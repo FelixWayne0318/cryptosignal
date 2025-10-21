@@ -1,3 +1,4 @@
+from app.oi_utils import fetch_oi_hourly, oi_metrics_and_score
 # -*- coding: utf-8 -*-
 """
 ATS Analyzer · v1.5 one-off tester (Prime/Watch) — strictly per v1.5
