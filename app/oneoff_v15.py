@@ -181,7 +181,7 @@ def zigzag_swings(h,l,c, atr_now, theta, allow_last_half=True):
 
     return swings[-12:]  # last up to 12 pivots sufficient
 
-def sq_score(h,l,c, ema30, atr_now, theta, side_long, fifteen_ctx):
+def sq_score(h,l,c, ema30_last, atr_now, theta, side_long, fifteen_ctx):
     """
     Compute SQ (0-100) per v1.5: consistency, ICR, retracement depth, tempo, not-overextended, 15m micro confirm
     fifteen_ctx: dict with keys 'micro_ok' (bool), 'micro_boom_veto' (bool)
@@ -190,7 +190,7 @@ def sq_score(h,l,c, ema30, atr_now, theta, side_long, fifteen_ctx):
     if len(swings)<3:
         base=50.0
         micro=5.0 if fifteen_ctx.get("micro_ok", False) else 0.0
-        over = abs(c[-1]-ema30[-1])/max(1e-12,atr_now)
+        over = abs(c[-1]-ema30_last)/max(1e-12,atr_now)
         pos = 1.0 if over<=0.8 else 0.5
         return clip(base*pos + micro, 0, 100)
 
@@ -248,7 +248,7 @@ def sq_score(h,l,c, ema30, atr_now, theta, side_long, fifteen_ctx):
     tempo_score = clip(tempo,0.0,1.0)*100.0
 
     # Position not over-extended
-    over = abs(c[-1]-ema30[-1])/max(1e-12,atr_now)
+    over = abs(c[-1]-ema30_last)/max(1e-12,atr_now)
     pos_score = 100.0 if over<=0.8 else 50.0
 
     micro_score = 100.0 if fifteen_ctx.get("micro_ok", False) else 0.0
