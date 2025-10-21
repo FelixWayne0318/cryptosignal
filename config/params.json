@@ -1,0 +1,116 @@
+{
+  "universe": {
+    "min_24h_quote_usdt": 10000000,
+    "robust_z24_abs_threshold": 1.0
+  },
+  "overlay": {
+    "z_volume_1h_threshold": 3.0,
+    "min_hour_quote_usdt": 5000000,
+    "z24_and_24h_quote": { "z24": 2.0, "quote": 20000000 },
+    "oi_1h_pct_big": 0.12,
+    "oi_1h_pct_small": 0.20,
+    "triple_sync": {
+      "dP1h_abs_pct": 0.10,
+      "v5_over_v20": 2.5,
+      "cvd_mix_abs_per_h": 0.12
+    },
+    "hot_decay_hours": 2.0
+  },
+  "weights": { "T": 25, "A": 15, "S": 15, "V": 20, "O": 15, "E": 10 },
+  "publish": {
+    "prob_threshold": 0.62,
+    "min_pass_dimensions": 4
+  },
+  "trend": {
+    "ema_order_min_bars": 3,
+    "slope_atr_min_long": 0.30,
+    "slope_atr_min_short": -0.30,
+    "r2_min": 0.50
+  },
+  "structure": {
+    "theta": {
+      "big": 0.35,
+      "small": 0.40,
+      "overlay_add": 0.05,
+      "new_phaseA_add": 0.10,
+      "strong_regime_sub": 0.05,
+      "min": 0.25,
+      "max": 0.60
+    },
+    "sq_threshold_base": 0.65,
+    "sq_threshold_overlay": 0.72,
+    "sq_threshold_phaseA": 0.75
+  },
+  "volume": {
+    "vlevel_long_min": 1.2,
+    "vlevel_long_opt": 1.7,
+    "vlevel_short_max": 1.15,
+    "vpeak_then_low": 2.0,
+    "vroc_abs_min": 0.15,
+    "vroc_abs_max": 0.60
+  },
+  "open_interest": {
+    "long_oi24_lo": 0.05,
+    "long_oi24_hi": 0.18,
+    "short_dnup12_lo": 8,
+    "short_dnup12_hi": 12,
+    "short_oi24_lo": -0.25,
+    "short_oi24_hi": -0.08,
+    "crowding_p95_penalty": 8
+  },
+  "environment": {
+    "chop14_max": 52.0,
+    "room_atr_min": 0.5,
+    "funding": {
+      "min_samples": 12,
+      "z_abs_big": 2.3,
+      "z_abs_small": 2.0,
+      "p_hi_big": 0.97,
+      "p_lo_big": 0.03,
+      "p_hi_small": 0.98,
+      "p_lo_small": 0.02
+    }
+  },
+  "prior_q": {
+    "prior_up_lo": 0.42,
+    "prior_up_hi": 0.58,
+    "breadth_top_n": 30
+  },
+  "pricing": {
+    "entry_ext_max": 0.6,
+    "delta_base": 0.02,
+    "delta_coef": 0.10,
+    "sl_atr_back": 1.8,
+    "sl_pivot_back": 0.10,
+    "tp1_R": 1.0,
+    "tp2_R_max": 2.5,
+    "tp2_room_floor_R": 1.8,
+    "room_atr_tp2_floor": 0.6,
+    "sr_band_lookback": 72,
+    "sr_margin": 0.002
+  },
+  "micro_15m": {
+    "ema10_side_min_ok": 4,
+    "ema10_side_window": 6,
+    "under_atr_frac": 0.15,
+    "refill_max_bars": 2,
+    "v3_over_v20_min": 1.1,
+    "v3_over_v20_max": 1.6,
+    "dV_abs_min": 0.12,
+    "dV_abs_max": 0.45,
+    "cvd_same_slope_bars": 4,
+    "micro_pivot_look": 10,
+    "micro_pivot_tolerance_atr1h": 0.05,
+    "anti_explosion_atr15m": 0.8,
+    "anti_explosion_vratio": 2.0,
+    "min_pass_count": 2
+  },
+  "limits": {
+    "per_symbol_delay_ms": 600,
+    "http_timeout_sec": 12,
+    "cache_ttl_sec": 900,
+    "backoff_first_sec": 2.5,
+    "backoff_max_sec": 30.0
+  },
+  "majors": ["BTCUSDT","ETHUSDT"]
+}
