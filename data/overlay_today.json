@@ -1,0 +1,276 @@
+{
+  "LIGHTUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.049970999999999995
+  },
+  "COAIUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.18432300000000001
+  },
+  "AIAUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.5734888823267598
+  },
+  "FUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.8303032728435067
+  },
+  "RIVERUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.094428
+  },
+  "AUCTIONUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.2641170093964547
+  },
+  "EVAAUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.10366696244891868
+  },
+  "MLNUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.9797485928966848
+  },
+  "ZORAUSDT": {
+    "when": 1761078450,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.036405021478121274
+  },
+  "XPINUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.07925130551122948
+  },
+  "FFUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.04176
+  },
+  "OPENUSDT": {
+    "when": 1761073803,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.05246583921755738
+  },
+  "SOPHUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 1.0182844491723637
+  },
+  "CLOUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.044847
+  },
+  "BLESSUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.068553
+  },
+  "STBLUSDT": {
+    "when": 1761078450,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.21484803973915034
+  },
+  "SOONUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.11962884267391316
+  },
+  "UBUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.2161767081128431
+  },
+  "2ZUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.031271999999999994
+  },
+  "MYXUSDT": {
+    "when": 1761081199,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.034497
+  },
+  "ATHUSDT": {
+    "when": 1761081199,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.034422
+  },
+  "PROVEUSDT": {
+    "when": 1761078450,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.8988278632946594
+  },
+  "ZEREBROUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.07175203202021338
+  },
+  "MERLUSDT": {
+    "when": 1761078450,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.21849460231773515
+  },
+  "TRUTHUSDT": {
+    "when": 1761085061,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.049413
+  },
+  "LYNUSDT": {
+    "when": 1761073803,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.05000190982040251
+  },
+  "AIOTUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.14758478361786023
+  },
+  "1000LUNCUSDT": {
+    "when": 1761073803,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.03307342450057809
+  },
+  "IDOLUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.061605162794850954
+  },
+  "TAGUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.057512999999999995
+  },
+  "BIOUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.034338
+  },
+  "BASUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.1084232572959898
+  },
+  "KDAUSDT": {
+    "when": 1761088456,
+    "why": [
+      "zv1h",
+      "triple"
+    ],
+    "hot": 2.5909305028983303
+  },
+  "MIRAUSDT": {
+    "when": 1761081199,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.0376087747933601
+  },
+  "DOGSUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.7636795836280343
+  },
+  "RVVUSDT": {
+    "when": 1761085061,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.04567802409107647
+  },
+  "BTRUSDT": {
+    "when": 1761085061,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.37953350396523755
+  },
+  "HEMIUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.033500999999999996
+  },
+  "BELUSDT": {
+    "when": 1761088456,
+    "why": [
+      "triple"
+    ],
+    "hot": 0.032702999999999996
+  }
+}

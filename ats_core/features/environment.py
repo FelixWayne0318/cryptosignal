@@ -99,30 +99,51 @@ def _fetch_funding_rates(symbol: str, limit: int = 50) -> List[float]:
             pass
     return rates
 
+
 def funding_hard_veto(symbol: str, is_bigcap: bool, params: dict):
     """
     返回 (veto: bool, meta: dict)
-      meta = {"samples":N, "last":float, "pctl":百分位(0..100), "z":abs_robust_z}
-    规则（v1.5）：
-      • 大币：分位 ≥97% 或 ≤3% ；或 |z| ≥ 2.3
-      • 小币：分位 ≥98% 或 ≤2% ；或 |z| ≥ 2.0
-      • 样本不足（<12）→ 不否决（False）
+    meta={"samples":N,"last":rate,"abs_last":|rate|,"pctl":0..100,"z":abs_z,"reason":str}
+    规则（v1.5稳健化）：
+      • 样本 < min_samples → 不否决
+      • |last| < min_abs   → 不否决（避免“很小的费率”被分位数误伤）
+      • 其余按 (pctl 极端 或 |z| 极端) 判定（默认），阈值区分大/小币
     """
+    lookback = int(params.get("lookback", 50))
+    min_samples = int(params.get("min_samples", 12))
+    min_abs = float(params.get("min_abs", 0.0002))  # 0.02%/8h
+    mode = params.get("mode", "or-minabs")
+
     try:
-        rates = _fetch_funding_rates(symbol, limit=int(params.get("funding_limit", 50)))
+        rates = _fetch_funding_rates(symbol, limit=lookback)
     except Exception:
-        return False, {"samples": 0, "last": None, "pctl": None, "z": None}
+        return False, {"samples":0,"last":None,"abs_last":None,"pctl":None,"z":None,"reason":"network"}
 
-    if len(rates) < 12:
-        return False, {"samples": len(rates), "last": (rates[-1] if rates else None), "pctl": None, "z": None}
+    if len(rates) < min_samples:
+        last = rates[-1] if rates else None
+        return False, {"samples":len(rates),"last":last,"abs_last":(abs(last) if last is not None else None),
+                       "pctl":None,"z":None,"reason":"insufficient"}
 
-    last = rates[-1]
-    pctl = _percentile_rank(rates, last)  # 0..100
-    z    = abs(_robust_z(rates, last))
+    last = float(rates[-1])
+    abs_last = abs(last)
+    pctl = _percentile_rank(rates, last)
+    z = abs(_robust_z(rates, last))
+
+    if abs_last < min_abs:
+        return False, {"samples":len(rates),"last":last,"abs_last":abs_last,"pctl":pctl,"z":z,"reason":"below_min_abs"}
 
     if is_bigcap:
-        veto = (pctl >= 97.0 or pctl <= 3.0) or (z >= 2.3)
+        p_hi, p_lo, z_th = float(params.get("p_hi_big",97)), float(params.get("p_lo_big",3)), float(params.get("z_big",2.3))
     else:
-        veto = (pctl >= 98.0 or pctl <= 2.0) or (z >= 2.0)
+        p_hi, p_lo, z_th = float(params.get("p_hi_small",98)), float(params.get("p_lo_small",2)), float(params.get("z_small",2.0))
 
-    return veto, {"samples": len(rates), "last": last, "pctl": round(pctl,2), "z": round(z,2)}
+    extreme_p = (pctl >= p_hi or pctl <= p_lo)
+    extreme_z = (z >= z_th)
+
+    if mode == "and":
+        veto = (extreme_p and extreme_z)
+    else:  # "or-minabs"（默认）
+        veto = (extreme_p or extreme_z)
+
+    return veto, {"samples":len(rates),"last":last,"abs_last":abs_last,
+                  "pctl":round(pctl,2),"z":round(z,2),"reason":("extreme" if veto else "ok")}

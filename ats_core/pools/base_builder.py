@@ -41,3 +41,5 @@ def build_base_universe():
     with open(os.path.join(DATA,"base_pool.json"),"w",encoding="utf-8") as f:
         json.dump(base,f,ensure_ascii=False,indent=2)
     return [x["symbol"] for x in base]
+if __name__=="__main__":
+    build_base_universe()

@@ -33,7 +33,7 @@ def analyze_symbol(symbol:str, ctx_market=None):
     # T
     T, Tm = score_trend(h,l,c,c4, p["trend"])
     # A
-    A, Am = score_accel(c, cv, p["accel"])
+    A, Am = score_accel(c, cv, p.get("accel", {}))
     # S (needs m15_ok in ctx later; for score use False first; publish阶段再更新)
     S, Sm = score_structure(h,l,c, ema30[-1], atr_now, p["structure"], {"bigcap":is_bigcap(symbol), "overlay":False, "phaseA":False, "strong":(Tm["slopeATR"]>=0.30), "m15_ok":False})
     # V

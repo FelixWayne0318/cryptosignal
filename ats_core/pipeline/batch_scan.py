@@ -26,3 +26,5 @@ def batch_run():
         except Exception as e:
             warn("batch %s error: %s", sym, e)
         time.sleep(CFG.get("limits","per_symbol_delay_ms", default=600)/1000.0)
+if __name__=="__main__":
+    batch_run()
