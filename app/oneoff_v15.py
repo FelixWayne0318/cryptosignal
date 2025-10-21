@@ -538,7 +538,7 @@ f"• 量能 {col(V)} {V} —— v5/v20 & 变化率\n"
 f"• 加速 {col(A)} {A} —— Δ斜率 & ΔCVD\n"
 f"• 持仓 {col(O)} {O} —— OI 24h/1h\n"
 f"• 环境 {col(E)} {E} —— CHOP/Room\n\n"
-f"<b>环境</b> prior={prior:.2f} · Q={Q:.2f} · CHOP={chop:.1f} · Room={room:.2f}×ATR\n"
+f"<b>环境</b> prior={prior:.2f} · Q={Q:.2f}；OI24h={oi_tag.get("oi24h_pct")}%{("⚠️" if oi_tag.get("crowding_warn") else "")} · CHOP={chop:.1f} · Room={room:.2f}×ATR\n"
 f"<b>失效</b> ① 回收入场下沿且 v5/v20&lt;1 ② CVD 连续 2h 反向\n"
 f"<code>UTC {now} · 有效 8h 或触发失效</code>"
     )
