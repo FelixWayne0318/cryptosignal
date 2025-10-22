@@ -1,164 +1,114 @@
-# coding: utf-8
-"""
-Open Interest feature scoring
-
-修复点：
-- OI 数据不足（len(oi) < 30）时，不再把缺失当成“0 分”。
-  默认采用平滑的回退打分（基于 cvd6_fallback），避免误导性的 0。
-  若希望严格以“缺失”为 None，可将环境变量 ATS_OI_STRICT_NONE=1。
-
-- 正常路径保留你原有的映射逻辑，并对异常做了保护，确保输出在 0~100。
-"""
-
-from typing import Tuple, Optional, Dict, Any
+# ats_core/features/open_interest.py
 from statistics import median
+from typing import Dict, Tuple, Any
 from ats_core.sources.oi import fetch_oi_hourly, pct, pct_series
 
-# 可通过环境变量切换“严格缺失为 None”模式（默认为 False）
-import os
-STRICT_NONE_IF_INSUFFICIENT = os.getenv("ATS_OI_STRICT_NONE", "0") in ("1", "true", "TRUE")
-
-def _percentile(xs, p: float) -> float:
-    """简易 percentile（无 numpy 依赖），p ∈ [0,1]"""
-    if not xs:
-        return float("nan")
-    q = sorted(xs)
-    i = int(round((len(q) - 1) * max(0.0, min(1.0, p))))
-    return q[i]
-
-def _fallback_from_cvd6(cvd6_fallback: Optional[float]) -> int:
-    """
-    将 cvd6_fallback 平滑映射为 0~100 的得分。
-    - 若 cvd6 ∈ [-1, 1]（常见相关/标准化因子），映射到 10~90，居中 50；
-    - 若 cvd6 ∈ [0, 1]，按 0~100 映射；
-    - 其它数值做裁剪后再映射；若 None，给出中性 50。
-    """
-    if cvd6_fallback is None:
-        return 50
-    try:
-        x = float(cvd6_fallback)
-    except Exception:
-        return 50
-
-    if -1.0 <= x <= 1.0:
-        # 以 50 为中性，±1 → ±40 的摆幅，留出安全边界
-        s = 0.5 + 0.4 * x
-    elif 0.0 <= x <= 1.0:
-        s = x
-    else:
-        # 粗暴裁剪再居中
-        s = max(0.0, min(1.0, x))
-    return int(round(100.0 * max(0.0, min(1.0, s))))
+# 线性映射助手：把 x 从 [lo, hi] 线性映到 [0,1] 并截断
+def _ramp(x: float, lo: float, hi: float) -> float:
+    if hi == lo:
+        return 0.0
+    return max(0.0, min(1.0, (x - lo) / (hi - lo)))
 
 def score_open_interest(symbol: str,
                         closes,
                         side_long: bool,
                         params: Dict[str, Any],
-                        cvd6_fallback: Optional[float]
-                        ) -> Tuple[Optional[int], Dict[str, Any]]:
+                        cvd6_fallback: float) -> Tuple[int, Dict[str, Any]]:
     """
-    返回 (O, meta)
-      - O: 0~100 的整数；若数据不足且启用严格模式则为 None
-      - meta: 诊断信息（oi1h_pct/oi24h_pct/dnup12/upup12/crowding_warn）
+    专注“变化率”的 OI 评分：
+      - 主分量：oi24（按近 7 天中位数归一后的 24h 变化率）
+      - 辅分量：价格↑/OI↑ 同向次数（up_up 或 dn_up，取决于方向）
+      - 拥挤度：若当前 oi24 高于近 24h 变化率的 95 分位，扣分 crowding_penalty
+    元数据返回：
+      - oi1h_pct / oi24h_pct（百分比，保留两位）
+      - upup12 / dnup12，同向计数
+      - crowding_warn / p95_oi24（拥挤阈值）
+      - den（归一化分母，中位数）
     """
-    oi = fetch_oi_hourly(symbol, limit=200)
-    if not isinstance(oi, (list, tuple)):
-        oi = []
+    # 参数默认（缺键也不炸）
+    default_par = {
+        # 多头侧：希望 24h OI 上涨越多越好
+        "long_oi24_lo":  1.0,   # 低于 1% 视为 0
+        "long_oi24_hi":  8.0,   # 高于 8% 视为 1
+        # 空头侧：希望 24h OI 下降（-oi24 越大越好）
+        "short_oi24_lo": 2.0,   # -oi24 低于 2% 视为 0（oi24 > -2%）
+        "short_oi24_hi": 10.0,  # -oi24 高于 10% 视为 1（oi24 < -10%）
+        # 同向计数阈值（12 根内）
+        "upup12_lo": 6,   # 6 次起才开始给分
+        "upup12_hi": 12,  # 12 次封顶
+        "dnup12_lo": 6,
+        "dnup12_hi": 12,
+        # 拥挤度
+        "crowding_p95_penalty": 10,
+        # 权重（总和不用正好=1，会在 0..100 内乘以 100）
+        "w_change": 0.7,    # 变化率权重
+        "w_align":  0.3,    # 价格-持仓同向权重
+    }
+    par = dict(default_par)
+    if isinstance(params, dict):
+        par.update(params)
 
-    # —— 数据不足：平滑回退或严格缺失 —— #
+    oi = fetch_oi_hourly(symbol, limit=200)
+    # 兜底：数据不足用 CVD proxy，给一个温和的分数（避免全 0）
     if len(oi) < 30:
-        meta = {
+        O = int(100 * max(0.0, min(1.0, (cvd6_fallback - 0.01) / 0.05)))
+        return O, {
             "oi1h_pct": None,
             "oi24h_pct": None,
-            "dnup12": None,
-            "upup12": None,
-            "crowding_warn": False,
-            "reason": "oi_insufficient",
+            "dnup12":   None,
+            "upup12":   None,
+            "crowding_warn": False
         }
-        if STRICT_NONE_IF_INSUFFICIENT:
-            return None, meta
-        # 默认给一个“中性且不误导”的回退分（避免长期显示 0）
-        O = _fallback_from_cvd6(cvd6_fallback)
-        return O, meta
 
-    # —— 正常路径 —— #
-    # 归一化分母：近 168 小时（1 周）的中位数，避免极端值/除 0
-    try:
-        den = median(oi[max(0, len(oi) - 168):])
-        den = den if den not in (None, 0.0) else 1e-12
-    except Exception:
-        den = 1e-12
+    den = median(oi[max(0, len(oi) - 168):])
+    # 归一变化率
+    oi1h = pct(oi[-1], oi[-2], den)
+    oi24 = pct(oi[-1], oi[-25], den) if len(oi) >= 25 else 0.0
 
-    # 短/中期相对变化（相对 den）
-    try:
-        oi1h = pct(oi[-1], oi[-2], den)
-    except Exception:
-        oi1h = 0.0
-    oi24 = 0.0
-    try:
-        if len(oi) >= 25:
-            oi24 = pct(oi[-1], oi[-25], den)
-    except Exception:
-        oi24 = 0.0
-
-    # 近 12 根“价格方向 vs OI 方向”统计
-    k = max(0, min(12, len(closes) - 1, len(oi) - 1))
-    up_up = 0
-    dn_up = 0
+    # 最近 12 小时价格 vs OI 同向统计
+    k = min(12, len(closes) - 1, len(oi) - 1)
+    up_up = dn_up = 0
     for i in range(1, k + 1):
-        dp  = closes[-i] - closes[-i - 1]
-        doi = oi[-i]     - oi[-i - 1]
+        dp = closes[-i] - closes[-i - 1]
+        doi = oi[-i] - oi[-i - 1]
         if dp > 0 and doi > 0:
             up_up += 1
         if dp < 0 and doi > 0:
             dn_up += 1
 
-    # 拥挤度：用 24h 变化的 95 分位做阈值
-    hist24 = []
-    try:
-        hist24 = pct_series(oi, 24)
-    except Exception:
-        hist24 = []
-    p95 = _percentile(hist24, 0.95) if len(hist24) >= 10 else float("inf")
-    crowd_warn = (oi24 >= p95)
+    # 拥挤度：oi24 的历史分布（最近 look=24 的变化率序列）
+    hist24 = pct_series(oi, 24)
+    crowding_warn = False
+    p95 = None
+    if hist24:
+        s = sorted(hist24)
+        p95 = s[int(0.95 * (len(s) - 1))]
+        crowding_warn = (oi24 >= p95)
 
-    # --- 打分映射（保留你的原始逻辑，但做保护） --- #
-    try:
-        if side_long:
-            s1 = (oi24 - params["long_oi24_lo"]) / (params["long_oi24_hi"] - params["long_oi24_lo"])
-            s1 = max(0.0, min(1.0, float(s1)))
-            s2 = (up_up - 6) / (12 - 6) if 12 > 6 else 0.0
-            s2 = max(0.0, min(1.0, float(s2)))
-            O = int(round(80 * s1 + 20 * s2))
-        else:
-            a = (dn_up - params["short_dnup12_lo"]) / (params["short_dnup12_hi"] - params["short_dnup12_lo"])
-            a = max(0.0, min(1.0, float(a)))
-            b = ((-oi24) - (-params["short_oi24_hi"])) / ((-params["short_oi24_lo"]) - (-params["short_oi24_hi"]))
-            b = max(0.0, min(1.0, float(b)))
-            O = int(round(100 * max(a, b)))
-    except Exception:
-        # 参数缺失时，退回到仅由 oi24 方向给个保守分
-        base = oi24 if side_long else (-oi24)
-        # 将 base 粗略压缩到 [0,1]
-        s = max(0.0, min(1.0, 0.5 + 0.5 * base))
-        O = int(round(100 * s))
+    # —— 打分：主看“变化率”，辅看“同向” ——
+    if side_long:
+        s_change = _ramp(oi24, par["long_oi24_lo"], par["long_oi24_hi"])
+        s_align  = _ramp(up_up, par["upup12_lo"], par["upup12_hi"])
+    else:
+        # 空头侧：-oi24 越大越好（即 oi24 越负越好）
+        s_change = _ramp(-oi24, par["short_oi24_lo"], par["short_oi24_hi"])
+        s_align  = _ramp(dn_up, par["dnup12_lo"], par["dnup12_hi"])
 
-    # 拥挤扣分
-    try:
-        pen = int(params.get("crowding_p95_penalty", 0))
-    except Exception:
-        pen = 0
-    if crowd_warn and pen > 0:
-        O = max(0, O - pen)
+    O_raw = 100.0 * (par["w_change"] * s_change + par["w_align"] * s_align)
 
-    # 裁剪到 0~100
-    O = max(0, min(100, int(O)))
+    # 拥挤度惩罚
+    if crowding_warn:
+        O_raw -= float(par["crowding_p95_penalty"])
+
+    O = int(round(max(0.0, min(100.0, O_raw))))
 
     meta = {
         "oi1h_pct": round(oi1h * 100, 2),
         "oi24h_pct": round(oi24 * 100, 2),
         "dnup12": dn_up,
         "upup12": up_up,
-        "crowding_warn": crowd_warn,
+        "crowding_warn": crowding_warn,
+        "p95_oi24": round(p95 * 100, 2) if p95 is not None else None,
+        "den": den,
     }
     return O, meta
