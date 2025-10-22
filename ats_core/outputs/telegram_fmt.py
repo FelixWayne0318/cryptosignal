@@ -1,13 +1,15 @@
 # coding: utf-8
 """
 Unified Telegram template (prime & watch)
-- 标题： [手动](可选) + 观 察(可选) + 方向 + 概率% + TTL
+- 标题： [手动](可选) + 观察(可选) + 方向 + 概率% + TTL
 - 第二行：🔹 符号 · 现价（动态小数位、去尾 0）
 - 六维：恒显示解释；数值为 0 则隐藏该维（若有解释则显示“— + 解释”）
 - 去掉旧版重复“现价 …”行；不追加 UTC 有效期落款行
 """
 import os, html
 from typing import Any, Dict, Optional
+
+# ---------- 基础格式化 ----------
 
 def _fmt_num(x: Any, nd: int = 3) -> str:
     try:
@@ -80,6 +82,8 @@ def _fmt_code_px(x, r=None):
     s = f"{f:.{nd}f}".rstrip("0").rstrip(".")
     return f"<code>{s}</code>"
 
+# ---------- 分数提取/解释 ----------
+
 def _norm_score_value(v: Any):
     if isinstance(v, dict):
         for k in ("score","value","v","s"):
@@ -134,9 +138,42 @@ def _score_notes(r: Dict) -> Dict[str,str]:
             if k in pool: out[name]=html.escape(str(pool[k]), quote=False); break
     return out
 
+def _auto_note(name: str, v: Any) -> str:
+    try:
+        x = float(v)
+    except Exception:
+        return ""
+    if name == "趋势":
+        if x >= 80: return "趋势强；多周期同侧"
+        if x >= 65: return "趋势良好；回撤可控"
+        return "趋势弱/震荡"
+    if name == "结构":
+        if x >= 80: return "结构连贯；高低点阶梯清晰"
+        if x >= 65: return "结构尚可；关键位未被破坏"
+        return "结构杂乱/级别相抵"
+    if name == "量能":
+        if x >= 80: return "放量明显；成交活跃"
+        if x >= 65: return "量能温和提升"
+        return "量能不足"
+    if name == "加速":
+        if x >= 80: return "动量强；加速度正向"
+        if x >= 65: return "加速改善"
+        return "加速不足/有背离风险"
+    if name == "持仓":
+        if x >= 80: return "OI显著增加；资金跟随"
+        if x >= 65: return "OI温和变化"
+        return "OI走弱/减仓"
+    if name == "环境":
+        if x >= 80: return "背景顺风；拥挤度低；空间充足"
+        if x >= 65: return "环境中性偏顺"
+        return "环境一般/拥挤或空间不足"
+    return ""
+
 def _is_zero_like(v):
     try: return float(v)==0.0
     except Exception: return False
+
+# ---------- 交易计划/环境 ----------
 
 def _entry_band(r: Dict):
     band = _pick(r, "entry_zone","entry","band","ref_range","range","zone")
@@ -169,9 +206,12 @@ def _env_hint(r: Dict) -> Optional[str]:
     if Q is not None: bits.append(f"Q={_fmt_num(Q,2)}")
     return " · ".join(bits) if bits else None
 
+# ---------- 主渲染 ----------
+
 def render_signal(r: Dict, *, is_watch: bool=False) -> str:
     sym   = _pick(r,"symbol","sym","ticker","—")
     price = _pick(r,"last","price","close","px")
+
     pu    = _pick(r,"prob_up","probLong","prob")
     pd    = _pick(r,"prob_dn","probShort")
     side  = _pick(r,"side")
@@ -182,6 +222,7 @@ def render_signal(r: Dict, *, is_watch: bool=False) -> str:
             side = "long" if float(pu) >= (0.5 if float(pu)<=1 else 50) else "short"
         else:
             side = "long"
+
     base = None
     if pu is not None or pd is not None:
         if side in ("long","多"):
@@ -189,12 +230,14 @@ def render_signal(r: Dict, *, is_watch: bool=False) -> str:
         else:
             base = float(pd) if pd is not None else (1-float(pu) if float(pu)<=1 else None)
     pct_int = _fmt_prob_pct(base if base is not None else pu)
+
     ttl   = _ttl_hours(r)
     icon  = "🟩" if side in ("long","多") else "🟥"
     word  = "做多" if side in ("long","多") else "做空"
     manual = "[手动] " if os.getenv("ATS_VIA")=="manual" else ""
     prefix = "🟡 观察 · " if is_watch else ""
     title  = f"<b>{manual}{prefix}{icon} {word} {pct_int if pct_int is not None else '—'}% · {ttl}h</b>"
+
     lines = [title]
     # 第二行：🔹 符号 · 现价
     sym_line = f"🔹 {sym}" + (f" · 现价 {_fmt_code_px(price, r)}" if price is not None else "")
@@ -216,7 +259,7 @@ def render_signal(r: Dict, *, is_watch: bool=False) -> str:
         if tp_line:
             lines.append(f"止盈 <code>{tp_line}</code>")
 
-    # 六维（恒显解释；0 分隐藏，若有解释则用“—”）
+    # 六维（恒显解释；零分隐藏，除非有解释）
     sc = _score_lookup(r)
     notes = _score_notes(r)
     lines.append("")
@@ -224,17 +267,26 @@ def render_signal(r: Dict, *, is_watch: bool=False) -> str:
     bullets=[]
     for name in ("趋势","结构","量能","加速","持仓","环境"):
         v = sc.get(name)
+        # 解释：优先用上游 notes；若缺失且分值非零，则自动生成简短解释
+        explain = notes.get(name) if isinstance(notes, dict) else None
+        if (not explain or not str(explain).strip()) and v is not None and not _is_zero_like(v):
+            explain = _auto_note(name, v)
+
+        tail = f" —— {explain}" if (explain and str(explain).strip()) else ""
+
         if v is None:
+            # 无分值：仅当有显式解释时展示“— + 解释”，否则跳过
+            if tail:
+                bullets.append(f"• {name} ⚪ —{tail}")
             continue
-        tail = f" —— {notes[name]}" if name in notes else ""
+
         if isinstance(v, bool):
             bullets.append(f"• {name} {'✅' if v else '❌'}{tail}")
         else:
             if _is_zero_like(v):
-                if name in notes:
+                # 零分：按规则隐藏，除非有解释（此时显示“— + 解释”）
+                if tail:
                     bullets.append(f"• {name} ⚪ —{tail}")
-                else:
-                    continue
             else:
                 bullets.append(f"• {name} {_dot(v)} {_fmt_num(v,0)}{tail}")
     lines.extend(bullets if bullets else ["—"])
