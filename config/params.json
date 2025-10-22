@@ -1,60 +1,103 @@
 {
-  "majors": ["BTCUSDT", "ETHUSDT"],
+  "majors": ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"],
+  "universe": [],
 
-  "universe": [
-    "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT",
-    "MLNUSDT", "KDAUSDT", "AUCTIONUSDT", "FUSDT", "BASUSDT", "SOPHUSDT", "NILUSDT", "XPINUSDT",
-    "1000LUNCUSDT", "DOGSUSDT", "ZEREBROUSDT", "IDOLUSDT", "PAXGUSDT", "LIGHTUSDT", "SOONUSDT",
-    "CLOUSDT", "XPLUSDT", "COAIUSDT"
-  ],
+  "trend": {
+    "ema_fast": 20,
+    "ema_slow": 50,
+    "ema_htf": 100,
+    "atr_window": 14,
+    "slope_atr_norm_hours": 48,
+    "slope_up_hi": 0.35,
+    "slope_up_lo": 0.10,
+    "slope_dn_hi": -0.35,
+    "slope_dn_lo": -0.10
+  },
+
+  "accel": {
+    "mom_window": 12,
+    "div_lookback": 30,
+    "score_lo": -0.5,
+    "score_hi": 0.5
+  },
+
+  "structure": {
+    "ema_bias_hi": 0.015,
+    "ema_bias_lo": -0.015,
+    "atr_band_mul": 1.5,
+    "swing_lookback": 20,
+    "min_confluence": 2
+  },
+
+  "open_interest": {
+    "long_oi24_lo": -0.05,
+    "long_oi24_hi": 0.10,
+    "short_dnup12_lo": 4,
+    "short_dnup12_hi": 9,
+    "short_oi24_lo": -0.02,
+    "short_oi24_hi": -0.10,
+    "crowding_p95_penalty": 10
+  },
+
+  "environment": {
+    "atr_mult_tight": 1.2,
+    "atr_mult_loose": 2.0,
+    "liquidity_usdt_1h_min": 3000000,
+    "funding": {
+      "veto_bigcap": 0.06,
+      "veto_alt": 0.08,
+      "cooldown_hours": 8
+    }
+  },
+
+  "prior_q": {
+    "base": 1.0,
+    "pass_dims_weight": 0.10,
+    "over_ok_bonus": 0.05,
+    "samples_ok_bonus": 0.05,
+    "crowding_penalty": 0.10,
+    "bigcap_bonus": 0.05
+  },
+
+  "weights": {
+    "T": 0.20,
+    "A": 0.15,
+    "S": 0.20,
+    "V": 0.15,
+    "O": 0.15,
+    "E": 0.15
+  },
+
+  "pricing": {
+    "tp_mul": 2.0,
+    "sl_mul": 1.0,
+    "trail_mul": 1.2,
+    "partial_tp": [0.5, 1.0, 1.5]
+  },
+
+  "micro_15m": {
+    "ema_window": 20,
+    "atr_window": 14,
+    "atr_mult": 0.6,
+    "min_confirms": 2
+  },
+
+  "publish": {
+    "prob_threshold": 58,
+    "min_pass_dimensions": 2
+  },
 
   "overlay": {
     "oi_1h_pct_big": 0.003,
-    "oi_1h_pct_small": 0.010,
+    "oi_1h_pct_small": 0.01,
     "hot_decay_hours": 2,
     "z_volume_1h_threshold": 3,
     "min_hour_quote_usdt": 5000000,
     "z24_and_24h_quote": { "z24": 2, "quote": 20000000 },
-    "triple_sync": { "dP1h_abs_pct": 0.1, "v5_over_v20": 2.5, "cvd_mix_abs_per_h": 0.12 }
-  },
-
-  "params": {
-    "trend": {
-      "lookback_1h": 120,
-      "lookback_4h": 200,
-      "slopeATR_thresholds": { "weak": 0.15, "strong": 0.30 }
-    },
-    "accel": { "ema_fast": 5, "ema_slow": 20, "min_zscore": 1.0 },
-    "structure": { "ema_ref": 30, "atr_mult_break": 1.2, "consolidation_bars": 12 },
-    "volume": {},
-
-    "open_interest": {
-      "long_oi24_lo": 0.0,
-      "long_oi24_hi": 0.06,
-      "short_dnup12_lo": 3,
-      "short_dnup12_hi": 8,
-      "short_oi24_hi": 0.0,
-      "short_oi24_lo": -0.04,
-      "crowding_p95_penalty": 10
-    },
-
-    "environment": {
-      "funding": { "bigcap_extreme": 0.020, "alt_extreme": 0.040 }
-    },
-
-    "prior_q": {
-      "quality_floor": 0.40,
-      "pass_dims_weights": { "base": 0.50, "overlay_bonus": 0.10 }
-    },
-
-    "pricing": { "atr_tp": 1.8, "atr_sl": 1.0, "min_rr": 1.2 },
-
-    "micro_15m": { "lookback_bars": 24, "min_confirm_bars": 2, "atr_filter_mult": 0.5 },
-
-    "weights": { "T": 0.25, "A": 0.15, "S": 0.15, "V": 0.10, "O": 0.20, "E": 0.15 },
-
-    "publish": { "prob_threshold": 58, "min_pass_dimensions": 2 }
-  },
-
-  "outputs": {}
+    "triple_sync": {
+      "dP1h_abs_pct": 0.1,
+      "v5_over_v20": 2.5,
+      "cvd_mix_abs_per_h": 0.12
+    }
+  }
 }
