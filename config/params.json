@@ -11,7 +11,8 @@
     "slope_up_hi": 0.35,
     "slope_up_lo": 0.10,
     "slope_dn_hi": -0.35,
-    "slope_dn_lo": -0.10
+    "slope_dn_lo": -0.10,
+    "ema_order_min_bars": 6
   },
 
   "accel": {
