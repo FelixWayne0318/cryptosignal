@@ -1,104 +1,49 @@
 {
-  "majors": ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"],
-  "universe": [],
-
-  "trend": {
-    "ema_fast": 20,
-    "ema_slow": 50,
-    "ema_htf": 100,
-    "atr_window": 14,
-    "slope_atr_norm_hours": 48,
-    "slope_up_hi": 0.35,
-    "slope_up_lo": 0.10,
-    "slope_dn_hi": -0.35,
-    "slope_dn_lo": -0.10,
-    "ema_order_min_bars": 6
-  },
-
-  "accel": {
-    "mom_window": 12,
-    "div_lookback": 30,
-    "score_lo": -0.5,
-    "score_hi": 0.5
-  },
-
-  "structure": {
-    "ema_bias_hi": 0.015,
-    "ema_bias_lo": -0.015,
-    "atr_band_mul": 1.5,
-    "swing_lookback": 20,
-    "min_confluence": 2
-  },
-
-  "open_interest": {
-    "long_oi24_lo": -0.05,
-    "long_oi24_hi": 0.10,
-    "short_dnup12_lo": 4,
-    "short_dnup12_hi": 9,
-    "short_oi24_lo": -0.02,
-    "short_oi24_hi": -0.10,
-    "crowding_p95_penalty": 10
-  },
-
-  "environment": {
-    "atr_mult_tight": 1.2,
-    "atr_mult_loose": 2.0,
-    "liquidity_usdt_1h_min": 3000000,
-    "funding": {
-      "veto_bigcap": 0.06,
-      "veto_alt": 0.08,
-      "cooldown_hours": 8
-    }
-  },
-
-  "prior_q": {
-    "base": 1.0,
-    "pass_dims_weight": 0.10,
-    "over_ok_bonus": 0.05,
-    "samples_ok_bonus": 0.05,
-    "crowding_penalty": 0.10,
-    "bigcap_bonus": 0.05
-  },
-
-  "weights": {
-    "T": 0.20,
-    "A": 0.15,
-    "S": 0.20,
-    "V": 0.15,
-    "O": 0.15,
-    "E": 0.15
-  },
-
-  "pricing": {
-    "tp_mul": 2.0,
-    "sl_mul": 1.0,
-    "trail_mul": 1.2,
-    "partial_tp": [0.5, 1.0, 1.5]
-  },
-
-  "micro_15m": {
-    "ema_window": 20,
-    "atr_window": 14,
-    "atr_mult": 0.6,
-    "min_confirms": 2
-  },
-
-  "publish": {
-    "prob_threshold": 58,
-    "min_pass_dimensions": 2
-  },
-
   "overlay": {
     "oi_1h_pct_big": 0.003,
-    "oi_1h_pct_small": 0.01,
+    "oi_1h_pct_small": 0.010,
     "hot_decay_hours": 2,
+
     "z_volume_1h_threshold": 3,
     "min_hour_quote_usdt": 5000000,
+
     "z24_and_24h_quote": { "z24": 2, "quote": 20000000 },
+
     "triple_sync": {
-      "dP1h_abs_pct": 0.1,
+      "dP1h_abs_pct": 0.10,
       "v5_over_v20": 2.5,
       "cvd_mix_abs_per_h": 0.12
     }
-  }
+  },
+
+  "trend": {
+    /* —— 已有：EMA 顺序最少持续根数 —— */
+    "ema_order_min_bars": 6,
+
+    /* —— 新增：基于 ATR 归一的斜率门槛（避免 KeyError）——
+       含义：以 ATR 为单位度量价格斜率（每根K的变化 / ATR），
+       达到阈值才认为多/空趋势有效。数值越小越宽松。 */
+    "slope_atr_min_long": 0.06,
+    "slope_atr_min_short": 0.06,
+
+    /* 斜率计算窗口（越大越稳健也越迟钝） */
+    "slope_lookback": 20,
+
+    /* ATR 计算参数（常规即可） */
+    "atr_period": 14,
+    "atr_ma": "rma",
+
+    /* 可选：EMA 组（有些指标会用到，不用也不影响） */
+    "ema_periods": [20, 50, 100, 200]
+  },
+
+  /* —— 基础池（每日更新的 base）——
+     即便 overlay 能独立工作，给一份常见合约能帮助 overlay 扫描范围更稳。
+     你可随时替换为自己的 base 清单。 */
+  "universe": [
+    "BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT",
+    "TRXUSDT","TONUSDT","AVAXUSDT","LINKUSDT","DOTUSDT","MATICUSDT","BCHUSDT",
+    "LTCUSDT","ATOMUSDT","FILUSDT","NEARUSDT","APTUSDT","OPUSDT","ARBUSDT",
+    "SUIUSDT","PAXGUSDT","COAIUSDT","CLOUSDT","XPLUSDT"
+  ]
 }
