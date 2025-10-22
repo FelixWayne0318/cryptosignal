@@ -23,7 +23,6 @@ os.environ.setdefault("ATS_FMT_EXPLAIN", "1")
 os.environ.setdefault("ATS_FMT_DECIMALS_AUTO", "1")
 os.environ.pop("ATS_VIA", None)
 
-# 基础依赖
 from ats_core.cfg import CFG
 from ats_core.pipeline.analyze_symbol import analyze_symbol
 from ats_core.outputs.telegram_fmt import render_watch, render_prime
@@ -37,27 +36,31 @@ except Exception:
 
 REPO = pathlib.Path(__file__).resolve().parents[1]  # ~/ats-analyzer
 
+
 def _load_market_ctx() -> Dict[str, Any]:
     """预取 BTC/ETH 1h 收盘，供 analyze_symbol 用于 prior 计算。"""
-    ctx = {}
+    ctx: Dict[str, Any] = {}
     try:
         btc = klines_1h("BTCUSDT", 300)
         eth = klines_1h("ETHUSDT", 300)
-        _,_,_,btc_c,_,_,_ = split_ohlcv(btc)
-        _,_,_,eth_c,_,_,_ = split_ohlcv(eth)
-        if btc_c and eth_c:
-            ctx = {"btc_c": btc_c, "eth_c": eth_c}
+        if btc and eth:
+            _, _, _, btc_c, *_ = split_ohlcv(btc)
+            _, _, _, eth_c, *_ = split_ohlcv(eth)
+            if btc_c and eth_c:
+                ctx = {"btc_c": btc_c, "eth_c": eth_c}
     except Exception:
         pass
     return ctx
 
+
 def _get_candidates(limit: Optional[int]) -> List[str]:
     """优先 overlay_builder；为空则回退到 CFG.universe；再不行用默认集合。"""
     syms: List[str] = []
+
     # 1) overlay_builder
     try:
         ob = importlib.import_module("ats_core.pools.overlay_builder")
-        for name in ("build","build_overlay","build_candidates","build_pool"):
+        for name in ("build", "build_overlay", "build_candidates", "build_pool"):
             if hasattr(ob, name):
                 arr = getattr(ob, name)()
                 if isinstance(arr, list) and arr:
@@ -72,21 +75,23 @@ def _get_candidates(limit: Optional[int]) -> List[str]:
     # 2) universe
     if not syms:
         uni = CFG.get("universe", default=None)
-        if isinstance(uni, (list,tuple)) and uni and isinstance(uni[0], str):
+        if isinstance(uni, (list, tuple)) and uni and isinstance(uni[0], str):
             syms = list(uni)
 
     # 3) 兜底
     if not syms:
-        syms = ["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","COAIUSDT","CLOUSDT","XPLUSDT"]
+        syms = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "COAIUSDT", "CLOUSDT", "XPLUSDT"]
 
     if limit and limit > 0:
         syms = syms[:limit]
     return syms
 
+
 def _decide_text(res: Dict[str, Any]) -> str:
     """依据 prime/watch 选择模版；默认 watch 更安全。"""
     pub = res.get("publish") or {}
     return render_prime(res) if pub.get("prime") else render_watch(res)
+
 
 def _maybe_send(txt: str) -> bool:
     """如配置成功，发送到 Telegram。返回是否发送成功。"""
@@ -101,16 +106,18 @@ def _maybe_send(txt: str) -> bool:
         traceback.print_exc()
         return False
 
+
 def _save_json(res_dir: pathlib.Path, sym: str, res: Dict[str, Any]) -> None:
     res_dir.mkdir(parents=True, exist_ok=True)
     p = res_dir / f"{sym}.json"
     with p.open("w", encoding="utf-8") as f:
         json.dump(res, f, ensure_ascii=False, indent=2)
 
+
 def main(argv: List[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--send", action="store_true", help="发送到 Telegram（默认只打印不发）")
-    ap.add_argument("--only-prime", action="store_true", help="仅发送 prime=True 的信号")
+    ap.add_argument("--only-prime", dest="only_prime", action="store_true", help="仅发送 prime=True 的信号")
     ap.add_argument("--limit", type=int, default=24, help="最多处理多少个候选")
     ap.add_argument("--save-json", action="store_true", help="保存 analyze 结果 JSON 到 data/run_*/")
     ap.add_argument("--dry-run", action="store_true", help="强制不发送（即便带了 --send）")
@@ -154,7 +161,8 @@ def main(argv: List[str]) -> int:
                     print(f"[SAVE JSON FAIL] {s}: {e}", file=sys.stderr)
 
             do_send = args.send and (not args.dry_run)
-            if do_send and args.only-prime and (not pub.get("prime")):
+            # —— 修复点：使用 args.only_prime 而不是 args.only-prime ——
+            if do_send and args.only_prime and (not pub.get("prime")):
                 # 仅 prime，跳过非 prime
                 continue
 
@@ -177,6 +185,7 @@ def main(argv: List[str]) -> int:
         print(f"results dir: {out_dir}")
 
     return 1 if fails else 0
+
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))
