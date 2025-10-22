@@ -1,3 +1,4 @@
+import os
 ATS_SEND_WATCH = os.environ.get('ATS_SEND_WATCH','0') == '1'
 import os, urllib.request, urllib.parse
 
