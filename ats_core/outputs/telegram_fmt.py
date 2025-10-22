@@ -1,13 +1,15 @@
 # coding: utf-8
 """
-Unified Telegram template (prime & watch)
+Unified Telegram template (prime & watch) — FORCE FULL 6-DIM OUTPUT
 - 标题： [手动](可选) + 观察(可选) + 方向 + 概率% + TTL
 - 第二行：🔹 符号 · 现价（动态小数位、去尾 0）
-- 六维：恒显示解释；数值为 0 则隐藏该维（若有解释则显示“— + 解释”）
-- 去掉旧版重复“现价 …”行；不追加 UTC 有效期落款行
+- 六维：恒显示（趋势/结构/量能/加速/持仓/环境），0 分也显示，并给出简短解释
+- 不追加 UTC 有效期落款行；计划(入场/止损/TP)若有则显示
 """
 import os, html
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
+
+__TEMPLATE_SIG__ = "tmpl:force-6dims+show-zero@2025-10-22-11:05Z"
 
 # ---------- 基础格式化 ----------
 
@@ -84,14 +86,33 @@ def _fmt_code_px(x, r=None):
 
 # ---------- 分数提取/解释 ----------
 
+def _to_0_100(v: Any) -> Optional[float]:
+    """把 0~1 小数统一为 0~100，其他值原样返回；非数值返回 None。"""
+    try:
+        f = float(v)
+    except Exception:
+        return None
+    if 0.0 <= f <= 1.0:
+        return f * 100.0
+    return f
+
 def _norm_score_value(v: Any):
+    # 支持 dict/bool/数值
     if isinstance(v, dict):
         for k in ("score","value","v","s"):
-            if k in v: return v[k]
-        if "pass" in v: return bool(v["pass"])
+            if k in v:
+                out = _to_0_100(v[k])
+                return out if out is not None else v[k]
+        if "pass" in v:
+            return bool(v["pass"])
+        return None
+    if isinstance(v, (int, float)):
+        out = _to_0_100(v)
+        return out if out is not None else v
     return v
 
 def _score_lookup(r: Dict) -> Dict[str, Any]:
+    """汇总各容器，并支持 T/A/S/V/O/E 别名。"""
     buckets = [
         r.get("scores"), r.get("dim_scores"), r.get("dimensions"),
         r.get("six"), r.get("evidence"), r.get("checks"), r.get("dims"),
@@ -114,35 +135,45 @@ def _score_lookup(r: Dict) -> Dict[str, Any]:
         "持仓":  ("oi","open_interest","O"),
         "环境":  ("env","environment","E"),
     }
-    out={}
-    for name,alts in mapping.items():
+    out: Dict[str, Any] = {}
+    for name, alts in mapping.items():
         val=None
         for k in alts:
-            if k in sc: val=_norm_score_value(sc[k]); break
+            if k in sc:
+                val = _norm_score_value(sc[k])
+                break
         out[name]=val
     return out
 
 def _score_notes(r: Dict) -> Dict[str,str]:
+    """六维解释：notes / scores_meta / analysis.notes"""
     buckets = [ r.get("notes"), r.get("scores_meta"),
                 (r.get("analysis") or {}).get("notes") if isinstance(r.get("analysis"),dict) else None ]
-    pool={}
+    pool: Dict[str, Any] = {}
     for b in buckets:
         if isinstance(b, dict): pool.update(b)
     alias = {
-        "趋势":("trend","T"), "结构":("structure","struct","S"), "量能":("volume","vol","V"),
-        "加速":("accel","acceleration","A"), "持仓":("oi","open_interest","O"), "环境":("env","environment","E")
+        "趋势":("trend","T"),
+        "结构":("structure","struct","S"),
+        "量能":("volume","vol","V"),
+        "加速":("accel","acceleration","A"),
+        "持仓":("oi","open_interest","O"),
+        "环境":("env","environment","E"),
     }
     out={}
     for name,keys in alias.items():
         for k in (name,)+keys:
-            if k in pool: out[name]=html.escape(str(pool[k]), quote=False); break
+            if k in pool:
+                out[name]=html.escape(str(pool[k]), quote=False)
+                break
     return out
 
 def _auto_note(name: str, v: Any) -> str:
+    """当上游没给 notes 时，按分值自动生成简短解释（0 分也给解释）。"""
     try:
-        x = float(v)
+        x = float(v if v is not None else 0.0)
     except Exception:
-        return ""
+        x = 0.0
     if name == "趋势":
         if x >= 80: return "趋势强；多周期同侧"
         if x >= 65: return "趋势良好；回撤可控"
@@ -175,7 +206,7 @@ def _is_zero_like(v):
 
 # ---------- 交易计划/环境 ----------
 
-def _entry_band(r: Dict):
+def _entry_band(r: Dict) -> Tuple[Optional[Any],Optional[Any]]:
     band = _pick(r, "entry_zone","entry","band","ref_range","range","zone")
     lo = r.get("entry_lo"); hi = r.get("entry_hi")
     if lo is None or hi is None:
@@ -259,37 +290,35 @@ def render_signal(r: Dict, *, is_watch: bool=False) -> str:
         if tp_line:
             lines.append(f"止盈 <code>{tp_line}</code>")
 
-    # 六维（恒显解释；零分隐藏，除非有解释）
-    sc = _score_lookup(r)
+    # 六维 ———— 恒显；若上游缺失则按 0 处理；始终有解释
+    sc    = _score_lookup(r)
     notes = _score_notes(r)
     lines.append("")
     lines.append("<b>六维分析</b>")
+
+    order = ("趋势","结构","量能","加速","持仓","环境")
     bullets=[]
-    for name in ("趋势","结构","量能","加速","持仓","环境"):
-        v = sc.get(name)
-        # 解释：优先用上游 notes；若缺失且分值非零，则自动生成简短解释
+    for name in order:
+        raw_v = sc.get(name)
+        # 缺失视作 0
+        v = 0.0 if raw_v is None else raw_v
+        # 解释：优先 notes，没有则自动生成（包含 0 分场景）
         explain = notes.get(name) if isinstance(notes, dict) else None
-        if (not explain or not str(explain).strip()) and v is not None and not _is_zero_like(v):
+        if not explain or not str(explain).strip():
             explain = _auto_note(name, v)
-
-        tail = f" —— {explain}" if (explain and str(explain).strip()) else ""
-
-        if v is None:
-            # 无分值：仅当有显式解释时展示“— + 解释”，否则跳过
-            if tail:
-                bullets.append(f"• {name} ⚪ —{tail}")
-            continue
-
+        # 渲染
         if isinstance(v, bool):
-            bullets.append(f"• {name} {'✅' if v else '❌'}{tail}")
+            bullets.append(f"• {name} {'✅' if v else '❌'} —— {explain}")
         else:
-            if _is_zero_like(v):
-                # 零分：按规则隐藏，除非有解释（此时显示“— + 解释”）
-                if tail:
-                    bullets.append(f"• {name} ⚪ —{tail}")
-            else:
-                bullets.append(f"• {name} {_dot(v)} {_fmt_num(v,0)}{tail}")
-    lines.extend(bullets if bullets else ["—"])
+            vv = 0.0
+            try:
+                vv = float(v)
+            except Exception:
+                vv = 0.0
+            dot = _dot(vv)
+            bullets.append(f"• {name} {dot} {_fmt_num(vv,0)} —— {explain}")
+
+    lines.extend(bullets)
 
     # 环境/失效（可选）
     env_hint = _env_hint(r)
@@ -302,13 +331,8 @@ def render_signal(r: Dict, *, is_watch: bool=False) -> str:
             invalid = "  ".join(map(str, invalid))
         lines.append(f"<b>失效</b> {invalid}")
 
-    # 观察：未发布原因（可选）
-    if is_watch:
-        reasons = _pick(r,"unpub_reasons","watch_reasons","reasons")
-        if reasons:
-            if isinstance(reasons,(list,tuple)):
-                reasons = "；".join(map(str, reasons))
-            lines.append(f"<code>未发布原因：{html.escape(str(reasons),quote=False)}</code>")
+    # 末尾追加一个极短签名，便于确认是否加载到了这份模板
+    lines.append(f"\n<code>{__TEMPLATE_SIG__}</code>")
 
     return "\n".join(lines)
 
