@@ -6,36 +6,55 @@
   "overlay": {
     "z_volume_1h_threshold": 3.0,
     "min_hour_quote_usdt": 5000000,
-    "z24_and_24h_quote": { "z24": 2.0, "quote": 20000000 },
+    "z24_and_24h_quote": {
+      "z24": 2.0,
+      "quote": 20000000
+    },
     "oi_1h_pct_big": 0.12,
-    "oi_1h_pct_small": 0.20,
+    "oi_1h_pct_small": 0.2,
     "triple_sync": {
-      "dP1h_abs_pct": 0.10,
+      "dP1h_abs_pct": 0.1,
       "v5_over_v20": 2.5,
       "cvd_mix_abs_per_h": 0.12
     },
     "hot_decay_hours": 2.0
   },
-  "weights": { "T": 25, "A": 15, "S": 15, "V": 20, "O": 15, "E": 10 },
+  "weights": {
+    "T": 25,
+    "A": 15,
+    "S": 15,
+    "V": 20,
+    "O": 15,
+    "E": 10
+  },
   "publish": {
     "prob_threshold": 0.62,
-    "min_pass_dimensions": 4
+    "min_pass_dimensions": 4,
+    "watch": {
+      "prob_min": 0.58,
+      "dims_min": 2,
+      "require_micro": true
+    },
+    "prime": {
+      "prob_min": 0.6,
+      "dims_min": 4
+    }
   },
   "trend": {
     "ema_order_min_bars": 3,
-    "slope_atr_min_long": 0.30,
-    "slope_atr_min_short": -0.30,
-    "r2_min": 0.50
+    "slope_atr_min_long": 0.3,
+    "slope_atr_min_short": -0.3,
+    "r2_min": 0.5
   },
   "structure": {
     "theta": {
       "big": 0.35,
-      "small": 0.40,
+      "small": 0.4,
       "overlay_add": 0.05,
-      "new_phaseA_add": 0.10,
+      "new_phaseA_add": 0.1,
       "strong_regime_sub": 0.05,
       "min": 0.25,
-      "max": 0.60
+      "max": 0.6
     },
     "sq_threshold_base": 0.65,
     "sq_threshold_overlay": 0.72,
@@ -47,7 +66,7 @@
     "vlevel_short_max": 1.15,
     "vpeak_then_low": 2.0,
     "vroc_abs_min": 0.15,
-    "vroc_abs_max": 0.60
+    "vroc_abs_max": 0.6
   },
   "open_interest": {
     "long_oi24_lo": 0.05,
@@ -68,7 +87,8 @@
       "p_hi_big": 0.97,
       "p_lo_big": 0.03,
       "p_hi_small": 0.98,
-      "p_lo_small": 0.02
+      "p_lo_small": 0.02,
+      "enabled": false
     }
   },
   "prior_q": {
@@ -79,9 +99,9 @@
   "pricing": {
     "entry_ext_max": 0.6,
     "delta_base": 0.02,
-    "delta_coef": 0.10,
+    "delta_coef": 0.1,
     "sl_atr_back": 1.8,
-    "sl_pivot_back": 0.10,
+    "sl_pivot_back": 0.1,
     "tp1_R": 1.0,
     "tp2_R_max": 2.5,
     "tp2_room_floor_R": 1.8,
@@ -112,5 +132,13 @@
     "backoff_first_sec": 2.5,
     "backoff_max_sec": 30.0
   },
-  "majors": ["BTCUSDT","ETHUSDT"]
+  "majors": [
+    "BTCUSDT",
+    "ETHUSDT"
+  ],
+  "watch": {
+    "min_prob": 0.6,
+    "min_dims": 3,
+    "require_micro": true
+  }
 }

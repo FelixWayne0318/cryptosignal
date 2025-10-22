@@ -101,28 +101,54 @@ def _fetch_funding_rates(symbol: str, limit: int = 50) -> List[float]:
 
 def funding_hard_veto(symbol: str, is_bigcap: bool, params: dict):
     """
-    返回 (veto: bool, meta: dict)
-      meta = {"samples":N, "last":float, "pctl":百分位(0..100), "z":abs_robust_z}
-    规则（v1.5）：
-      • 大币：分位 ≥97% 或 ≤3% ；或 |z| ≥ 2.3
-      • 小币：分位 ≥98% 或 ≤2% ；或 |z| ≥ 2.0
-      • 样本不足（<12）→ 不否决（False）
+    返回 (veto: bool, meta: dict)。当 params.enabled 为 False 时，直接不否决。
     """
     try:
-        rates = _fetch_funding_rates(symbol, limit=int(params.get("funding_limit", 50)))
+        enabled = params.get("enabled", True) if isinstance(params, dict) else True
     except Exception:
-        return False, {"samples": 0, "last": None, "pctl": None, "z": None}
+        enabled = True
+    # 关掉：立刻返回，不打网
+    if str(enabled).lower() in ("0","false","no","off"):
+        return False, {"disabled": True}
 
-    if len(rates) < 12:
-        return False, {"samples": len(rates), "last": (rates[-1] if rates else None), "pctl": None, "z": None}
+    # ——以下保留极端判定（以防你以后重新打开）——
+    def _get(*keys, default=None, cast=float):
+        cfg = params or {}
+        for k in keys:
+            if k in cfg and cfg[k] is not None:
+                try:
+                    return cast(cfg[k])
+                except Exception:
+                    pass
+        return default
+
+    p_hi_big = _get("pctl_bigcap_hi", default=99.5)
+    p_lo_big = _get("pctl_bigcap_lo", default=0.5)
+    z_big    = _get("z_bigcap",       default=3.0)
+
+    p_hi_small = _get("pctl_smallcap_hi", default=99.7)
+    p_lo_small = _get("pctl_smallcap_lo", default=0.3)
+    z_small    = _get("z_smallcap",       default=3.0)
+
+    min_samples = int(_get("min_samples",    default=12, cast=int))
+    limit       = int(_get("funding_limit",  default=50, cast=int))
+
+    try:
+        rates = _fetch_funding_rates(symbol, limit=limit)
+    except Exception:
+        return False, {"samples":0, "last":None, "pctl":None, "z":None}
+
+    if len(rates) < min_samples:
+        return False, {"samples":len(rates), "last":(rates[-1] if rates else None),
+                       "pctl":None, "z":None}
 
     last = rates[-1]
-    pctl = _percentile_rank(rates, last)  # 0..100
+    pctl = _percentile_rank(rates, last)
     z    = abs(_robust_z(rates, last))
 
     if is_bigcap:
-        veto = (pctl >= 97.0 or pctl <= 3.0) or (z >= 2.3)
+        veto = (pctl >= p_hi_big or pctl <= p_lo_big) or (z >= z_big)
     else:
-        veto = (pctl >= 98.0 or pctl <= 2.0) or (z >= 2.0)
+        veto = (pctl >= p_hi_small or pctl <= p_lo_small) or (z >= z_small)
 
-    return veto, {"samples": len(rates), "last": last, "pctl": round(pctl,2), "z": round(z,2)}
+    return veto, {"samples":len(rates), "last":last, "pctl":round(pctl,2), "z":round(z,2)}
