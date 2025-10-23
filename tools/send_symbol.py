@@ -1,93 +1,134 @@
 # coding: utf-8
+"""
+tools/send_symbol.py
+手动发送“正式模板”信号的统一入口：
+- 解析命令行参数（symbol / to / note / tag / ttl）
+- 调用 analyze_symbol 产出指标
+- 用 telegram_fmt 的正式模板渲染
+- 依据 --to 选择合适的 Telegram Chat 并发送
+"""
+
 from __future__ import annotations
-
 import os
+import sys
 import argparse
-from typing import Dict, Any
+from typing import Any, Dict
 
+# --- 业务依赖 ---
 from ats_core.pipeline.analyze_symbol import analyze_symbol
-from ats_core.outputs.telegram_fmt import render_watch  # 统一用一个渲染器
 from ats_core.outputs.publisher import telegram_send
 
-from ats_core.sources.binance import get_klines, get_open_interest_hist
-from ats_core.features.cvd import cvd_from_klines, cvd_mix_with_oi_price, zscore_last
+# 模板渲染：优先直接用 render_signal（可区分“观察/正式”）；若老版本仅有 render_watch，则降级兼容
+try:
+    from ats_core.outputs.telegram_fmt import render_signal, render_watch  # type: ignore
+    HAS_RENDER_SIGNAL = True
+except Exception:
+    from ats_core.outputs.telegram_fmt import render_watch  # type: ignore
+    HAS_RENDER_SIGNAL = False
+    def render_signal(r: Dict[str, Any], is_watch: bool = True) -> str:
+        # 兼容兜底：没有 render_signal 就用 render_watch（样式可能少“正式”的标题）
+        return render_watch(r)
 
 
-def _ensure_env_for_channel(to: str, chat_id_cli: str | None) -> None:
+def _choose_chat_id(dest: str, override_chat: str | None) -> str:
     """
-    选择对应频道的 CHAT_ID（支持 --to trade）。
-    优先级：命令行 -> 专用环境变量 -> 通用 TELEGRAM_CHAT_ID
+    依据 --to 选择 Chat：
+      - trade/prime -> TELEGRAM_TRADE_CHAT_ID or TELEGRAM_PRIME_CHAT_ID or TELEGRAM_CHAT_ID
+      - watch/base  -> TELEGRAM_WATCH_CHAT_ID or TELEGRAM_CHAT_ID
+    手动指定 --chat-id 优先。
     """
-    if chat_id_cli:
-        os.environ["TELEGRAM_CHAT_ID"] = chat_id_cli
-        return
+    if override_chat:
+        return override_chat
 
-    # 优先各自专用变量
-    if to == "watch":
-        cid = os.getenv("TELEGRAM_WATCH_CHAT_ID") or os.getenv("ATS_TELEGRAM_WATCH_CHAT_ID")
-    elif to in ("prime", "trade"):
-        cid = os.getenv("TELEGRAM_TRADE_CHAT_ID") or os.getenv("ATS_TELEGRAM_TRADE_CHAT_ID")
-    elif to == "base":
-        cid = os.getenv("TELEGRAM_BASE_CHAT_ID") or os.getenv("ATS_TELEGRAM_BASE_CHAT_ID")
+    env = os.environ
+    if dest in ("trade", "prime"):
+        return (
+            env.get("TELEGRAM_TRADE_CHAT_ID")
+            or env.get("TELEGRAM_PRIME_CHAT_ID")
+            or env.get("TELEGRAM_CHAT_ID", "")
+        )
     else:
-        cid = None
-
-    # 退化到通用
-    if not cid:
-        cid = os.getenv("TELEGRAM_CHAT_ID") or os.getenv("ATS_TELEGRAM_CHAT_ID")
-
-    if not cid:
-        raise RuntimeError("没有可用的 Telegram Chat ID，请设置 TELEGRAM_CHAT_ID 或对应频道专用变量。")
-
-    os.environ["TELEGRAM_CHAT_ID"] = cid
+        return env.get("TELEGRAM_WATCH_CHAT_ID") or env.get("TELEGRAM_CHAT_ID", "")
 
 
-def _last(x):
-    if isinstance(x, (int, float)):
-        return float(x)
-    try:
-        return float(x[-1])
-    except Exception:
-        return x
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--symbol", required=True, help="如：BTCUSDT")
+    parser.add_argument(
+        "--to",
+        default="watch",
+        choices=["watch", "trade", "prime", "base"],
+        help="发送目标：watch(观察) / trade(正式) / prime(正式别名) / base",
+    )
+    parser.add_argument(
+        "--chat-id",
+        default=None,
+        help="可手动覆盖目标 Chat ID；不传则按 --to 走环境变量映射",
+    )
+    parser.add_argument(
+        "--tag",
+        default="none",
+        choices=["watch", "trade", "prime", "none"],
+        help="附加在消息末尾的标签（#watch/#trade/#prime），不影响模板本身",
+    )
+    parser.add_argument(
+        "--note",
+        default="",
+        help="备注说明，出现在模板的备注段落",
+    )
+    parser.add_argument(
+        "--ttl-h",
+        type=int,
+        default=8,
+        help="模板 TTL（小时），默认 8h",
+    )
+    args = parser.parse_args()
 
-
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--symbol", required=True, dest="symbol", help="例如：BTCUSDT")
-    ap.add_argument("--to", choices=("prime", "watch", "base", "trade"), default="watch")
-    ap.add_argument("--chat-id", dest="chat_id", default=None, help="覆盖发送目标 Chat ID")
-    ap.add_argument("--tag", choices=("prime", "watch", "none", "trade"), default="watch")
-    ap.add_argument("--note", default="", help="附加注释（可选）")
-    args = ap.parse_args()
-
-    if not (os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("ATS_TELEGRAM_BOT_TOKEN")):
-        raise RuntimeError("未设置 TELEGRAM_BOT_TOKEN（或 ATS_TELEGRAM_BOT_TOKEN）。")
-
-    # 1) 先跑你原有的分析逻辑
+    # 1) 分析
     res: Dict[str, Any] = analyze_symbol(args.symbol)
+    if not isinstance(res, dict):
+        print("analyze_symbol 未返回 dict，发送中止。", file=sys.stderr)
+        sys.exit(1)
 
-    # 2) 追加 CVD 指标（不改动你的业务判定，只是“补充字段”）
-    k1 = get_klines(args.symbol, "1h", 200)
-    oi = get_open_interest_hist(args.symbol, "1h", len(k1))
-    cvd = cvd_from_klines(k1)
-    _, mix = cvd_mix_with_oi_price(k1, oi)
-
-    res["cvd_z20"] = float(zscore_last(cvd, 20)) if cvd else 0.0
-    res["cvd_mix_abs_per_h"] = float(abs(mix[-1])) if mix else 0.0
-
-    # 3) 渲染（统一使用 render_watch，避免模板缺失）
-    #    把 symbol/tag/note 附到 res 里，供模板展示（模板里不存在也不会出错）
-    payload = dict(res)
+    # 2) 组装渲染 payload
+    payload: Dict[str, Any] = dict(res)
     payload["symbol"] = args.symbol
-    payload["tag"] = args.tag
     if args.note:
         payload["note"] = args.note
 
-    text = render_watch(payload)
+    # TTL / publish 信息（模板会读取）
+    publish = dict(payload.get("publish") or {})
+    publish.setdefault("ttl_h", args.ttl_h)
+    publish["dest"] = args.to
+    payload["publish"] = publish
 
-    # 4) 选择目标频道并发送
-    _ensure_env_for_channel(args.to, args.chat_id)
+    # 3) 模板渲染（统一用正式模板通道）
+    is_watch = args.to in ("watch", "base")
+    try:
+        text = render_signal(payload, is_watch=is_watch)
+    except TypeError:
+        # 万一老版本 render_signal 签名不带 is_watch，就降级
+        text = render_watch(payload) if is_watch else render_signal(payload)
+
+    # 可选：附加一个纯标签行，不改变模板主体
+    if args.tag != "none":
+        text = f"{text}\n#{args.tag}"
+
+    # 4) 选择 Chat 并发送
+    chat_id = _choose_chat_id(args.to, args.chat_id)
+    if not chat_id:
+        print(
+            "❌ 未找到可用 Chat ID。请设置：\n"
+            "  - 观察：TELEGRAM_WATCH_CHAT_ID 或 TELEGRAM_CHAT_ID\n"
+            "  - 正式：TELEGRAM_TRADE_CHAT_ID 或 TELEGRAM_PRIME_CHAT_ID 或 TELEGRAM_CHAT_ID",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    # publisher.telegram_send 读取 TELEGRAM_CHAT_ID，这里临时覆盖确保发到正确频道
+    os.environ["TELEGRAM_CHAT_ID"] = chat_id
     telegram_send(text)
+    print(f"✅ 已发送：symbol={args.symbol} to={args.to} chat={chat_id}")
 
 
 if __name__ == "__main__":
