@@ -1,4 +1,4 @@
-sudo -u linuxuser -H bash -lc 'cat > /opt/ats-quant/tools/full_run.py << "PY"
+sudo -u linuxuser -H tee /opt/ats-quant/tools/full_run.py >/dev/null <<'PY'
 # coding: utf-8
 from __future__ import annotations
 """
@@ -125,8 +125,8 @@ FALLBACK_UNIVERSE = ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT"
 
 def _pick_universe(limit: int) -> List[str]:
     try:
-        cands = _overlay_build()
-        if isinstance(cands, list) and cands: return [s.upper() for s in cands[:limit]]
+      cands = _overlay_build()
+      if isinstance(cands, list) and cands: return [s.upper() for s in cands[:limit]]
     except Exception: pass
     uni = _CFG_get("universe", default=[])
     if isinstance(uni, list) and uni: return [str(s).upper() for s in uni[:limit]]
@@ -201,4 +201,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-PY'
+PY
