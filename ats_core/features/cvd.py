@@ -1,146 +1,119 @@
 # coding: utf-8
 from __future__ import annotations
-
-"""
-CVD 统一实现：
-- 优先使用 Binance K 线中的 takerBuyBaseVolume（第 10 列索引 9）来估算主动买卖量差，
-  即 signed = buy_base - sell_base = (2 * taker_buy_base - volume)；
-- 若无 taker 字段，则回退为 sign(close - open) * volume；
-- 提供 cvd 累积、zscore、与 OI/价格的标准化混合信号。
-"""
-
-from typing import List, Sequence, Tuple, Dict, Any
+from typing import List, Sequence, Tuple
 import math
-from statistics import mean, pstdev
 
-from ats_core.cfg import CFG
-
-# ---- 工具 ----
 def _to_f(x) -> float:
     try:
         return float(x)
     except Exception:
-        return 0.0
+        return float('nan')
 
-def _last(x):
-    if isinstance(x, (int, float)):
-        return float(x)
-    try:
-        return float(x[-1])
-    except Exception:
-        return _to_f(x)
+def _col(kl: Sequence[Sequence], idx: int) -> List[float]:
+    return [_to_f(r[idx]) for r in kl if isinstance(r, (list, tuple)) and len(r) > idx]
 
-def _pct_series(xs: Sequence[float]) -> List[float]:
+def _pct_change(arr: Sequence[float]) -> List[float]:
     out: List[float] = []
     prev = None
-    for v in xs:
-        v = _to_f(v)
-        if prev is None or prev == 0:
+    for x in arr:
+        x = _to_f(x)
+        if not math.isfinite(x) or prev is None or prev == 0:
             out.append(0.0)
         else:
-            out.append((v / prev) - 1.0)
-        prev = v
+            out.append((x - prev) / prev)
+        prev = x
     return out
 
-def _zscore_series(xs: Sequence[float], n: int) -> List[float]:
+def _z_all(a: Sequence[float]) -> List[float]:
+    xs = [float(x) for x in a if isinstance(x, (int, float)) and math.isfinite(x)]
     if not xs:
-        return []
-    out: List[float] = []
-    q: List[float] = []
-    for v in xs:
-        q.append(_to_f(v))
-        if len(q) > n:
-            q.pop(0)
-        if len(q) < 2:
-            out.append(0.0)
-        else:
-            mu = mean(q)
-            sd = pstdev(q) or 1e-9
-            out.append((v - mu) / sd)
-    return out
+        return [0.0] * len(a)
+    m = sum(xs) / len(xs)
+    var = sum((x - m) ** 2 for x in xs) / max(1, len(xs) - 1)
+    std = math.sqrt(var) if var > 0 else 0.0
+    if std == 0:
+        return [0.0] * len(a)
+    return [((float(v) - m) / std) if isinstance(v, (int, float)) and math.isfinite(v) else 0.0 for v in a]
 
-def zscore_last(xs: Sequence[float], n: int) -> float:
-    zs = _zscore_series(xs, n)
-    return _last(zs) if zs else 0.0
+def _close_prices(kl: Sequence[Sequence]) -> List[float]:
+    # Binance futures klines: [0] openTime, [1] open, [2] high, [3] low, [4] close, [5] volume, ...
+    return _col(kl, 4)
 
-# ---- CVD 主体 ----
-def cvd_from_klines(klines: Sequence[Sequence[Any]], use_taker: bool = True) -> List[float]:
+def cvd_from_klines(klines: Sequence[Sequence]) -> List[float]:
     """
-    Binance kline 列表： [openTime, open, high, low, close, volume, closeTime,
-                         quoteVol, trades, takerBuyBase, takerBuyQuote, ignore]
-    返回逐根累加的 CVD（基于基准币数量）。
+    以“tick rule”估算买卖方向：close >= open 记为 +1，否则 -1；CVD = Σ(sign * volume)
+    输入为 Binance 期货 klines（12 列）。
     """
+    o = _col(klines, 1)
+    c = _col(klines, 4)
+    v = _col(klines, 5)
+    n = min(len(o), len(c), len(v))
+    s = 0.0
     cvd: List[float] = []
-    acc = 0.0
-    for r in klines:
-        try:
-            o = _to_f(r[1]); c = _to_f(r[4]); v = _to_f(r[5])
-            taker_buy_base = _to_f(r[9]) if (use_taker and len(r) > 9) else None
-            if taker_buy_base is not None and taker_buy_base > 0.0:
-                signed = 2.0 * taker_buy_base - v
-            else:
-                # 回退：用价格方向给体积加符号
-                sgn = 1.0 if (c - o) >= 0 else -1.0
-                signed = sgn * v
-            acc += signed
-        except Exception:
-            # 异常行跳过
-            acc += 0.0
-        cvd.append(acc)
+    for i in range(n):
+        oi, ci, vi = o[i], c[i], v[i]
+        if not (math.isfinite(oi) and math.isfinite(ci) and math.isfinite(vi)):
+            cvd.append(s)
+            continue
+        sign = 1.0 if ci >= oi else -1.0
+        s += sign * vi
+        cvd.append(s)
     return cvd
 
+def zscore_last(xs: Sequence[float], window: int = 20) -> float:
+    if not xs:
+        return 0.0
+    w = xs[-window:] if len(xs) >= window else list(xs)
+    w = [float(x) for x in w if isinstance(x, (int, float)) and math.isfinite(x)]
+    if len(w) < 2:
+        return 0.0
+    mean = sum(w) / len(w)
+    var = sum((x - mean) ** 2 for x in w) / max(1, len(w) - 1)
+    std = math.sqrt(var) if var > 0 else 0.0
+    if std == 0:
+        return 0.0
+    return (w[-1] - mean) / std
+
 def cvd_mix_with_oi_price(
-    klines: Sequence[Sequence[Any]],
-    oi_hist: Sequence[Dict[str, Any]],
-    window: int = 20,
-    weights: Dict[str, float] | None = None,
+    klines: Sequence[Sequence],
+    oi_hist: Sequence[dict],
+    window: int = 20
 ) -> Tuple[List[float], List[float]]:
     """
-    生成两条序列：
-      - cvd: 上述累加 CVD
-      - mix: 把 CVD 一阶变化、OI 百分比变化、价格百分比变化，各自做 rolling zscore 后线性加权的“合成动量”
+    组合信号示例：标准化后的 CVD + 价格收益 + OI 变化三者合成。
+    返回：(cvd_series, mix_series)
+    - mix_series 为每根 K 的综合强度（已标准化），越大代表量价+OI 同向越强。
     """
-    if weights is None:
-        wcfg = CFG.get("cvd", default={"w_cvd": 0.5, "w_oi": 0.3, "w_px": 0.2})
-    else:
-        wcfg = dict(weights)
-    w_cvd = float(wcfg.get("w_cvd", 0.5))
-    w_oi  = float(wcfg.get("w_oi", 0.3))
-    w_px  = float(wcfg.get("w_px", 0.2))
+    cvd = cvd_from_klines(klines)
+    closes = _close_prices(klines)
+    ret_p = _pct_change(closes)
 
-    # 价格序列
-    close = [_to_f(r[4]) for r in klines]
-    cvd = cvd_from_klines(klines, use_taker=True)
+    oi_vals: List[float] = []
+    if isinstance(oi_hist, (list, tuple)):
+        for d in oi_hist:
+            if not isinstance(d, dict):
+                continue
+            v = d.get("sumOpenInterest") or d.get("sumOpenInterestValue") or d.get("openInterest") or 0.0
+            oi_vals.append(_to_f(v))
 
-    # OI 序列（sumOpenInterest）
-    oi_vals = []
-    for o in oi_hist or []:
-        v = _to_f(o.get("sumOpenInterest"))
-        oi_vals.append(v)
-
-    # 对齐长度
-    n = min(len(close), len(cvd), len(oi_vals)) if oi_vals else min(len(close), len(cvd))
-    if n <= 3:
-        return cvd, []
-
-    close = close[-n:]
-    cvd = cvd[-n:]
     if oi_vals:
+        n = min(len(cvd), len(ret_p), len(oi_vals))
+        cvd = cvd[-n:]
+        ret_p = ret_p[-n:]
         oi_vals = oi_vals[-n:]
-
-    # 一阶变化 / 百分比
-    cvd_diff = [0.0] + [cvd[i]-cvd[i-1] for i in range(1, n)]
-    px_pct  = _pct_series(close)
-    if oi_vals:
-        oi_pct = _pct_series(oi_vals)
+        d_oi = _pct_change(oi_vals)
     else:
-        oi_pct = [0.0]*n
+        n = min(len(cvd), len(ret_p))
+        cvd = cvd[-n:]
+        ret_p = ret_p[-n:]
+        d_oi = [0.0] * n
 
-    # 滚动 zscore
-    z_cvd = _zscore_series(cvd_diff, window)
-    z_px  = _zscore_series(px_pct, window)
-    z_oi  = _zscore_series(oi_pct, window)
+    # 标准化
+    z_cvd = _z_all(cvd)
+    z_p = _z_all(ret_p)
+    z_oi = _z_all(d_oi)
 
-    # 线性混合
-    mix = [w_cvd*z_cvd[i] + w_oi*z_oi[i] + w_px*z_px[i] for i in range(n)]
+    mix = [1.0 * z_cvd[i] + 0.5 * z_p[i] + 0.5 * z_oi[i] for i in range(n)]
     return cvd, mix
+
+__all__ = ["cvd_from_klines", "cvd_mix_with_oi_price", "zscore_last"]
