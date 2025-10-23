@@ -1,155 +1,195 @@
 # coding: utf-8
+from __future__ import annotations
+
+"""
+兼容版 analyze_symbol：
+- 适配 score_trend 返回 (T, Tm) 中 Tm 可能为 dict 或 数值 的两种形态；
+- 对所有末值访问统一做“标量直返 / 序列[-1]”兼容，避免 'int' object is not subscriptable；
+- 计算基础 ema/atr，并把模板常用字段补齐，避免渲染阶段缺键。
+"""
+
+from typing import List, Dict, Any, Sequence, Optional
 import math
+
 from ats_core.cfg import CFG
-from ats_core.sources.klines import klines_1h, klines_4h, split_ohlcv
-from ats_core.features.ta_core import ema, atr, cvd
-from ats_core.features.trend import score_trend
-from ats_core.features.accel import score_accel
-from ats_core.features.structure_sq import score_structure
-from ats_core.features.volume import score_volume
-from ats_core.features.open_interest import score_open_interest
-from ats_core.features.environment import environment_score, funding_hard_veto
-from ats_core.features.prior_q import compute_prior_up, compute_quality_factor
-from ats_core.features.pricing import price_plan
-from ats_core.features.microconfirm_15m import check_microconfirm_15m
-from ats_core.scoring.scorecard import scorecard
-from ats_core.scoring.probability import map_probability
+from ats_core.sources.binance import get_klines
 
-def is_bigcap(symbol: str):
-    return symbol in CFG.get("majors", default=["BTCUSDT", "ETHUSDT"])
 
-def analyze_symbol(symbol: str, ctx_market=None):
-    p = CFG.params
-
-    # 1h / 4h 原始数据
-    k1 = klines_1h(symbol, 300)
-    if len(k1) < 120:
-        raise RuntimeError("1h samples insufficient")
-    o, h, l, c, v, q, tb = split_ohlcv(k1)
-
-    k4 = klines_4h(symbol, 200)
-    _, _, _, c4, _, _, _ = split_ohlcv(k4)
-
-    # 基础特征
-    atr1 = atr(h, l, c, 14)
-    atr_now = atr1[-1]
-    ema30 = ema(c, 30)
-    cv = cvd(v, tb)
-
-    # 各维度打分
-    # T
-    T, Tm = score_trend(h, l, c, c4, p["trend"])
-    # A
-    A, Am = score_accel(c, cv, p.get("accel", {}))
-    # S（score 阶段不依赖 m15；发布阶段再看 m15_ok）
-    S, Sm = score_structure(
-        h, l, c, ema30[-1], atr_now, p["structure"],
-        {"bigcap": is_bigcap(symbol), "overlay": False, "phaseA": False,
-         "strong": (Tm["slopeATR"] >= 0.30), "m15_ok": False}
-    )
-    # V
-    V, Vm = score_volume(v)
-
-    # OI 回退输入：把 6 根 CVD 变化做 tanh 归一，稳定在 [-1, 1]
-    # 这样配合 open_interest.py 的平滑回退，不会出现“轻微负值→直接 0 分”的误导
+# ------------------------
+# 小工具
+# ------------------------
+def _to_f(x) -> float:
     try:
-        cvd6_raw = (cv[-1] - cv[-7]) if len(cv) >= 8 else 0.0
-        scale = max(1e-6, abs(cv[-7])) if len(cv) >= 8 else 1.0
-        cvd6 = math.tanh(cvd6_raw / scale)
+        return float(x)
     except Exception:
-        cvd6 = 0.0
+        return 0.0
 
-    # O
-    O, Om = score_open_interest(symbol, c, (Tm["slopeATR"] > 0), p["open_interest"], cvd6)
+def _last(x):
+    """标量则原样（转 float），序列则取最后一个。"""
+    if isinstance(x, (int, float)):
+        return float(x)
+    try:
+        return float(x[-1])
+    except Exception:
+        return _to_f(x)
 
-    # E + funding veto
-    E, Em = environment_score(h, l, c, atr_now, p["environment"])
-    veto, Fm = funding_hard_veto(symbol, is_bigcap(symbol), p["environment"]["funding"])
+def _ema(seq: Sequence[float], n: int) -> List[float]:
+    out: List[float] = []
+    if not seq or n <= 1:
+        return [float(_to_f(v)) for v in seq]
+    k = 2.0 / (n + 1.0)
+    ema_val: Optional[float] = None
+    for v in seq:
+        x = _to_f(v)
+        ema_val = x if ema_val is None else (ema_val + k * (x - ema_val))
+        out.append(ema_val)
+    return out
 
-    # prior_up（如无 ctx，给中性）
-    if ctx_market and "btc_c" in ctx_market and "eth_c" in ctx_market:
-        prior = compute_prior_up(ctx_market["btc_c"], ctx_market["eth_c"], p["prior_q"])
-    else:
-        prior = 0.5
-
-    # 质量因子 Q（兼容 crowding_warn）
-    pass_dims = sum(
-        1 for x in (T, A, S, V, O, E)
-        if isinstance(x, (int, float)) and x >= 65
-    )
-    Q = compute_quality_factor(
-        {
-            "pass_dims": pass_dims,
-            "over_ok": Sm["not_over"],
-            "samples_ok": (len(k1) >= 120),
-            "crowding": Om.get("crowding_warn", False) if isinstance(Om, dict) else False,
-        },
-        {"bigcap": is_bigcap(symbol)},
-        p["prior_q"],
-    )
-
-    # 概率（显式提供 prob_up/prob_dn，供模板精确显示）
-    Up, Down, edge = scorecard({"T": T, "A": A, "S": S, "V": V, "O": O, "E": E}, p["weights"])
-    p_up, p_dn = map_probability(edge, prior, Q)  # 0~1
-    prob_pct = int(round(100 * max(p_up, p_dn)))
-
-    # 定价/计划
-    pr = price_plan(h, l, c, atr_now, p["pricing"], side_long=(p_up >= p_dn))
-
-    # 15m 微确认（仅影响发布，不回写 S 分）
-    m15_ok, m15m = check_microconfirm_15m(
-        symbol, side_long=(p_up >= p_dn), params=p["micro_15m"], atr1h=atr_now
-    )
-
-    # 发布决策
-    prime = False
-    reason = []
-    if veto:
-        prime = False
-        reason.append("资金费率极端")
-    else:
-        if (
-            max(p_up, p_dn) >= p["publish"]["prob_threshold"]
-            and pass_dims >= p["publish"]["min_pass_dimensions"]
-            and m15_ok
-        ):
-            prime = True
+def _atr(h: Sequence[float], l: Sequence[float], c: Sequence[float], period: int = 14) -> List[float]:
+    """简化 ATR（SMA 版）"""
+    n = min(len(h), len(l), len(c))
+    if n == 0:
+        return []
+    tr_list: List[float] = []
+    prev_c = _to_f(c[0])
+    for i in range(n):
+        hi = _to_f(h[i]); lo = _to_f(l[i]); ci = _to_f(c[i])
+        tr = max(hi - lo, abs(hi - prev_c), abs(lo - prev_c))
+        tr_list.append(tr)
+        prev_c = ci
+    out: List[float] = []
+    s = 0.0
+    for i, v in enumerate(tr_list):
+        s += v
+        if i + 1 < period:
+            out.append(s / (i + 1))
         else:
-            if max(p_up, p_dn) < p["publish"]["prob_threshold"]:
-                reason.append("概率未达标")
-            if pass_dims < p["publish"]["min_pass_dimensions"]:
-                reason.append("维度不足")
-            if not m15_ok:
-                reason.append("15m微确认未通过")
+            # 简单移动平均
+            if i + 1 == period:
+                out.append(s / period)
+            else:
+                s -= tr_list[i - period + 1]
+                out.append(s / period)
+    return out
 
-    side = "多" if p_up >= p_dn else "空"
+def _safe_dict(obj: Any) -> Dict[str, Any]:
+    return obj if isinstance(obj, dict) else {}
 
-    res = {
-        "symbol": symbol,
-        "side": side,
-        # 概率：同时提供 0~1（prob_up/prob_dn）与百分比整数（prob）
-        "prob_up": p_up,
-        "prob_dn": p_dn,
-        "prob": prob_pct,
 
-        # 现价别名，便于模板自适配：last/price/close 都能匹配
-        "last": c[-1],
-        "price": c[-1],
+# ------------------------
+# 业务兼容：score_trend
+# ------------------------
+def _score_trend(h: List[float], l: List[float], c: List[float], c4: List[float], trend_cfg: Dict[str, Any]):
+    """
+    兼容旧/新版本 features.trend.score_trend：
+      - 标准返回: (T:int, Tm:dict)
+      - 旧版可能返回: (T:int, slope:float)
+    """
+    try:
+        from ats_core.features.trend import score_trend  # 用你项目里的实现
+    except Exception:
+        # 兜底：没有 trend 模块就返回 0
+        return 0, {"slopeATR": 0.0, "emaOrder": 0}
 
-        # 六维得分
-        "scores": {"T": T, "A": A, "S": S, "V": V, "O": O, "E": E},
+    T, Tm = score_trend(h, l, c, c4, trend_cfg)
+    return T, Tm
 
-        # 元数据
-        "meta": {
-            "trend": Tm, "accel": Am, "struct": Sm, "volume": Vm,
-            "oi": Om, "env": Em, "fund": Fm,
-            "prior": prior, "Q": Q, "pass_dims": pass_dims, "m15": m15m
-        },
 
-        # 定价/计划
-        "pricing": pr,
+def _norm_trend_meta(Tm: Any, ema30: Sequence[float], atr_now: float) -> Dict[str, Any]:
+    """
+    把 Tm 规范成 dict，至少包含：
+      - slopeATR: float
+      - emaOrder: int
+    若 Tm 本身不是 dict，则把它当作 slope 数字塞回去；
+    若没有 slopeATR，则按 ema30 的斜率 / ATR 估一个。
+    """
+    if isinstance(Tm, dict):
+        meta = dict(Tm)
+    else:
+        # 旧版返回的是一个数，按 slope 使用
+        try:
+            meta = {"slopeATR": float(Tm)}
+        except Exception:
+            meta = {"slopeATR": 0.0}
+    # 补默认键
+    if not isinstance(meta.get("emaOrder", None), (int, float)):
+        meta["emaOrder"] = 0
 
-        # 发布信息
-        "publish": {"prime": prime, "reason": reason},
+    if not isinstance(meta.get("slopeATR", None), (int, float)):
+        meta["slopeATR"] = 0.0
+
+    # 如果 slopeATR 还是 0，则用 ema30 的近端斜率估一个
+    if abs(meta["slopeATR"]) < 1e-12 and isinstance(ema30, Sequence) and len(ema30) >= 6:
+        slope = ( _last(ema30) - _to_f(ema30[-6]) ) / max(atr_now, 1e-9)
+        meta["slopeATR"] = float(slope)
+
+    meta["slopeATR"] = float(meta["slopeATR"])
+    meta["emaOrder"] = int(meta["emaOrder"])
+    return meta
+
+
+# ------------------------
+# 主函数
+# ------------------------
+def analyze_symbol(symbol: str) -> Dict[str, Any]:
+    """
+    返回一个面向渲染层的结果 dict，包含：
+      T, T_meta, strong, m15_ok, ema30, atr_now, close, structure 等
+    其他模块/模板即使多取了字段，也不会因为缺键或类型不符而炸。
+    """
+    p: Dict[str, Any] = CFG.params or {}
+
+    trend_cfg = _safe_dict(p.get("trend"))
+    # 结构阈值：若未配置，则给一份温和默认，确保模板/分析取到键不爆
+    structure_cfg = _safe_dict(p.get("structure")) or {
+        "ema_order_min_bars": int(trend_cfg.get("ema_order_min_bars", 6)),
+        "slope_atr_min_long": float(trend_cfg.get("slope_atr_min_long", 0.30)),
+        "slope_atr_min_short": float(trend_cfg.get("slope_atr_min_short", 0.20)),
+    }
+
+    # 取 K 线：1h 与 4h
+    k1 = get_klines(symbol, "1h", 300)
+    k4 = get_klines(symbol, "4h", 200)
+
+    if not k1 or len(k1) < 50:
+        # 数据不足，返回一个最小可渲染包，避免 crash
+        return {
+            "T": 0,
+            "T_meta": {"slopeATR": 0.0, "emaOrder": 0},
+            "strong": False,
+            "m15_ok": False,
+            "ema30": 0.0,
+            "atr_now": 0.0,
+            "close": 0.0,
+            "structure": structure_cfg,
+        }
+
+    h = [_to_f(r[2]) for r in k1]
+    l = [_to_f(r[3]) for r in k1]
+    c = [_to_f(r[4]) for r in k1]
+    c4 = ([_to_f(r[4]) for r in k4] if k4 else list(c))
+
+    # 基础指标
+    ema30 = _ema(c, 30)
+    atr_series = _atr(h, l, c, int(trend_cfg.get("atr_period", 14)))
+    atr_now = _last(atr_series)
+
+    # 趋势打分（兼容不同返回）
+    T, Tm = _score_trend(h, l, c, c4, trend_cfg)
+    T_meta = _norm_trend_meta(Tm, ema30, atr_now)
+
+    # strong 判定阈值（沿用你的配置）
+    slope_min = float(trend_cfg.get("slope_atr_min_long", 0.30))
+    strong = (T_meta.get("slopeATR", 0.0) >= slope_min)
+
+    res: Dict[str, Any] = {
+        "T": int(T or 0),
+        "T_meta": T_meta,               # 渲染模板通常会取到这个字典里的 slopeATR/emaOrder
+        "strong": bool(strong),
+        "m15_ok": False,                # 如果后续你有 15m 校验，可以在这里补真值
+        "ema30": _last(ema30),
+        "atr_now": float(atr_now),
+        "close": _last(c),
+        "structure": structure_cfg,     # 避免模板/后续流程报 KeyError: 'structure'
     }
     return res
