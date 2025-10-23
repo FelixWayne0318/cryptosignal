@@ -1,37 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 读取 Telegram 凭据
-[ -f "$HOME/.telegram.env" ] && . "$HOME/.telegram.env" || true
+# 已按你的要求写死在脚本里（需要时也可用环境变量覆盖）
+: "${TELEGRAM_BOT_TOKEN:=7545580872:AAF7HzkHA4LRQUiOZngUgL39epuGVeEta70}"
+: "${TELEGRAM_CHAT_ID:=-1003142003085}"
 
-BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
-CHAT_ID="${TELEGRAM_CHAT_ID:-}"
-
-if [ -z "${BOT_TOKEN}" ] || [ -z "${CHAT_ID}" ]; then
-  echo "❌ TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID 未设置。请在 ~/.telegram.env 配置后重试。" >&2
-  exit 2
-fi
-
-if [ $# -lt 1 ]; then
+if [[ $# -lt 1 ]]; then
   echo "用法: $0 <file> [caption]" >&2
   exit 2
 fi
 
-FILE="$1"
-CAPTION="${2:-}"
+FILE="$1"; shift || true
+CAPTION="${*:-}"
 
-if [ ! -f "$FILE" ]; then
+if [[ ! -f "$FILE" ]]; then
   echo "❌ 文件不存在: $FILE" >&2
-  exit 2
+  exit 3
 fi
 
-API="https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
+API="https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument"
 
-echo "→ 发送: $FILE"
-curl -fsS -X POST "$API" \
-  -F "chat_id=${CHAT_ID}" \
+resp="$(curl -sS -X POST "$API" \
+  -F "chat_id=${TELEGRAM_CHAT_ID}" \
   -F "document=@${FILE}" \
   -F "caption=${CAPTION}" \
-  -m 600 -o /dev/null
+  -F "parse_mode=HTML")"
 
-echo "✅ 发送完成: $FILE"
+if printf '%s' "$resp" | grep -q '"ok":true'; then
+  echo "✅ 已发送: $FILE"
+else
+  echo "❌ 发送失败，返回: $resp" >&2
+  exit 4
+fi
