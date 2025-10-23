@@ -1,51 +1,47 @@
+# tools/send_symbol.py
 # coding: utf-8
 from __future__ import annotations
-import os, argparse
+import argparse
+import os
+
 from ats_core.pipeline.analyze_symbol import analyze_symbol
 from ats_core.outputs.telegram_fmt import render_watch
-from ats_core.outputs.publisher import telegram_send
 
-def pick_chat_id(dest: str|None, chat_id_cli: str|None) -> str:
-    if chat_id_cli:
-        return chat_id_cli
-    if dest == "prime":
-        envs = ["TELEGRAM_CHAT_ID_PRIME","ATS_TELEGRAM_CHAT_ID_PRIME",
-                "TELEGRAM_CHAT_ID","ATS_TELEGRAM_CHAT_ID"]
-    elif dest == "watch":
-        envs = ["TELEGRAM_CHAT_ID_WATCH","ATS_TELEGRAM_CHAT_ID_WATCH",
-                "TELEGRAM_CHAT_ID","ATS_TELEGRAM_CHAT_ID"]
-    else:
-        envs = ["TELEGRAM_CHAT_ID","ATS_TELEGRAM_CHAT_ID"]
-    for k in envs:
-        v = os.getenv(k)
-        if v:
-            return v
-    return ""
+# 兼容只提供 telegram_send(text) 的场景
+try:
+    from ats_core.outputs.publisher import telegram_send_to as _send_to  # type: ignore
+except Exception:
+    _send_to = None
+from ats_core.outputs.publisher import telegram_send  # type: ignore
+
+TO_ALIAS = {"trade": "prime"}
 
 def main():
-    ap = argparse.ArgumentParser(description="强制渲染并发送某个标的（忽略 prime/观察判定）")
-    ap.add_argument("--symbol", required=True, help="如 BTCUSDT")
-    ap.add_argument("--to", choices=["prime","watch","base"], default="base")
-    ap.add_argument("--chat-id", default=None)
-    ap.add_argument("--tag", choices=["prime","watch","none"], default="none")
-    ap.add_argument("--note", default="", help="附加在文首的一段备注")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--symbol", required=True, dest="symbol")
+    ap.add_argument("--to", choices=["prime", "watch", "base", "trade"], default="watch")
+    ap.add_argument("--tag", choices=["prime", "watch", "none", "trade"], default="watch")
+    ap.add_argument("--note", default="")
+    ap.add_argument("--chat-id", dest="chat_id", default=None)
     args = ap.parse_args()
 
-    res = analyze_symbol(args.symbol)
-    res["symbol"] = args.symbol
-    txt = render_watch(res)
-    if args.note:
-        txt = f"{args.note}\n{txt}"
-    if args.tag == "prime":
-        txt = "【正式】\n" + txt
-    elif args.tag == "watch":
-        txt = "【观察】\n" + txt
+    dest = TO_ALIAS.get(args.to, args.to)
+    tag  = TO_ALIAS.get(args.tag, args.tag)
 
-    cid = pick_chat_id(args.to, args.chat_id)
-    if not cid:
-        raise SystemExit("❌ 没有可用 chat_id，请导出 TELEGRAM_CHAT_ID* 或用 --chat-id 指定。")
-    os.environ["TELEGRAM_CHAT_ID"] = cid
-    os.environ["ATS_TELEGRAM_CHAT_ID"] = cid
+    res = analyze_symbol(args.symbol)
+    # 渲染
+    txt = render_watch(dict(res, symbol=args.symbol))
+    if args.note:
+        txt = f"{args.note}\n\n{txt}"
+
+    # 发送
+    chat_id = args.chat_id or os.getenv("TELEGRAM_CHAT_ID") or os.getenv("ATS_TELEGRAM_CHAT_ID")
+    if _send_to is not None:
+        try:
+            _send_to(txt, to=dest, chat_id=chat_id)
+            return
+        except TypeError:
+            pass  # 回退到简单接口
     telegram_send(txt)
 
 if __name__ == "__main__":
