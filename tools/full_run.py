@@ -196,7 +196,8 @@ def main():
     print(f"prime:      {prime_cnt}")
     print(f"sent:       {send_cnt}")
     print(f"fails:      {fail_cnt}")
-    if args.save_json: print(f"results dir: {results_dir}")
+    if args.save_json:
+        print(f"results dir: {results_dir}")
 
 if __name__ == "__main__":
     main()
