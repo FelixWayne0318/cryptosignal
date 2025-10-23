@@ -24,6 +24,8 @@ def _robust_z24(symbol):
 def build_base_universe():
     # 修复：从 overlay 配置读取参数
     overlay_params = CFG.get("overlay", default={})
+    # 安全地获取黑名单
+    blacklist = getattr(CFG, 'blacklist', []) or []
     t = all_24h()
     base=[]
     for x in t:
@@ -33,7 +35,7 @@ def build_base_universe():
             if not sym.endswith("USDT"): continue
             # 放宽：500万USDT成交额（原来1000万）
             if q < 5000000: continue
-            if sym in CFG.blacklist: continue
+            if sym in blacklist: continue
             z24=_robust_z24(sym)
             if z24 is None: continue
             # 放宽：z24绝对值>=0.5（原来1.0）
