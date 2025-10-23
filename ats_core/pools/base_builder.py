@@ -22,7 +22,10 @@ def _robust_z24(symbol):
     return z
 
 def build_base_universe():
-    params = CFG.get("universe", default={})
+    # 修复：从 overlay 配置读取参数
+    overlay_params = CFG.get("overlay", default={})
+    # 安全地获取黑名单
+    blacklist = getattr(CFG, 'blacklist', []) or []
     t = all_24h()
     base=[]
     for x in t:
@@ -30,11 +33,13 @@ def build_base_universe():
             sym=x["symbol"]
             q=float(x["quoteVolume"])
             if not sym.endswith("USDT"): continue
-            if q < params.get("min_24h_quote_usdt", 1e7): continue
-            if sym in CFG.blacklist: continue
+            # 放宽：500万USDT成交额（原来1000万）
+            if q < 5000000: continue
+            if sym in blacklist: continue
             z24=_robust_z24(sym)
             if z24 is None: continue
-            if abs(z24) >= params.get("robust_z24_abs_threshold",1.0):
+            # 放宽：z24绝对值>=0.5（原来1.0）
+            if abs(z24) >= 0.5:
                 base.append({"symbol":sym,"z24":z24,"quote":q})
         except: pass
     base = sorted(base, key=lambda x: -x["quote"])
