@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 
 from ats_core.backoff import sleep_retry
 
-# 期货域名；如需自定义，可导出 ATS_BINANCE_BASE
+# Binance 期货 API 基础地址；可通过环境变量覆盖
 BASE = os.getenv("ATS_BINANCE_BASE", "https://fapi.binance.com")
 
 def _as_float(x, default: float) -> float:
@@ -24,7 +24,7 @@ def _as_int(x, default: int) -> int:
     except Exception:
         return int(default)
 
-# 全局默认超时/重试（统一强制为数字）
+# 统一默认的超时与重试次数（字符串也会被安全转成数字）
 DEFAULT_TIMEOUT = _as_float(os.getenv("ATS_HTTP_TIMEOUT", os.getenv("HTTP_TIMEOUT", 5)), 5.0)
 DEFAULT_RETRIES = _as_int(os.getenv("ATS_HTTP_MAX_RETRIES", os.getenv("HTTP_MAX_RETRIES", 4)), 4)
 
@@ -33,7 +33,7 @@ def _fetch(url: str,
            timeout: float | int | None = None,
            retries: int | None = None) -> Any:
     """
-    GET 并解析 JSON；对 timeout/retries 做显式转型，避免类型错误。
+    GET 并解析 JSON；显式数值化 timeout/retries，避免类型错误。
     """
     to = DEFAULT_TIMEOUT if timeout is None else _as_float(timeout, DEFAULT_TIMEOUT)
     rt = DEFAULT_RETRIES if retries is None else _as_int(retries, DEFAULT_RETRIES)
@@ -56,8 +56,8 @@ def _fetch(url: str,
             last_err = e
             if i >= rt - 1:
                 break
+            # 退避重试（backoff 内部也只用数字参与计算）
             sleep_retry(i)
-    # 重试仍失败
     if last_err:
         raise last_err
 
@@ -74,12 +74,21 @@ def get_klines(symbol: str, interval: str = "1h", limit: int = 300) -> List[List
         params={"symbol": symbol, "interval": interval, "limit": limit},
     )
 
-def get_ticker_24hr(symbol: str) -> Dict[str, Any]:
+def get_ticker_24h(symbol: str | None = None) -> Dict[str, Any] | List[Dict[str, Any]]:
     """
     24h 统计（含成交额等）
     GET /fapi/v1/ticker/24hr
+    - 传入 symbol（如 "BTCUSDT"）返回单个 dict
+    - 不传 / 传 None 返回全量 list[dict]
     """
-    return _fetch(f"{BASE}/fapi/v1/ticker/24hr", params={"symbol": symbol})
+    if symbol:
+        return _fetch(f"{BASE}/fapi/v1/ticker/24hr", params={"symbol": symbol})
+    else:
+        # 不带 symbol 按 Binance 行为返回全市场列表
+        return _fetch(f"{BASE}/fapi/v1/ticker/24hr", params=None)
+
+# 兼容旧命名（有人从其他模块 import get_ticker_24hr）
+get_ticker_24hr = get_ticker_24h
 
 def get_funding_rate_hist(symbol: str,
                           startTime: int | None = None,
@@ -102,12 +111,10 @@ def get_open_interest_hist(symbol: str,
                            period: str = "1h",
                            limit: int = 200) -> List[Dict[str, Any]]:
     """
-    OI 历史（Binance 期货数据）
+    OI 历史
     GET /futures/data/openInterestHist
     period: 5m / 15m / 1h / 4h / 1d
     """
-    # 注意：该路径不是 /fapi/v1，而是 /futures/data
-    # 官方域名仍使用 fapi.binance.com
     limit = _as_int(limit, 200)
     return _fetch(
         f"{BASE}/futures/data/openInterestHist",
