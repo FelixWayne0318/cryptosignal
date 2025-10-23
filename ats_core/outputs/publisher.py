@@ -1,26 +1,44 @@
-import os
-ATS_SEND_WATCH = os.environ.get('ATS_SEND_WATCH','0') == '1'
-import os, urllib.request, urllib.parse
+# coding: utf-8
+from __future__ import annotations
 
-def _load_env():
-    # read .env at repo root if exists
-    try:
-        root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        for path in (os.path.join(root,".env"), os.path.expanduser("~/ats-analyzer/.env")):
-            if os.path.isfile(path):
-                for line in open(path,'r',encoding='utf-8'):
-                    s=line.strip()
-                    if not s or s.startswith("#") or "=" not in s: continue
-                    k,v=s.split("=",1); k=k.strip(); v=v.strip()
-                    if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")): v=v[1:-1]
-                    os.environ.setdefault(k,v)
-    except: pass
+import json
+import urllib.parse
+import urllib.request
+from typing import Optional
 
-def telegram_send(html:str):
-    _load_env()
-    token=os.environ.get("TELEGRAM_BOT_TOKEN")
-    chat =os.environ.get("TELEGRAM_CHAT_ID")
-    if not token or not chat: return
-    data=urllib.parse.urlencode({"chat_id":chat, "text":html, "parse_mode":"HTML", "disable_web_page_preview":"true"}).encode()
-    req=urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
-    urllib.request.urlopen(req, timeout=12).read()
+def _env(name: str, default: Optional[str]=None) -> Optional[str]:
+    import os
+    return os.getenv(name, default)
+
+def telegram_send(text: str,
+                  chat_id: Optional[str] = None,
+                  bot_token: Optional[str] = None) -> None:
+    """
+    发送纯文本到 Telegram。支持在调用时覆盖 chat_id / bot_token。
+    回退顺序：
+      - 入参 chat_id / bot_token
+      - 环境变量 TELEGRAM_CHAT_ID / TELEGRAM_BOT_TOKEN
+      - 兼容旧名 ATS_TELEGRAM_CHAT_ID / ATS_TELEGRAM_BOT_TOKEN
+    """
+    chat_id = (chat_id
+               or _env("TELEGRAM_CHAT_ID")
+               or _env("ATS_TELEGRAM_CHAT_ID"))
+    bot_token = (bot_token
+                 or _env("TELEGRAM_BOT_TOKEN")
+                 or _env("ATS_TELEGRAM_BOT_TOKEN"))
+    if not bot_token or not chat_id:
+        raise RuntimeError("telegram_send 缺少 bot_token 或 chat_id")
+
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    data = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+    }
+    body = urllib.parse.urlencode(data).encode("utf-8")
+    req = urllib.request.Request(url, data=body, headers={
+        "Content-Type": "application/x-www-form-urlencoded"
+    })
+    with urllib.request.urlopen(req, timeout=10) as r:
+        _ = json.loads(r.read().decode("utf-8"))
