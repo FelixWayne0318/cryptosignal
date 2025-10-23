@@ -1,134 +1,169 @@
 # coding: utf-8
 from __future__ import annotations
-from typing import Any, Dict, Sequence
-import math
-import html
 
-def _pick(d: Any, *args, default=None):
+from typing import Any, Mapping, Sequence, Optional
+
+
+# ------------ 小工具（健壮取值 + 统一格式化）------------
+
+def _get(obj: Any, key_or_path: Any, default: Any = None) -> Any:
     """
-    兼容写法：
-      _pick(r, "ttl_h", "ttl_hours")
-      _pick(r, "publish", {})
-      _pick(r, "publish", default={})
-      _pick(r, "publish", {}, default=8)
-    规则：
-      - 最后一个“非字符串”的位置参数，视为默认值（若 default 未显式传入）
-      - 逐个键尝试命中；若 d 非 dict，或都未命中，返回默认值
+    安全取值：
+    - key_or_path 是 str -> 从 dict 取
+    - 是 list/tuple -> 按路径逐级深入
+    - 否则 -> default
     """
-    _default = default
-    keys = list(args)
-    if keys and not isinstance(keys[-1], str):
-        if _default is None:
-            _default = keys[-1]
-        keys = keys[:-1]
-    if not isinstance(d, dict):
-        return _default
-    for k in keys:
-        if isinstance(k, str) and k in d:
-            return d.get(k)
-    return _default
-
-def _ttl_hours(r: Dict[str, Any]) -> int:
-    v = _pick(r, "ttl_h", "ttl_hours")
-    if isinstance(v, (int, float)) and math.isfinite(float(v)):
-        return int(v)
-    pub = _pick(r, "publish", default={})
-    if isinstance(pub, dict):
-        v2 = _pick(pub, "ttl_h", default=None)
-        if isinstance(v2, (int, float)) and math.isfinite(float(v2)):
-            return int(v2)
-    return 8
-
-def _fmt_pct(x) -> str:
-    try:
-        x = float(x)
-        s = "+" if x >= 0 else ""
-        return f"{s}{x * 100:.2f}%"
-    except Exception:
-        return "-"
-
-def _fmt_price(x) -> str:
-    try:
-        return f"{float(x):.6g}"
-    except Exception:
-        return str(x)
-
-def render_signal(r: Dict[str, Any], is_watch: bool = False) -> str:
-    sym = _pick(r, "symbol", "sym", "pair", default="UNKNOWN")
-    note = _pick(r, "note", "desc", "comment", default=None)
-    ttl = _ttl_hours(r)
-    tag = "👀 观察" if is_watch else "🚀 交易"
-    header = f"<b>{tag}</b> · <b>{html.escape(str(sym))}</b>"
-    lines = [header]
-
-    # 计划：entry/tp/sl（可选）
-    entry = _pick(r, "entry", "price", default=None)
-    tp = _pick(r, "tp", "take_profit", "targets", default=None)
-    sl = _pick(r, "sl", "stop", "stop_loss", default=None)
-    if entry is not None or tp is not None or sl is not None:
-        lines.append("<b>计划</b>")
-        if entry is not None:
-            lines.append(f"• 入场：<code>{_fmt_price(entry)}</code>")
-        if tp is not None:
-            if isinstance(tp, (list, tuple)):
-                tp_str = ", ".join(_fmt_price(x) for x in tp[:5])
+    if obj is None:
+        return default
+    if isinstance(key_or_path, (list, tuple)):
+        cur = obj
+        for k in key_or_path:
+            if isinstance(cur, Mapping) and k in cur:
+                cur = cur[k]
             else:
-                tp_str = _fmt_price(tp)
-            lines.append(f"• 止盈：<code>{tp_str}</code>")
-        if sl is not None:
-            lines.append(f"• 止损：<code>{_fmt_price(sl)}</code>")
+                return default
+        return cur
+    if isinstance(key_or_path, str) and isinstance(obj, Mapping):
+        return obj.get(key_or_path, default)
+    return default
 
-    # 趋势（可选）
-    trend = _pick(r, "trend", default=None)
-    if isinstance(trend, dict):
-        slope = _pick(trend, "slopeATR", "slope_atr", default=None)
-        ema_ok = _pick(trend, "ema_order_ok", default=None)
-        msgs = []
-        if slope is not None:
-            msgs.append(f"slopeATR={_fmt_price(slope)}")
-        if ema_ok is not None:
-            msgs.append(f"EMA序={'✓' if ema_ok else '×'}")
-        if msgs:
-            lines.append("<b>趋势</b>")
-            lines.append("• " + " / ".join(msgs))
 
-    # 量能（CVD & OI，均可选）
-    cvd_info = _pick(r, "cvd", default=None)
-    oi_info = _pick(r, "oi", default=None)
-    sub = []
-    if isinstance(cvd_info, dict):
-        z = _pick(cvd_info, "z20", "zscore", "z", default=None)
-        v = _pick(cvd_info, "last", "value", default=None)
-        items = []
-        if z is not None:
-            items.append(f"z20={_fmt_price(z)}")
-        if v is not None:
-            items.append(f"ΣΔV={_fmt_price(v)}")
-        if items:
-            sub.append("CVD(" + ", ".join(items) + ")")
-    if isinstance(oi_info, dict):
-        o = _pick(oi_info, "d1h", "pct_1h", "change_1h", default=None)
-        if o is not None:
-            sub.append("OIΔ1h=" + _fmt_pct(o))
-    if sub:
-        lines.append("<b>量能</b>")
-        lines.append("• " + " / ".join(sub))
+def _fmt_num(x: Any, digits: int = 2) -> str:
+    try:
+        return f"{float(x):.{digits}f}"
+    except Exception:
+        return "—"
 
-    # 备注（可选）
-    if isinstance(note, str) and note.strip():
-        lines.append("<b>备注</b>")
-        lines.append(html.escape(note.strip()))
 
-    # TTL
-    lines.append(f"<i>TTL ~{ttl}h</i>")
+def _fmt_pct(x: Any, digits: int = 2) -> str:
+    try:
+        return f"{float(x) * 100:.{digits}f}%"
+    except Exception:
+        return "—"
+
+
+def _fmt_bool(x: Any) -> str:
+    if isinstance(x, bool):
+        return "✅" if x else "❌"
+    return "—"
+
+
+def _ttl_hours(r: Mapping[str, Any]) -> int:
+    v = (
+        _get(r, "ttl_h")
+        or _get(r, "ttl_hours")
+        or _get(_get(r, "publish", {}), "ttl_h")
+        or 8
+    )
+    try:
+        return int(v)
+    except Exception:
+        return 8
+
+
+# ------------ 主渲染 ------------
+
+def _render_body(r: Mapping[str, Any]) -> str:
+    # 头部信息
+    sym = _get(r, "symbol", "?")
+    tag = _get(r, "tag") or "watch"
+
+    # 趋势相关
+    trendT = _get(r, ["trend", "T"]) or _get(r, "T")
+    slope_atr = _get(r, ["trend", "slopeATR"]) or _get(r, "slopeATR")
+    m15_ok = _get(r, ["trend", "m15_ok"])
+
+    # 动量 / 量能
+    dp1h = (
+        _get(r, ["metrics", "dP1h_abs_pct"])
+        or _get(r, "dP1h_abs_pct")
+        or _get(r, "dP1h")
+    )
+    z1h = _get(r, ["metrics", "z_volume_1h"]) or _get(r, "z_volume_1h")
+    v5v20 = _get(r, ["metrics", "v5_over_v20"]) or _get(r, "v5_over_v20")
+
+    # OI / CVD
+    oi_d1h = _get(r, ["oi", "d1h_pct"]) or _get(r, "oi_1h_pct")
+    oi_z20 = _get(r, ["oi", "z20"]) or _get(r, "oi_z20")
+    cvd_z20 = _get(r, ["cvd", "z20"]) or _get(r, "cvd_z20")
+    cvd_mix = (
+        _get(r, ["cvd", "mix_last"])
+        or _get(r, "cvd_mix_last")
+        or _get(r, "cvd_mix_z20")
+    )
+
+    # 质量 / 结构（有就打，没有就占位）
+    quality = _get(r, ["prior", "q"]) or _get(r, "quality_factor")
+    structure = _get(r, "structure")
+
+    # 交易建议（可选）
+    entry = _get(r, "entry")
+    stop = _get(r, "stop")
+    targets = _get(r, "targets")
+
+    ttl = _ttl_hours(r)
+    note = _get(r, "note") or _get(r, ["publish", "note"])
+
+    lines = []
+    lines.append(f"{'👀 观察' if tag == 'watch' else '🚀 正式'} · {sym}")
+
+    # 指标块（固定骨架 + 有值写值 / 无值写占位）
+    lines.append(
+        "趋势："
+        f"T {_fmt_num(trendT, 0)}｜斜率×ATR {_fmt_num(slope_atr, 2)}｜M15 {_fmt_bool(m15_ok)}"
+    )
+    lines.append(
+        "动量："
+        f"ΔP1h {_fmt_pct(dp1h)}｜成交 z1h {_fmt_num(z1h, 2)}｜v5/v20 {_fmt_num(v5v20, 2)}"
+    )
+    lines.append(
+        "资金："
+        f"OI Δ1h {_fmt_pct(oi_d1h)}｜OI z20 {_fmt_num(oi_z20, 2)}｜CVD z20 {_fmt_num(cvd_z20, 2)}"
+    )
+    lines.append(f"混合：CVD·OI·价 {_fmt_num(cvd_mix, 3)}")
+
+    # 结构 / 质量（可选）
+    if structure is not None:
+        lines.append(f"结构：{structure}")
+    if quality is not None:
+        lines.append(f"质量：Q {_fmt_num(quality, 2)}")
+
+    # 交易建议（可选）
+    if any(v is not None for v in (entry, stop, targets)):
+        tgs = ""
+        if isinstance(targets, (list, tuple)) and targets:
+            tgs = " / ".join(_fmt_num(x, 4) for x in targets[:4])
+        lines.append(
+            "建议：" +
+            f"入 {_fmt_num(entry, 4)}；止 {_fmt_num(stop, 4)}" +
+            (f"；目 {tgs}" if tgs else "")
+        )
+
+    # 备注 / TTL / 标签
+    if note:
+        lines.append(f"备注：{note}")
+    lines.append(f"TTL ~{ttl}h")
+    lines.append(f"#{tag} #{sym}")
+
     return "\n".join(lines)
 
-def render_watch(r: Dict[str, Any]) -> str:
+
+def render_signal(r: Mapping[str, Any], is_watch: bool = False) -> str:
+    # 兼容：外部传了 is_watch 我们覆盖 tag；否则用 r['tag']
+    if is_watch:
+        if isinstance(r, dict):
+            r = dict(r)
+            r["tag"] = "watch"
+    else:
+        if isinstance(r, dict) and r.get("tag") is None:
+            r = dict(r)
+            r["tag"] = "trade"
+    return _render_body(r)
+
+
+def render_watch(r: Mapping[str, Any]) -> str:
     return render_signal(r, is_watch=True)
 
-def render_prime(r: Dict[str, Any]) -> str:
-    return render_signal(r, is_watch=False)
 
-# 兼容：有些地方可能叫 render_base，这里直接复用
-def render_base(r: Dict[str, Any]) -> str:
-    return render_watch(r)
+def render_prime(r: Mapping[str, Any]) -> str:
+    return render_signal(r, is_watch=False)
