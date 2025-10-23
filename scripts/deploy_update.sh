@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# === 基本配置（可在外部用环境变量覆盖） ===
+# === 基本配置（可由环境变量覆盖） ===
 REPO_DIR="${REPO_DIR:-$HOME/ats-analyzer}"
 BRANCH="${BRANCH:-main}"
 
-# === Telegram 变量（必须通过环境变量注入；不再硬编码） ===
-# 可选：将这些写入 /etc/environment 或 systemd unit 的 Environment= 中
+# === Telegram 变量（通过环境变量注入；不再硬编码） ===
 TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
 TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}"
 TELEGRAM_WATCH_CHAT_ID="${TELEGRAM_WATCH_CHAT_ID:-${TELEGRAM_CHAT_ID:-}}"
@@ -38,7 +37,7 @@ echo "▶ Run self-check (non-blocking)"
 if ./scripts/self_check.sh; then
   echo "✅ self_check passed (or with warnings)"
 else
-  echo "⚠️ self_check returned non-zero (check logs above); continue for manual verification"
+  echo "⚠️ self_check returned non-zero (see logs above); continue for manual verification"
 fi
 
 echo "▶ Send verification message to watch channel (if TELEGRAM_* provided)"
