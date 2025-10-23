@@ -90,8 +90,16 @@ class _Cfg:
         # 用默认值补齐，避免 KeyError
         self.params = _deep_merge(copy.deepcopy(DEFAULTS), user_cfg)
 
-    def get(self, key: str, default: Any = None) -> Any:
-        return self.params.get(key, default)
+    # 兼容各种历史调用写法：
+    # - CFG.get("overlay", {})                  # 位置实参默认值
+    # - CFG.get("overlay", default={})          # 关键字默认值
+    # - CFG.get("overlay", {}, default={})      # 两者都传也不报错，优先位置实参
+    def get(self, key: str, *args, **kwargs) -> Any:
+        if args:
+            default_val = args[0]
+        else:
+            default_val = kwargs.get("default", None)
+        return self.params.get(key, default_val)
 
 
 CFG = _Cfg()
