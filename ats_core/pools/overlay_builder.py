@@ -1,284 +1,109 @@
 # coding: utf-8
-"""
-Overlay candidate builder (多规则并集 + 排序 + 可选“只增不减”)
-命中任一规则即入池：
-  1) 新合约（K线历史较短）
-  2) 量能：1h 成交量 Z 分数（相对近 24 根）
-  3) z24 + 24h quote：价格 1h 变动的 z 分数（近 24 根）与 24h 累计成交额门槛
-  4) OI：近 1h OI 相对变化率（相对最近期 OI 中位数）——大盘/非大盘不同阈值
-  5) 三同向：|1h 涨跌幅|、V5/V20、|CVD 每小时强度| 同时达标
-
-并根据“热度 hot”排序：
-  hot = 0.5*max(0,zv) + 0.3*abs(dP1h_pct)/100 + 0.2*max(0,oi1h)
-  （简洁直观，够用即可；若需可在配置里继续扩展权重）
-"""
-
 from __future__ import annotations
-from typing import List, Dict, Any, Tuple
-from statistics import mean, pstdev, median
-import math, json, os, time
+
+"""
+Overlay 候选构建（统一使用 cvd.py）
+- 读取 1h K 线 + 1h OI，计算：
+   dP1h_abs_pct、v5_over_v20、cvd_mix_abs_per_h
+- 满足 overlay["triple_sync"] 阈值即入选
+- 同时兼容 z24/24h_quote 的基础筛
+"""
+
+from typing import List, Dict, Any
+from statistics import mean
 
 from ats_core.cfg import CFG
-from ats_core.sources.klines import klines_1h, split_ohlcv
-from ats_core.features.ta_core import cvd as cvd_series
-from ats_core.sources.oi import fetch_oi_hourly
+from ats_core.sources.tickers import all_24h
+from ats_core.sources.binance import get_klines, get_open_interest_hist
+from ats_core.features.cvd import cvd_mix_with_oi_price
 
-
-# -------------------------------
-# 工具函数
-# -------------------------------
-
-def _zscore(x: float, mu: float, sigma: float) -> float:
-    if sigma <= 1e-12:
-        return 0.0
-    return (x - mu) / sigma
-
-def _pct(a: float, b: float) -> float:
-    """百分比变化（返回“百分数”，例如 +1.5% -> 1.5）"""
-    if abs(b) <= 1e-12:
-        return 0.0
-    return (a - b) / b * 100.0
-
-def _safe_ratio(a: float, b: float) -> float:
-    return a / b if abs(b) > 1e-12 else 0.0
-
-def _now_ts() -> int:
-    return int(time.time())
-
-def _persist_path() -> str:
-    repo = os.path.expanduser(CFG.get("repo_root", default="~/ats-analyzer"))
-    return os.path.join(os.path.expanduser(repo), "data/cache/overlay_seen.json")
-
-def _load_seen() -> set:
+# ------- utils -------
+def _to_f(x) -> float:
     try:
-        with open(_persist_path(), "r", encoding="utf-8") as f:
-            arr = json.load(f)
-        if isinstance(arr, list):
-            return set(s for s in arr if isinstance(s, str))
+        return float(x)
     except Exception:
-        pass
-    return set()
-
-def _save_seen(seen: set):
-    try:
-        os.makedirs(os.path.dirname(_persist_path()), exist_ok=True)
-        with open(_persist_path(), "w", encoding="utf-8") as f:
-            json.dump(sorted(seen), f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
-
-
-# -------------------------------
-# 各规则打标
-# -------------------------------
-
-def _rule_new_contract(tb: List[int], max_hours: int) -> Tuple[bool, str]:
-    """新合约：K线历史不足 max_hours 小时；或首尾时间跨度小于 max_hours"""
-    if not tb:
-        return False, ""
-    hours = (tb[-1] - tb[0]) / 3600.0
-    if hours < max_hours:
-        return True, f"new({hours:.1f}h)"
-    # 根数很少也算新（兜底）
-    if len(tb) < max_hours:
-        return True, f"new_nbars({len(tb)})"
-    return False, ""
-
-def _rule_zvol_1h(v: List[float], lookback: int, z_th: float) -> Tuple[bool, float]:
-    """量能：近 1h 成交量对近 lookback 根的 Z 分数"""
-    if len(v) < lookback + 1:
-        return False, 0.0
-    base = v[-lookback-1:-1]
-    mu, sig = mean(base), pstdev(base)
-    zv = _zscore(v[-1], mu, sig)
-    return (zv >= z_th), zv
-
-def _rule_z24_and_quote(c: List[float], q: List[float], lookback: int, z_th: float, min_quote_24h: float) -> Tuple[bool, float, float]:
-    """
-    z24：把近 lookback 根的“1h 涨跌幅(%) 序列”做 z 分数，检测当前 1h 的 |z| 是否大于阈值
-    同时要求 24h 累计 quote >= min_quote_24h
-    """
-    if len(c) < lookback + 1 or len(q) < 24:
-        return False, 0.0, 0.0
-    rets = [_pct(c[i], c[i-1]) for i in range(1, len(c))]
-    base = rets[-lookback-1:-1]
-    mu, sig = mean(base), pstdev(base)
-    z_now = _zscore(rets[-1], mu, sig)
-    quote24 = sum(q[-24:])
-    ok = (abs(z_now) >= z_th) and (quote24 >= min_quote_24h)
-    return ok, z_now, quote24
-
-def _oi_1h_pct(sym: str) -> float:
-    """近 1h OI 相对变化（相对最近期 OI 中位数），返回比例（1% = 0.01）"""
-    oi = fetch_oi_hourly(sym, 30)
-    if len(oi) < 2:
         return 0.0
-    den = median(oi)
-    return (oi[-1] - oi[-2]) / max(1e-12, den)
 
-def _rule_oi_1h(sym: str, majors: set, th_big: float, th_small: float) -> Tuple[bool, float]:
-    r1h = _oi_1h_pct(sym)
-    is_big = (sym in majors)
-    th = th_big if is_big else th_small
-    return (r1h >= th), r1h
+def _last(x):
+    if isinstance(x, (int, float)):
+        return float(x)
+    try:
+        return float(x[-1])
+    except Exception:
+        return _to_f(x)
 
-def _rule_triple_sync(c: List[float], v: List[float], tb: List[float], dP1h_abs_pct_th: float, v5_over_v20_th: float, cvd_abs_per_h_th: float) -> Tuple[bool, Dict[str, float]]:
-    """
-    三同向：
-      - |1h 涨跌幅(%)| >= dP1h_abs_pct_th
-      - V5 / V20 >= v5_over_v20_th
-      - |CVD 每小时强度| >= cvd_abs_per_h_th
-    其中 CVD 每小时强度：abs(cvd[-1] - cvd[-7]) / (6 小时)，再相对 6h 成交量归一
-    """
-    out = {"dP1h_pct": 0.0, "v5_over_v20": 0.0, "cvd_abs_per_h": 0.0}
-    if len(c) < 25 or len(v) < 25 or len(tb) < 25:
-        return False, out
+def _pct(a, b) -> float:
+    a = _to_f(a); b = _to_f(b)
+    if b == 0: return 0.0
+    return a / b - 1.0
 
-    dP1h_pct = abs(_pct(c[-1], c[-2]))  # 百分数
-    v5 = sum(v[-5:]) / 5.0
-    v20 = sum(v[-20:]) / 20.0
-    v_ratio = _safe_ratio(v5, v20)
+def _ma(xs, n):
+    if not xs: return 0.0
+    if len(xs) < n: return sum(_to_f(v) for v in xs) / len(xs)
+    return sum(_to_f(v) for v in xs[-n:]) / n
 
-    cv = cvd_series(v, tb)
-    # 取近 6 小时报动强度（并按 6h 成交量归一）
-    cvd_abs = abs(cv[-1] - cv[-7]) if len(cv) >= 8 else 0.0
-    vol6 = sum(v[-6:]) if len(v) >= 6 else 0.0
-    cvd_abs_per_h = _safe_ratio(cvd_abs, max(1e-12, vol6))  # 作为“占 6 小时成交量的比例/每小时”
+# ------- main -------
+def build() -> List[str]:
+    params: Dict[str, Any] = CFG.get("overlay", default={})
+    tri: Dict[str, Any] = params.get("triple_sync", {}) or {}
 
-    out["dP1h_pct"] = dP1h_pct
-    out["v5_over_v20"] = v_ratio
-    out["cvd_abs_per_h"] = cvd_abs_per_h
-
-    ok = (dP1h_pct >= dP1h_abs_pct_th) and (v_ratio >= v5_over_v20_th) and (cvd_abs_per_h >= cvd_abs_per_h_th)
-    return ok, out
-
-
-# -------------------------------
-# 主构建函数
-# -------------------------------
-
-def build() -> List[Dict[str, Any]]:
-    """
-    返回形如：
-      [{'symbol': 'BTCUSDT', 'why': ['zv','oi','tri'], 'oi1h':0.012, 'zv':3.4, 'dP1h_pct':0.8, 'v5_over_v20':2.7, 'cvd_abs_per_h':0.13, 'z24':2.1, 'quote1h':..., 'quote24h':..., 'hot':0.42}, ...]
-    """
-    par = CFG.get("overlay", default={})
-
-    # 阈值与参数（有默认值，亦可在 config.yaml 覆盖）
-    lookback_zvol = par.get("zvol_lookback", 24)
-    z_volume_1h_threshold = float(par.get("z_volume_1h_threshold", 3))
-
-    min_hour_quote_usdt = float(par.get("min_hour_quote_usdt", 5_000_000))
-
-    z24cfg = par.get("z24_and_24h_quote", {}) or {}
-    z24_th = float(z24cfg.get("z24", 2))
-    min_quote_24h = float(z24cfg.get("quote", 20_000_000))
-
-    th_big   = float(par.get("oi_1h_pct_big",   0.003))  # 大盘 OI 1h 相对增幅（默认 0.3%）
-    th_small = float(par.get("oi_1h_pct_small", 0.010))  # 小盘 OI 1h 相对增幅（默认 1.0%）
-
-    tri = par.get("triple_sync", {}) or {}
-    dP1h_abs_pct_th  = float(tri.get("dP1h_abs_pct",     0.50))  # 1h 涨跌幅阈值（百分数）；例 0.50 = 0.5%
-    v5_over_v20_th   = float(tri.get("v5_over_v20",      2.0))
-    cvd_abs_per_h_th = float(tri.get("cvd_mix_abs_per_h",0.10))  # 近 6h CVD 强度/成交量/每小时
-
-    new_max_hours = int(par.get("new_contract_hours", 72))  # 72h 内视作“新合约”
-
-    persist_add_only = bool(par.get("persist_add_only", False))
-
-    hot_decay_hours = float(par.get("hot_decay_hours", 2))  # 目前未用于时间衰减（留作扩展）
-
-    majors = set(CFG.get("majors", default=["BTCUSDT", "ETHUSDT"]))
-    uni = list(CFG.get("universe", default=list(majors)))
+    # 基础 universe：优先 params.universe，否则 24h 列表里的前若干主流
+    uni: List[str] = CFG.get("universe", default=[]) or []
     if not uni:
-        uni = ["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","COAIUSDT","CLOUSDT","XPLUSDT"]
+        # 兜底：取 24h 数据里的 USDT 线性合约（符号以 USDT 结尾）
+        tks = all_24h()
+        uni = [t["symbol"] for t in tks if isinstance(t, dict) and str(t.get("symbol","")).endswith("USDT")]
 
-    seen = _load_seen() if persist_add_only else set()
+    out: List[str] = []
 
-    candidates: List[Dict[str, Any]] = []
+    # 可选：z24 & 24h 成交额过滤
+    z24_q = params.get("z24_and_24h_quote", {})
+    need_z24 = _to_f(z24_q.get("z24", 0.0))
+    need_quote = _to_f(z24_q.get("quote", 0.0))
+
+    t24 = {t["symbol"]: t for t in all_24h() if isinstance(t, dict) and t.get("symbol")}
 
     for sym in uni:
         try:
-            # 1h K线
-            k1 = klines_1h(sym, 300)
-            if not k1 or len(k1) < 30:
+            t = t24.get(sym, {})
+            if need_quote > 0 and _to_f(t.get("quoteVolume")) < need_quote:
                 continue
-            o,h,l,c,v,q,tb = split_ohlcv(k1)
-            quote1h = q[-1] if q else 0.0
-            if quote1h < min_hour_quote_usdt:
-                # 直接按小时成交额过滤
-                # 但如果“只增不减”且该符号已在 seen 中，可保留
-                if (sym not in seen):
-                    continue
+            # 你项目里如果有 z24 字段就用；没有就跳过该过滤
+            z24_val = _to_f(t.get("z24", 0.0))
+            if need_z24 > 0 and z24_val < need_z24:
+                continue
 
-            why: List[str] = []
+            # --- 1h K 线 + OI ---
+            k1 = get_klines(sym, "1h", 60)
+            if not k1 or len(k1) < 25:
+                continue
+            oi = get_open_interest_hist(sym, "1h", 60)
 
-            # R1: 新合约
-            _is_new, tag_new = _rule_new_contract(tb, new_max_hours)
-            if _is_new:
-                why.append("new")
+            close = [_to_f(r[4]) for r in k1]
+            vol_quote = [_to_f(r[7]) for r in k1]  # quoteAssetVolume
 
-            # R2: 量能 zvol(1h)
-            _zok, zv = _rule_zvol_1h(v, lookback_zvol, z_volume_1h_threshold)
-            if _zok:
-                why.append("zv")
+            # dP1h_abs_pct
+            dp1h = abs(_pct(close[-1], close[-2]))
 
-            # R3: z24 + 24h quote
-            _z24ok, z24, quote24 = _rule_z24_and_quote(c, q, 24, z24_th, min_quote_24h)
-            if _z24ok:
-                why.append("z24")
+            # v5_over_v20
+            v5 = _ma(vol_quote, 5)
+            v20 = _ma(vol_quote, 20)
+            v5_over_v20 = (v5 / v20) if v20 > 0 else 0.0
 
-            # R4: OI 近 1h 相对变化（大盘/小盘阈值不同）
-            _oiok, oi1h = _rule_oi_1h(sym, majors, th_big, th_small)
-            if _oiok:
-                why.append("oi")
+            # cvd_mix_abs_per_h（来自 cvd.py，标准化混合动量末值的绝对值）
+            _, mix = cvd_mix_with_oi_price(k1, oi, window=20)
+            cvd_mix_abs_per_h = abs(_last(mix)) if mix else 0.0
 
-            # R5: 三同向
-            _triok, tri_meta = _rule_triple_sync(c, v, tb, dP1h_abs_pct_th, v5_over_v20_th, cvd_abs_per_h_th)
-            if _triok:
-                why.append("tri")
+            # 阈值
+            need_dp = _to_f(tri.get("dP1h_abs_pct", 0.0))
+            need_vr = _to_f(tri.get("v5_over_v20", 0.0))
+            need_cvd = _to_f(tri.get("cvd_mix_abs_per_h", 0.0))
 
-            # 任一命中 或 已在 seen（只增不减）
-            if why or (persist_add_only and (sym in seen)):
-                # 计算综合“热度”排序
-                dP1h_pct = tri_meta.get("dP1h_pct", abs(_pct(c[-1], c[-2])))
-                v_ratio  = tri_meta.get("v5_over_v20", _safe_ratio(sum(v[-5:])/5.0, sum(v[-20:])/20.0))
-                cvd_h    = tri_meta.get("cvd_abs_per_h", 0.0)
-                # 热度：简单组合（与之前 grep 到的思路一致）
-                hot = 0.5*max(0.0, zv) + 0.3*abs(dP1h_pct)/100.0 + 0.2*max(0.0, oi1h)
-
-                item = {
-                    "symbol": sym,
-                    "why": sorted(set(why)),
-                    "oi1h": round(oi1h, 6),
-                    "zv": round(zv, 3),
-                    "dP1h_pct": round(dP1h_pct, 3),
-                    "v5_over_v20": round(v_ratio, 3),
-                    "cvd_abs_per_h": round(cvd_h, 4),
-                    "z24": round(z24, 3) if _z24ok else 0.0,
-                    "quote1h": float(quote1h),
-                    "quote24h": float(quote24 if _z24ok else sum(q[-24:]) if len(q)>=24 else 0.0),
-                    "hot": round(hot, 6),
-                }
-                candidates.append(item)
-                seen.add(sym)
+            if (dp1h >= need_dp) and (v5_over_v20 >= need_vr) and (cvd_mix_abs_per_h >= need_cvd):
+                out.append(sym)
 
         except Exception:
-            # 单个符号异常不影响整体
             continue
 
-    # 排序（热度从高到低）
-    candidates.sort(key=lambda x: (x.get("hot", 0.0), x.get("quote1h", 0.0)), reverse=True)
-
-    if persist_add_only:
-        _save_seen(seen)
-
-    return candidates
-
-
-# 兼容可能存在的旧入口名
-build_overlay    = build
-build_candidates = build
-build_pool       = build
-
-__all__ = ["build", "build_overlay", "build_candidates", "build_pool"]
+    # 可选：Hot 衰减 / OI 变化 / 1h 成交额门槛等，仍按你 params.overlay 里的其他键在这里扩展
+    return out
