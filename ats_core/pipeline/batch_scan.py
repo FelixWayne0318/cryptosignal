@@ -1,9 +1,9 @@
 import os, time, json
 from ats_core.cfg import CFG
 from ats_core.pools.base_builder import build_base_universe
-from ats_core.pools.overlay_builder import update_overlay_universe
+from ats_core.pools.overlay_builder import build as build_overlay
 from ats_core.pipeline.analyze_symbol import analyze_symbol
-from ats_core.outputs.telegram_fmt import render_prime, render_watch
+from ats_core.outputs.telegram_fmt import render_trade, render_watch
 from ats_core.outputs.publisher import telegram_send
 from ats_core.logging import log, warn
 
@@ -12,12 +12,13 @@ os.makedirs(DATA, exist_ok=True)
 
 def batch_run():
     base = build_base_universe()
-    overlay = update_overlay_universe(base)
+    overlay = build_overlay()
     syms = overlay + [s for s in base if s not in overlay]
     for sym in syms:
         try:
-            r = analyze_symbol(sym, ctx_market=None)
-            html = render_prime(r) if r["publish"]["prime"] else render_watch(r)
+            r = analyze_symbol(sym)
+            pub = r.get("publish") or {}
+            html = render_trade(r) if pub.get("prime") else render_watch(r)
             telegram_send(html)
             # save report
             ts=time.strftime("%Y%m%dT%H%MZ", time.gmtime())
