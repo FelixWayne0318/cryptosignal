@@ -4,7 +4,6 @@ from __future__ import annotations
 import os
 import sys
 import time
-import json
 import importlib
 import platform
 from typing import Any, Dict, List
@@ -66,7 +65,7 @@ def main(argv: List[str]) -> int:
         if isinstance(uni, (list, tuple)) and len(uni) > 0 and isinstance(uni[0], str):
             ok(f"universe 数量：{len(uni)}")
         else:
-            warn("universe 为空或无效（不是硬性错误，后续会回退到常见主流币）")
+            warn("universe 为空或无效（非硬错误，后续会回退到常见主流币）")
 
         # 兼容性：验证 CFG.get 三种用法均可
         try:
@@ -95,7 +94,7 @@ def main(argv: List[str]) -> int:
     except Exception as e:
         warn(f"overlay 构建失败：{e}")
 
-    # 3) 单标的分析与渲染
+    # 3) 单标的的分析与渲染
     try:
         analyze_symbol = importlib.import_module("ats_core.pipeline.analyze_symbol").analyze_symbol
         render_watch = importlib.import_module("ats_core.outputs.telegram_fmt").render_watch
@@ -104,8 +103,8 @@ def main(argv: List[str]) -> int:
         return EXIT_CODE
 
     test_syms: List[str] = []
-    if isinstance(uni, (list, tuple)) and uni and isinstance(uni[0], str):
-        test_syms.extend(list(uni[:5]))
+    if isinstance(p.get("universe"), (list, tuple)) and p["universe"] and isinstance(p["universe"][0], str):
+        test_syms.extend(list(p["universe"][:5]))
     # fallback 主流
     for s in ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"]:
         if s not in test_syms:
@@ -120,7 +119,7 @@ def main(argv: List[str]) -> int:
                 continue
             r["symbol"] = s
             txt = render_watch(r)
-            if isinstance(txt, str) and ("六" in txt or "<b>" in txt):
+            if isinstance(txt, str) and ("<b>" in txt or "六" in txt):
                 ok(f"分析+渲染 OK：{s}")
                 analyzed_ok += 1
                 break
