@@ -1,162 +1,145 @@
 # coding: utf-8
-"""
-全流程：候选 -> 分析 -> 过滤 -> 输出 -> （可选）发送 & 落盘
-用法示例：
-  python3 -m tools.full_run --limit 50
-  python3 -m tools.full_run --send --only-prime
-  python3 -m tools.full_run --limit 50 --save-json
-"""
+from __future__ import annotations
 
-import os, sys, json, argparse, importlib
-from datetime import datetime, timezone
+import argparse
+import json
+import os
 from pathlib import Path
-
-# 让模板恒显“六维+解释+动态小数位”，便于排查
-os.environ.setdefault("ATS_FMT_SHOW_ZERO", "1")
-os.environ.setdefault("ATS_FMT_FULL", "1")
-os.environ.setdefault("ATS_FMT_EXPLAIN", "1")
-os.environ.setdefault("ATS_FMT_DECIMALS_AUTO", "1")
+from datetime import datetime
 
 from ats_core.cfg import CFG
-from ats_core.sources.klines import klines_1h, split_ohlcv
-from ats_core.pipeline.analyze_symbol import analyze_symbol
 from ats_core.outputs.telegram_fmt import render_watch
+from ats_core.outputs.publisher import telegram_send
 
-try:
-    from ats_core.outputs.publisher import telegram_send
-except Exception:
-    telegram_send = None
+def _bool(v):  # 兼容 '1'/'true'/'yes'
+    return str(v).lower() in ("1","true","yes","y","on")
 
+def _env(name: str, default=None):
+    return os.getenv(name, default)
 
-def _symbols_from_overlay():
-    """调用 overlay_builder，返回符号列表（str）"""
+def _pick_universe(limit: int):
+    # 先用 overlay 候选，其次用 params.universe，最后内置主流兜底
     try:
-        ob = importlib.import_module("ats_core.pools.overlay_builder")
-        for name in ("build", "build_overlay", "build_candidates", "build_pool"):
-            if hasattr(ob, name):
-                res = getattr(ob, name)()
-                if isinstance(res, list) and res:
-                    if isinstance(res[0], dict):
-                        out = []
-                        for it in res:
-                            s = it.get("symbol") or it.get("sym") or it.get("ticker")
-                            if s:
-                                out.append(s)
-                        return out
-                    if isinstance(res[0], str):
-                        return list(res)
-                return []
-    except Exception:
-        return []
-    return []
-
-
-def _ctx_prior_market():
-    """提供 analyze_symbol 需要的 btc/eth 1h close 作为 prior 计算上下文"""
-    ctx = {}
-    try:
-        k1 = klines_1h("BTCUSDT", 300)
-        _, _, _, c, _, _, _ = split_ohlcv(k1)
-        if c:
-            ctx["btc_c"] = c
+        from ats_core.pools import overlay_builder
+        cands = overlay_builder.build()
+        if isinstance(cands, list) and cands:
+            return cands[:limit]
     except Exception:
         pass
-    try:
-        k1 = klines_1h("ETHUSDT", 300)
-        _, _, _, c, _, _, _ = split_ohlcv(k1)
-        if c:
-            ctx["eth_c"] = c
-    except Exception:
-        pass
-    return ctx if ("btc_c" in ctx and "eth_c" in ctx) else None
-
-
-def main(argv):
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--limit", type=int, default=24, help="最多处理多少个候选")
-    ap.add_argument("--send", action="store_true", help="发送到 Telegram（需要 publisher 配置可用）")
-    ap.add_argument("--only-prime", dest="only_prime", action="store_true",
-                    help="只发送 prime=True 的")
-    ap.add_argument("--save-json", action="store_true", help="把每个标的的分析结果落盘 JSON")
-    args = ap.parse_args(argv)
-
-    # 打印关键配置
-    ov = CFG.get("overlay", default={})
     uni = CFG.get("universe", default=[])
-    print(f"[CFG] overlay: {ov}")
-    print(f"[CFG] universe size: {len(uni)}")
+    if isinstance(uni, list) and uni:
+        return uni[:limit]
+    fallback = [
+        "BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT",
+        "TRXUSDT","AVAXUSDT","LINKUSDT","MATICUSDT","DOTUSDT","LTCUSDT","BCHUSDT"
+    ]
+    return fallback[:limit]
 
-    # prior 上下文
-    ctx_market = _ctx_prior_market()
-    print(f"[CTX] prior context: {'ok' if ctx_market else 'fallback'}")
+def _analyze(symbol: str):
+    from ats_core.pipeline.analyze_symbol import analyze_symbol
+    return analyze_symbol(symbol)
 
-    # 候选
-    syms = _symbols_from_overlay()
-    if not syms:
-        if isinstance(uni, (list, tuple)) and uni and isinstance(uni[0], str):
-            syms = list(uni)
-        else:
-            syms = ["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","COAIUSDT","CLOUSDT","XPLUSDT"]
-    if args.limit and args.limit > 0:
-        syms = syms[:args.limit]
-    print(f"[CAND] count={len(syms)} examples={syms[:7]}")
+def route_chat_id(is_prime: bool,
+                  args_chat_prime: str|None,
+                  args_chat_watch: str|None) -> str|None:
+    """
+    选择发送目标：
+      1) CLI 覆盖：--prime-chat-id / --watch-chat-id
+      2) 环境变量：TELEGRAM_CHAT_ID_PRIME / TELEGRAM_CHAT_ID_WATCH
+      3) 回退：TELEGRAM_CHAT_ID / ATS_TELEGRAM_CHAT_ID
+    """
+    env_prime = _env("TELEGRAM_CHAT_ID_PRIME") or _env("ATS_TELEGRAM_CHAT_ID_PRIME")
+    env_watch = _env("TELEGRAM_CHAT_ID_WATCH") or _env("ATS_TELEGRAM_CHAT_ID_WATCH")
+    base      = _env("TELEGRAM_CHAT_ID") or _env("ATS_TELEGRAM_CHAT_ID")
 
-    # 落盘目录（可选）
-    results_dir = None
+    if is_prime:
+        return args_chat_prime or env_prime or base
+    else:
+        return args_chat_watch or env_watch or base
+
+def maybe_tag(text: str, is_prime: bool, add_tags: bool) -> str:
+    if not add_tags:
+        return text
+    prefix = "【正式】" if is_prime else "【观察】"
+    return f"{prefix}\n{text}"
+
+def main():
+    ap = argparse.ArgumentParser(description="全流程跑一遍，支持分流路由 prime/observe")
+    ap.add_argument("--limit", type=int, default=30, help="最多分析多少个标的")
+    ap.add_argument("--send", action="store_true", help="真的发送到 Telegram")
+    ap.add_argument("--only-prime", dest="only_prime", action="store_true", help="仅发送 prime=True 的信号")
+    ap.add_argument("--only-watch", dest="only_watch", action="store_true", help="仅发送 非 prime 的信号")
+    ap.add_argument("--save-json", action="store_true", help="把每个标的结果落盘 JSON")
+    ap.add_argument("--prime-chat-id", type=str, default=None, help="正式信号发送到的 Chat ID（覆盖环境变量）")
+    ap.add_argument("--watch-chat-id", type=str, default=None, help="观察信号发送到的 Chat ID（覆盖环境变量）")
+    ap.add_argument("--add-tags", action="store_true", help="在文本前添加【正式】/【观察】标签")
+    args = ap.parse_args()
+
+    # 读取一些 overlay 阈值做开场回显（便于排查）
+    overlay = CFG.get("overlay", default={})
+    print("[CFG] overlay:", overlay)
+    uni = CFG.get("universe", default=[])
+    print("[CFG] universe size:", len(uni))
+
+    symbols = _pick_universe(args.limit)
+    print("[CAND] count={} examples={}".format(len(symbols), symbols[:7]))
+
+    out_rows = []
+    prime_cnt = 0
+    send_cnt  = 0
+    fail_cnt  = 0
+
+    # 结果保存目录
+    results_dir = Path("data") / ("run_" + datetime.utcnow().strftime("%Y%m%d-%H%M%S"))
     if args.save_json:
-        stamp = datetime.now(timezone.utc).strftime("run_%Y%m%d-%H%M%S")
-        results_dir = Path("data") / stamp
         results_dir.mkdir(parents=True, exist_ok=True)
 
-    do_send = bool(args.send and telegram_send)
-
-    analyzed = 0
-    prime_count = 0
-    sent = 0
-    fails = 0
-
-    for s in syms:
+    for s in symbols:
         try:
-            r = analyze_symbol(s, ctx_market=ctx_market)
-            analyzed += 1
-            pub = r.get("publish") or {}
+            res = _analyze(s)
+            if not isinstance(res, dict):
+                raise RuntimeError("analyze_symbol 返回非 dict")
+            res["symbol"] = s
+            is_prime = bool(res.get("prime", False))
 
-            txt = render_watch(r)
-            print(f"\n==== {s} ====\n{txt}\n", flush=True)
+            # 过滤逻辑
+            if args.only_prime and not is_prime:
+                continue
+            if args.only_watch and is_prime:
+                continue
 
-            if pub.get("prime"):
-                prime_count += 1
+            # 渲染 & 打印
+            txt = render_watch(res)
+            if args.add_tags:
+                txt = maybe_tag(txt, is_prime, add_tags=True)
+
+            print(f"\n==== {s} ====\n{txt}\n")
 
             # 发送
-            if do_send and (not args.only_prime or pub.get("prime")):
-                try:
-                    telegram_send(txt)
-                    sent += 1
-                    print(f"[SENT] {s}", flush=True)
-                except Exception as e:
-                    fails += 1
-                    print(f"[SEND FAIL] {s} -> {e}", file=sys.stderr, flush=True)
+            if args.send:
+                cid = route_chat_id(is_prime, args.prime_chat_id, args.watch_chat_id)
+                telegram_send(txt, chat_id=cid)
+                send_cnt += 1
 
-            # 落盘
-            if results_dir is not None:
-                fn = (results_dir / f"{s}.json")
-                with open(fn.as_posix(), "w", encoding="utf-8") as f:
-                    json.dump(r, f, ensure_ascii=False, indent=2)
+            if is_prime:
+                prime_cnt += 1
 
+            if args.save_json:
+                Path(results_dir / f"{s}.json").write_text(json.dumps(res, ensure_ascii=False, indent=2))
+
+            out_rows.append({"symbol": s, "prime": is_prime, "ok": True})
         except Exception as e:
-            fails += 1
-            print(f"[ANALYZE FAIL] {s} -> {e}", file=sys.stderr, flush=True)
+            fail_cnt += 1
+            print(f"[ANALYZE FAIL] {s} -> {e}")
 
     print("\n—— SUMMARY ——")
-    print(f"candidates: {len(syms)}")
-    print(f"analyzed:   {analyzed}")
-    print(f"prime:      {prime_count}")
-    print(f"sent:       {sent}")
-    print(f"fails:      {fails}")
-    if results_dir is not None:
-        print(f"results dir: {results_dir.resolve()}")
-    return 0 if fails == 0 else 1
-
+    print(f"candidates: {len(symbols)}")
+    print(f"analyzed:   {len(out_rows)}")
+    print(f"prime:      {prime_cnt}")
+    print(f"sent:       {send_cnt}")
+    print(f"fails:      {fail_cnt}")
+    if args.save_json:
+        print(f"results dir: {results_dir}")
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    main()
