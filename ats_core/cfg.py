@@ -1,105 +1,63 @@
+# ats_core/cfg.py
 # coding: utf-8
 from __future__ import annotations
 
-import os
 import json
-import copy
-import pathlib
-from typing import Any, Dict
+import os
+from typing import Any, Dict, Optional
 
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
-# ---- 内建默认参数（防止线上配置缺键时直接崩）----
-DEFAULTS: Dict[str, Any] = {
-    "trend": {
-        "ema_order_min_bars": 6,
-        "slope_atr_min_long": 0.06,
-        "slope_atr_min_short": 0.04,
-        "slope_lookback": 12,
-        "atr_period": 14,
-    },
-
-    "overlay": {
-        "oi_1h_pct_big": 0.003,
-        "oi_1h_pct_small": 0.01,
-        "hot_decay_hours": 2,
-
-        "z_volume_1h_threshold": 3,
-        "min_hour_quote_usdt": 5_000_000,
-
-        "z24_and_24h_quote": {"z24": 2, "quote": 20_000_000},
-
-        "triple_sync": {
-            "dP1h_abs_pct": 0.10,
-            "v5_over_v20": 2.5,
-            "cvd_mix_abs_per_h": 0.12,
-        },
-    },
-
-    "universe": [
-        "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
-        "ADAUSDT", "DOGEUSDT", "TRXUSDT", "AVAXUSDT", "LINKUSDT",
-        "MATICUSDT", "DOTUSDT", "LTCUSDT", "BCHUSDT", "ATOMUSDT",
-        "FILUSDT", "NEARUSDT", "APTUSDT", "OPUSDT", "ARBUSDT",
-        "SUIUSDT", "SEIUSDT", "INJUSDT", "RUNEUSDT", "IMXUSDT",
-        "TONUSDT", "ICPUSDT", "AAVEUSDT", "UNIUSDT", "ETCUSDT",
-        "COAIUSDT", "PAXGUSDT", "XPLUSDT", "CLOUSDT",
-    ],
-}
-
-
-def _deep_merge(base: Dict[str, Any], over: Dict[str, Any]) -> Dict[str, Any]:
-    """递归深合并，把 over 覆盖到 base 上。"""
-    for k, v in (over or {}).items():
-        if isinstance(v, dict) and isinstance(base.get(k), dict):
-            base[k] = _deep_merge(base[k], v)
-        else:
-            base[k] = v
-    return base
-
-
-class _Cfg:
-    def __init__(self):
-        self.params: Dict[str, Any] = {}
-        self.reload()
-
-    def _repo_root(self) -> pathlib.Path:
-        # ats_core/cfg.py -> ats_core -> 仓库根
-        return pathlib.Path(__file__).resolve().parents[1]
-
-    def _load_json(self, path: pathlib.Path) -> Dict[str, Any]:
-        if not path.exists():
-            return {}
-        try:
-            txt = path.read_text(encoding="utf-8")
-            data = json.loads(txt)
-            if isinstance(data, dict):
-                return data
-        except Exception:
-            pass
+def _read_json(path: str) -> Dict[str, Any]:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
         return {}
 
-    def reload(self):
-        # 允许外部覆盖路径：
-        #  - ATS_CONFIG_PATH 指向某个具体文件
-        #  - ATS_ROOT 指向仓库根；默认用当前文件回溯
-        root = pathlib.Path(os.environ.get("ATS_ROOT") or self._repo_root())
-        cfg_path_env = os.environ.get("ATS_CONFIG_PATH")
-        cfg_path = pathlib.Path(cfg_path_env) if cfg_path_env else (root / "config" / "params.json")
+class _Cfg:
+    def __init__(self) -> None:
+        self._params: Optional[Dict[str, Any]] = None
+        self._params_file = os.getenv(
+            "ATS_PARAMS_FILE",
+            os.path.join(_REPO_ROOT, "config", "params.json"),
+        )
 
-        user_cfg = self._load_json(cfg_path)
-        # 用默认值补齐，避免 KeyError
-        self.params = _deep_merge(copy.deepcopy(DEFAULTS), user_cfg)
+    def _ensure_defaults(self, p: Dict[str, Any]) -> Dict[str, Any]:
+        # 基本段落
+        p.setdefault("trend", {})
+        p.setdefault("overlay", {})
+        p.setdefault("universe", [])
 
-    # 兼容各种历史调用写法：
-    # - CFG.get("overlay", {})                  # 位置实参默认值
-    # - CFG.get("overlay", default={})          # 关键字默认值
-    # - CFG.get("overlay", {}, default={})      # 两者都传也不报错，优先位置实参
-    def get(self, key: str, *args, **kwargs) -> Any:
-        if args:
-            default_val = args[0]
-        else:
-            default_val = kwargs.get("default", None)
-        return self.params.get(key, default_val)
+        # 关键：structure 缺失时给一个温和的默认，防止 analyze_symbol 里 KeyError
+        p.setdefault("structure", {
+            "enabled": True,          # 打开结构评分（score_structure 内部若找不到细节，再用它自己的默认）
+            "fallback_score": 50      # 万一内部无法计算，可当作中性分
+        })
 
+        return p
+
+    def reload(self) -> None:
+        raw = _read_json(self._params_file)
+        if not isinstance(raw, dict):
+            raw = {}
+        self._params = self._ensure_defaults(raw)
+
+    @property
+    def params(self) -> Dict[str, Any]:
+        if self._params is None:
+            self.reload()
+        return self._params or {}
+
+    # 兼容两种 default 传参方式：
+    #   CFG.get("overlay", {})             # 位置参数当 default
+    #   CFG.get("overlay", default={})     # 关键字 default
+    #   CFG.get("overlay", {}, default={}) # 旧代码同时传也能容忍
+    def get(self, key: str, *pos, default: Any = None) -> Any:
+        if pos:
+            # 只取第一个位置参数作为 default
+            if default is None:
+                default = pos[0]
+        return (self.params or {}).get(key, default)
 
 CFG = _Cfg()
