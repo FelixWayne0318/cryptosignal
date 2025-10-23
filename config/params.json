@@ -1,7 +1,15 @@
 {
+  "trend": {
+    "ema_order_min_bars": 6,
+    "slope_atr_min_long": 0.06,
+    "slope_atr_min_short": 0.04,
+    "slope_lookback": 12,
+    "atr_period": 14
+  },
+
   "overlay": {
     "oi_1h_pct_big": 0.003,
-    "oi_1h_pct_small": 0.010,
+    "oi_1h_pct_small": 0.01,
     "hot_decay_hours": 2,
 
     "z_volume_1h_threshold": 3,
@@ -16,34 +24,13 @@
     }
   },
 
-  "trend": {
-    /* —— 已有：EMA 顺序最少持续根数 —— */
-    "ema_order_min_bars": 6,
-
-    /* —— 新增：基于 ATR 归一的斜率门槛（避免 KeyError）——
-       含义：以 ATR 为单位度量价格斜率（每根K的变化 / ATR），
-       达到阈值才认为多/空趋势有效。数值越小越宽松。 */
-    "slope_atr_min_long": 0.06,
-    "slope_atr_min_short": 0.06,
-
-    /* 斜率计算窗口（越大越稳健也越迟钝） */
-    "slope_lookback": 20,
-
-    /* ATR 计算参数（常规即可） */
-    "atr_period": 14,
-    "atr_ma": "rma",
-
-    /* 可选：EMA 组（有些指标会用到，不用也不影响） */
-    "ema_periods": [20, 50, 100, 200]
-  },
-
-  /* —— 基础池（每日更新的 base）——
-     即便 overlay 能独立工作，给一份常见合约能帮助 overlay 扫描范围更稳。
-     你可随时替换为自己的 base 清单。 */
   "universe": [
-    "BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT",
-    "TRXUSDT","TONUSDT","AVAXUSDT","LINKUSDT","DOTUSDT","MATICUSDT","BCHUSDT",
-    "LTCUSDT","ATOMUSDT","FILUSDT","NEARUSDT","APTUSDT","OPUSDT","ARBUSDT",
-    "SUIUSDT","PAXGUSDT","COAIUSDT","CLOUSDT","XPLUSDT"
+    "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
+    "ADAUSDT", "DOGEUSDT", "TRXUSDT", "AVAXUSDT", "LINKUSDT",
+    "MATICUSDT", "DOTUSDT", "LTCUSDT", "BCHUSDT", "ATOMUSDT",
+    "FILUSDT", "NEARUSDT", "APTUSDT", "OPUSDT", "ARBUSDT",
+    "SUIUSDT", "SEIUSDT", "INJUSDT", "RUNEUSDT", "IMXUSDT",
+    "TONUSDT", "ICPUSDT", "AAVEUSDT", "UNIUSDT", "ETCUSDT",
+    "COAIUSDT", "PAXGUSDT", "XPLUSDT", "CLOUSDT"
   ]
 }
