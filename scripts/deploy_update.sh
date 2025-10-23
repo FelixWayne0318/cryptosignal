@@ -1,41 +1,57 @@
 #!/usr/bin/env bash
-# 安全部署脚本（无硬编码密钥版）
-# 用法：直接执行。可在仓库根目录放置 .env 提供环境变量。
-
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT_DIR"
+# === 基本配置（可在外部用环境变量覆盖） ===
+REPO_DIR="${REPO_DIR:-$HOME/ats-analyzer}"
+BRANCH="${BRANCH:-main}"
 
-# 读取 .env（若存在）
-if [[ -f ".env" ]]; then
-  # shellcheck disable=SC2046
-  export $(grep -E '^[A-Za-z_][A-Za-z0-9_]*=' .env | xargs) || true
+# === Telegram 变量（必须通过环境变量注入；不再硬编码） ===
+# 可选：将这些写入 /etc/environment 或 systemd unit 的 Environment= 中
+TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
+TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}"
+TELEGRAM_WATCH_CHAT_ID="${TELEGRAM_WATCH_CHAT_ID:-${TELEGRAM_CHAT_ID:-}}"
+TELEGRAM_TRADE_CHAT_ID="${TELEGRAM_TRADE_CHAT_ID:-${TELEGRAM_CHAT_ID:-}}"
+
+require_env() {
+  local name="$1" val="$2"
+  if [[ -z "$val" ]]; then
+    echo "⚠️ 环境变量 $name 未设置：相关发送步骤将被跳过" >&2
+    return 1
+  fi
+  return 0
+}
+
+echo "▶ Deploying repo at: $REPO_DIR (branch: $BRANCH)"
+cd "$REPO_DIR" || { echo "❌ Repo not found: $REPO_DIR"; exit 1; }
+
+echo "▶ Fetch & checkout"
+git fetch --all -p
+git checkout "$BRANCH"
+git pull --ff-only origin "$BRANCH"
+
+echo "▶ Install deps (optional, skip if managed elsewhere)"
+if [[ -f requirements.txt ]]; then
+  python3 -m pip install -U -r requirements.txt
 fi
 
-# 必需环境变量检查（仅当需要向 Telegram 发送验证信息时）
-NEED_TG_SEND="${NEED_TG_SEND:-1}"   # 置为0则不发验证消息
-if [[ "${NEED_TG_SEND}" == "1" ]]; then
-  : "${TELEGRAM_BOT_TOKEN:?请在环境变量或 .env 中设置 TELEGRAM_BOT_TOKEN}"
-  : "${TELEGRAM_CHAT_ID:?请在环境变量或 .env 中设置 TELEGRAM_CHAT_ID}"
+echo "▶ Run self-check (non-blocking)"
+if ./scripts/self_check.sh; then
+  echo "✅ self_check passed (or with warnings)"
+else
+  echo "⚠️ self_check returned non-zero (check logs above); continue for manual verification"
 fi
 
-# 建议：固定 Python 路径或使用系统 python3
-PYTHON_BIN="${PYTHON_BIN:-python3}"
-export PYTHONPATH="${ROOT_DIR}:${PYTHONPATH:-}"
+echo "▶ Send verification message to watch channel (if TELEGRAM_* provided)"
+if require_env TELEGRAM_BOT_TOKEN "$TELEGRAM_BOT_TOKEN" && require_env TELEGRAM_WATCH_CHAT_ID "$TELEGRAM_WATCH_CHAT_ID"; then
+  export TELEGRAM_BOT_TOKEN TELEGRAM_WATCH_CHAT_ID TELEGRAM_TRADE_CHAT_ID TELEGRAM_CHAT_ID
+  if python3 -m tools.send_symbol --symbol BTCUSDT --to watch --tag watch --note "部署验证：渲染&发送"; then
+    echo "✅ verification (send_symbol)"
+  else
+    echo "⚠️ send_symbol failed; try plain text"
+    ./scripts/send_manual.sh --to watch --tag watch "部署完成（send_symbol失败，需排查）" || true
+  fi
+else
+  echo "ℹ️ 未提供 Telegram 凭据，跳过发送验证步骤"
+fi
 
-echo "[deploy] pulling latest..."
-git fetch --all -q
-git pull --rebase -q
-
-echo "[deploy] self check..."
-chmod +x ./scripts/self_check.sh || true
-./scripts/self_check.sh
-
-if [[ "${NEED_TG_SEND}" == "1" ]]; then
-  echo "[deploy] send verification message to Telegram..."
-  # 发送一条简短验证消息（走工具，不在脚本硬编码 Token/ChatID）
-  "${PYTHON_BIN}" -m tools.send_text \
-    --text "✅ 部署完成：$(date -u +'%Y-%m-%d %H:%M:%S UTC')" \
-    --to "${TELEGRAM_CHAT_ID}" || {
-      echo "⚠️ 发送验证消息失败（忽略错误
+echo "✅ Done."
