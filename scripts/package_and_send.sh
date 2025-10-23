@@ -1,85 +1,50 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 仓库根目录（兼容从任意目录调用）
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")"/.. && pwd)"
-cd "$REPO"
+# 已按你的要求写死在脚本里（也可通过环境变量覆盖）
+: "${TELEGRAM_BOT_TOKEN:=7545580872:AAF7HzkHA4LRQUiOZngUgL39epuGVeEta70}"
+: "${TELEGRAM_CHAT_ID:=-1003142003085}"
 
-# 输出目录
-OUT="${REPO}/data/packages"
-mkdir -p "$OUT"
-
-TS="$(date +%F_%H%M%S)"
-GIT_SHORT="$(git rev-parse --short HEAD 2>/dev/null || echo 'no-git')"
-
-SRC_TGZ="${OUT}/src_${TS}_${GIT_SHORT}.tar.gz"
-BUNDLE="${OUT}/repo_${TS}_${GIT_SHORT}.bundle"
-SHA_FILE="${OUT}/SHA256SUMS_${TS}_${GIT_SHORT}.txt"
-
-# 仅源码打包（排除 .git / 缓存）
-echo "• 打包源码 → ${SRC_TGZ}"
-tar \
-  --exclude='.git' \
-  --exclude='__pycache__' \
-  --exclude='*.pyc' \
-  --exclude='*.pyo' \
-  -czf "${SRC_TGZ}" \
-  -C "${REPO}" .
-
-# 打完整历史的 git bundle（若不是 git 仓库会跳过）
-if git rev-parse --git-dir >/dev/null 2>&1; then
-  echo "• 制作 git bundle → ${BUNDLE}"
-  git bundle create "${BUNDLE}" --all
-else
-  echo "⚠️ 当前不是 git 仓库，跳过 bundle。"
-  BUNDLE=""
+# 自动探测仓库根；失败则回退到 ~/ats-analyzer
+REPO="${REPO:-}"
+if [[ -z "${REPO}" ]]; then
+  if topdir="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+    REPO="$topdir"
+  else
+    REPO="$HOME/ats-analyzer"
+  fi
 fi
 
-# 生成校验和
-echo "• 生成 SHA256 校验"
-{
-  [ -f "${SRC_TGZ}" ] && sha256sum "${SRC_TGZ}"
-  [ -n "${BUNDLE}" ] && [ -f "${BUNDLE}" ] && sha256sum "${BUNDLE}"
-} > "${SHA_FILE}"
+if [[ ! -d "$REPO" ]]; then
+  echo "❌ 找不到仓库目录: $REPO" >&2
+  exit 2
+fi
 
-# 发送文件到 Telegram，超过 1.9GB 自动分片
-send_with_split() {
-  local file="$1"
-  local caption="$2"
-  local max=$((1900*1024*1024))  # 1.9GB，低于 Telegram 2GB 上限
+TS="$(date +%Y%m%d-%H%M%S)"
+OUT="/tmp/ats-analyzer_${TS}.tgz"
 
-  [ -f "$file" ] || return 0
+HOST="$(hostname -f 2>/dev/null || hostname)"
+IPV4="$(ip -4 addr show 2>/dev/null | awk '/inet /{print $2}' | paste -sd',' - || true)"
+GITINFO="$(cd "$REPO" && (git rev-parse --short HEAD && git log -1 --pretty=%s) 2>/dev/null | paste -sd' ' - || echo 'no-git')"
 
-  local size
-  size=$(wc -c <"$file")
+# 打包（排除缓存与无关目录，避免包太大）
+tar -C "$REPO" -czf "$OUT" \
+  --exclude-vcs \
+  --exclude='*.pyc' \
+  --exclude='__pycache__' \
+  --exclude='.venv' \
+  --exclude='.env' \
+  --exclude='.DS_Store' \
+  --exclude='data/cache' \
+  --exclude='data/run_*' \
+  .
 
-  if [ "$size" -le "$max" ]; then
-    bash "${REPO}/scripts/send_tg.sh" "$file" "$caption"
-  else
-    echo "• 文件较大，分片上传: $file"
-    local prefix="${file}.part."
-    rm -f ${prefix}* 2>/dev/null || true
-    split -b 1900m -d -a 2 "$file" "${prefix}"
+CAPTION="Repo backup ${TS}
+host: ${HOST}
+ip: ${IPV4}
+git: ${GITINFO}"
 
-    # 统计片数
-    shopt -s nullglob
-    parts=( ${prefix}* )
-    local total="${#parts[@]}"
-    local idx=1
-    for p in "${parts[@]}"; do
-      bash "${REPO}/scripts/send_tg.sh" "$p" "${caption} (part ${idx}/${total})"
-      idx=$((idx+1))
-    done
-  fi
-}
-
-CAPTION_BASE="ats-analyzer ${TS} (${GIT_SHORT})"
-
-send_with_split "${SRC_TGZ}" "SRC tarball · ${CAPTION_BASE}"
-[ -n "${BUNDLE}" ] && [ -f "${BUNDLE}" ] && send_with_split "${BUNDLE}" "GIT bundle · ${CAPTION_BASE}"
-bash "${REPO}/scripts/send_tg.sh" "${SHA_FILE}" "SHA256SUMS · ${CAPTION_BASE}"
-
-echo "✅ 全部完成"
-echo "  • ${SRC_TGZ}"
-[ -n "${BUNDLE}" ] && [ -f "${BUNDLE}" ] && echo "  • ${BUNDLE}"
-echo "  • ${SHA_FILE}"
+# 发送
+TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN" \
+TELEGRAM_CHAT_ID="$TELEGRAM_CHAT_ID" \
+bash "$(dirname "$0")/send_tg.sh" "$OUT" "$CAPTION"
