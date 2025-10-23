@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 已按你的要求写死在脚本里（需要时也可用环境变量覆盖）
-: "${TELEGRAM_BOT_TOKEN:=7545580872:AAF7HzkHA4LRQUiOZngUgL39epuGVeEta70}"
-: "${TELEGRAM_CHAT_ID:=-1003142003085}"
+# 必须由外部注入，避免明文硬编码
+: "${TELEGRAM_BOT_TOKEN:?请通过环境变量 TELEGRAM_BOT_TOKEN 提供 Bot Token}"
+: "${TELEGRAM_CHAT_ID:?请通过环境变量 TELEGRAM_CHAT_ID 提供 Chat ID}"
 
 if [[ $# -lt 1 ]]; then
   echo "用法: $0 <file> [caption]" >&2
