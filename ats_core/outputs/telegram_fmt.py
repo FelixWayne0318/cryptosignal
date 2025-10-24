@@ -81,11 +81,19 @@ def _emoji_by_score(s: int) -> str:
         return "🟡"
     return "🔴"
 
-def _desc_trend(s: int) -> str:
-    if s >= 80: return "强势/上行倾向"
-    if s >= 60: return "温和上行或多头占优"
-    if s >= 40: return "中性/震荡"
-    return "趋势弱/震荡或下行倾向"
+def _desc_trend(s: int, is_long: bool = True) -> str:
+    if is_long:
+        # 做多视角
+        if s >= 80: return "强势/上行倾向"
+        if s >= 60: return "温和上行或多头占优"
+        if s >= 40: return "中性/震荡"
+        return "趋势弱/震荡或下行倾向"
+    else:
+        # 做空视角
+        if s >= 80: return "强势/下行倾向"
+        if s >= 60: return "温和下行或空头占优"
+        if s >= 40: return "中性/震荡"
+        return "趋势弱/震荡或上行倾向"
 
 def _desc_structure(s: int) -> str:
     if s >= 80: return "结构清晰/多周期共振"
@@ -99,17 +107,19 @@ def _desc_volume(s: int) -> str:
     if s >= 40: return "量能中性"
     return "量能不足/跟随意愿弱"
 
-def _desc_accel(s: int) -> str:
-    if s >= 80: return "加速强/持续性好"
-    if s >= 60: return "加速偏强/待确认"
+def _desc_accel(s: int, is_long: bool = True) -> str:
+    direction = "上行" if is_long else "下行"
+    if s >= 80: return f"{direction}加速强/持续性好"
+    if s >= 60: return f"{direction}加速偏强/待确认"
     if s >= 40: return "加速一般"
     return "加速不足/有背离风险"
 
-def _desc_positions(s: int) -> str:
-    if s >= 80: return "持仓变化显著/可能拥挤"
-    if s >= 60: return "OI温和上升/活跃"
-    if s >= 40: return "OI温和变化"
-    return "持仓走弱/去杠杆"
+def _desc_positions(s: int, is_long: bool = True) -> str:
+    side = "多头" if is_long else "空头"
+    if s >= 80: return f"{side}持仓显著增长/可能拥挤"
+    if s >= 60: return f"{side}持仓温和上升/活跃"
+    if s >= 40: return "持仓温和变化"
+    return f"{side}持仓走弱/去杠杆"
 
 def _desc_env(s: int) -> str:
     if s >= 80: return "环境友好/空间充足"
@@ -215,12 +225,13 @@ def _six_scores(r: Dict[str, Any]) -> Tuple[int,int,int,int,int,int]:
     return T, S, V, A, OI, E
 
 def _conviction_and_side(r: Dict[str, Any], six: Tuple[int,int,int,int,int,int]) -> Tuple[int, str]:
-    # user-supplied conviction/side take precedence if present
-    conv = _get(r, "conviction") or _get(r, "publish.conviction")
-    if not isinstance(conv, (int, float)):
-        conv = int(round(sum(six) / 6))
+    # 优先使用概率 P（转换为百分比）
+    prob = _get(r, "probability")
+    if isinstance(prob, (int, float)):
+        conv = int(round(prob * 100))
     else:
-        conv = int(round(_clamp(conv)))
+        # 兜底：使用六维平均分
+        conv = int(round(sum(six) / 6))
 
     side = (_get(r, "side") or _get(r, "publish.side") or "").lower()
     # normalize side label
@@ -252,17 +263,22 @@ def _header_lines(r: Dict[str, Any], is_watch: bool) -> Tuple[str, str]:
     line1 = f"🔹 {sym} · 现价 {price_s}"
     tag = "观察" if is_watch else "正式"
     icon = "👀" if is_watch else "📣"
-    line2 = f"{icon} {tag} · {side_lbl} {conv}% · {ttl_h}h"
+    line2 = f"{icon} {tag} · {side_lbl} {conv}% · 有效期{ttl_h}h"
     return line1, line2
 
 def _six_block(r: Dict[str, Any]) -> str:
     T, S, V, A, OI, E = _six_scores(r)
+
+    # 获取方向
+    side = (_get(r, "side") or "").lower()
+    is_long = side in ("long", "buy", "bull", "多", "做多")
+
     lines = []
-    lines.append(f"• 趋势 {_emoji_by_score(T)} {T:>2d} —— {_desc_trend(T)}")
+    lines.append(f"• 趋势 {_emoji_by_score(T)} {T:>2d} —— {_desc_trend(T, is_long)}")
     lines.append(f"• 结构 {_emoji_by_score(S)} {S:>2d} —— {_desc_structure(S)}")
     lines.append(f"• 量能 {_emoji_by_score(V)} {V:>2d} —— {_desc_volume(V)}")
-    lines.append(f"• 加速 {_emoji_by_score(A)} {A:>2d} —— {_desc_accel(A)}")
-    lines.append(f"• 持仓 {_emoji_by_score(OI)} {OI:>2d} —— {_desc_positions(OI)}")
+    lines.append(f"• 加速 {_emoji_by_score(A)} {A:>2d} —— {_desc_accel(A, is_long)}")
+    lines.append(f"• 持仓 {_emoji_by_score(OI)} {OI:>2d} —— {_desc_positions(OI, is_long)}")
     lines.append(f"• 环境 {_emoji_by_score(E)} {E:>2d} —— {_desc_env(E)}")
     return "\n".join(lines)
 
