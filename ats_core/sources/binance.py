@@ -13,6 +13,19 @@ from ats_core.backoff import sleep_retry  # 指数退避
 # 允许通过环境变量覆盖网关，便于内网代理或将来切换
 BASE = os.environ.get("BINANCE_FAPI_BASE", "https://fapi.binance.com")
 
+# 支持 HTTP/HTTPS 代理
+HTTP_PROXY = os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy")
+HTTPS_PROXY = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
+
+# 构建 opener（如果有代理配置）
+_opener = None
+if HTTP_PROXY or HTTPS_PROXY:
+    proxy_handler = urllib.request.ProxyHandler({
+        'http': HTTP_PROXY or HTTPS_PROXY,
+        'https': HTTPS_PROXY or HTTP_PROXY,
+    })
+    _opener = urllib.request.build_opener(proxy_handler)
+
 
 def _get(
     path_or_url: str,
@@ -23,6 +36,7 @@ def _get(
 ) -> Any:
     """
     统一 GET 请求，带重试与简单 UA；path_or_url 可以是完整 URL 或以 / 开头的路径
+    支持通过环境变量 HTTP_PROXY/HTTPS_PROXY 配置代理
     """
     if path_or_url.startswith("http"):
         url = path_or_url
@@ -35,9 +49,14 @@ def _get(
     for i in range(retries + 1):
         try:
             req = urllib.request.Request(full, headers={"User-Agent": "ats-analyzer/1.0"})
-            with urllib.request.urlopen(req, timeout=float(timeout)) as r:
-                data = r.read()
-                return json.loads(data)
+            if _opener:
+                with _opener.open(req, timeout=float(timeout)) as r:
+                    data = r.read()
+                    return json.loads(data)
+            else:
+                with urllib.request.urlopen(req, timeout=float(timeout)) as r:
+                    data = r.read()
+                    return json.loads(data)
         except Exception as e:
             last_err = e
             sleep_retry(i)
