@@ -120,15 +120,17 @@ def _desc_env(s: int) -> str:
 # ---------- extract scores robustly ----------
 
 def _score_trend(r: Dict[str, Any]) -> int:
-    # prefer r['T'] else maybe r['trend.score'] or regression-like value scaled
+    # 优先使用顶层 T 字段（来自新版 analyze_symbol）
     v = _get(r, "T")
     if v is None:
         v = _get(r, "trend.score")
     return _as_int_score(v, 50)
 
 def _score_structure(r: Dict[str, Any]) -> int:
-    # r['structure.score'] or r['structure.fallback_score'] or 50
-    v = _get(r, "structure.score")
+    # 优先使用顶层 S 字段（来自新版 analyze_symbol）
+    v = _get(r, "S")
+    if v is None:
+        v = _get(r, "structure.score")
     if v is None:
         v = _get(r, "structure.fallback_score")
     if v is None:
@@ -138,32 +140,42 @@ def _score_structure(r: Dict[str, Any]) -> int:
     return _as_int_score(v, 50)
 
 def _score_volume(r: Dict[str, Any]) -> int:
-    # try z-score first
+    # 优先使用顶层 V 字段（来自新版 analyze_symbol）
+    v = _get(r, "V")
+    if v is not None:
+        return _as_int_score(v, 50)
+
+    # 兼容旧版：尝试从元数据计算
     z = _get(r, "volume.z1h") or _get(r, "z_volume_1h") or _get(r, "momentum.z1h")
     if isinstance(z, (int, float)):
-        # map z in ~[-3, +3] to 0..100 around 50
         return _as_int_score(50 + 12 * float(z), 50)
-    # try ratio v5/v20
     ratio = _get(r, "volume.v5_over_v20") or _get(r, "v5_over_v20")
     if isinstance(ratio, (int, float)):
-        # 1.0 -> 50; 2.5 -> ~80; 0.6 -> ~30
         return _as_int_score(50 + 30 * (float(ratio) - 1.0), 50)
     return 50
 
 def _score_accel(r: Dict[str, Any]) -> int:
-    # try slope*ATR or 1h absolute return
+    # 优先使用顶层 A 字段（来自新版 analyze_symbol）
+    v = _get(r, "A")
+    if v is not None:
+        return _as_int_score(v, 50)
+
+    # 兼容旧版：尝试从元数据计算
     slope_atr = _get(r, "trend.slopeATR") or _get(r, "Tm.slopeATR")
     if isinstance(slope_atr, (int, float)):
-        # 0.30 -> ~80, 0.15 -> ~60, 0.05 -> ~40
         return _as_int_score(200 * float(slope_atr), 50)
     dP1h = _get(r, "momentum.dP1h_abs_pct") or _get(r, "dP1h_abs_pct")
     if isinstance(dP1h, (int, float)):
-        # 0.0..1.0% map to 40..80 roughly
         return _as_int_score(40 + 40 * min(1.0, float(dP1h) / 0.01), 50)
     return 50
 
 def _score_positions(r: Dict[str, Any]) -> int:
-    # combine oi z20 & cvd_z20 if available
+    # 优先使用顶层 O 字段（来自新版 analyze_symbol）
+    v = _get(r, "O")
+    if v is not None:
+        return _as_int_score(v, 50)
+
+    # 兼容旧版：尝试从元数据计算
     oi_z = _get(r, "oi.z20") or _get(r, "oi_z20")
     cvd_z = _get(r, "cvd.z20") or _get(r, "cvd_z20")
     vals: List[float] = []
@@ -172,23 +184,24 @@ def _score_positions(r: Dict[str, Any]) -> int:
     if isinstance(cvd_z, (int, float)):
         vals.append(float(cvd_z))
     if vals:
-        # z in [-3,3] → 0..100 around 50
         m = sum(vals) / len(vals)
         return _as_int_score(50 + 12 * m, 50)
     return 50
 
 def _score_env(r: Dict[str, Any]) -> int:
-    # use ATR% or volatility-esque metric if present
+    # 优先使用顶层 E 字段（来自新版 analyze_symbol）
+    v = _get(r, "E")
+    if v is not None:
+        return _as_int_score(v, 50)
+
+    # 兼容旧版：尝试从元数据计算
     atr_now = _get(r, "atr.now") or _get(r, "atr_now") or _get(r, "vol.atr_pct")
     if isinstance(atr_now, (int, float)):
-        # too low or too high can both be不好；简单映射到甜区
         x = float(atr_now)
-        # center ~1.0% as 60，过低<0.3→40，过高>3%→40
         if x <= 0:
             return 40
-        # bell-like mapping
         import math as _m
-        score = 60 - 20 * abs(_m.log10(x) - _m.log10(0.01))  # rough
+        score = 60 - 20 * abs(_m.log10(x) - _m.log10(0.01))
         return _as_int_score(score, 50)
     return 50
 
