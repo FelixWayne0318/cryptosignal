@@ -173,13 +173,13 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         pricing = _calc_pricing(h, l, c, atr_now, params.get("pricing", {}), side_long)
 
     # ---- 8. 组装结果 ----
-    return {
+    result = {
         "symbol": symbol,
         "price": close_now,
         "ema30": _last(ema30),
         "atr_now": atr_now,
 
-        # 6维分数
+        # 6维分数（结构化）
         "scores": chosen_scores,
         "scores_long": long_scores,
         "scores_short": short_scores,
@@ -219,6 +219,11 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         "cvd_z20": _zscore_last(cvd_series, 20) if cvd_series else 0.0,
         "cvd_mix_abs_per_h": abs(_last(cvd_mix)) if cvd_mix else 0.0,
     }
+
+    # 兼容旧版 telegram_fmt.py：将分数直接放在顶层
+    result.update(chosen_scores)
+
+    return result
 
 # ============ 特征计算辅助函数 ============
 
