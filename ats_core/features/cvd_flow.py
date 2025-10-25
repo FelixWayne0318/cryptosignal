@@ -52,11 +52,10 @@ def score_cvd_flow(
     # CVD归一化到价格（避免不同币种的CVD量级差异）
     price = max(1e-12, abs(c[-1]) + 1.0)
     cvd_window = cvd_series[-7:]  # 最近7个数据点（6小时）
-    cvd6 = (cvd_window[-1] - cvd_window[0]) / price
-
-    # ========== 2. 持续性分析（判断是否持续流入/流出） ==========
-    # 2.1 计算线性回归斜率
     n = len(cvd_window)
+
+    # ========== 2. 线性回归分析（判断持续性） ==========
+    # 2.1 计算线性回归斜率（每小时平均变化）
     x_mean = (n - 1) / 2.0
     y_mean = sum(cvd_window) / n
 
@@ -64,37 +63,46 @@ def score_cvd_flow(
     denominator = sum((i - x_mean) ** 2 for i in range(n))
     slope = numerator / denominator if denominator > 0 else 0
 
-    # 2.2 计算一致性（上涨K线占比）
-    up_count = sum(1 for i in range(1, n) if cvd_window[i] > cvd_window[i-1])
-    consistency = up_count / (n - 1) if n > 1 else 0
-
-    # 2.3 计算R²（拟合优度，0-1，越大越线性）
+    # 2.2 计算R²（拟合优度，0-1，越大越线性）
     y_pred = [slope * i + (y_mean - slope * x_mean) for i in range(n)]
     ss_res = sum((cvd_window[i] - y_pred[i]) ** 2 for i in range(n))
     ss_tot = sum((cvd_window[i] - y_mean) ** 2 for i in range(n))
     r_squared = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0
 
-    # 2.4 综合判断持续性
-    # 一致性 >= 60% + R² >= 0.7 = 持续性强
-    is_consistent = (consistency >= 0.6 and r_squared >= 0.7)
+    # 2.3 综合判断持续性
+    # R² >= 0.7 = 持续性强（变化平稳，不被单根K线主导）
+    is_consistent = (r_squared >= 0.7)
 
     # ========== 3. 软映射评分（带符号，-100到+100） ==========
-    # 直接映射CVD变化，不取反
-    # 正数 = 买入压力（CVD上升）
-    # 负数 = 卖出压力（CVD下降）
-    # 使用 tanh 映射: cvd6 / scale → (-1, 1) → (-100, 100)
-    normalized = math.tanh(cvd6 / p["cvd_scale"])
+    # 使用斜率而非两点比较，避免被单根K线主导
+    # slope_normalized：斜率归一化到价格（每小时平均变化率）
+    slope_normalized = slope / price
+
+    # 6小时总变化 = 斜率 × 6（更准确反映平均趋势）
+    cvd_trend = slope_normalized * (n - 1)
+
+    # tanh映射到(-1, 1)，再放大到(-100, 100)
+    normalized = math.tanh(cvd_trend / p["cvd_scale"])
     cvd_score = 100.0 * normalized
+
+    # 如果R²低（震荡），降低分数（震荡意味着不稳定）
+    if not is_consistent:
+        # 根据R²打折：R²=0.4→70%, R²=0.6→85%, R²=0.7→100%
+        stability_factor = 0.7 + 0.3 * (r_squared / 0.7)
+        cvd_score = cvd_score * min(1.0, stability_factor)
 
     # ========== 4. 最终分数（保留符号） ==========
     C = int(round(max(-100, min(100, cvd_score))))
 
+    # 计算cvd6用于显示（实际的起点终点变化）
+    cvd6 = (cvd_window[-1] - cvd_window[0]) / price
+
     # ========== 5. 返回元数据 ==========
     return C, {
-        "cvd6": round(cvd6, 6),
+        "cvd6": round(cvd6, 6),              # 实际变化（用于显示）
         "cvd_raw": round(cvd_window[-1] - cvd_window[0], 2),
         "cvd_score": cvd_score,
-        "consistency": round(consistency, 3),  # 一致性（0-1）
-        "r_squared": round(r_squared, 3),      # R²拟合优度（0-1）
-        "is_consistent": is_consistent          # 是否持续
+        "slope": round(slope_normalized, 8),  # 斜率（每小时平均变化）
+        "r_squared": round(r_squared, 3),     # R²拟合优度（0-1）
+        "is_consistent": is_consistent        # 是否持续（R²>=0.7）
     }
