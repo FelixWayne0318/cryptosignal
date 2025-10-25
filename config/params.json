@@ -9,6 +9,19 @@
 
   "accel": {},
 
+  "momentum": {
+    "slope_lookback": 30,
+    "slope_scale": 0.01,
+    "accel_scale": 0.005,
+    "slope_weight": 0.6,
+    "accel_weight": 0.4
+  },
+
+  "cvd_flow": {
+    "lookback_hours": 6,
+    "cvd_scale": 0.02
+  },
+
   "structure": {
     "theta": {
       "big": 0.35,
@@ -69,12 +82,12 @@
 
   "weights": {
     "T": 20,
-    "A": 10,
-    "S": 15,
-    "V": 15,
+    "M": 10,
+    "C": 10,
+    "S": 10,
+    "V": 20,
     "O": 15,
-    "E": 10,
-    "F": 15
+    "E": 15
   },
 
   "fund_leading": {
