@@ -81,51 +81,144 @@ def _emoji_by_score(s: int) -> str:
         return "🟡"
     return "🔴"
 
-def _desc_trend(s: int, is_long: bool = True) -> str:
+def _desc_trend(s: int, is_long: bool = True, Tm: int = None) -> str:
+    """
+    描述趋势
+
+    Args:
+        s: T 分数 (0-100)
+        is_long: 是否做多
+        Tm: 趋势方向 (-1=空头, 0=震荡, 1=多头)
+    """
     if is_long:
         # 做多视角
-        if s >= 80: return "强势/上行倾向"
-        if s >= 60: return "温和上行或多头占优"
-        if s >= 40: return "中性/震荡"
-        return "趋势弱/震荡或下行倾向"
+        if s >= 80: desc = "强势/上行倾向"
+        elif s >= 60: desc = "温和上行或多头占优"
+        elif s >= 40: desc = "中性/震荡"
+        else: desc = "趋势弱/震荡或下行倾向"
     else:
         # 做空视角
-        if s >= 80: return "强势/下行倾向"
-        if s >= 60: return "温和下行或空头占优"
-        if s >= 40: return "中性/震荡"
-        return "趋势弱/震荡或上行倾向"
+        if s >= 80: desc = "强势/下行倾向"
+        elif s >= 60: desc = "温和下行或空头占优"
+        elif s >= 40: desc = "中性/震荡"
+        else: desc = "趋势弱/震荡或上行倾向"
 
-def _desc_structure(s: int) -> str:
-    if s >= 80: return "结构清晰/多周期共振"
-    if s >= 60: return "结构尚可/回踩确认"
-    if s >= 40: return "结构一般/级别分歧"
-    return "结构杂乱/级别相抵"
+    # 附加趋势方向
+    if Tm is not None:
+        if Tm > 0:
+            desc += " [多头]"
+        elif Tm < 0:
+            desc += " [空头]"
+        else:
+            desc += " [震荡]"
 
-def _desc_volume(s: int) -> str:
-    if s >= 80: return "放量明显/跟随积极"
-    if s >= 60: return "量能偏强/逐步释放"
-    if s >= 40: return "量能中性"
-    return "量能不足/跟随意愿弱"
+    return desc
 
-def _desc_accel(s: int, is_long: bool = True) -> str:
+def _desc_structure(s: int, theta: float = None) -> str:
+    """
+    描述结构
+
+    Args:
+        s: S 分数 (0-100)
+        theta: 结构一致性角度 (0.25-0.60)
+    """
+    if s >= 80: desc = "结构清晰/多周期共振"
+    elif s >= 60: desc = "结构尚可/回踩确认"
+    elif s >= 40: desc = "结构一般/级别分歧"
+    else: desc = "结构杂乱/级别相抵"
+
+    # 附加结构角度
+    if theta is not None:
+        desc += f" (θ={theta:.2f})"
+
+    return desc
+
+def _desc_volume(s: int, v5v20: float = None) -> str:
+    """
+    描述量能
+
+    Args:
+        s: V 分数 (0-100)
+        v5v20: 短期/长期量能比率
+    """
+    if s >= 80: desc = "放量明显/跟随积极"
+    elif s >= 60: desc = "量能偏强/逐步释放"
+    elif s >= 40: desc = "量能中性"
+    else: desc = "量能不足/跟随意愿弱"
+
+    # 附加量能比率
+    if v5v20 is not None:
+        desc += f" (v5/v20={v5v20:.2f})"
+
+    return desc
+
+def _desc_accel(s: int, is_long: bool = True, cvd6: float = None) -> str:
+    """
+    描述加速
+
+    Args:
+        s: A 分数 (0-100)
+        is_long: 是否做多
+        cvd6: CVD 6小时变化百分比
+    """
     direction = "上行" if is_long else "下行"
-    if s >= 80: return f"{direction}加速强/持续性好"
-    if s >= 60: return f"{direction}加速偏强/待确认"
-    if s >= 40: return "加速一般"
-    return "加速不足/有背离风险"
+    if s >= 80: desc = f"{direction}加速强/持续性好"
+    elif s >= 60: desc = f"{direction}加速偏强/待确认"
+    elif s >= 40: desc = "加速一般"
+    else: desc = "加速不足/有背离风险"
 
-def _desc_positions(s: int, is_long: bool = True) -> str:
+    # 附加 CVD 变化
+    if cvd6 is not None:
+        cvd_pct = cvd6 * 100
+        if cvd_pct >= 0:
+            desc += f" (CVD+{cvd_pct:.1f}%)"
+        else:
+            desc += f" (CVD{cvd_pct:.1f}%)"
+
+    return desc
+
+def _desc_positions(s: int, is_long: bool = True, oi24h_pct: float = None) -> str:
+    """
+    描述持仓
+
+    Args:
+        s: O 分数 (0-100)
+        is_long: 是否做多
+        oi24h_pct: OI 24小时变化百分比
+    """
     side = "多头" if is_long else "空头"
-    if s >= 80: return f"{side}持仓显著增长/可能拥挤"
-    if s >= 60: return f"{side}持仓温和上升/活跃"
-    if s >= 40: return "持仓温和变化"
-    return f"{side}持仓走弱/去杠杆"
+    if s >= 80: desc = f"{side}持仓显著增长/可能拥挤"
+    elif s >= 60: desc = f"{side}持仓温和上升/活跃"
+    elif s >= 40: desc = "持仓温和变化"
+    else: desc = f"{side}持仓走弱/去杠杆"
 
-def _desc_env(s: int) -> str:
-    if s >= 80: return "环境友好/空间充足"
-    if s >= 60: return "环境偏友好"
-    if s >= 40: return "环境一般/空间有限"
-    return "环境不佳/波动或流动性掣肘"
+    # 附加 OI 24h 变化
+    if oi24h_pct is not None:
+        if oi24h_pct >= 0:
+            desc += f" (OI+{oi24h_pct:.1f}%)"
+        else:
+            desc += f" (OI{oi24h_pct:.1f}%)"
+
+    return desc
+
+def _desc_env(s: int, chop: float = None) -> str:
+    """
+    描述环境
+
+    Args:
+        s: E 分数 (0-100)
+        chop: Chop 指数 (0-100，越高越震荡)
+    """
+    if s >= 80: desc = "环境友好/空间充足"
+    elif s >= 60: desc = "环境偏友好"
+    elif s >= 40: desc = "环境一般/空间有限"
+    else: desc = "环境不佳/波动或流动性掣肘"
+
+    # 附加 Chop 指数
+    if chop is not None:
+        desc += f" (Chop={chop:.0f})"
+
+    return desc
 
 def _desc_fund_leading(s: int, leading_raw: float = None) -> str:
     """
@@ -314,17 +407,31 @@ def _six_block(r: Dict[str, Any]) -> str:
     side = (_get(r, "side") or "").lower()
     is_long = side in ("long", "buy", "bull", "多", "做多")
 
-    # 获取 F 的真实领先性数值
+    # 获取各维度的真实数据（从 scores_meta 提取）
+    T_meta = _get(r, "scores_meta.T") or {}
+    S_meta = _get(r, "scores_meta.S") or {}
+    V_meta = _get(r, "scores_meta.V") or {}
+    A_meta = _get(r, "scores_meta.A") or {}
+    O_meta = _get(r, "scores_meta.O") or {}
+    E_meta = _get(r, "scores_meta.E") or {}
     F_meta = _get(r, "scores_meta.F") or {}
-    leading_raw = F_meta.get("leading_raw")
+
+    # 提取具体指标
+    Tm = T_meta.get("Tm")  # 趋势方向 (-1/0/1)
+    theta = S_meta.get("theta")  # 结构角度
+    v5v20 = V_meta.get("v5v20")  # 量能比率
+    cvd6 = A_meta.get("cvd6")  # CVD 6h 变化
+    oi24h_pct = O_meta.get("oi24h_pct")  # OI 24h 变化%
+    chop = E_meta.get("chop")  # Chop 指数
+    leading_raw = F_meta.get("leading_raw")  # 资金领先性
 
     lines = []
-    lines.append(f"• 趋势 {_emoji_by_score(T)} {T:>2d} —— {_desc_trend(T, is_long)}")
-    lines.append(f"• 结构 {_emoji_by_score(S)} {S:>2d} —— {_desc_structure(S)}")
-    lines.append(f"• 量能 {_emoji_by_score(V)} {V:>2d} —— {_desc_volume(V)}")
-    lines.append(f"• 加速 {_emoji_by_score(A)} {A:>2d} —— {_desc_accel(A, is_long)}")
-    lines.append(f"• 持仓 {_emoji_by_score(OI)} {OI:>2d} —— {_desc_positions(OI, is_long)}")
-    lines.append(f"• 环境 {_emoji_by_score(E)} {E:>2d} —— {_desc_env(E)}")
+    lines.append(f"• 趋势 {_emoji_by_score(T)} {T:>2d} —— {_desc_trend(T, is_long, Tm)}")
+    lines.append(f"• 结构 {_emoji_by_score(S)} {S:>2d} —— {_desc_structure(S, theta)}")
+    lines.append(f"• 量能 {_emoji_by_score(V)} {V:>2d} —— {_desc_volume(V, v5v20)}")
+    lines.append(f"• 加速 {_emoji_by_score(A)} {A:>2d} —— {_desc_accel(A, is_long, cvd6)}")
+    lines.append(f"• 持仓 {_emoji_by_score(OI)} {OI:>2d} —— {_desc_positions(OI, is_long, oi24h_pct)}")
+    lines.append(f"• 环境 {_emoji_by_score(E)} {E:>2d} —— {_desc_env(E, chop)}")
     lines.append(f"• 资金 {_emoji_by_score(F)} {F:>2d} —— {_desc_fund_leading(F, leading_raw)}")
     return "\n".join(lines)
 
