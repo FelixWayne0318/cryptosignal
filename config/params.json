@@ -114,7 +114,8 @@
 
   "base": {
     "min_quote_volume": 5000000,
-    "min_z24_abs": 0.5
+    "min_z24_abs": 0.5,
+    "min_pool_size": 20
   },
 
   "overlay": {
@@ -128,9 +129,15 @@
       "quote": 5000000
     },
     "triple_sync": {
-      "dP1h_abs_pct": 0.02,
-      "v5_over_v20": 1.3,
-      "cvd_mix_abs_per_h": 0.03
+      "mode": "2of3",
+      "dP1h_abs_pct": 0.015,
+      "v5_over_v20": 1.2,
+      "cvd_mix_abs_per_h": 0.025,
+      "anti_chase": {
+        "enabled": true,
+        "lookback": 72,
+        "max_distance_pct": 0.05
+      }
     }
   },
 

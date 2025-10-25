@@ -94,13 +94,48 @@ def build() -> List[str]:
             _, mix = cvd_mix_with_oi_price(k1, oi, window=20)
             cvd_mix_abs_per_h = abs(_last(mix)) if mix else 0.0
 
+            # === 回撤过滤：避免追高/追跌 ===
+            anti_chase = tri.get("anti_chase", {}) or {}
+            if anti_chase.get("enabled", False):
+                high = [_to_f(r[2]) for r in k1]
+                low = [_to_f(r[3]) for r in k1]
+                lookback = int(anti_chase.get("lookback", 72))  # 72小时
+                max_distance = float(anti_chase.get("max_distance_pct", 0.05))  # 5%
+
+                if len(high) >= lookback and len(low) >= lookback:
+                    hh = max(high[-lookback:])  # 最高点
+                    ll = min(low[-lookback:])   # 最低点
+                    current = close[-1]
+
+                    # 距离高点太近（可能追高）
+                    if current > hh * (1 - max_distance):
+                        continue
+                    # 距离低点太近（可能追跌做空）
+                    if current < ll * (1 + max_distance):
+                        continue
+
             # 阈值
             need_dp = _to_f(tri.get("dP1h_abs_pct", 0.0))
             need_vr = _to_f(tri.get("v5_over_v20", 0.0))
             need_cvd = _to_f(tri.get("cvd_mix_abs_per_h", 0.0))
 
-            if (dp1h >= need_dp) and (v5_over_v20 >= need_vr) and (cvd_mix_abs_per_h >= need_cvd):
-                out.append(sym)
+            # 三选二模式（优化：降低严格度）
+            mode = tri.get("mode", "all")  # "all"=全部满足, "2of3"=三选二
+
+            conditions = [
+                dp1h >= need_dp,
+                v5_over_v20 >= need_vr,
+                cvd_mix_abs_per_h >= need_cvd
+            ]
+
+            if mode == "2of3":
+                # 三选二：至少满足2个条件
+                if sum(conditions) >= 2:
+                    out.append(sym)
+            else:
+                # 默认：全部满足（原有逻辑）
+                if all(conditions):
+                    out.append(sym)
 
         except Exception:
             continue
