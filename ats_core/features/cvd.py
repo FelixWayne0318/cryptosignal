@@ -126,8 +126,7 @@ def cvd_from_spot_klines(klines: Sequence[Sequence]) -> List[float]:
 def cvd_combined(
     futures_klines: Sequence[Sequence],
     spot_klines: Sequence[Sequence] = None,
-    futures_weight: float = 0.7,
-    spot_weight: float = 0.3
+    use_dynamic_weight: bool = True
 ) -> List[float]:
     """
     组合现货+合约CVD
@@ -135,11 +134,17 @@ def cvd_combined(
     Args:
         futures_klines: 合约K线数据
         spot_klines: 现货K线数据（可选）
-        futures_weight: 合约权重（默认0.7）
-        spot_weight: 现货权重（默认0.3）
+        use_dynamic_weight: 是否使用动态权重（按成交额比例）
+                          True: 根据实际成交额动态计算权重（推荐）
+                          False: 使用固定权重（70%合约 + 30%现货）
 
     Returns:
         组合后的CVD序列
+
+    说明：
+        - 动态权重：根据合约和现货的实际成交额（USDT）比例计算权重
+        - 这样能真实反映不同市场的资金流向权重
+        - 例如：某币合约日成交10亿，现货1亿 → 权重自动为 90.9% : 9.1%
     """
     cvd_f = cvd_from_klines(futures_klines, use_taker_buy=True)
 
@@ -150,23 +155,51 @@ def cvd_combined(
     cvd_s = cvd_from_spot_klines(spot_klines)
 
     # 对齐长度
-    n = min(len(cvd_f), len(cvd_s))
+    n = min(len(cvd_f), len(cvd_s), len(futures_klines), len(spot_klines))
     cvd_f = cvd_f[-n:]
     cvd_s = cvd_s[-n:]
+    f_klines = futures_klines[-n:]
+    s_klines = spot_klines[-n:]
 
-    # 标准化后混合
-    z_f = _z_all(cvd_f)
-    z_s = _z_all(cvd_s)
+    # 计算权重
+    if use_dynamic_weight:
+        # 方法1：按成交额（USDT）比例动态计算权重
+        # K线第7列：quoteAssetVolume（成交额，单位USDT）
+        f_quote_volume = sum([_to_f(k[7]) for k in f_klines])
+        s_quote_volume = sum([_to_f(k[7]) for k in s_klines])
+        total_quote = f_quote_volume + s_quote_volume
 
-    # 加权组合
-    combined = [futures_weight * z_f[i] + spot_weight * z_s[i] for i in range(n)]
+        if total_quote > 0:
+            futures_weight = f_quote_volume / total_quote
+            spot_weight = s_quote_volume / total_quote
+        else:
+            # 降级到固定比例
+            futures_weight = 0.7
+            spot_weight = 0.3
+    else:
+        # 方法2：固定权重
+        futures_weight = 0.7
+        spot_weight = 0.3
 
-    # 还原为累积值（保持CVD的累积特性）
+    # 加权组合CVD增量（而不是标准化）
     result: List[float] = []
-    s = 0.0
-    for val in combined:
-        s += val
-        result.append(s)
+    for i in range(n):
+        # 计算每根K线的CVD增量
+        if i == 0:
+            delta_f = cvd_f[i]
+            delta_s = cvd_s[i]
+        else:
+            delta_f = cvd_f[i] - cvd_f[i-1]
+            delta_s = cvd_s[i] - cvd_s[i-1]
+
+        # 加权混合增量
+        combined_delta = futures_weight * delta_f + spot_weight * delta_s
+
+        # 累加
+        if i == 0:
+            result.append(combined_delta)
+        else:
+            result.append(result[-1] + combined_delta)
 
     return result
 

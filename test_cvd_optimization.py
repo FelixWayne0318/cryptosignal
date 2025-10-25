@@ -92,9 +92,25 @@ def test_cvd_improvement():
         cvd_spot = cvd_from_klines(spot_klines, use_taker_buy=True)
         print(f"   ✅ 现货CVD: {cvd_spot[-1]:.2f}")
 
-        # 组合现货+合约
-        cvd_mix = cvd_combined(futures_klines, spot_klines)
-        print(f"   ✅ 组合CVD (70%合约 + 30%现货): {cvd_mix[-1]:.2f}")
+        # 计算成交额比例
+        n = min(len(futures_klines), len(spot_klines))
+        f_quote = sum([float(k[7]) for k in futures_klines[-n:]])
+        s_quote = sum([float(k[7]) for k in spot_klines[-n:]])
+        total_quote = f_quote + s_quote
+        f_weight = f_quote / total_quote * 100 if total_quote > 0 else 0
+        s_weight = s_quote / total_quote * 100 if total_quote > 0 else 0
+
+        print(f"\n   成交额分析（最近{n}小时）:")
+        print(f"   - 合约成交额: ${f_quote:,.0f} ({f_weight:.1f}%)")
+        print(f"   - 现货成交额: ${s_quote:,.0f} ({s_weight:.1f}%)")
+
+        # 组合现货+合约（动态权重）
+        cvd_mix_dynamic = cvd_combined(futures_klines, spot_klines, use_dynamic_weight=True)
+        print(f"\n   ✅ 组合CVD (动态权重 {f_weight:.1f}%:{s_weight:.1f}%): {cvd_mix_dynamic[-1]:.2f}")
+
+        # 对比固定权重
+        cvd_mix_fixed = cvd_combined(futures_klines, spot_klines, use_dynamic_weight=False)
+        print(f"   ℹ️ 组合CVD (固定权重 70%:30%): {cvd_mix_fixed[-1]:.2f}")
 
     except Exception as e:
         print(f"   ℹ️ 现货数据获取失败（可选功能）: {e}")
@@ -105,8 +121,12 @@ def test_cvd_improvement():
     print("\n优化总结:")
     print("1. ✅ 使用真实的takerBuyVolume替代Tick Rule估算")
     print("2. ✅ CVD计算更加准确，反映真实买卖压力")
-    print("3. ✅ 支持现货+合约组合CVD（可选）")
+    print("3. ✅ 支持现货+合约组合CVD（动态权重，按成交额比例）")
     print("4. ✅ 向后兼容（保留旧方法）")
+    print("\n权重计算方法:")
+    print("- 动态权重（推荐）：根据实际成交额（USDT）自动计算")
+    print("  例：合约10亿，现货1亿 → 权重90.9%:9.1%")
+    print("- 固定权重（备选）：70%合约 + 30%现货")
 
 if __name__ == "__main__":
     try:
