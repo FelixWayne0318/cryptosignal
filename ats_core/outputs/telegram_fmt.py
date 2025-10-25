@@ -127,6 +127,13 @@ def _desc_env(s: int) -> str:
     if s >= 40: return "环境一般/空间有限"
     return "环境不佳/波动或流动性掣肘"
 
+def _desc_fund_leading(s: int) -> str:
+    if s >= 75: return "资金强势领先/蓄势待发"
+    if s >= 60: return "资金略微领先/机会较好"
+    if s >= 40: return "资金价格同步/一般"
+    if s >= 25: return "价格略微领先/追高风险"
+    return "价格大幅领先/风险较大"
+
 # ---------- extract scores robustly ----------
 
 def _score_trend(r: Dict[str, Any]) -> int:
@@ -215,16 +222,25 @@ def _score_env(r: Dict[str, Any]) -> int:
         return _as_int_score(score, 50)
     return 50
 
-def _six_scores(r: Dict[str, Any]) -> Tuple[int,int,int,int,int,int]:
+def _score_fund_leading(r: Dict[str, Any]) -> int:
+    # 优先使用顶层 F 字段（来自新版 analyze_symbol）
+    v = _get(r, "F")
+    if v is not None:
+        return _as_int_score(v, 50)
+    # 无兜底逻辑，返回中性
+    return 50
+
+def _six_scores(r: Dict[str, Any]) -> Tuple[int,int,int,int,int,int,int]:
     T  = _score_trend(r)
     S  = _score_structure(r)
     V  = _score_volume(r)
     A  = _score_accel(r)
     OI = _score_positions(r)
     E  = _score_env(r)
-    return T, S, V, A, OI, E
+    F  = _score_fund_leading(r)
+    return T, S, V, A, OI, E, F
 
-def _conviction_and_side(r: Dict[str, Any], six: Tuple[int,int,int,int,int,int]) -> Tuple[int, str]:
+def _conviction_and_side(r: Dict[str, Any], seven: Tuple[int,int,int,int,int,int,int]) -> Tuple[int, str]:
     # 优先使用概率 P（转换为百分比）
     prob = _get(r, "probability")
     if isinstance(prob, (int, float)):
@@ -267,7 +283,7 @@ def _header_lines(r: Dict[str, Any], is_watch: bool) -> Tuple[str, str]:
     return line1, line2
 
 def _six_block(r: Dict[str, Any]) -> str:
-    T, S, V, A, OI, E = _six_scores(r)
+    T, S, V, A, OI, E, F = _six_scores(r)
 
     # 获取方向
     side = (_get(r, "side") or "").lower()
@@ -280,6 +296,7 @@ def _six_block(r: Dict[str, Any]) -> str:
     lines.append(f"• 加速 {_emoji_by_score(A)} {A:>2d} —— {_desc_accel(A, is_long)}")
     lines.append(f"• 持仓 {_emoji_by_score(OI)} {OI:>2d} —— {_desc_positions(OI, is_long)}")
     lines.append(f"• 环境 {_emoji_by_score(E)} {E:>2d} —— {_desc_env(E)}")
+    lines.append(f"• 资金 {_emoji_by_score(F)} {F:>2d} —— {_desc_fund_leading(F)}")
     return "\n".join(lines)
 
 def _note_and_tags(r: Dict[str, Any], is_watch: bool) -> str:

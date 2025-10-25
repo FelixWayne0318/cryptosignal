@@ -68,12 +68,27 @@
   },
 
   "weights": {
-    "T": 25,
-    "A": 15,
+    "T": 20,
+    "A": 10,
     "S": 15,
-    "V": 20,
+    "V": 15,
     "O": 15,
-    "E": 10
+    "E": 10,
+    "F": 15
+  },
+
+  "fund_leading": {
+    "oi_weight": 0.4,
+    "vol_weight": 0.3,
+    "cvd_weight": 0.3,
+    "trend_weight": 0.6,
+    "slope_weight": 0.4,
+    "oi_scale": 3.0,
+    "vol_scale": 0.3,
+    "cvd_scale": 0.02,
+    "price_scale": 3.0,
+    "slope_scale": 0.01,
+    "leading_scale": 20.0
   },
 
   "publish": {

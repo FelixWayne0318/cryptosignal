@@ -125,11 +125,25 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     # 环境（E）- 方向无关
     E, E_meta = _calc_environment(h, l, c, atr_now, params.get("environment", {}))
 
-    # ---- 3. Scorecard ----
-    weights = params.get("weights", {"T": 25, "A": 15, "S": 15, "V": 20, "O": 15, "E": 10})
+    # ---- 2.5. 资金领先性（F）- 需要双向计算 ----
+    # F 需要的输入数据
+    oi_change_pct = O_meta_long.get("oi24h_pct", 0.0) if O_meta_long.get("oi24h_pct") is not None else 0.0
+    vol_ratio = V_meta.get("v5v20", 1.0)
+    price_change_24h = ((c[-1] - c[-25]) / c[-25] * 100) if len(c) >= 25 else 0.0
+    price_slope = (ema30[-1] - ema30[-7]) / 6.0 / max(1e-9, atr_now)  # 归一化斜率
 
-    long_scores = {"T": T_long, "A": A_long, "S": S_long, "V": V, "O": O_long, "E": E}
-    short_scores = {"T": T_short, "A": A_short, "S": S_short, "V": V, "O": O_short, "E": E}
+    F_long, F_meta_long = _calc_fund_leading(
+        oi_change_pct, vol_ratio, cvd6, price_change_24h, price_slope, True, params.get("fund_leading", {})
+    )
+    F_short, F_meta_short = _calc_fund_leading(
+        oi_change_pct, vol_ratio, cvd6, price_change_24h, price_slope, False, params.get("fund_leading", {})
+    )
+
+    # ---- 3. Scorecard ----
+    weights = params.get("weights", {"T": 20, "A": 10, "S": 15, "V": 15, "O": 15, "E": 10, "F": 15})
+
+    long_scores = {"T": T_long, "A": A_long, "S": S_long, "V": V, "O": O_long, "E": E, "F": F_long}
+    short_scores = {"T": T_short, "A": A_short, "S": S_short, "V": V, "O": O_short, "E": E, "F": F_short}
 
     UpScore, DownScore, edge = scorecard(long_scores, weights)
     _, _, edge_short = scorecard(short_scores, weights)
@@ -143,7 +157,8 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         "S": S_meta_long if side_long else S_meta_short,
         "V": V_meta,
         "O": O_meta_long if side_long else O_meta_short,
-        "E": E_meta
+        "E": E_meta,
+        "F": F_meta_long if side_long else F_meta_short
     }
 
     # ---- 4. 概率计算 ----
@@ -281,6 +296,21 @@ def _calc_environment(h, l, c, atr_now, cfg):
         return int(E), meta
     except Exception:
         return 50, {"chop": 50.0, "room": 0.5}
+
+def _calc_fund_leading(oi_change_pct, vol_ratio, cvd_change, price_change_pct, price_slope, side_long, cfg):
+    """资金领先性打分"""
+    try:
+        from ats_core.features.fund_leading import score_fund_leading
+        F, meta = score_fund_leading(oi_change_pct, vol_ratio, cvd_change, price_change_pct, price_slope, side_long, cfg)
+        return int(F), meta
+    except Exception as e:
+        # 兜底：返回中性分数
+        return 50, {
+            "fund_momentum": 50.0,
+            "price_momentum": 50.0,
+            "leading_raw": 0.0,
+            "error": str(e)
+        }
 
 def _calc_quality(scores: Dict, n_klines: int, n_oi: int) -> float:
     """
