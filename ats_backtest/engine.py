@@ -194,7 +194,7 @@ class BacktestEngine:
                 continue
 
             # 开仓
-            self._open_trade_from_signal(signal)
+            self._open_trade_from_signal(signal, price_data)
 
             # 检查所有持仓（使用该信号之后的价格数据）
             self._check_open_trades(signal_time, price_data)
@@ -205,13 +205,37 @@ class BacktestEngine:
         # 计算最终指标
         return self._generate_results()
 
-    def _open_trade_from_signal(self, signal: Dict):
+    def _open_trade_from_signal(self, signal: Dict, price_data: Dict[str, List]):
         """
         根据信号开仓
 
         Args:
             signal: 信号字典
+            price_data: 价格数据字典
         """
+        symbol = signal.get('symbol')
+        entry_time = signal.get('timestamp', signal.get('entry_time'))
+
+        # 获取入场价格
+        entry_price = signal.get('entry_price', signal.get('current_price'))
+
+        # 如果没有entry_price，从价格数据中获取
+        if entry_price is None and symbol in price_data:
+            # 找到信号时间点最近的K线
+            symbol_prices = price_data[symbol]
+            for price_bar in symbol_prices:
+                bar_time = price_bar[0] if isinstance(price_bar[0], datetime) else datetime.fromtimestamp(price_bar[0] / 1000)
+                # 使用信号时间点之后第一根K线的收盘价
+                if bar_time >= entry_time:
+                    entry_price = price_bar[4]  # close price
+                    break
+
+        # 如果还是没有价格，跳过这个信号
+        if entry_price is None:
+            print(f"⚠️  Skipping {symbol}: No entry price available")
+            self.signals_skipped += 1
+            return
+
         # 计算仓位大小
         position_value = self.current_capital * self.position_size_pct
 
@@ -220,10 +244,10 @@ class BacktestEngine:
 
         # 创建交易
         trade = BacktestTrade(
-            symbol=signal.get('symbol'),
+            symbol=symbol,
             side=signal.get('side'),
-            entry_time=signal.get('timestamp', signal.get('entry_time')),
-            entry_price=signal.get('entry_price', signal.get('current_price')),
+            entry_time=entry_time,
+            entry_price=entry_price,
             stop_loss=signal.get('stop_loss', signal.get('sl')),
             take_profit_1=signal.get('take_profit_1', signal.get('tp1')),
             take_profit_2=signal.get('take_profit_2', signal.get('tp2')),
@@ -237,8 +261,12 @@ class BacktestEngine:
         # 记录权益点
         self._record_equity_point(trade.entry_time, position_value, commission)
 
+        # 安全打印（处理None值）
+        sl_str = f"{trade.stop_loss:.4f}" if trade.stop_loss else "N/A"
+        tp_str = f"{(trade.take_profit_2 or trade.take_profit_1):.4f}" if (trade.take_profit_2 or trade.take_profit_1) else "N/A"
+
         print(f"📊 Open: {trade.symbol} {trade.side.upper()} @ {trade.entry_price:.4f} "
-              f"(Prob: {trade.probability:.1%}, SL: {trade.stop_loss:.4f}, TP: {trade.take_profit_2 or trade.take_profit_1:.4f})")
+              f"(Prob: {trade.probability:.1%}, SL: {sl_str}, TP: {tp_str})")
 
     def _check_open_trades(self, current_time: datetime, price_data: Dict[str, List]):
         """
