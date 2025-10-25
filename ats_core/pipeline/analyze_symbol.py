@@ -477,7 +477,9 @@ def _calc_pricing(h, l, c, atr_now, cfg, side_long):
     try:
         from ats_core.features.pricing import price_plan
         return price_plan(h, l, c, atr_now, cfg, side_long)
-    except Exception:
+    except Exception as e:
+        from ats_core.logging import warn
+        warn(f"pricing计算失败: {e}, cfg={cfg}")
         return None
 
 def _zscore_last(series, window):
