@@ -27,6 +27,14 @@ def save_signal(analysis_result: Dict) -> int:
         pricing = analysis_result.get('pricing', {}) or {}
         publish = analysis_result.get('publish', {}) or {}
 
+        # 计算入场价格（取entry_lo和entry_hi的中点）
+        entry_price = None
+        if pricing:
+            entry_lo = pricing.get('entry_lo')
+            entry_hi = pricing.get('entry_hi')
+            if entry_lo is not None and entry_hi is not None:
+                entry_price = (entry_lo + entry_hi) / 2
+
         signal = Signal(
             symbol=analysis_result['symbol'],
             timestamp=datetime.utcnow(),
@@ -45,13 +53,13 @@ def save_signal(analysis_result: Dict) -> int:
             weighted_score=analysis_result.get('UpScore') if analysis_result.get('side') == 'long' else analysis_result.get('DownScore'),
             base_probability=analysis_result.get('P_base'),
 
-            # 给价计划
-            entry_price=pricing.get('entry'),
+            # 给价计划（从pricing中正确提取）
+            entry_price=entry_price,
             stop_loss=pricing.get('sl'),
             take_profit_1=pricing.get('tp1'),
             take_profit_2=pricing.get('tp2'),
 
-            # 当前价格
+            # 当前价格（从analyze_symbol结果中获取最新价）
             current_price=analysis_result.get('price'),
 
             # 发布状态
@@ -497,5 +505,93 @@ def expire_old_signals(hours: int = 24) -> int:
         session.rollback()
         print(f"❌ Failed to expire signals: {e}")
         return 0
+    finally:
+        session.close()
+
+
+# ========== 候选池操作 ==========
+
+def save_candidate_pool(
+    symbols: List[str],
+    pool_type: str = 'merged',
+    filter_params: Optional[Dict] = None,
+    run_mode: str = 'manual',
+    notes: Optional[str] = None
+) -> int:
+    """
+    保存候选池到数据库
+
+    Args:
+        symbols: 币种列表
+        pool_type: 候选池类型 ('base', 'overlay', 'merged')
+        filter_params: 筛选参数（可选）
+        run_mode: 运行模式 ('manual', 'cron', 'api')
+        notes: 备注（可选）
+
+    Returns:
+        pool_id: 新创建的候选池ID
+    """
+    from .models import CandidatePool
+
+    session = db.get_session()
+    try:
+        pool = CandidatePool(
+            timestamp=datetime.utcnow(),
+            pool_type=pool_type,
+            symbols=symbols,
+            count=len(symbols),
+            filter_params=filter_params or {},
+            run_mode=run_mode,
+            notes=notes
+        )
+
+        session.add(pool)
+        session.commit()
+
+        pool_id = pool.id
+        print(f"✅ Candidate pool saved: #{pool_id} [{pool_type}] {len(symbols)} symbols")
+        return pool_id
+
+    except Exception as e:
+        session.rollback()
+        print(f"❌ Failed to save candidate pool: {e}")
+        raise
+    finally:
+        session.close()
+
+
+def get_recent_candidate_pools(
+    days: int = 7,
+    pool_type: Optional[str] = None,
+    limit: int = 50
+) -> List:
+    """
+    获取最近的候选池记录
+
+    Args:
+        days: 天数
+        pool_type: 候选池类型过滤（可选）
+        limit: 返回数量限制
+
+    Returns:
+        候选池记录列表
+    """
+    from .models import CandidatePool
+
+    session = db.get_session()
+    try:
+        start_time = datetime.utcnow() - timedelta(days=days)
+
+        query = session.query(CandidatePool).filter(
+            CandidatePool.timestamp >= start_time
+        )
+
+        if pool_type:
+            query = query.filter(CandidatePool.pool_type == pool_type)
+
+        pools = query.order_by(desc(CandidatePool.timestamp)).limit(limit).all()
+
+        return pools
+
     finally:
         session.close()

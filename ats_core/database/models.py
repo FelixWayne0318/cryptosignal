@@ -153,6 +153,50 @@ class DailyMetrics(Base):
         return f"<DailyMetrics(date={self.date.date()}, signals={self.total_signals}, win_rate={self.win_rate})>"
 
 
+class CandidatePool(Base):
+    """
+    候选池历史记录表
+
+    记录每次运行时的候选池列表，用于：
+    1. 追踪选币逻辑的变化
+    2. 回测时重建历史候选池
+    3. 分析哪些币种被频繁选中
+    """
+    __tablename__ = 'candidate_pools'
+
+    # 主键
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # 时间戳
+    timestamp = Column(DateTime, nullable=False, index=True, default=datetime.utcnow)
+
+    # 候选池类型（'base', 'overlay', 'merged'）
+    pool_type = Column(String(20), nullable=False, index=True)
+
+    # 候选币种列表（JSON数组）
+    symbols = Column(JSON, nullable=False)
+    # 示例：["BTCUSDT", "ETHUSDT", "SOLUSDT", ...]
+
+    # 币种数量
+    count = Column(Integer, nullable=False)
+
+    # 选币参数（JSON，记录当时的筛选条件）
+    filter_params = Column(JSON)
+    # 示例：{"min_volume_24h": 1000000, "min_price_change_24h": 5, ...}
+
+    # 运行方式（'manual', 'cron', 'api'）
+    run_mode = Column(String(20))
+
+    # 备注
+    notes = Column(Text)
+
+    # 元数据
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<CandidatePool(id={self.id}, timestamp={self.timestamp}, type={self.pool_type}, count={self.count})>"
+
+
 # ========== 数据库连接管理 ==========
 
 class Database:
