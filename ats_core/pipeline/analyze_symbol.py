@@ -2,12 +2,19 @@
 from __future__ import annotations
 
 """
-完整的单币种分析管道：
+完整的单币种分析管道（改进版v2.0）：
 1. 获取市场数据（K线、OI）
-2. 计算6维特征（T/A/S/V/O/E）
+2. 计算7维特征（T/M/C/S/V/O/E） - F作为调节器
 3. 双向评分（long/short）
-4. 计算概率和边缘
-5. 判定发布条件
+4. 计算基础概率
+5. F调节器调整概率
+6. 判定发布条件
+
+改进点：
+- T：软映射 + 多空对称
+- M：从A分离出价格动量
+- C：从A分离出CVD资金流
+- F：从评分维度改为概率调节器
 """
 
 from typing import Dict, Any, Tuple, List
@@ -98,15 +105,19 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     # CVD
     cvd_series, cvd_mix = cvd_mix_with_oi_price(k1, oi_data, window=20)
 
-    # ---- 2. 计算6维特征 ----
+    # ---- 2. 计算7维特征（改进版）----
 
-    # 趋势（T）- 方向对称
-    T_long, T_meta = _calc_trend(h, l, c, c4, params.get("trend", {}))
-    T_short = 100 - T_long
+    # 趋势（T）- 需要双向计算（新增side_long参数）
+    T_long, T_meta_long = _calc_trend(h, l, c, c4, params.get("trend", {}), True)
+    T_short, T_meta_short = _calc_trend(h, l, c, c4, params.get("trend", {}), False)
 
-    # 加速度（A）- 方向对称
-    A_long, A_meta = _calc_accel(c, cvd_series, params.get("accel", {}))
-    A_short = 100 - A_long
+    # 动量（M）- 从A分离出来的价格动量
+    M_long, M_meta_long = _calc_momentum(c, True, params.get("momentum", {}))
+    M_short, M_meta_short = _calc_momentum(c, False, params.get("momentum", {}))
+
+    # CVD资金流（C）- 从A分离出来的CVD
+    C_long, C_meta_long = _calc_cvd_flow(cvd_series, c, True, params.get("cvd_flow", {}))
+    C_short, C_meta_short = _calc_cvd_flow(cvd_series, c, False, params.get("cvd_flow", {}))
 
     # 结构（S）- 需要双向计算
     ctx_long = {"bigcap": False, "overlay": False, "phaseA": False, "strong": (T_long > 75), "m15_ok": False}
@@ -139,11 +150,22 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         oi_change_pct, vol_ratio, cvd6, price_change_24h, price_slope, False, params.get("fund_leading", {})
     )
 
-    # ---- 3. Scorecard ----
-    weights = params.get("weights", {"T": 20, "A": 10, "S": 15, "V": 15, "O": 15, "E": 10, "F": 15})
+    # ---- 3. Scorecard（改进版：7维基础评分，F作为调节器）----
+    # 新权重：T、M、C、S、V、O、E（7维）
+    weights = params.get("weights", {
+        "T": 20,  # 趋势
+        "M": 10,  # 动量（从A分离）
+        "C": 10,  # CVD资金流（从A分离）
+        "S": 10,  # 结构
+        "V": 20,  # 量能
+        "O": 15,  # 持仓
+        "E": 15   # 环境
+        # F 不参与权重，作为调节器
+    })
 
-    long_scores = {"T": T_long, "A": A_long, "S": S_long, "V": V, "O": O_long, "E": E, "F": F_long}
-    short_scores = {"T": T_short, "A": A_short, "S": S_short, "V": V, "O": O_short, "E": E, "F": F_short}
+    # 7维基础分数（不包含F）
+    long_scores = {"T": T_long, "M": M_long, "C": C_long, "S": S_long, "V": V, "O": O_long, "E": E}
+    short_scores = {"T": T_short, "M": M_short, "C": C_short, "S": S_short, "V": V, "O": O_short, "E": E}
 
     UpScore, DownScore, edge = scorecard(long_scores, weights)
     _, _, edge_short = scorecard(short_scores, weights)
@@ -152,23 +174,46 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     side_long = (UpScore > DownScore)
     chosen_scores = long_scores if side_long else short_scores
     chosen_meta = {
-        "T": T_meta,
-        "A": A_meta,
+        "T": T_meta_long if side_long else T_meta_short,
+        "M": M_meta_long if side_long else M_meta_short,
+        "C": C_meta_long if side_long else C_meta_short,
         "S": S_meta_long if side_long else S_meta_short,
         "V": V_meta,
         "O": O_meta_long if side_long else O_meta_short,
         "E": E_meta,
-        "F": F_meta_long if side_long else F_meta_short
+        "F": F_meta_long if side_long else F_meta_short  # F保留用于显示
     }
 
-    # ---- 4. 概率计算 ----
+    # ---- 4. 基础概率计算 ----
     prior_up = 0.50  # 中性先验，可以根据BTC/ETH环境调整
     Q = _calc_quality(chosen_scores, len(k1), len(oi_data))
 
-    P_long, P_short = map_probability(edge, prior_up, Q)
+    P_long_base, P_short_base = map_probability(edge, prior_up, Q)
+    P_base = P_long_base if side_long else P_short_base
+
+    # ---- 5. F调节器调整概率（改进版核心）----
+    F_chosen = F_long if side_long else F_short
+
+    # F作为调节器调整概率
+    if F_chosen >= 70:
+        # 资金领先价格，蓄势待发
+        adjustment = 1.15  # 提升15%
+    elif F_chosen >= 50:
+        # 资金价格同步
+        adjustment = 1.0
+    elif F_chosen >= 30:
+        # 价格略微领先
+        adjustment = 0.9  # 降低10%
+    else:
+        # 价格远超资金，追高风险
+        adjustment = 0.7  # 降低30%
+
+    # 最终概率
+    P_long = min(0.95, P_long_base * adjustment if side_long else P_long_base)
+    P_short = min(0.95, P_short_base * adjustment if not side_long else P_short_base)
     P_chosen = P_long if side_long else P_short
 
-    # ---- 5. 发布判定 ----
+    # ---- 6. 发布判定 ----
     publish_cfg = params.get("publish", {})
     prime_prob_min = publish_cfg.get("prime_prob_min", 0.62)
     prime_dims_ok_min = publish_cfg.get("prime_dims_ok_min", 4)
@@ -187,14 +232,14 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     if is_prime:
         pricing = _calc_pricing(h, l, c, atr_now, params.get("pricing", {}), side_long)
 
-    # ---- 8. 组装结果 ----
+    # ---- 8. 组装结果（改进版）----
     result = {
         "symbol": symbol,
         "price": close_now,
         "ema30": _last(ema30),
         "atr_now": atr_now,
 
-        # 6维分数（结构化）
+        # 7维分数（结构化）- T/M/C/S/V/O/E
         "scores": chosen_scores,
         "scores_long": long_scores,
         "scores_short": short_scores,
@@ -209,10 +254,13 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         "side": "long" if side_long else "short",
         "side_long": side_long,
 
-        # 概率
+        # 概率（改进版：包含调整信息）
         "P_long": P_long,
         "P_short": P_short,
         "probability": P_chosen,
+        "P_base": P_base,  # 基础概率（调整前）
+        "F_score": F_chosen,  # F分数
+        "F_adjustment": adjustment,  # 调整系数
         "prior_up": prior_up,
         "Q": Q,
 
@@ -242,24 +290,42 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
 
 # ============ 特征计算辅助函数 ============
 
-def _calc_trend(h, l, c, c4, cfg):
-    """趋势打分"""
+def _calc_trend(h, l, c, c4, cfg, side_long):
+    """趋势打分（改进版：支持多空对称）"""
     try:
         from ats_core.features.trend import score_trend
-        T, Tm = score_trend(h, l, c, c4, cfg)
+        T, Tm = score_trend(h, l, c, c4, cfg, side_long)
         meta = {"Tm": Tm, "slopeATR": 0.0, "emaOrder": Tm}
         return int(T), meta
     except Exception:
         return 50, {"Tm": 0, "slopeATR": 0.0, "emaOrder": 0}
 
 def _calc_accel(c, cvd_series, cfg):
-    """加速度打分"""
+    """加速度打分（旧版，保留用于兼容）"""
     try:
         from ats_core.features.accel import score_accel
         A, meta = score_accel(c, cvd_series, cfg)
         return int(A), meta
     except Exception:
         return 50, {"dslope30": 0.0, "cvd6": 0.0, "weak_ok": False}
+
+def _calc_momentum(c, side_long, cfg):
+    """动量打分（新版M维度）"""
+    try:
+        from ats_core.features.momentum import score_momentum
+        M, meta = score_momentum(c, side_long, cfg)
+        return int(M), meta
+    except Exception:
+        return 50, {"slope_now": 0.0, "accel": 0.0}
+
+def _calc_cvd_flow(cvd_series, c, side_long, cfg):
+    """CVD资金流打分（新版C维度）"""
+    try:
+        from ats_core.features.cvd_flow import score_cvd_flow
+        C, meta = score_cvd_flow(cvd_series, c, side_long, cfg)
+        return int(C), meta
+    except Exception:
+        return 50, {"cvd6": 0.0, "cvd_score": 50}
 
 def _calc_structure(h, l, c, ema30_last, atr_now, cfg, ctx):
     """结构打分"""
