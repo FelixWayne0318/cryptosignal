@@ -78,8 +78,8 @@ def build() -> List[str]:
             # --- 新币检测（优先检查，快速通道）---
             new_coin_enabled = new_coin_cfg.get("enabled", False)
             if new_coin_enabled:
-                min_days = int(new_coin_cfg.get("min_days", 7))
-                max_days = int(new_coin_cfg.get("phaseB_days", 30))
+                min_hours = int(new_coin_cfg.get("min_hours", 1))  # 最早1小时
+                max_days = int(new_coin_cfg.get("max_days", 30))    # 最多30天
                 min_volume = _to_f(new_coin_cfg.get("min_volume_24h", 10000000))  # 1000万USDT
 
                 # 快速检测：获取最多720根1h K线（30天）
@@ -88,8 +88,8 @@ def build() -> List[str]:
                     coin_age_hours = len(k_check)
                     coin_age_days = coin_age_hours / 24
 
-                    # 新币条件：7-30天 + 高成交额
-                    if min_days <= coin_age_days <= max_days:
+                    # 新币条件：1小时-30天 + 高成交额
+                    if coin_age_hours >= min_hours and coin_age_days <= max_days:
                         quote_vol = _to_f(t.get("quoteVolume", 0))
                         if quote_vol >= min_volume:
                             # 新币直接加入overlay（跳过三重共振检测）

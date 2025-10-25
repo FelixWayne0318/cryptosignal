@@ -143,15 +143,18 @@
 
   "new_coin": {
     "enabled": true,
-    "min_days": 7,
-    "phaseA_days": 14,
+    "min_hours": 1,
+    "ultra_new_hours": 24,
+    "phaseA_days": 7,
     "phaseB_days": 30,
+    "max_days": 30,
     "min_volume_24h": 10000000,
+    "ultra_new_prime_prob_min": 0.70,
+    "ultra_new_dims_ok_min": 6,
     "phaseA_prime_prob_min": 0.65,
     "phaseA_dims_ok_min": 5,
     "phaseB_prime_prob_min": 0.63,
-    "phaseB_dims_ok_min": 4,
-    "phaseA_max_daily": 1
+    "phaseB_dims_ok_min": 4
   },
 
   "limits": {

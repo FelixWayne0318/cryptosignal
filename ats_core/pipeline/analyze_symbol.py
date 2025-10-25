@@ -86,22 +86,38 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     k4 = get_klines(symbol, "4h", 200)
     oi_data = get_open_interest_hist(symbol, "1h", 300)
 
-    if not k1 or len(k1) < 50:
-        return _make_empty_result(symbol, "insufficient_data")
-
-    # ---- 新币检测 ----
+    # ---- 新币检测（优先判断，决定数据要求）----
     new_coin_cfg = params.get("new_coin", {})
-    coin_age_hours = len(k1)
+    coin_age_hours = len(k1) if k1 else 0
     coin_age_days = coin_age_hours / 24
 
-    phaseA_days = new_coin_cfg.get("phaseA_days", 14)
-    phaseB_days = new_coin_cfg.get("phaseB_days", 30)
+    # 4级分级阈值
+    ultra_new_hours = new_coin_cfg.get("ultra_new_hours", 24)  # 1-24小时：超新
+    phaseA_days = new_coin_cfg.get("phaseA_days", 7)            # 1-7天：极度谨慎
+    phaseB_days = new_coin_cfg.get("phaseB_days", 30)           # 7-30天：谨慎
 
+    # 判断阶段
+    is_ultra_new = coin_age_hours <= ultra_new_hours  # 1-24小时
+    is_phaseA = coin_age_days <= phaseA_days and not is_ultra_new  # 1-7天
+    is_phaseB = phaseA_days < coin_age_days <= phaseB_days  # 7-30天
     is_new_coin = coin_age_days <= phaseB_days
-    is_phaseA = coin_age_days <= phaseA_days  # 0-14天：极度谨慎
-    is_phaseB = phaseA_days < coin_age_days <= phaseB_days  # 15-30天：谨慎
 
-    coin_phase = "phaseA" if is_phaseA else ("phaseB" if is_phaseB else "mature")
+    if is_ultra_new:
+        coin_phase = "ultra_new"  # 超新币（1-24小时）
+        min_data = 10              # 至少10根1h K线
+    elif is_phaseA:
+        coin_phase = "phaseA"     # 阶段A（1-7天）
+        min_data = 30
+    elif is_phaseB:
+        coin_phase = "phaseB"     # 阶段B（7-30天）
+        min_data = 50
+    else:
+        coin_phase = "mature"     # 成熟币
+        min_data = 50
+
+    # 检查数据是否足够
+    if not k1 or len(k1) < min_data:
+        return _make_empty_result(symbol, "insufficient_data")
 
     h = [_to_f(r[2]) for r in k1]
     l = [_to_f(r[3]) for r in k1]
@@ -234,18 +250,24 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     P_short = min(0.95, P_short_base * adjustment if not side_long else P_short_base)
     P_chosen = P_long if side_long else P_short
 
-    # ---- 6. 发布判定 ----
+    # ---- 6. 发布判定（4级分级标准）----
     publish_cfg = params.get("publish", {})
 
-    # 新币特殊处理：应用更严格标准
-    if is_phaseA:
-        # 阶段A（0-14天）：极度谨慎
+    # 新币特殊处理：应用分级标准
+    if is_ultra_new:
+        # 超新币（1-24小时）：超级谨慎
+        prime_prob_min = new_coin_cfg.get("ultra_new_prime_prob_min", 0.70)
+        prime_dims_ok_min = new_coin_cfg.get("ultra_new_dims_ok_min", 6)
+        prime_dim_threshold = 70  # 提高单维度门槛
+        watch_prob_min = 0.65  # 新币不发watch信号
+    elif is_phaseA:
+        # 阶段A（1-7天）：极度谨慎
         prime_prob_min = new_coin_cfg.get("phaseA_prime_prob_min", 0.65)
         prime_dims_ok_min = new_coin_cfg.get("phaseA_dims_ok_min", 5)
         prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
-        watch_prob_min = 0.60  # 新币不发watch信号
+        watch_prob_min = 0.60
     elif is_phaseB:
-        # 阶段B（15-30天）：谨慎
+        # 阶段B（7-30天）：谨慎
         prime_prob_min = new_coin_cfg.get("phaseB_prime_prob_min", 0.63)
         prime_dims_ok_min = new_coin_cfg.get("phaseB_dims_ok_min", 4)
         prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
