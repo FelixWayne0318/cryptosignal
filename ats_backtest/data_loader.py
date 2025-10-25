@@ -235,8 +235,21 @@ class BacktestDataLoader:
             return None
 
         try:
-            with open(cache_file, 'r') as f:
-                data = json.load(f)
+            # 尝试检测是否为 gzip 压缩文件
+            import gzip
+
+            # 读取前两个字节检测是否为 gzip 文件（魔术字节：0x1f 0x8b）
+            with open(cache_file, 'rb') as f:
+                magic = f.read(2)
+
+            if magic == b'\x1f\x8b':
+                # gzip 压缩文件
+                with gzip.open(cache_file, 'rt', encoding='utf-8') as f:
+                    data = json.load(f)
+            else:
+                # 普通 JSON 文件
+                with open(cache_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
 
             # 转换回datetime对象
             bars = []
@@ -247,7 +260,12 @@ class BacktestDataLoader:
             return bars
 
         except Exception as e:
-            print(f"   ⚠️  Cache read error: {e}")
+            print(f"   ⚠️  Cache read error: {e}, deleting corrupted cache file")
+            # 删除损坏的缓存文件
+            try:
+                cache_file.unlink()
+            except:
+                pass
             return None
 
     def _save_to_cache(self, symbol: str, start_time: datetime, end_time: datetime, interval: str, bars: List):
