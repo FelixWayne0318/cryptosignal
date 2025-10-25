@@ -21,7 +21,7 @@ from typing import Dict, Any, Tuple, List
 from statistics import median
 
 from ats_core.cfg import CFG
-from ats_core.sources.binance import get_klines, get_open_interest_hist
+from ats_core.sources.binance import get_klines, get_open_interest_hist, get_spot_klines
 from ats_core.features.cvd import cvd_from_klines, cvd_mix_with_oi_price
 from ats_core.scoring.scorecard import scorecard
 from ats_core.scoring.probability import map_probability
@@ -86,6 +86,13 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     k4 = get_klines(symbol, "4h", 200)
     oi_data = get_open_interest_hist(symbol, "1h", 300)
 
+    # 尝试获取现货K线（用于CVD组合计算）
+    # 如果失败（某些币只有合约），cvd_mix_with_oi_price会自动降级到只用合约CVD
+    try:
+        spot_k1 = get_spot_klines(symbol, "1h", 300)
+    except Exception:
+        spot_k1 = None
+
     # ---- 新币检测（优先判断，决定数据要求）----
     new_coin_cfg = params.get("new_coin", {})
     coin_age_hours = len(k1) if k1 else 0
@@ -132,8 +139,8 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     atr_now = _last(atr_series)
     close_now = _last(c)
 
-    # CVD
-    cvd_series, cvd_mix = cvd_mix_with_oi_price(k1, oi_data, window=20)
+    # CVD（现货+合约组合，如果有现货数据）
+    cvd_series, cvd_mix = cvd_mix_with_oi_price(k1, oi_data, window=20, spot_klines=spot_k1)
 
     # ---- 2. 计算7维特征（改进版）----
 
