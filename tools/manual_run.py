@@ -43,7 +43,14 @@ def load_existing_pool():
             with open(overlay_path, 'r') as f:
                 overlay_data = json.load(f)
                 if isinstance(overlay_data, list):
-                    symbols.extend(overlay_data)
+                    # 候选池可能是字符串列表或对象列表
+                    for item in overlay_data:
+                        if isinstance(item, dict):
+                            # 对象格式：{'symbol': 'BTCUSDT', 'z24': 1.0, ...}
+                            symbols.append(item['symbol'])
+                        else:
+                            # 字符串格式：'BTCUSDT'
+                            symbols.append(item)
                     log(f"✅ 读取 overlay 候选池: {len(overlay_data)} 个")
         except Exception as e:
             warn(f"读取 overlay 失败: {e}")
@@ -55,7 +62,9 @@ def load_existing_pool():
                 base_data = json.load(f)
                 if isinstance(base_data, list):
                     # 去重（overlay 优先）
-                    for sym in base_data:
+                    for item in base_data:
+                        # 提取symbol字段（兼容对象和字符串）
+                        sym = item['symbol'] if isinstance(item, dict) else item
                         if sym not in symbols:
                             symbols.append(sym)
                     log(f"✅ 读取 base 候选池: {len(base_data)} 个（合并后总计 {len(symbols)} 个）")
