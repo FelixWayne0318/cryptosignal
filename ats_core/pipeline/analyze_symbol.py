@@ -287,8 +287,9 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     m15_ok = _check_microconfirm_15m(symbol, side_long, params.get("microconfirm_15m", {}), atr_now)
 
     # ---- 7. 给价计划 ----
+    # 为Prime和Watch信号都计算止盈止损
     pricing = None
-    if is_prime:
+    if is_prime or is_watch:
         pricing = _calc_pricing(h, l, c, atr_now, params.get("pricing", {}), side_long)
 
     # ---- 8. 组装结果（改进版）----
