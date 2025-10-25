@@ -1,13 +1,15 @@
 # ats_core/features/open_interest.py
+"""
+O（持仓）评分 - 使用方向性软映射
+
+改进：
+- 旧版：oi24 < 1% → 0 分（硬阈值）
+- 新版：oi24 = 0.5% → 约 42 分，1.5% → 约 57 分（软映射）
+"""
 from statistics import median
 from typing import Dict, Tuple, Any
 from ats_core.sources.oi import fetch_oi_hourly, pct, pct_series
-
-# 线性映射助手：把 x 从 [lo, hi] 线性映到 [0,1] 并截断
-def _ramp(x: float, lo: float, hi: float) -> float:
-    if hi == lo:
-        return 0.0
-    return max(0.0, min(1.0, (x - lo) / (hi - lo)))
+from ats_core.features.scoring_utils import directional_score
 
 def score_open_interest(symbol: str,
                         closes,
@@ -25,39 +27,35 @@ def score_open_interest(symbol: str,
       - crowding_warn / p95_oi24（拥挤阈值）
       - den（归一化分母，中位数）
     """
-    # 参数默认（缺键也不炸）
+    # 参数默认
     default_par = {
-        # 多头侧：希望 24h OI 上涨越多越好
-        "long_oi24_lo":  1.0,   # 低于 1% 视为 0
-        "long_oi24_hi":  8.0,   # 高于 8% 视为 1
-        # 空头侧：希望 24h OI 下降（-oi24 越大越好）
-        "short_oi24_lo": 2.0,   # -oi24 低于 2% 视为 0（oi24 > -2%）
-        "short_oi24_hi": 10.0,  # -oi24 高于 10% 视为 1（oi24 < -10%）
-        # 同向计数阈值（12 根内）
-        "upup12_lo": 6,   # 6 次起才开始给分
-        "upup12_hi": 12,  # 12 次封顶
-        "dnup12_lo": 6,
-        "dnup12_hi": 12,
-        # 拥挤度
-        "crowding_p95_penalty": 10,
-        # 权重（总和不用正好=1，会在 0..100 内乘以 100）
-        "w_change": 0.7,    # 变化率权重
-        "w_align":  0.3,    # 价格-持仓同向权重
+        "oi24_scale": 3.0,          # OI 24h变化率缩放系数（3% 给约 69 分）
+        "align_scale": 4.0,          # 同向次数缩放系数（4次 给约 69 分）
+        "oi_weight": 0.7,            # OI 变化率权重
+        "align_weight": 0.3,         # 同向权重
+        "crowding_p95_penalty": 10,  # 拥挤度惩罚
+        "min_oi_samples": 30,        # 最少 OI 数据点
     }
     par = dict(default_par)
     if isinstance(params, dict):
         par.update(params)
 
     oi = fetch_oi_hourly(symbol, limit=200)
-    # 兜底：数据不足用 CVD proxy，给一个温和的分数（避免全 0）
-    if len(oi) < 30:
-        O = int(100 * max(0.0, min(1.0, (cvd6_fallback - 0.01) / 0.05)))
+    # 兜底：数据不足时使用 CVD proxy
+    if len(oi) < par["min_oi_samples"]:
+        O = directional_score(
+            cvd6_fallback,
+            neutral=0.0,
+            scale=0.02,
+            max_bonus=40  # 降低最大值，因为 CVD 不如 OI 准确
+        )
         return O, {
             "oi1h_pct": None,
             "oi24h_pct": None,
             "dnup12":   None,
             "upup12":   None,
-            "crowding_warn": False
+            "crowding_warn": False,
+            "data_source": "cvd_fallback"
         }
 
     den = median(oi[max(0, len(oi) - 168):])
@@ -85,20 +83,24 @@ def score_open_interest(symbol: str,
         p95 = s[int(0.95 * (len(s) - 1))]
         crowding_warn = (oi24 >= p95)
 
-    # —— 打分：主看“变化率”，辅看“同向” ——
+    # —— 打分：使用软映射 ——
     if side_long:
-        s_change = _ramp(oi24, par["long_oi24_lo"], par["long_oi24_hi"])
-        s_align  = _ramp(up_up, par["upup12_lo"], par["upup12_hi"])
+        # 做多：希望 OI 上升
+        oi_score = directional_score(oi24, neutral=0.0, scale=par["oi24_scale"])
+        # 同向：价格↑ OI↑ 的次数
+        align_score = directional_score(up_up, neutral=0.0, scale=par["align_scale"])
     else:
-        # 空头侧：-oi24 越大越好（即 oi24 越负越好）
-        s_change = _ramp(-oi24, par["short_oi24_lo"], par["short_oi24_hi"])
-        s_align  = _ramp(dn_up, par["dnup12_lo"], par["dnup12_hi"])
+        # 做空：希望 OI 下降（-oi24 越大越好）
+        oi_score = directional_score(-oi24, neutral=0.0, scale=par["oi24_scale"])
+        # 同向：价格↓ OI↑ 的次数（空头持仓增加）
+        align_score = directional_score(dn_up, neutral=0.0, scale=par["align_scale"])
 
-    O_raw = 100.0 * (par["w_change"] * s_change + par["w_align"] * s_align)
+    # 加权平均
+    O_raw = par["oi_weight"] * oi_score + par["align_weight"] * align_score
 
     # 拥挤度惩罚
     if crowding_warn:
-        O_raw -= float(par["crowding_p95_penalty"])
+        O_raw -= par["crowding_p95_penalty"]
 
     O = int(round(max(0.0, min(100.0, O_raw))))
 
@@ -110,5 +112,8 @@ def score_open_interest(symbol: str,
         "crowding_warn": crowding_warn,
         "p95_oi24": round(p95 * 100, 2) if p95 is not None else None,
         "den": den,
+        "oi_score": oi_score,
+        "align_score": align_score,
+        "data_source": "oi_data"
     }
     return O, meta
