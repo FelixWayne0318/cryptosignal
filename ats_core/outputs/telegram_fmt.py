@@ -340,23 +340,29 @@ def _score_env(r: Dict[str, Any]) -> int:
         return _as_int_score(score, 50)
     return 50
 
+def _score_momentum(r: Dict[str, Any]) -> int:
+    v = _get(r, "M")
+    return _as_int_score(v, 50)
+
+def _score_cvd_flow(r: Dict[str, Any]) -> int:
+    v = _get(r, "C")
+    return _as_int_score(v, 50)
+
 def _score_fund_leading(r: Dict[str, Any]) -> int:
-    # 优先使用顶层 F 字段（来自新版 analyze_symbol）
-    v = _get(r, "F")
-    if v is not None:
-        return _as_int_score(v, 50)
-    # 无兜底逻辑，返回中性
-    return 50
+    v = _get(r, "F_score") or _get(r, "F")
+    return _as_int_score(v, 50)
 
 def _six_scores(r: Dict[str, Any]) -> Tuple[int,int,int,int,int,int,int]:
+    """兼容：返回T/S/V/M/C/O/E/F（实际8维）"""
     T  = _score_trend(r)
     S  = _score_structure(r)
     V  = _score_volume(r)
-    A  = _score_accel(r)
+    M  = _score_momentum(r)
+    C  = _score_cvd_flow(r)
     OI = _score_positions(r)
     E  = _score_env(r)
     F  = _score_fund_leading(r)
-    return T, S, V, A, OI, E, F
+    return T, S, V, M, OI, E, F  # 返回7维+F（去掉C保持兼容）
 
 def _conviction_and_side(r: Dict[str, Any], seven: Tuple[int,int,int,int,int,int,int]) -> Tuple[int, str]:
     # 优先使用概率 P（转换为百分比）
@@ -401,38 +407,48 @@ def _header_lines(r: Dict[str, Any], is_watch: bool) -> Tuple[str, str]:
     return line1, line2
 
 def _six_block(r: Dict[str, Any]) -> str:
-    T, S, V, A, OI, E, F = _six_scores(r)
+    T, S, V, M, OI, E, F = _six_scores(r)
+    C = _score_cvd_flow(r)  # 单独获取C
 
     # 获取方向
     side = (_get(r, "side") or "").lower()
     is_long = side in ("long", "buy", "bull", "多", "做多")
 
-    # 获取各维度的真实数据（从 scores_meta 提取）
+    # 获取各维度的真实数据
     T_meta = _get(r, "scores_meta.T") or {}
     S_meta = _get(r, "scores_meta.S") or {}
     V_meta = _get(r, "scores_meta.V") or {}
-    A_meta = _get(r, "scores_meta.A") or {}
+    M_meta = _get(r, "scores_meta.M") or {}
+    C_meta = _get(r, "scores_meta.C") or {}
     O_meta = _get(r, "scores_meta.O") or {}
     E_meta = _get(r, "scores_meta.E") or {}
     F_meta = _get(r, "scores_meta.F") or {}
 
     # 提取具体指标
-    Tm = T_meta.get("Tm")  # 趋势方向 (-1/0/1)
-    theta = S_meta.get("theta")  # 结构角度
-    v5v20 = V_meta.get("v5v20")  # 量能比率
-    cvd6 = A_meta.get("cvd6")  # CVD 6h 变化
-    oi24h_pct = O_meta.get("oi24h_pct")  # OI 24h 变化%
-    chop = E_meta.get("chop")  # Chop 指数
-    leading_raw = F_meta.get("leading_raw")  # 资金领先性
+    Tm = T_meta.get("Tm")
+    theta = S_meta.get("theta")
+    v5v20 = V_meta.get("v5v20")
+    slope = M_meta.get("slope_now")
+    cvd6 = C_meta.get("cvd6")
+    oi24h_pct = O_meta.get("oi24h_pct")
+    chop = E_meta.get("chop")
+    leading_raw = F_meta.get("leading_raw")
 
     lines = []
     lines.append(f"• 趋势 {_emoji_by_score(T)} {T:>2d} —— {_desc_trend(T, is_long, Tm)}")
+    lines.append(f"• 动量 {_emoji_by_score(M)} {M:>2d} —— 价格动量")
+    lines.append(f"• 资金流 {_emoji_by_score(C)} {C:>2d} —— CVD变化")
     lines.append(f"• 结构 {_emoji_by_score(S)} {S:>2d} —— {_desc_structure(S, theta)}")
     lines.append(f"• 量能 {_emoji_by_score(V)} {V:>2d} —— {_desc_volume(V, v5v20)}")
-    lines.append(f"• 加速 {_emoji_by_score(A)} {A:>2d} —— {_desc_accel(A, is_long, cvd6)}")
     lines.append(f"• 持仓 {_emoji_by_score(OI)} {OI:>2d} —— {_desc_positions(OI, is_long, oi24h_pct)}")
     lines.append(f"• 环境 {_emoji_by_score(E)} {E:>2d} —— {_desc_env(E, chop)}")
-    lines.append(f"• 资金 {_emoji_by_score(F)} {F:>2d} —— {_desc_fund_leading(F, leading_raw)}")
+
+    # F调节器信息
+    F_adj = _get(r, "F_adjustment", 1.0)
+    P_base = _get(r, "P_base")
+    if P_base and F_adj != 1.0:
+        lines.append(f"\n⚡ 资金领先 {F:>2d} → 概率调整 ×{F_adj:.2f}")
+
     return "\n".join(lines)
 
 def _note_and_tags(r: Dict[str, Any], is_watch: bool) -> str:
