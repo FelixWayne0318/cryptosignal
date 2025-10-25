@@ -167,11 +167,18 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     long_scores = {"T": T_long, "M": M_long, "C": C_long, "S": S_long, "V": V, "O": O_long, "E": E}
     short_scores = {"T": T_short, "M": M_short, "C": C_short, "S": S_short, "V": V, "O": O_short, "E": E}
 
-    UpScore, DownScore, edge = scorecard(long_scores, weights)
-    _, _, edge_short = scorecard(short_scores, weights)
+    # 计算做多和做空的真实加权分数
+    long_weighted, _, edge_long = scorecard(long_scores, weights)
+    short_weighted, _, edge_short = scorecard(short_scores, weights)
 
-    # 选择占优方向
-    side_long = (UpScore > DownScore)
+    # **修复**：选择加权分数更高的方向（而不是简单的UpScore > DownScore）
+    # 这样可以正确识别强势下跌趋势应该做空
+    side_long = (long_weighted >= short_weighted)
+
+    # 为了兼容旧逻辑，保留UpScore/DownScore
+    UpScore = long_weighted
+    DownScore = 100.0 - long_weighted
+    edge = edge_long if side_long else edge_short
     chosen_scores = long_scores if side_long else short_scores
     chosen_meta = {
         "T": T_meta_long if side_long else T_meta_short,
