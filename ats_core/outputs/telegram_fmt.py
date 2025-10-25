@@ -127,12 +127,37 @@ def _desc_env(s: int) -> str:
     if s >= 40: return "环境一般/空间有限"
     return "环境不佳/波动或流动性掣肘"
 
-def _desc_fund_leading(s: int) -> str:
-    if s >= 75: return "资金强势领先/蓄势待发"
-    if s >= 60: return "资金略微领先/机会较好"
-    if s >= 40: return "资金价格同步/一般"
-    if s >= 25: return "价格略微领先/追高风险"
-    return "价格大幅领先/风险较大"
+def _desc_fund_leading(s: int, leading_raw: float = None) -> str:
+    """
+    描述资金领先性
+
+    Args:
+        s: F 分数 (0-100)
+        leading_raw: 真实的领先性数值（可以是负数）
+    """
+    # 基础描述
+    if s >= 75:
+        desc = "资金强势领先/蓄势待发"
+    elif s >= 60:
+        desc = "资金略微领先/机会较好"
+    elif s >= 40:
+        desc = "资金价格同步/一般"
+    elif s >= 25:
+        desc = "价格略微领先/追高风险"
+    elif s >= 10:
+        desc = "价格明显领先/风险较大"
+    else:
+        desc = "价格远超资金/极度危险"
+
+    # 如果有真实数值，附加显示
+    if leading_raw is not None:
+        leading_int = int(round(leading_raw))
+        if leading_raw >= 0:
+            return f"{desc} (资金领先+{leading_int})"
+        else:
+            return f"{desc} (价格领先{leading_int})"
+
+    return desc
 
 # ---------- extract scores robustly ----------
 
@@ -289,6 +314,10 @@ def _six_block(r: Dict[str, Any]) -> str:
     side = (_get(r, "side") or "").lower()
     is_long = side in ("long", "buy", "bull", "多", "做多")
 
+    # 获取 F 的真实领先性数值
+    F_meta = _get(r, "scores_meta.F") or {}
+    leading_raw = F_meta.get("leading_raw")
+
     lines = []
     lines.append(f"• 趋势 {_emoji_by_score(T)} {T:>2d} —— {_desc_trend(T, is_long)}")
     lines.append(f"• 结构 {_emoji_by_score(S)} {S:>2d} —— {_desc_structure(S)}")
@@ -296,7 +325,7 @@ def _six_block(r: Dict[str, Any]) -> str:
     lines.append(f"• 加速 {_emoji_by_score(A)} {A:>2d} —— {_desc_accel(A, is_long)}")
     lines.append(f"• 持仓 {_emoji_by_score(OI)} {OI:>2d} —— {_desc_positions(OI, is_long)}")
     lines.append(f"• 环境 {_emoji_by_score(E)} {E:>2d} —— {_desc_env(E)}")
-    lines.append(f"• 资金 {_emoji_by_score(F)} {F:>2d} —— {_desc_fund_leading(F)}")
+    lines.append(f"• 资金 {_emoji_by_score(F)} {F:>2d} —— {_desc_fund_leading(F, leading_raw)}")
     return "\n".join(lines)
 
 def _note_and_tags(r: Dict[str, Any], is_watch: bool) -> str:
