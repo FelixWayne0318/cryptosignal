@@ -64,6 +64,26 @@ class BacktestTrade:
         """是否盈利"""
         return self.pnl_percent is not None and self.pnl_percent > 0
 
+    @property
+    def pnl_amount(self) -> Optional[float]:
+        """盈亏金额别名（兼容 metrics.py）"""
+        return self.pnl_usdt
+
+    @property
+    def signal_probability(self) -> float:
+        """信号概率别名（兼容 report.py）"""
+        return self.probability
+
+    @property
+    def signal_scores(self) -> Dict:
+        """信号评分别名（兼容 report.py）"""
+        return self.scores
+
+    @property
+    def position_size(self) -> Optional[float]:
+        """仓位大小（用于报告）"""
+        return None  # 暂时返回None，实际应该在开仓时记录
+
     def calculate_pnl(self, exit_price: float) -> float:
         """
         计算盈亏百分比
@@ -475,22 +495,7 @@ class BacktestEngine:
 
                 'max_drawdown': self._calculate_max_drawdown(),
             },
-            'trades': [
-                {
-                    'symbol': t.symbol,
-                    'side': t.side,
-                    'entry_time': t.entry_time.isoformat() if t.entry_time else None,
-                    'entry_price': t.entry_price,
-                    'exit_time': t.exit_time.isoformat() if t.exit_time else None,
-                    'exit_price': t.exit_price,
-                    'exit_reason': t.exit_reason,
-                    'pnl_percent': t.pnl_percent,
-                    'pnl_usdt': t.pnl_usdt,
-                    'holding_hours': t.holding_hours,
-                    'probability': t.probability,
-                }
-                for t in closed_trades
-            ],
+            'trades': closed_trades,  # 返回 BacktestTrade 对象列表
             'equity_curve': self.equity_curve
         }
 
