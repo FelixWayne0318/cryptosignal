@@ -7,6 +7,7 @@ C（CVD资金流）维度 - 买卖压力分析
 - CVD（Cumulative Volume Delta）变化
 - 买卖压力对比
 """
+import math
 from typing import List, Tuple, Dict, Any
 from .scoring_utils import directional_score
 
@@ -45,24 +46,16 @@ def score_cvd_flow(
     # CVD归一化到价格（避免不同币种的CVD量级差异）
     cvd6 = (cvd_series[-1] - cvd_series[-7]) / max(1e-12, abs(c[-1]) + 1.0)
 
-    # ========== 2. 软映射评分（多空对称） ==========
-    if side_long:
-        # 做多：CVD上升（买压强）好
-        cvd_score = directional_score(
-            cvd6,
-            neutral=0.0,
-            scale=p["cvd_scale"]
-        )
-    else:
-        # 做空：CVD下降（卖压强）好
-        cvd_score = directional_score(
-            -cvd6,  # 取反
-            neutral=0.0,
-            scale=p["cvd_scale"]
-        )
+    # ========== 2. 软映射评分（带符号，-100到+100） ==========
+    # 直接映射CVD变化，不取反
+    # 正数 = 买入压力（CVD上升）
+    # 负数 = 卖出压力（CVD下降）
+    # 使用 tanh 映射: cvd6 / scale → (-1, 1) → (-100, 100)
+    normalized = math.tanh(cvd6 / p["cvd_scale"])
+    cvd_score = 100.0 * normalized
 
-    # ========== 3. 最终分数 ==========
-    C = int(round(max(0, min(100, cvd_score))))
+    # ========== 3. 最终分数（保留符号） ==========
+    C = int(round(max(-100, min(100, cvd_score))))
 
     # ========== 4. 返回元数据 ==========
     return C, {

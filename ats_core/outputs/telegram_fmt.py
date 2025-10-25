@@ -75,6 +75,27 @@ def _ttl_hours(r: Dict[str, Any]) -> int:
 # ---------- score → emoji / description ----------
 
 def _emoji_by_score(s: int) -> str:
+    """
+    分数转emoji（支持负数）
+
+    对于正常指标（0-100）：
+    - >= 60: 🟢 (强)
+    - 40-60: 🟡 (中)
+    - < 40: 🔴 (弱)
+
+    对于带符号指标（-100到+100，如CVD）：
+    - 正数: 🟢 (买入压力)
+    - 接近0: 🟡 (均衡)
+    - 负数: 🔴 (卖出压力)
+    """
+    # 处理负数（带符号指标）
+    if s < 0:
+        if s <= -40:
+            return "🔴"  # 强烈卖出压力
+        else:
+            return "🟡"  # 轻微卖出压力
+
+    # 处理正数
     if s >= 60:
         return "🟢"
     if s >= 40:
@@ -182,23 +203,26 @@ def _desc_cvd_flow(s: int, is_long: bool = True, cvd6: float = None) -> str:
     描述CVD资金流（明确买入/卖出方向）
 
     Args:
-        s: C 分数 (0-100)
-        is_long: 是否做多
+        s: C 分数 (-100到+100，带符号！)
+        is_long: 是否做多（已弃用，仅保留兼容性）
         cvd6: CVD 6小时变化（已归一化到价格）
     """
-    # 根据方向确定是买压还是卖压
-    if is_long:
-        # 做多信号：高分 = 买压强
-        if s >= 80: desc = "强劲买入压力/资金流入"
-        elif s >= 60: desc = "偏强买入压力/资金流入"
-        elif s >= 40: desc = "买卖压力均衡"
-        else: desc = "卖出压力偏强/资金流出"
+    # 根据分数正负确定买压/卖压（不再依赖is_long）
+    # 正数 = 买入压力，负数 = 卖出压力
+    if s >= 80:
+        desc = "强劲买入压力/资金流入"
+    elif s >= 60:
+        desc = "偏强买入压力/资金流入"
+    elif s >= 40:
+        desc = "轻微买入压力"
+    elif s >= -40:
+        desc = "买卖压力均衡"
+    elif s >= -60:
+        desc = "轻微卖出压力"
+    elif s >= -80:
+        desc = "偏强卖出压力/资金流出"
     else:
-        # 做空信号：高分 = 卖压强
-        if s >= 80: desc = "强劲卖出压力/资金流出"
-        elif s >= 60: desc = "偏强卖出压力/资金流出"
-        elif s >= 40: desc = "买卖压力均衡"
-        else: desc = "买入压力偏强/资金流入"
+        desc = "强劲卖出压力/资金流出"
 
     # 附加 CVD 6小时变化百分比
     if cvd6 is not None:
@@ -378,8 +402,21 @@ def _score_momentum(r: Dict[str, Any]) -> int:
     return _as_int_score(v, 50)
 
 def _score_cvd_flow(r: Dict[str, Any]) -> int:
+    """
+    获取CVD分数（支持负数：-100到+100）
+
+    注意：CVD现在是带符号的，正数=买入压力，负数=卖出压力
+    """
     v = _get(r, "C")
-    return _as_int_score(v, 50)
+    if v is None:
+        return 0  # 默认0=中性
+    try:
+        # 直接转换，不做0-100限制
+        score = int(round(float(v)))
+        # 限制在-100到+100
+        return max(-100, min(100, score))
+    except Exception:
+        return 0
 
 def _score_fund_leading(r: Dict[str, Any]) -> int:
     v = _get(r, "F_score") or _get(r, "F")
@@ -469,7 +506,7 @@ def _six_block(r: Dict[str, Any]) -> str:
     lines = []
     lines.append(f"• 趋势 {_emoji_by_score(T)} {T:>2d} —— {_desc_trend(T, is_long, Tm)}")
     lines.append(f"• 动量 {_emoji_by_score(M)} {M:>2d} —— 价格动量")
-    lines.append(f"• 资金流 {_emoji_by_score(C)} {C:>2d} —— {_desc_cvd_flow(C, is_long, cvd6)}")
+    lines.append(f"• 资金流 {_emoji_by_score(C)} {C:+4d} —— {_desc_cvd_flow(C, is_long, cvd6)}")  # 带符号显示
     lines.append(f"• 结构 {_emoji_by_score(S)} {S:>2d} —— {_desc_structure(S, theta)}")
     lines.append(f"• 量能 {_emoji_by_score(V)} {V:>2d} —— {_desc_volume(V, v5v20)}")
     lines.append(f"• 持仓 {_emoji_by_score(OI)} {OI:>2d} —— {_desc_positions(OI, is_long, oi24h_pct)}")

@@ -281,15 +281,20 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
 
     # 改进的Prime判定逻辑：
     # 1. 概率达标
-    # 2. 原因指标（资金推动）全部达标：C（资金流）+ V（量能）+ O（持仓）≥ 65
+    # 2. 原因指标（资金推动）全部达标：C（资金流）+ V（量能）+ O（持仓）
     #    这确保价格上涨/下跌是由真实资金推动的
     dims_ok = sum(1 for s in chosen_scores.values() if s >= prime_dim_threshold)
 
     # 原因指标（资金推动因素）
+    # 注意：C现在是带符号的（-100到+100）
+    # 做多：C >= 65（买入压力），做空：C <= -65（卖出压力）
+    c_score = chosen_scores.get("C", 0)
+    c_ok = (c_score >= 65) if side_long else (c_score <= -65)
+
     fund_dims_ok = all([
-        chosen_scores.get("C", 0) >= 65,  # 资金流
-        chosen_scores.get("V", 0) >= 65,  # 量能
-        chosen_scores.get("O", 0) >= 65   # 持仓
+        c_ok,                                 # 资金流（带方向）
+        chosen_scores.get("V", 0) >= 65,      # 量能
+        chosen_scores.get("O", 0) >= 65       # 持仓
     ])
 
     is_prime = (P_chosen >= prime_prob_min) and fund_dims_ok
