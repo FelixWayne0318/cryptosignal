@@ -199,14 +199,17 @@ def _desc_accel(s: int, is_long: bool = True, cvd6: float = None) -> str:
 
     return desc
 
-def _desc_cvd_flow(s: int, is_long: bool = True, cvd6: float = None) -> str:
+def _desc_cvd_flow(s: int, is_long: bool = True, cvd6: float = None,
+                   consistency: float = None, is_consistent: bool = None) -> str:
     """
-    描述CVD资金流（明确买入/卖出方向）
+    描述CVD资金流（明确买入/卖出方向 + 持续性）
 
     Args:
         s: C 分数 (-100到+100，带符号！)
         is_long: 是否做多（已弃用，仅保留兼容性）
         cvd6: CVD 6小时变化（已归一化到价格）
+        consistency: 一致性（0-1，上涨K线占比）
+        is_consistent: 是否持续（一致性>=60% + R²>=0.7）
 
     分数对称映射：
         ≥ +80: 强劲资金流入
@@ -244,9 +247,23 @@ def _desc_cvd_flow(s: int, is_long: bool = True, cvd6: float = None) -> str:
     if cvd6 is not None:
         cvd_pct = cvd6 * 100
         if cvd_pct >= 0:
-            desc += f" (CVD+{cvd_pct:.1f}%)"
+            desc += f" (CVD+{cvd_pct:.1f}%"
         else:
-            desc += f" (CVD{cvd_pct:.1f}%)"
+            desc += f" (CVD{cvd_pct:.1f}%"
+
+        # 附加持续性标注
+        if is_consistent is not None:
+            if is_consistent:
+                desc += ", 持续✓"
+            else:
+                # 显示一致性百分比，提示震荡
+                if consistency is not None:
+                    cons_pct = int(consistency * 100)
+                    desc += f", 震荡{cons_pct}%"
+                else:
+                    desc += ", 震荡"
+
+        desc += ")"
 
     return desc
 
@@ -515,6 +532,8 @@ def _six_block(r: Dict[str, Any]) -> str:
     v5v20 = V_meta.get("v5v20")
     slope = M_meta.get("slope_now")
     cvd6 = C_meta.get("cvd6")
+    cvd_consistency = C_meta.get("consistency")
+    cvd_is_consistent = C_meta.get("is_consistent")
     oi24h_pct = O_meta.get("oi24h_pct")
     chop = E_meta.get("chop")
     leading_raw = F_meta.get("leading_raw")
@@ -522,7 +541,7 @@ def _six_block(r: Dict[str, Any]) -> str:
     lines = []
     lines.append(f"• 趋势 {_emoji_by_score(T)} {T:>2d} —— {_desc_trend(T, is_long, Tm)}")
     lines.append(f"• 动量 {_emoji_by_score(M)} {M:>2d} —— 价格动量")
-    lines.append(f"• 资金流 {_emoji_by_score(C)} {C:+4d} —— {_desc_cvd_flow(C, is_long, cvd6)}")  # 带符号显示
+    lines.append(f"• 资金流 {_emoji_by_score(C)} {C:+4d} —— {_desc_cvd_flow(C, is_long, cvd6, cvd_consistency, cvd_is_consistent)}")  # 带符号显示+持续性
     lines.append(f"• 结构 {_emoji_by_score(S)} {S:>2d} —— {_desc_structure(S, theta)}")
     lines.append(f"• 量能 {_emoji_by_score(V)} {V:>2d} —— {_desc_volume(V, v5v20)}")
     lines.append(f"• 持仓 {_emoji_by_score(OI)} {OI:>2d} —— {_desc_positions(OI, is_long, oi24h_pct)}")
