@@ -85,7 +85,12 @@ def calculate_metrics(trades: List, equity_curve: List[tuple], initial_capital: 
     sortino_ratio = _calculate_sortino_ratio(trades, equity_curve)
 
     # 计算卡玛比率（收益/最大回撤）
-    final_equity = equity_curve[-1][1] if equity_curve else initial_capital
+    if equity_curve:
+        last_point = equity_curve[-1]
+        final_equity = last_point['equity'] if isinstance(last_point, dict) else last_point[1]
+    else:
+        final_equity = initial_capital
+
     total_return = (final_equity - initial_capital) / initial_capital
     calmar_ratio = total_return / abs(max_drawdown_pct) if max_drawdown_pct != 0 else 0
 
@@ -95,12 +100,12 @@ def calculate_metrics(trades: List, equity_curve: List[tuple], initial_capital: 
     # 月度收益分析
     monthly_returns = _calculate_monthly_returns(equity_curve, initial_capital)
 
-    # 分时段统计
+    # 分时段统计（兼容大小写）
     exit_reasons = {
-        'tp1': len([t for t in trades if t.exit_reason == 'TP1']),
-        'tp2': len([t for t in trades if t.exit_reason == 'TP2']),
-        'sl': len([t for t in trades if t.exit_reason == 'SL']),
-        'expired': len([t for t in trades if t.exit_reason == 'Expired']),
+        'tp1': len([t for t in trades if t.exit_reason and t.exit_reason.lower() == 'tp1']),
+        'tp2': len([t for t in trades if t.exit_reason and t.exit_reason.lower() == 'tp2']),
+        'sl': len([t for t in trades if t.exit_reason and t.exit_reason.lower() == 'sl']),
+        'expired': len([t for t in trades if t.exit_reason and t.exit_reason.lower() == 'expired']),
     }
 
     return {
@@ -158,7 +163,7 @@ def _calculate_drawdown(equity_curve: List[tuple], initial_capital: float) -> tu
     计算最大回撤
 
     Args:
-        equity_curve: 权益曲线
+        equity_curve: 权益曲线（dict列表或tuple列表）
         initial_capital: 初始资金
 
     Returns:
@@ -173,7 +178,14 @@ def _calculate_drawdown(equity_curve: List[tuple], initial_capital: float) -> tu
     peak_time = None
     drawdown_start = None
 
-    for timestamp, equity in equity_curve:
+    for point in equity_curve:
+        # 支持dict格式（引擎输出）和tuple格式
+        if isinstance(point, dict):
+            timestamp = point['time']
+            equity = point['equity']
+        else:
+            timestamp, equity = point
+
         if equity > peak_equity:
             peak_equity = equity
             peak_time = timestamp
@@ -313,7 +325,7 @@ def _calculate_monthly_returns(equity_curve: List[tuple], initial_capital: float
     计算月度收益
 
     Args:
-        equity_curve: 权益曲线
+        equity_curve: 权益曲线（dict列表或tuple列表）
         initial_capital: 初始资金
 
     Returns:
@@ -324,7 +336,14 @@ def _calculate_monthly_returns(equity_curve: List[tuple], initial_capital: float
 
     monthly_equity = {}
 
-    for timestamp, equity in equity_curve:
+    for point in equity_curve:
+        # 支持dict格式（引擎输出）和tuple格式
+        if isinstance(point, dict):
+            timestamp = point['time']
+            equity = point['equity']
+        else:
+            timestamp, equity = point
+
         month_key = timestamp.strftime('%Y-%m')
         monthly_equity[month_key] = equity
 

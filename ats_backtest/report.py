@@ -211,14 +211,28 @@ def print_equity_curve(equity_curve: List[tuple], sample_points: int = 20):
     print(f"{'Time':<20} {'Equity':<15} {'Change%':<10}")
     print("-" * 70)
 
-    prev_equity = sampled[0][1]
-    for timestamp, equity in sampled:
+    # 获取初始equity（支持dict和tuple格式）
+    first_point = sampled[0]
+    if isinstance(first_point, dict):
+        prev_equity = first_point['equity']
+    else:
+        prev_equity = first_point[1]
+
+    for point in sampled:
+        # 支持dict格式（引擎输出）和tuple格式
+        if isinstance(point, dict):
+            timestamp = point['time']
+            equity = point['equity']
+        else:
+            timestamp, equity = point
+
         time_str = timestamp.strftime('%Y-%m-%d %H:%M')
         equity_str = f"${equity:.2f}"
         change_pct = (equity - prev_equity) / prev_equity * 100 if prev_equity > 0 else 0
         change_str = f"{change_pct:+.2f}%" if change_pct != 0 else "-"
 
         print(f"{time_str:<20} {equity_str:<15} {change_str:<10}")
+        prev_equity = equity
 
     print()
     print("=" * 70)
