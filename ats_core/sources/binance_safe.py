@@ -162,7 +162,16 @@ def _get_safe(
                     if used_weight > 5000:  # 接近6000限制
                         print(f"⚠️  Weight usage high: {used_weight}/6000")
 
+                # 读取响应数据
                 data = response.read()
+
+                # 检查是否为gzip压缩（如果Content-Encoding是gzip）
+                content_encoding = response.headers.get('Content-Encoding', '').lower()
+                if content_encoding == 'gzip' or (len(data) >= 2 and data[:2] == b'\x1f\x8b'):
+                    import gzip
+                    data = gzip.decompress(data)
+
+                # 解析JSON
                 return json.loads(data)
 
         except urllib.error.HTTPError as e:
