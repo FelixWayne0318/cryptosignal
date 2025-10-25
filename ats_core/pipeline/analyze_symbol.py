@@ -238,18 +238,21 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     # ---- 5. F调节器调整概率（改进版核心）----
     F_chosen = F_long if side_long else F_short
 
-    # F作为调节器调整概率
-    if F_chosen >= 70:
-        # 资金领先价格，蓄势待发
+    # F作为调节器调整概率（F范围：-100 到 +100）
+    if F_chosen >= 60:
+        # 资金强势领先价格（蓄势待发）✅✅✅
         adjustment = 1.15  # 提升15%
-    elif F_chosen >= 50:
-        # 资金价格同步
-        adjustment = 1.0
     elif F_chosen >= 30:
-        # 价格略微领先
+        # 资金温和领先价格（机会较好）✅
+        adjustment = 1.05  # 提升5%
+    elif F_chosen >= -30:
+        # 资金价格同步（中性）
+        adjustment = 1.0
+    elif F_chosen >= -60:
+        # 价格温和领先资金（追高风险）⚠️
         adjustment = 0.9  # 降低10%
     else:
-        # 价格远超资金，追高风险
+        # 价格强势领先资金（风险很大）❌
         adjustment = 0.7  # 降低30%
 
     # 最终概率

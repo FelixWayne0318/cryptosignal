@@ -310,30 +310,24 @@ def _desc_fund_leading(s: int, leading_raw: float = None) -> str:
     描述资金领先性
 
     Args:
-        s: F 分数 (0-100)
-        leading_raw: 真实的领先性数值（可以是负数）
+        s: F 分数 (-100 到 +100)
+        leading_raw: 真实的领先性数值（用于调试，可选）
     """
-    # 基础描述
-    if s >= 75:
-        desc = "资金强势领先/蓄势待发"
-    elif s >= 60:
-        desc = "资金略微领先/机会较好"
-    elif s >= 40:
-        desc = "资金价格同步/一般"
-    elif s >= 25:
-        desc = "价格略微领先/追高风险"
+    # 带符号的描述体系（-100 到 +100）
+    if s >= 60:
+        desc = "资金强势领先价格 (蓄势待发)"
+    elif s >= 30:
+        desc = "资金温和领先价格 (机会较好)"
     elif s >= 10:
-        desc = "价格明显领先/风险较大"
+        desc = "资金略微领先 (同步偏好)"
+    elif s >= -10:
+        desc = "资金价格同步 (中性)"
+    elif s >= -30:
+        desc = "价格略微领先 (同步偏差)"
+    elif s >= -60:
+        desc = "价格温和领先资金 (追高风险)"
     else:
-        desc = "价格远超资金/极度危险"
-
-    # 如果有真实数值，附加显示
-    if leading_raw is not None:
-        leading_int = int(round(leading_raw))
-        if leading_raw >= 0:
-            return f"{desc} (资金领先+{leading_int})"
-        else:
-            return f"{desc} (价格领先{leading_int})"
+        desc = "价格强势领先资金 (风险很大)"
 
     return desc
 
@@ -544,7 +538,8 @@ def _six_block(r: Dict[str, Any]) -> str:
 
     # F调节器信息（所有信号都显示）
     F_adj = _get(r, "F_adjustment", 1.0)
-    lines.append(f"\n⚡ 资金领先 {F:>2d} → 概率调整 ×{F_adj:.2f}")
+    f_desc = _desc_fund_leading(F)
+    lines.append(f"\n⚡ {f_desc} (F={F:+d}) → 概率调整 ×{F_adj:.2f}")
 
     return "\n".join(lines)
 
