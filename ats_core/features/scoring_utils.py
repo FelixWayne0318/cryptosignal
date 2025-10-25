@@ -15,7 +15,8 @@ def directional_score(
     value: float,
     neutral: float = 0.0,
     scale: float = 1.0,
-    max_bonus: float = 50.0
+    max_bonus: float = 50.0,
+    min_score: float = 10.0
 ) -> int:
     """
     方向性评分：50分为中性，正向加分，负向减分
@@ -24,6 +25,7 @@ def directional_score(
     - 不关注绝对值，只关注相对于中性点的偏移
     - 使用 tanh 实现平滑的软映射
     - 连续、有界、中心对称
+    - **避免0分陷阱**：设置最低分（默认10分）保留区分度
 
     Args:
         value: 指标值（变化率、比值等）
@@ -35,10 +37,13 @@ def directional_score(
             - scale 越大，映射越平缓（需要大变化才能拉开差距）
             - 一般取值：abs(value) 在 scale 附近时，得分约在 60-70 之间
         max_bonus: 最大加分/减分（默认 ±50）
-            - 通常设为 50，使得分数范围为 [0, 100]
+            - 通常设为 50，使得分数范围为 [min_score, 100]
+        min_score: 最低分（默认 10）
+            - 避免0分陷阱，即使完全反向也保留区分度
+            - 设为0可恢复旧行为
 
     Returns:
-        0-100 的分数
+        min_score ~ 100 的分数（默认10-100）
 
     Examples:
         # OI 变化率评分（neutral=0, scale=3.0）
@@ -50,6 +55,9 @@ def directional_score(
 
         >>> directional_score(-3.0, neutral=0, scale=3.0)
         31  # -3% 变化 → 明显不利
+
+        >>> directional_score(-100.0, neutral=0, scale=3.0)
+        10  # 极端反向 → 最低分（而非0分）
 
         # 量能比值评分（neutral=1.0, scale=0.3）
         >>> directional_score(1.0, neutral=1.0, scale=0.3)
@@ -72,11 +80,11 @@ def directional_score(
     #   x → +∞   → 1
     normalized = math.tanh(deviation / scale)
 
-    # 映射到 [0, 100]
+    # 映射到 [min_score, 100]
     score = 50 + max_bonus * normalized
 
-    # 截断到 [0, 100]
-    return int(round(max(0.0, min(100.0, score))))
+    # 截断到 [min_score, 100]（避免0分陷阱）
+    return int(round(max(min_score, min(100.0, score))))
 
 
 def sigmoid_score(
