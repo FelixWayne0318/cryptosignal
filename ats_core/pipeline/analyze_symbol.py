@@ -281,15 +281,15 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
 
     dims_ok = sum(1 for s in chosen_scores.values() if s >= prime_dim_threshold)
     is_prime = (P_chosen >= prime_prob_min) and (dims_ok >= prime_dims_ok_min)
-    is_watch = (watch_prob_min <= P_chosen < prime_prob_min) and not is_new_coin  # 新币不发watch
+    is_watch = False  # 不再发布Watch信号，全部都是正式信号
 
     # ---- 6. 15分钟微确认 ----
     m15_ok = _check_microconfirm_15m(symbol, side_long, params.get("microconfirm_15m", {}), atr_now)
 
     # ---- 7. 给价计划 ----
-    # 为Prime和Watch信号都计算止盈止损
+    # 只为Prime信号计算止盈止损（因为不发Watch信号了）
     pricing = None
-    if is_prime or is_watch:
+    if is_prime:
         pricing = _calc_pricing(h, l, c, atr_now, params.get("pricing", {}), side_long)
 
     # ---- 8. 组装结果（改进版）----

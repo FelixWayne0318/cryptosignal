@@ -401,9 +401,8 @@ def _header_lines(r: Dict[str, Any], is_watch: bool) -> Tuple[str, str]:
     conv, side_lbl = _conviction_and_side(r, six)
 
     line1 = f"🔹 {sym} · 现价 {price_s}"
-    tag = "观察" if is_watch else "正式"
-    icon = "👀" if is_watch else "📣"
-    line2 = f"{icon} {tag} · {side_lbl} {conv}% · 有效期{ttl_h}h"
+    # 不再区分观察/正式，统一为正式信号
+    line2 = f"{side_lbl} {conv}% · 有效期{ttl_h}h"
     return line1, line2
 
 def _six_block(r: Dict[str, Any]) -> str:
@@ -443,11 +442,9 @@ def _six_block(r: Dict[str, Any]) -> str:
     lines.append(f"• 持仓 {_emoji_by_score(OI)} {OI:>2d} —— {_desc_positions(OI, is_long, oi24h_pct)}")
     lines.append(f"• 环境 {_emoji_by_score(E)} {E:>2d} —— {_desc_env(E, chop)}")
 
-    # F调节器信息
+    # F调节器信息（所有信号都显示）
     F_adj = _get(r, "F_adjustment", 1.0)
-    P_base = _get(r, "P_base")
-    if P_base and F_adj != 1.0:
-        lines.append(f"\n⚡ 资金领先 {F:>2d} → 概率调整 ×{F_adj:.2f}")
+    lines.append(f"\n⚡ 资金领先 {F:>2d} → 概率调整 ×{F_adj:.2f}")
 
     return "\n".join(lines)
 
@@ -501,7 +498,8 @@ def render_signal(r: Dict[str, Any], is_watch: bool = False) -> str:
     l1, l2 = _header_lines(r, is_watch)
     six = _six_block(r)
     pricing = _pricing_block(r)
-    body = f"{l1}\n{l2}\n\n六维分析\n{six}{pricing}\n\n{_note_and_tags(r, is_watch)}"
+    # 价格信息放在七维分析前面
+    body = f"{l1}\n{l2}{pricing}\n\n七维分析\n{six}\n\n{_note_and_tags(r, is_watch)}"
     return body
 
 def render_watch(r: Dict[str, Any]) -> str:
