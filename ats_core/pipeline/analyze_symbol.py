@@ -279,8 +279,20 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
         watch_prob_min = publish_cfg.get("watch_prob_min", 0.58)
 
+    # 改进的Prime判定逻辑：
+    # 1. 概率达标
+    # 2. 原因指标（资金推动）全部达标：C（资金流）+ V（量能）+ O（持仓）≥ 65
+    #    这确保价格上涨/下跌是由真实资金推动的
     dims_ok = sum(1 for s in chosen_scores.values() if s >= prime_dim_threshold)
-    is_prime = (P_chosen >= prime_prob_min) and (dims_ok >= prime_dims_ok_min)
+
+    # 原因指标（资金推动因素）
+    fund_dims_ok = all([
+        chosen_scores.get("C", 0) >= 65,  # 资金流
+        chosen_scores.get("V", 0) >= 65,  # 量能
+        chosen_scores.get("O", 0) >= 65   # 持仓
+    ])
+
+    is_prime = (P_chosen >= prime_prob_min) and fund_dims_ok
     is_watch = False  # 不再发布Watch信号，全部都是正式信号
 
     # ---- 6. 15分钟微确认 ----
