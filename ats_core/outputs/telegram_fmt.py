@@ -584,8 +584,8 @@ def render_signal(r: Dict[str, Any], is_watch: bool = False) -> str:
     l1, l2 = _header_lines(r, is_watch)
     six = _six_block(r)
     pricing = _pricing_block(r)
-    # 价格信息放在七维分析前面
-    body = f"{l1}\n{l2}{pricing}\n\n七维分析\n{six}\n\n{_note_and_tags(r, is_watch)}"
+    # 价格信息放在七维分析前面（入场区间前空一行）
+    body = f"{l1}\n{l2}\n{pricing}\n\n七维分析\n{six}\n\n{_note_and_tags(r, is_watch)}"
     return body
 
 def render_watch(r: Dict[str, Any]) -> str:
