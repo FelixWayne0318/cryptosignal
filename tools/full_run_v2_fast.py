@@ -157,24 +157,15 @@ def load_candidate_pool() -> list[str]:
     ]
 
 
-def analyze_symbol_with_timeout(symbol: str, timeout: int = 30) -> dict:
-    """分析单个币种（带超时）"""
-    import signal
+def analyze_symbol_safe(symbol: str) -> dict:
+    """
+    安全分析单个币种
 
-    def timeout_handler(signum, frame):
-        raise TimeoutError(f"分析超时: {symbol}")
-
-    if hasattr(signal, 'SIGALRM'):
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(timeout)
-
-    try:
-        result = analyze_symbol(symbol)
-        result["symbol"] = symbol
-        return result
-    finally:
-        if hasattr(signal, 'SIGALRM'):
-            signal.alarm(0)
+    注意：移除了signal超时机制，因为在多线程环境下不安全
+    """
+    result = analyze_symbol(symbol)
+    result["symbol"] = symbol
+    return result
 
 
 def process_symbol(
@@ -186,7 +177,7 @@ def process_symbol(
 ) -> tuple[bool, dict | None]:
     """处理单个币种"""
     try:
-        r = analyze_symbol_with_timeout(symbol, timeout=30)
+        r = analyze_symbol_safe(symbol)
 
         # 保存到数据库
         if save_to_db and DB_ENABLED and save_signal:
@@ -213,12 +204,8 @@ def process_symbol(
 
         return True, r if (is_prime and save_json) else None
 
-    except TimeoutError:
-        progress.update(success=False)
-        progress.print_progress()
-        return False, None
-
     except Exception as e:
+        # 分析失败，记录错误但不阻塞其他币种
         progress.update(success=False)
         progress.print_progress()
         return False, None

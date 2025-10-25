@@ -6,10 +6,9 @@ full_run_v2: 高性能批量扫描工具（优化版）
 优化特性：
 1. 并发分析（5-10个币同时处理）
 2. 实时进度显示（百分比 + ETA）
-3. 超时控制（30秒/币）
-4. 心跳输出（防止SSH断开）
-5. 错误重试（自动重试失败的币）
-6. 批次处理（更稳定）
+3. 心跳输出（防止SSH断开）
+4. 错误容错（单个失败不影响整体）
+5. 批次处理（更稳定）
 
 使用方法：
     python3 tools/full_run_v2.py --send
@@ -128,34 +127,22 @@ class ProgressTracker:
         print("="*70)
 
 
-def analyze_symbol_with_timeout(symbol: str, timeout: int = 30) -> dict:
+def analyze_symbol_safe(symbol: str) -> dict:
     """
-    分析单个币种（带超时）
+    安全分析单个币种
+
+    注意：移除了signal超时机制，因为在多线程环境下不安全
+    如果需要超时控制，应该在线程池级别设置
 
     Args:
         symbol: 币种
-        timeout: 超时时间（秒）
 
     Returns:
         分析结果
     """
-    import signal
-
-    def timeout_handler(signum, frame):
-        raise TimeoutError(f"分析超时: {symbol}")
-
-    # 设置超时（仅Linux/Unix）
-    if hasattr(signal, 'SIGALRM'):
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(timeout)
-
-    try:
-        result = analyze_symbol(symbol)
-        result["symbol"] = symbol
-        return result
-    finally:
-        if hasattr(signal, 'SIGALRM'):
-            signal.alarm(0)  # 取消超时
+    result = analyze_symbol(symbol)
+    result["symbol"] = symbol
+    return result
 
 
 def process_symbol(
@@ -173,7 +160,7 @@ def process_symbol(
     """
     try:
         # 分析
-        r = analyze_symbol_with_timeout(symbol, timeout=30)
+        r = analyze_symbol_safe(symbol)
 
         # 保存到数据库
         if save_to_db and DB_ENABLED and save_signal:
@@ -201,12 +188,8 @@ def process_symbol(
 
         return True, r if (is_prime and save_json) else None
 
-    except TimeoutError:
-        progress.update(success=False)
-        progress.print_progress()
-        return False, None
-
     except Exception as e:
+        # 分析失败，记录错误但不阻塞其他币种
         progress.update(success=False)
         progress.print_progress()
         return False, None
