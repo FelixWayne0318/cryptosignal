@@ -177,6 +177,39 @@ def _desc_accel(s: int, is_long: bool = True, cvd6: float = None) -> str:
 
     return desc
 
+def _desc_cvd_flow(s: int, is_long: bool = True, cvd6: float = None) -> str:
+    """
+    描述CVD资金流（明确买入/卖出方向）
+
+    Args:
+        s: C 分数 (0-100)
+        is_long: 是否做多
+        cvd6: CVD 6小时变化（已归一化到价格）
+    """
+    # 根据方向确定是买压还是卖压
+    if is_long:
+        # 做多信号：高分 = 买压强
+        if s >= 80: desc = "强劲买入压力/资金流入"
+        elif s >= 60: desc = "偏强买入压力/资金流入"
+        elif s >= 40: desc = "买卖压力均衡"
+        else: desc = "卖出压力偏强/资金流出"
+    else:
+        # 做空信号：高分 = 卖压强
+        if s >= 80: desc = "强劲卖出压力/资金流出"
+        elif s >= 60: desc = "偏强卖出压力/资金流出"
+        elif s >= 40: desc = "买卖压力均衡"
+        else: desc = "买入压力偏强/资金流入"
+
+    # 附加 CVD 6小时变化百分比
+    if cvd6 is not None:
+        cvd_pct = cvd6 * 100
+        if cvd_pct >= 0:
+            desc += f" (CVD+{cvd_pct:.1f}%)"
+        else:
+            desc += f" (CVD{cvd_pct:.1f}%)"
+
+    return desc
+
 def _desc_positions(s: int, is_long: bool = True, oi24h_pct: float = None) -> str:
     """
     描述持仓
@@ -436,7 +469,7 @@ def _six_block(r: Dict[str, Any]) -> str:
     lines = []
     lines.append(f"• 趋势 {_emoji_by_score(T)} {T:>2d} —— {_desc_trend(T, is_long, Tm)}")
     lines.append(f"• 动量 {_emoji_by_score(M)} {M:>2d} —— 价格动量")
-    lines.append(f"• 资金流 {_emoji_by_score(C)} {C:>2d} —— CVD变化")
+    lines.append(f"• 资金流 {_emoji_by_score(C)} {C:>2d} —— {_desc_cvd_flow(C, is_long, cvd6)}")
     lines.append(f"• 结构 {_emoji_by_score(S)} {S:>2d} —— {_desc_structure(S, theta)}")
     lines.append(f"• 量能 {_emoji_by_score(V)} {V:>2d} —— {_desc_volume(V, v5v20)}")
     lines.append(f"• 持仓 {_emoji_by_score(OI)} {OI:>2d} —— {_desc_positions(OI, is_long, oi24h_pct)}")
