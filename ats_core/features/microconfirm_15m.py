@@ -120,6 +120,12 @@ def check_microconfirm_15m(symbol: str, side_long: bool, params: Dict, atr1h: fl
     atr_ratio = (atr15[-1] / max(1e-12, float(atr1h))) if atr15 else 0.0
     veto = (atr_ratio > _p(params, "anti_explosion_atr15m_max")) or (vratio > _p(params, "anti_explosion_vratio_max"))
 
+    # 可配置的最小通过条件数（默认2）
+    min_pass = int(_p(params, "min_conditions_pass")) if "min_conditions_pass" in params else 2
+
+    # 计算通过的条件数
+    conditions_passed = sum([ok_ema_side, ok_vol, ok_cvd, ok_pivot])
+
     flags = {
         "ema10_side": ok_ema_side,
         "micro_vol": ok_vol,
@@ -127,14 +133,19 @@ def check_microconfirm_15m(symbol: str, side_long: bool, params: Dict, atr1h: fl
         "micro_pivot": ok_pivot,
         "vratio": round(vratio, 3),
         "atr15_over_atr1h": round(atr_ratio, 3),
+        "conditions_passed": conditions_passed,
+        "min_pass": min_pass
     }
 
-    ok = (ok_ema_side and ok_vol and ok_cvd and ok_pivot) and (not veto)
+    # 只要通过≥min_pass个条件，且不被veto，就算通过
+    ok = (conditions_passed >= min_pass) and (not veto)
 
     note = ""
     if veto:
         note = "anti-explosion veto"
     elif not ok:
-        note = "conditions not met"
+        note = f"only {conditions_passed}/4 conditions passed (need {min_pass})"
+    else:
+        note = f"{conditions_passed}/4 conditions passed"
 
     return {"ok": bool(ok), "flags": flags, "veto": bool(veto), "note": note}

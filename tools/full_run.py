@@ -87,6 +87,12 @@ def main(argv: list[str]) -> int:
 
             pub = r.get("publish") or {}
             is_prime = pub.get("prime", False)
+            is_watch = pub.get("watch", False)
+
+            # 发布过滤：只处理符合 prime 或 watch 条件的信号
+            if not is_prime and not is_watch:
+                log(f"[SKIP] {sym} - 不符合发布条件 (P={r.get('probability', 0):.3f})")
+                continue
 
             # 选择渲染方式
             if is_prime:
@@ -105,7 +111,7 @@ def main(argv: list[str]) -> int:
             if args.save_json:
                 results.append(r)
 
-            # 发送到 Telegram
+            # 发送到 Telegram（已经通过发布过滤）
             if do_send and (not args.only_prime or is_prime):
                 try:
                     telegram_send(txt)

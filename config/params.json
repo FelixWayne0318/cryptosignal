@@ -7,16 +7,126 @@
     "atr_period": 14
   },
 
+  "accel": {},
+
+  "momentum": {
+    "slope_lookback": 30,
+    "slope_scale": 0.01,
+    "accel_scale": 0.005,
+    "slope_weight": 0.6,
+    "accel_weight": 0.4
+  },
+
+  "cvd_flow": {
+    "lookback_hours": 6,
+    "cvd_scale": 0.02
+  },
+
+  "structure": {
+    "theta": {
+      "big": 0.35,
+      "small": 0.40,
+      "overlay_add": 0.05,
+      "new_phaseA_add": 0.10,
+      "strong_regime_sub": 0.05
+    }
+  },
+
+  "open_interest": {
+    "long_oi24_lo": 1.0,
+    "long_oi24_hi": 8.0,
+    "short_oi24_lo": 2.0,
+    "short_oi24_hi": 10.0,
+    "upup12_lo": 6,
+    "upup12_hi": 12,
+    "dnup12_lo": 6,
+    "dnup12_hi": 12,
+    "crowding_p95_penalty": 10,
+    "w_change": 0.7,
+    "w_align": 0.3
+  },
+
+  "environment": {
+    "chop14_max": 52,
+    "room_min_for_bonus": 0.5
+  },
+
+  "microconfirm_15m": {
+    "ema10_side_window": 8,
+    "ema10_side_min_ok": 6,
+    "v3_over_v20_min": 0.8,
+    "v3_over_v20_max": 2.2,
+    "dV_abs_min": 0.05,
+    "dV_abs_max": 0.8,
+    "cvd_lookback": 5,
+    "micro_pivot_look": 8,
+    "micro_pivot_tolerance_atr1h": 0.25,
+    "anti_explosion_atr15m_max": 2.5,
+    "anti_explosion_vratio_max": 3.5,
+    "min_conditions_pass": 2
+  },
+
+  "pricing": {
+    "entry_ext_max": 0.6,
+    "delta_base": 0.02,
+    "delta_coef": 0.10,
+    "sl_pivot_back": 0.10,
+    "sl_atr_back": 1.8,
+    "tp1_R": 1.0,
+    "tp2_R_max": 2.5,
+    "sr_band_lookback": 72,
+    "sr_margin": 0.002,
+    "room_atr_tp2_floor": 0.6,
+    "tp2_room_floor_R": 1.8
+  },
+
+  "weights": {
+    "T": 20,
+    "M": 10,
+    "C": 10,
+    "S": 10,
+    "V": 20,
+    "O": 15,
+    "E": 15
+  },
+
+  "fund_leading": {
+    "oi_weight": 0.4,
+    "vol_weight": 0.3,
+    "cvd_weight": 0.3,
+    "trend_weight": 0.6,
+    "slope_weight": 0.4,
+    "oi_scale": 3.0,
+    "vol_scale": 0.3,
+    "cvd_scale": 0.02,
+    "price_scale": 3.0,
+    "slope_scale": 0.01,
+    "leading_scale": 20.0
+  },
+
+  "publish": {
+    "prime_prob_min": 0.62,
+    "prime_dims_ok_min": 4,
+    "prime_dim_threshold": 65,
+    "watch_prob_min": 0.58,
+    "watch_prob_max": 0.61
+  },
+
+  "base": {
+    "min_quote_volume": 5000000,
+    "min_z24_abs": 0.5
+  },
+
   "overlay": {
     "oi_1h_pct_big": 0.003,
     "oi_1h_pct_small": 0.01,
     "hot_decay_hours": 2,
-
     "z_volume_1h_threshold": 3,
     "min_hour_quote_usdt": 5000000,
-
-    "z24_and_24h_quote": { "z24": 1.0, "quote": 5000000 },
-
+    "z24_and_24h_quote": {
+      "z24": 1.0,
+      "quote": 5000000
+    },
     "triple_sync": {
       "dP1h_abs_pct": 0.02,
       "v5_over_v20": 1.3,
@@ -24,13 +134,24 @@
     }
   },
 
+  "new_coin": {
+    "phaseA_days": 14,
+    "phaseB_days": 30,
+    "phaseA_prime_prob_min": 0.65,
+    "phaseA_sq_min": 0.75,
+    "phaseB_prime_prob_min": 0.63,
+    "phaseB_sq_min": 0.72,
+    "phaseA_max_daily": 1
+  },
+
+  "limits": {
+    "per_symbol_delay_ms": 600
+  },
+
   "universe": [
-    "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
-    "ADAUSDT", "DOGEUSDT", "TRXUSDT", "AVAXUSDT", "LINKUSDT",
-    "MATICUSDT", "DOTUSDT", "LTCUSDT", "BCHUSDT", "ATOMUSDT",
-    "FILUSDT", "NEARUSDT", "APTUSDT", "OPUSDT", "ARBUSDT",
-    "SUIUSDT", "SEIUSDT", "INJUSDT", "RUNEUSDT", "IMXUSDT",
-    "TONUSDT", "ICPUSDT", "AAVEUSDT", "UNIUSDT", "ETCUSDT",
-    "COAIUSDT", "PAXGUSDT", "XPLUSDT", "CLOUSDT"
+    "BTCUSDT",
+    "ETHUSDT",
+    "BNBUSDT",
+    "SOLUSDT"
   ]
 }
