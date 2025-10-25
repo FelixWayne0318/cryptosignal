@@ -451,6 +451,40 @@ def _six_block(r: Dict[str, Any]) -> str:
 
     return "\n".join(lines)
 
+def _pricing_block(r: Dict[str, Any]) -> str:
+    """生成价格信息块（入场、止损、止盈）"""
+    pricing = _get(r, "pricing") or {}
+    if not pricing:
+        return ""
+
+    lines = []
+
+    # 入场区间
+    entry_lo = pricing.get("entry_lo")
+    entry_hi = pricing.get("entry_hi")
+    if entry_lo is not None and entry_hi is not None:
+        if abs(entry_lo - entry_hi) < 0.0001:
+            lines.append(f"📍 入场价: {_fmt_price(entry_lo)}")
+        else:
+            lines.append(f"📍 入场区间: {_fmt_price(entry_lo)} - {_fmt_price(entry_hi)}")
+
+    # 止损
+    sl = pricing.get("sl")
+    if sl is not None:
+        lines.append(f"🛑 止损: {_fmt_price(sl)}")
+
+    # 止盈
+    tp1 = pricing.get("tp1")
+    tp2 = pricing.get("tp2")
+    if tp1 is not None:
+        lines.append(f"🎯 止盈1: {_fmt_price(tp1)}")
+    if tp2 is not None:
+        lines.append(f"🎯 止盈2: {_fmt_price(tp2)}")
+
+    if lines:
+        return "\n" + "\n".join(lines)
+    return ""
+
 def _note_and_tags(r: Dict[str, Any], is_watch: bool) -> str:
     note = _get(r, "note") or _get(r, "publish.note") or ""
     tag = "#watch" if is_watch else "#trade"
@@ -466,7 +500,8 @@ def render_signal(r: Dict[str, Any], is_watch: bool = False) -> str:
     """Unified template for both watch and trade."""
     l1, l2 = _header_lines(r, is_watch)
     six = _six_block(r)
-    body = f"{l1}\n{l2}\n\n六维分析\n{six}\n\n{_note_and_tags(r, is_watch)}"
+    pricing = _pricing_block(r)
+    body = f"{l1}\n{l2}\n\n六维分析\n{six}{pricing}\n\n{_note_and_tags(r, is_watch)}"
     return body
 
 def render_watch(r: Dict[str, Any]) -> str:
