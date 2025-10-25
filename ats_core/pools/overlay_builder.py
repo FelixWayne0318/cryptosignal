@@ -46,6 +46,7 @@ def _ma(xs, n):
 def build() -> List[str]:
     params: Dict[str, Any] = CFG.get("overlay", default={})
     tri: Dict[str, Any] = params.get("triple_sync", {}) or {}
+    new_coin_cfg: Dict[str, Any] = CFG.get("new_coin", default={}) or {}
 
     # 基础 universe：优先 params.universe，否则 24h 列表里的前若干主流
     uni: List[str] = CFG.get("universe", default=[]) or []
@@ -55,6 +56,7 @@ def build() -> List[str]:
         uni = [t["symbol"] for t in tks if isinstance(t, dict) and str(t.get("symbol","")).endswith("USDT")]
 
     out: List[str] = []
+    new_coins: List[str] = []  # 记录新币
 
     # 可选：z24 & 24h 成交额过滤
     z24_q = params.get("z24_and_24h_quote", {})
@@ -73,7 +75,29 @@ def build() -> List[str]:
             if need_z24 > 0 and z24_val < need_z24:
                 continue
 
-            # --- 1h K 线 + OI ---
+            # --- 新币检测（优先检查，快速通道）---
+            new_coin_enabled = new_coin_cfg.get("enabled", False)
+            if new_coin_enabled:
+                min_days = int(new_coin_cfg.get("min_days", 7))
+                max_days = int(new_coin_cfg.get("phaseB_days", 30))
+                min_volume = _to_f(new_coin_cfg.get("min_volume_24h", 10000000))  # 1000万USDT
+
+                # 快速检测：获取最多720根1h K线（30天）
+                k_check = get_klines(sym, "1h", max_days * 24 + 10)
+                if k_check:
+                    coin_age_hours = len(k_check)
+                    coin_age_days = coin_age_hours / 24
+
+                    # 新币条件：7-30天 + 高成交额
+                    if min_days <= coin_age_days <= max_days:
+                        quote_vol = _to_f(t.get("quoteVolume", 0))
+                        if quote_vol >= min_volume:
+                            # 新币直接加入overlay（跳过三重共振检测）
+                            out.append(sym)
+                            new_coins.append(sym)
+                            continue  # 跳过后续的三重共振检测
+
+            # --- 1h K 线 + OI ---（常规币种三重共振检测）
             k1 = get_klines(sym, "1h", 60)
             if not k1 or len(k1) < 25:
                 continue
@@ -139,6 +163,10 @@ def build() -> List[str]:
 
         except Exception:
             continue
+
+    # 输出新币信息
+    if new_coins:
+        print(f"🆕 检测到 {len(new_coins)} 个新币: {', '.join(new_coins)}")
 
     # 可选：Hot 衰减 / OI 变化 / 1h 成交额门槛等，仍按你 params.overlay 里的其他键在这里扩展
     return out

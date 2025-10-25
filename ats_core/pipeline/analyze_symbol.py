@@ -89,6 +89,20 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     if not k1 or len(k1) < 50:
         return _make_empty_result(symbol, "insufficient_data")
 
+    # ---- 新币检测 ----
+    new_coin_cfg = params.get("new_coin", {})
+    coin_age_hours = len(k1)
+    coin_age_days = coin_age_hours / 24
+
+    phaseA_days = new_coin_cfg.get("phaseA_days", 14)
+    phaseB_days = new_coin_cfg.get("phaseB_days", 30)
+
+    is_new_coin = coin_age_days <= phaseB_days
+    is_phaseA = coin_age_days <= phaseA_days  # 0-14天：极度谨慎
+    is_phaseB = phaseA_days < coin_age_days <= phaseB_days  # 15-30天：谨慎
+
+    coin_phase = "phaseA" if is_phaseA else ("phaseB" if is_phaseB else "mature")
+
     h = [_to_f(r[2]) for r in k1]
     l = [_to_f(r[3]) for r in k1]
     c = [_to_f(r[4]) for r in k1]
@@ -222,14 +236,30 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
 
     # ---- 6. 发布判定 ----
     publish_cfg = params.get("publish", {})
-    prime_prob_min = publish_cfg.get("prime_prob_min", 0.62)
-    prime_dims_ok_min = publish_cfg.get("prime_dims_ok_min", 4)
-    prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
-    watch_prob_min = publish_cfg.get("watch_prob_min", 0.58)
+
+    # 新币特殊处理：应用更严格标准
+    if is_phaseA:
+        # 阶段A（0-14天）：极度谨慎
+        prime_prob_min = new_coin_cfg.get("phaseA_prime_prob_min", 0.65)
+        prime_dims_ok_min = new_coin_cfg.get("phaseA_dims_ok_min", 5)
+        prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
+        watch_prob_min = 0.60  # 新币不发watch信号
+    elif is_phaseB:
+        # 阶段B（15-30天）：谨慎
+        prime_prob_min = new_coin_cfg.get("phaseB_prime_prob_min", 0.63)
+        prime_dims_ok_min = new_coin_cfg.get("phaseB_dims_ok_min", 4)
+        prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
+        watch_prob_min = 0.60
+    else:
+        # 成熟币种：正常标准
+        prime_prob_min = publish_cfg.get("prime_prob_min", 0.62)
+        prime_dims_ok_min = publish_cfg.get("prime_dims_ok_min", 4)
+        prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
+        watch_prob_min = publish_cfg.get("watch_prob_min", 0.58)
 
     dims_ok = sum(1 for s in chosen_scores.values() if s >= prime_dim_threshold)
     is_prime = (P_chosen >= prime_prob_min) and (dims_ok >= prime_dims_ok_min)
-    is_watch = (watch_prob_min <= P_chosen < prime_prob_min)
+    is_watch = (watch_prob_min <= P_chosen < prime_prob_min) and not is_new_coin  # 新币不发watch
 
     # ---- 6. 15分钟微确认 ----
     m15_ok = _check_microconfirm_15m(symbol, side_long, params.get("microconfirm_15m", {}), atr_now)
@@ -278,6 +308,11 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
             "dims_ok": dims_ok,
             "ttl_h": 8
         },
+
+        # 新币信息
+        "coin_age_days": round(coin_age_days, 1),
+        "coin_phase": coin_phase,
+        "is_new_coin": is_new_coin,
 
         # 微确认
         "m15_ok": m15_ok,
