@@ -40,4 +40,5 @@ def scorecard(scores, weights):
     # 优势度：-1.0 到 +1.0
     edge = weighted_score / 100.0
 
-    return weighted_score, confidence, edge
+    # 返回整数类型（避免格式化错误）
+    return int(round(weighted_score)), int(round(confidence)), edge
