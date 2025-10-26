@@ -27,6 +27,10 @@ data/cache/
 data/database/
 data/reports/
 
+# --- Backup files ---
+*.bak
+*.bak.*
+
 # --- IDE / OS ---
 .vscode/
 .idea/
