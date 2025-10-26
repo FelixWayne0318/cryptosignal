@@ -121,7 +121,7 @@ def score_trend(
     L = [float(x) for x in l]
     C = [float(x) for x in c]
     if not C or len(C) < 30:
-        return 50, 0  # 数据太短，给中性分
+        return 0, 0  # 数据太短，给中性分（v2.0：±100系统中0为中性）
 
     # 参数配置
     ema_order_min_bars = int(cfg.get("ema_order_min_bars", 6))

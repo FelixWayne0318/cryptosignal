@@ -94,25 +94,31 @@ def _emoji_by_score(s: int) -> str:
 
 def _desc_trend(s: int, is_long: bool = True, Tm: int = None) -> str:
     """
-    描述趋势
+    描述趋势（v3.0：支持±100对称设计）
 
     Args:
-        s: T 分数 (0-100)
-        is_long: 是否做多
+        s: T 分数 (-100~+100)
+        is_long: 是否做多（已弃用，保留兼容性）
         Tm: 趋势方向 (-1=空头, 0=震荡, 1=多头)
     """
-    if is_long:
-        # 做多视角
-        if s >= 80: desc = "强势/上行倾向"
-        elif s >= 60: desc = "温和上行或多头占优"
-        elif s >= 40: desc = "中性/震荡"
-        else: desc = "趋势弱/震荡或下行倾向"
+    # v3.0：使用分数符号判断方向，绝对值判断强度
+    abs_s = abs(s)
+
+    if s > 0:
+        # 正分：上升趋势
+        if abs_s >= 80: desc = "强势上行"
+        elif abs_s >= 60: desc = "温和上行或多头占优"
+        elif abs_s >= 20: desc = "偏多/震荡上行"
+        else: desc = "中性/震荡"
+    elif s < 0:
+        # 负分：下降趋势
+        if abs_s >= 80: desc = "强势下行"
+        elif abs_s >= 60: desc = "温和下行或空头占优"
+        elif abs_s >= 20: desc = "偏空/震荡下行"
+        else: desc = "中性/震荡"
     else:
-        # 做空视角
-        if s >= 80: desc = "强势/下行倾向"
-        elif s >= 60: desc = "温和下行或空头占优"
-        elif s >= 40: desc = "中性/震荡"
-        else: desc = "趋势弱/震荡或上行倾向"
+        # 0分：完全中性
+        desc = "中性/震荡"
 
     # 附加趋势方向
     if Tm is not None:
@@ -127,16 +133,28 @@ def _desc_trend(s: int, is_long: bool = True, Tm: int = None) -> str:
 
 def _desc_structure(s: int, theta: float = None) -> str:
     """
-    描述结构
+    描述结构（v3.0：支持±100对称设计）
 
     Args:
-        s: S 分数 (0-100)
+        s: S 分数 (-100~+100)
         theta: 结构一致性角度 (0.25-0.60)
     """
-    if s >= 80: desc = "结构清晰/多周期共振"
-    elif s >= 60: desc = "结构尚可/回踩确认"
-    elif s >= 40: desc = "结构一般/级别分歧"
-    else: desc = "结构杂乱/级别相抵"
+    # v3.0：使用绝对值判断质量，符号判断方向
+    abs_s = abs(s)
+
+    # 质量描述
+    if abs_s >= 80: quality = "结构清晰/多周期共振"
+    elif abs_s >= 60: quality = "结构尚可/回踩确认"
+    elif abs_s >= 20: quality = "结构一般/级别分歧"
+    else: quality = "结构杂乱/级别相抵"
+
+    # 方向描述
+    if s > 20:
+        desc = f"{quality} [上升]"
+    elif s < -20:
+        desc = f"{quality} [下降]"
+    else:
+        desc = quality  # 中性，不标注方向
 
     # 附加结构角度
     if theta is not None:
@@ -146,16 +164,29 @@ def _desc_structure(s: int, theta: float = None) -> str:
 
 def _desc_volume(s: int, v5v20: float = None) -> str:
     """
-    描述量能
+    描述量能（v3.0：支持±100对称设计）
 
     Args:
-        s: V 分数 (0-100)
+        s: V 分数 (-100~+100)
         v5v20: 短期/长期量能比率
     """
-    if s >= 80: desc = "放量明显/跟随积极"
-    elif s >= 60: desc = "量能偏强/逐步释放"
-    elif s >= 40: desc = "量能中性"
-    else: desc = "量能不足/跟随意愿弱"
+    # v3.0：正=放量，负=缩量，绝对值=强度
+    abs_s = abs(s)
+
+    if s > 0:
+        # 正分：放量
+        if abs_s >= 80: desc = "放量明显/跟随积极"
+        elif abs_s >= 60: desc = "量能偏强/逐步释放"
+        elif abs_s >= 20: desc = "量能略强"
+        else: desc = "量能中性"
+    elif s < 0:
+        # 负分：缩量
+        if abs_s >= 80: desc = "缩量明显/跟随意愿弱"
+        elif abs_s >= 60: desc = "量能偏弱/逐步萎缩"
+        elif abs_s >= 20: desc = "量能略弱"
+        else: desc = "量能中性"
+    else:
+        desc = "量能中性"
 
     # 附加量能比率
     if v5v20 is not None:
@@ -165,18 +196,30 @@ def _desc_volume(s: int, v5v20: float = None) -> str:
 
 def _desc_accel(s: int, is_long: bool = True, cvd6: float = None) -> str:
     """
-    描述加速
+    描述加速/动量（v3.0：支持±100对称设计，M和C维度）
 
     Args:
-        s: A 分数 (0-100)
-        is_long: 是否做多
+        s: M/C 分数 (-100~+100)
+        is_long: 是否做多（已弃用，保留兼容性）
         cvd6: CVD 6小时变化百分比
     """
-    direction = "上行" if is_long else "下行"
-    if s >= 80: desc = f"{direction}加速强/持续性好"
-    elif s >= 60: desc = f"{direction}加速偏强/待确认"
-    elif s >= 40: desc = "加速一般"
-    else: desc = "加速不足/有背离风险"
+    # v3.0：使用符号判断方向，绝对值判断强度
+    abs_s = abs(s)
+
+    if s > 0:
+        # 正分：上行动量
+        if abs_s >= 80: desc = "上行加速强/持续性好"
+        elif abs_s >= 60: desc = "上行加速偏强/待确认"
+        elif abs_s >= 20: desc = "上行加速一般"
+        else: desc = "加速中性"
+    elif s < 0:
+        # 负分：下行动量
+        if abs_s >= 80: desc = "下行加速强/持续性好"
+        elif abs_s >= 60: desc = "下行加速偏强/待确认"
+        elif abs_s >= 20: desc = "下行加速一般"
+        else: desc = "加速中性"
+    else:
+        desc = "加速中性"
 
     # 附加 CVD 变化
     if cvd6 is not None:
@@ -190,18 +233,30 @@ def _desc_accel(s: int, is_long: bool = True, cvd6: float = None) -> str:
 
 def _desc_positions(s: int, is_long: bool = True, oi24h_pct: float = None) -> str:
     """
-    描述持仓
+    描述持仓（v3.0：支持±100对称设计）
 
     Args:
-        s: O 分数 (0-100)
-        is_long: 是否做多
+        s: O 分数 (-100~+100)
+        is_long: 是否做多（已弃用，保留兼容性）
         oi24h_pct: OI 24小时变化百分比
     """
-    side = "多头" if is_long else "空头"
-    if s >= 80: desc = f"{side}持仓显著增长/可能拥挤"
-    elif s >= 60: desc = f"{side}持仓温和上升/活跃"
-    elif s >= 40: desc = "持仓温和变化"
-    else: desc = f"{side}持仓走弱/去杠杆"
+    # v3.0：正=OI上升（多头增持），负=OI下降（空头减仓）
+    abs_s = abs(s)
+
+    if s > 0:
+        # 正分：OI上升
+        if abs_s >= 80: desc = "持仓显著增长/多头活跃/可能拥挤"
+        elif abs_s >= 60: desc = "持仓温和上升/活跃"
+        elif abs_s >= 20: desc = "持仓略微上升"
+        else: desc = "持仓平稳"
+    elif s < 0:
+        # 负分：OI下降
+        if abs_s >= 80: desc = "持仓显著下降/去杠杆明显"
+        elif abs_s >= 60: desc = "持仓温和下降/减仓"
+        elif abs_s >= 20: desc = "持仓略微下降"
+        else: desc = "持仓平稳"
+    else:
+        desc = "持仓平稳"
 
     # 附加 OI 24h 变化
     if oi24h_pct is not None:
@@ -214,16 +269,29 @@ def _desc_positions(s: int, is_long: bool = True, oi24h_pct: float = None) -> st
 
 def _desc_env(s: int, chop: float = None) -> str:
     """
-    描述环境
+    描述环境（v3.0：支持±100对称设计）
 
     Args:
-        s: E 分数 (0-100)
+        s: E 分数 (-100~+100)
         chop: Chop 指数 (0-100，越高越震荡)
     """
-    if s >= 80: desc = "环境友好/空间充足"
-    elif s >= 60: desc = "环境偏友好"
-    elif s >= 40: desc = "环境一般/空间有限"
-    else: desc = "环境不佳/波动或流动性掣肘"
+    # v3.0：正=上升空间大（靠近下轨），负=下降空间大（靠近上轨）
+    abs_s = abs(s)
+
+    if s > 0:
+        # 正分：上升空间大
+        if abs_s >= 80: desc = "环境友好/上升空间充足"
+        elif abs_s >= 60: desc = "环境偏友好/偏向上行"
+        elif abs_s >= 20: desc = "环境一般/略偏上行"
+        else: desc = "环境中性"
+    elif s < 0:
+        # 负分：下降空间大
+        if abs_s >= 80: desc = "环境友好/下降空间充足"
+        elif abs_s >= 60: desc = "环境偏友好/偏向下行"
+        elif abs_s >= 20: desc = "环境一般/略偏下行"
+        else: desc = "环境中性"
+    else:
+        desc = "环境中性"
 
     # 附加 Chop 指数
     if chop is not None:
@@ -233,25 +301,23 @@ def _desc_env(s: int, chop: float = None) -> str:
 
 def _desc_fund_leading(s: int, leading_raw: float = None) -> str:
     """
-    描述资金领先性
+    描述资金领先性（v3.0：支持±100对称设计）
 
     Args:
-        s: F 分数 (0-100)
+        s: F 分数 (-100~+100)
         leading_raw: 真实的领先性数值（可以是负数）
     """
-    # 基础描述
-    if s >= 75:
+    # v3.0：正=资金领先，负=价格领先，绝对值=强度
+    if s >= 60:
         desc = "资金强势领先/蓄势待发"
-    elif s >= 60:
+    elif s >= 20:
         desc = "资金略微领先/机会较好"
-    elif s >= 40:
-        desc = "资金价格同步/一般"
-    elif s >= 25:
+    elif s >= -20:
+        desc = "资金价格同步/中性"
+    elif s >= -60:
         desc = "价格略微领先/追高风险"
-    elif s >= 10:
-        desc = "价格明显领先/风险较大"
     else:
-        desc = "价格远超资金/极度危险"
+        desc = "价格大幅领先/风险很大"
 
     # 如果有真实数值，附加显示
     if leading_raw is not None:
@@ -270,7 +336,7 @@ def _score_trend(r: Dict[str, Any]) -> int:
     v = _get(r, "T")
     if v is None:
         v = _get(r, "trend.score")
-    return _as_int_score(v, 50)
+    return _as_int_score(v, 0)  # v3.0: 中性改为0
 
 def _score_structure(r: Dict[str, Any]) -> int:
     # 优先使用顶层 S 字段（来自新版 analyze_symbol）
@@ -283,45 +349,46 @@ def _score_structure(r: Dict[str, Any]) -> int:
         v = _get(r, "structure", {})
         if isinstance(v, dict) and "fallback_score" in v:
             v = v["fallback_score"]
-    return _as_int_score(v, 50)
+    return _as_int_score(v, 0)  # v3.0: 中性改为0
 
 def _score_volume(r: Dict[str, Any]) -> int:
     # 优先使用顶层 V 字段（来自新版 analyze_symbol）
     v = _get(r, "V")
     if v is not None:
-        return _as_int_score(v, 50)
+        return _as_int_score(v, 0)  # v3.0: 中性改为0
 
-    # 兼容旧版：尝试从元数据计算
+    # 兼容旧版：尝试从元数据计算（v3.0：改为±100对称）
     z = _get(r, "volume.z1h") or _get(r, "z_volume_1h") or _get(r, "momentum.z1h")
     if isinstance(z, (int, float)):
-        return _as_int_score(50 + 12 * float(z), 50)
+        return _as_int_score(12 * float(z), 0)  # z-score本身对称
     ratio = _get(r, "volume.v5_over_v20") or _get(r, "v5_over_v20")
     if isinstance(ratio, (int, float)):
-        return _as_int_score(50 + 30 * (float(ratio) - 1.0), 50)
-    return 50
+        return _as_int_score(30 * (float(ratio) - 1.0), 0)  # ratio=1为中性
+    return 0  # v3.0: 中性改为0
 
 def _score_accel(r: Dict[str, Any]) -> int:
     # 优先使用顶层 A 字段（来自新版 analyze_symbol）
     v = _get(r, "A")
     if v is not None:
-        return _as_int_score(v, 50)
+        return _as_int_score(v, 0)  # v3.0: 中性改为0
 
-    # 兼容旧版：尝试从元数据计算
+    # 兼容旧版：尝试从元数据计算（v3.0：改为±100对称）
     slope_atr = _get(r, "trend.slopeATR") or _get(r, "Tm.slopeATR")
     if isinstance(slope_atr, (int, float)):
-        return _as_int_score(200 * float(slope_atr), 50)
+        return _as_int_score(200 * float(slope_atr), 0)  # slope对称
     dP1h = _get(r, "momentum.dP1h_abs_pct") or _get(r, "dP1h_abs_pct")
     if isinstance(dP1h, (int, float)):
-        return _as_int_score(40 + 40 * min(1.0, float(dP1h) / 0.01), 50)
-    return 50
+        # 注意：dP1h是绝对值，需要保留符号信息
+        return _as_int_score(80 * min(1.0, float(dP1h) / 0.01), 0)
+    return 0  # v3.0: 中性改为0
 
 def _score_positions(r: Dict[str, Any]) -> int:
     # 优先使用顶层 O 字段（来自新版 analyze_symbol）
     v = _get(r, "O")
     if v is not None:
-        return _as_int_score(v, 50)
+        return _as_int_score(v, 0)  # v3.0: 中性改为0
 
-    # 兼容旧版：尝试从元数据计算
+    # 兼容旧版：尝试从元数据计算（v3.0：改为±100对称）
     oi_z = _get(r, "oi.z20") or _get(r, "oi_z20")
     cvd_z = _get(r, "cvd.z20") or _get(r, "cvd_z20")
     vals: List[float] = []
@@ -331,37 +398,41 @@ def _score_positions(r: Dict[str, Any]) -> int:
         vals.append(float(cvd_z))
     if vals:
         m = sum(vals) / len(vals)
-        return _as_int_score(50 + 12 * m, 50)
-    return 50
+        return _as_int_score(12 * m, 0)  # z-score本身对称
+    return 0  # v3.0: 中性改为0
 
 def _score_env(r: Dict[str, Any]) -> int:
     # 优先使用顶层 E 字段（来自新版 analyze_symbol）
     v = _get(r, "E")
     if v is not None:
-        return _as_int_score(v, 50)
+        return _as_int_score(v, 0)  # v3.0: 中性改为0
 
-    # 兼容旧版：尝试从元数据计算
+    # 兼容旧版：尝试从元数据计算（v3.0：改为±100对称）
+    # 注意：环境分数本身不具备方向性，旧版逻辑无法映射到±100
+    # 这里保持简单的fallback
     atr_now = _get(r, "atr.now") or _get(r, "atr_now") or _get(r, "vol.atr_pct")
     if isinstance(atr_now, (int, float)):
         x = float(atr_now)
         if x <= 0:
-            return 40
+            return 0  # v3.0: 中性改为0
         import math as _m
-        score = 60 - 20 * abs(_m.log10(x) - _m.log10(0.01))
-        return _as_int_score(score, 50)
-    return 50
+        # 简化逻辑：ATR越接近理想值（0.01）分数越高
+        deviation = abs(_m.log10(x) - _m.log10(0.01))
+        score = max(0, 80 - 40 * deviation)  # 0-80范围，正值表示环境好
+        return _as_int_score(score, 0)
+    return 0  # v3.0: 中性改为0
 
 def _score_momentum(r: Dict[str, Any]) -> int:
     v = _get(r, "M")
-    return _as_int_score(v, 50)
+    return _as_int_score(v, 0)  # v3.0: 中性改为0
 
 def _score_cvd_flow(r: Dict[str, Any]) -> int:
     v = _get(r, "C")
-    return _as_int_score(v, 50)
+    return _as_int_score(v, 0)  # v3.0: 中性改为0
 
 def _score_fund_leading(r: Dict[str, Any]) -> int:
     v = _get(r, "F_score") or _get(r, "F")
-    return _as_int_score(v, 50)
+    return _as_int_score(v, 0)  # v3.0: 中性改为0
 
 def _six_scores(r: Dict[str, Any]) -> Tuple[int,int,int,int,int,int,int]:
     """兼容：返回T/S/V/M/C/O/E/F（实际8维）"""
