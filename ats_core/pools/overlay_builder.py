@@ -46,6 +46,7 @@ def _ma(xs, n):
 def build() -> List[str]:
     params: Dict[str, Any] = CFG.get("overlay", default={})
     tri: Dict[str, Any] = params.get("triple_sync", {}) or {}
+    new_coin_cfg: Dict[str, Any] = CFG.get("new_coin", default={}) or {}
 
     # 基础 universe：优先 params.universe，否则 24h 列表里的前若干主流
     uni: List[str] = CFG.get("universe", default=[]) or []
@@ -55,6 +56,7 @@ def build() -> List[str]:
         uni = [t["symbol"] for t in tks if isinstance(t, dict) and str(t.get("symbol","")).endswith("USDT")]
 
     out: List[str] = []
+    new_coins: List[str] = []  # 记录新币
 
     # 可选：z24 & 24h 成交额过滤
     z24_q = params.get("z24_and_24h_quote", {})
@@ -73,7 +75,29 @@ def build() -> List[str]:
             if need_z24 > 0 and z24_val < need_z24:
                 continue
 
-            # --- 1h K 线 + OI ---
+            # --- 新币检测（优先检查，快速通道）---
+            new_coin_enabled = new_coin_cfg.get("enabled", False)
+            if new_coin_enabled:
+                min_hours = int(new_coin_cfg.get("min_hours", 1))  # 最早1小时
+                max_days = int(new_coin_cfg.get("max_days", 30))    # 最多30天
+                min_volume = _to_f(new_coin_cfg.get("min_volume_24h", 10000000))  # 1000万USDT
+
+                # 快速检测：获取最多720根1h K线（30天）
+                k_check = get_klines(sym, "1h", max_days * 24 + 10)
+                if k_check:
+                    coin_age_hours = len(k_check)
+                    coin_age_days = coin_age_hours / 24
+
+                    # 新币条件：1小时-30天 + 高成交额
+                    if coin_age_hours >= min_hours and coin_age_days <= max_days:
+                        quote_vol = _to_f(t.get("quoteVolume", 0))
+                        if quote_vol >= min_volume:
+                            # 新币直接加入overlay（跳过三重共振检测）
+                            out.append(sym)
+                            new_coins.append(sym)
+                            continue  # 跳过后续的三重共振检测
+
+            # --- 1h K 线 + OI ---（常规币种三重共振检测）
             k1 = get_klines(sym, "1h", 60)
             if not k1 or len(k1) < 25:
                 continue
@@ -94,16 +118,55 @@ def build() -> List[str]:
             _, mix = cvd_mix_with_oi_price(k1, oi, window=20)
             cvd_mix_abs_per_h = abs(_last(mix)) if mix else 0.0
 
+            # === 回撤过滤：避免追高/追跌 ===
+            anti_chase = tri.get("anti_chase", {}) or {}
+            if anti_chase.get("enabled", False):
+                high = [_to_f(r[2]) for r in k1]
+                low = [_to_f(r[3]) for r in k1]
+                lookback = int(anti_chase.get("lookback", 72))  # 72小时
+                max_distance = float(anti_chase.get("max_distance_pct", 0.05))  # 5%
+
+                if len(high) >= lookback and len(low) >= lookback:
+                    hh = max(high[-lookback:])  # 最高点
+                    ll = min(low[-lookback:])   # 最低点
+                    current = close[-1]
+
+                    # 距离高点太近（可能追高）
+                    if current > hh * (1 - max_distance):
+                        continue
+                    # 距离低点太近（可能追跌做空）
+                    if current < ll * (1 + max_distance):
+                        continue
+
             # 阈值
             need_dp = _to_f(tri.get("dP1h_abs_pct", 0.0))
             need_vr = _to_f(tri.get("v5_over_v20", 0.0))
             need_cvd = _to_f(tri.get("cvd_mix_abs_per_h", 0.0))
 
-            if (dp1h >= need_dp) and (v5_over_v20 >= need_vr) and (cvd_mix_abs_per_h >= need_cvd):
-                out.append(sym)
+            # 三选二模式（优化：降低严格度）
+            mode = tri.get("mode", "all")  # "all"=全部满足, "2of3"=三选二
+
+            conditions = [
+                dp1h >= need_dp,
+                v5_over_v20 >= need_vr,
+                cvd_mix_abs_per_h >= need_cvd
+            ]
+
+            if mode == "2of3":
+                # 三选二：至少满足2个条件
+                if sum(conditions) >= 2:
+                    out.append(sym)
+            else:
+                # 默认：全部满足（原有逻辑）
+                if all(conditions):
+                    out.append(sym)
 
         except Exception:
             continue
+
+    # 输出新币信息
+    if new_coins:
+        print(f"🆕 检测到 {len(new_coins)} 个新币: {', '.join(new_coins)}")
 
     # 可选：Hot 衰减 / OI 变化 / 1h 成交额门槛等，仍按你 params.overlay 里的其他键在这里扩展
     return out

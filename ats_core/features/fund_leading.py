@@ -9,10 +9,13 @@ F（资金领先性）维度
 
 F 的定义：
 F = f(资金动量 - 价格动量)
-- F > 70：资金明显领先价格（最佳入场点）✅✅✅
-- F = 50-70：资金略微领先（可以考虑）✅
-- F = 30-50：资金价格同步（一般）
-- F < 30：价格领先资金（追高风险）❌
+范围：-100 到 +100（带符号）
+
+- F >= +60：资金强势领先价格（蓄势待发）✅✅✅
+- F >= +30：资金温和领先价格（机会较好）✅
+- -30 < F < +30：资金价格同步（一般）
+- F <= -30：价格温和领先资金（追高风险）⚠️
+- F <= -60：价格强势领先资金（风险很大）❌
 
 输入：
 - oi_change_pct: OI 24小时变化率（%）
@@ -115,15 +118,17 @@ def score_fund_leading(
 
     # ========== 3. 资金领先性 ==========
     # leading = 资金动量 - 价格动量
-    # leading > 0：资金强于价格（蓄势）
-    # leading < 0：价格强于资金（追高）
+    # leading > 0：资金强于价格（蓄势）✅
+    # leading < 0：价格强于资金（追高）⚠️
 
     leading_raw = fund_momentum - price_momentum
 
-    # 映射到 0-100
-    # 使用 tanh 实现软映射
-    F = 50 + 50 * math.tanh(leading_raw / p["leading_scale"])
-    F = int(round(max(0.0, min(100.0, F))))
+    # 映射到 -100 到 +100（带符号）
+    # 正数 = 资金领先价格（蓄势待发）
+    # 负数 = 价格领先资金（追高风险）
+    normalized = math.tanh(leading_raw / p["leading_scale"])
+    F = 100.0 * normalized
+    F = int(round(max(-100.0, min(100.0, F))))
 
     # ========== 4. 元数据 ==========
     meta = {
@@ -151,18 +156,22 @@ def interpret_F(F_score: int) -> str:
     解释 F 分数的含义
 
     Args:
-        F_score: F 维度分数 (0-100)
+        F_score: F 维度分数 (-100 到 +100)
 
     Returns:
         中文解释
     """
-    if F_score >= 75:
-        return "资金强势领先/蓄势待发"
-    elif F_score >= 60:
-        return "资金略微领先/机会较好"
-    elif F_score >= 40:
-        return "资金价格同步/一般"
-    elif F_score >= 25:
-        return "价格略微领先/追高风险"
+    if F_score >= 60:
+        return "资金强势领先价格 (蓄势待发)"
+    elif F_score >= 30:
+        return "资金温和领先价格 (机会较好)"
+    elif F_score >= 10:
+        return "资金略微领先 (同步偏好)"
+    elif F_score >= -10:
+        return "资金价格同步 (中性)"
+    elif F_score >= -30:
+        return "价格略微领先 (同步偏差)"
+    elif F_score >= -60:
+        return "价格温和领先资金 (追高风险)"
     else:
-        return "价格大幅领先/风险较大"
+        return "价格强势领先资金 (风险很大)"

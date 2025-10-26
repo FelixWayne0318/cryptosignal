@@ -21,7 +21,7 @@ from typing import Dict, Any, Tuple, List
 from statistics import median
 
 from ats_core.cfg import CFG
-from ats_core.sources.binance import get_klines, get_open_interest_hist
+from ats_core.sources.binance import get_klines, get_open_interest_hist, get_spot_klines
 from ats_core.features.cvd import cvd_from_klines, cvd_mix_with_oi_price
 from ats_core.scoring.scorecard import scorecard
 from ats_core.scoring.probability import map_probability
@@ -86,7 +86,44 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     k4 = get_klines(symbol, "4h", 200)
     oi_data = get_open_interest_hist(symbol, "1h", 300)
 
-    if not k1 or len(k1) < 50:
+    # 尝试获取现货K线（用于CVD组合计算）
+    # 如果失败（某些币只有合约），cvd_mix_with_oi_price会自动降级到只用合约CVD
+    try:
+        spot_k1 = get_spot_klines(symbol, "1h", 300)
+    except Exception:
+        spot_k1 = None
+
+    # ---- 新币检测（优先判断，决定数据要求）----
+    new_coin_cfg = params.get("new_coin", {})
+    coin_age_hours = len(k1) if k1 else 0
+    coin_age_days = coin_age_hours / 24
+
+    # 4级分级阈值
+    ultra_new_hours = new_coin_cfg.get("ultra_new_hours", 24)  # 1-24小时：超新
+    phaseA_days = new_coin_cfg.get("phaseA_days", 7)            # 1-7天：极度谨慎
+    phaseB_days = new_coin_cfg.get("phaseB_days", 30)           # 7-30天：谨慎
+
+    # 判断阶段
+    is_ultra_new = coin_age_hours <= ultra_new_hours  # 1-24小时
+    is_phaseA = coin_age_days <= phaseA_days and not is_ultra_new  # 1-7天
+    is_phaseB = phaseA_days < coin_age_days <= phaseB_days  # 7-30天
+    is_new_coin = coin_age_days <= phaseB_days
+
+    if is_ultra_new:
+        coin_phase = "ultra_new"  # 超新币（1-24小时）
+        min_data = 10              # 至少10根1h K线
+    elif is_phaseA:
+        coin_phase = "phaseA"     # 阶段A（1-7天）
+        min_data = 30
+    elif is_phaseB:
+        coin_phase = "phaseB"     # 阶段B（7-30天）
+        min_data = 50
+    else:
+        coin_phase = "mature"     # 成熟币
+        min_data = 50
+
+    # 检查数据是否足够
+    if not k1 or len(k1) < min_data:
         return _make_empty_result(symbol, "insufficient_data")
 
     h = [_to_f(r[2]) for r in k1]
@@ -102,8 +139,8 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     atr_now = _last(atr_series)
     close_now = _last(c)
 
-    # CVD
-    cvd_series, cvd_mix = cvd_mix_with_oi_price(k1, oi_data, window=20)
+    # CVD（现货+合约组合，如果有现货数据）
+    cvd_series, cvd_mix = cvd_mix_with_oi_price(k1, oi_data, window=20, spot_klines=spot_k1)
 
     # ---- 2. 计算7维特征（改进版）----
 
@@ -201,18 +238,21 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     # ---- 5. F调节器调整概率（改进版核心）----
     F_chosen = F_long if side_long else F_short
 
-    # F作为调节器调整概率
-    if F_chosen >= 70:
-        # 资金领先价格，蓄势待发
+    # F作为调节器调整概率（F范围：-100 到 +100）
+    if F_chosen >= 60:
+        # 资金强势领先价格（蓄势待发）✅✅✅
         adjustment = 1.15  # 提升15%
-    elif F_chosen >= 50:
-        # 资金价格同步
-        adjustment = 1.0
     elif F_chosen >= 30:
-        # 价格略微领先
+        # 资金温和领先价格（机会较好）✅
+        adjustment = 1.05  # 提升5%
+    elif F_chosen >= -30:
+        # 资金价格同步（中性）
+        adjustment = 1.0
+    elif F_chosen >= -60:
+        # 价格温和领先资金（追高风险）⚠️
         adjustment = 0.9  # 降低10%
     else:
-        # 价格远超资金，追高风险
+        # 价格强势领先资金（风险很大）❌
         adjustment = 0.7  # 降低30%
 
     # 最终概率
@@ -220,21 +260,61 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     P_short = min(0.95, P_short_base * adjustment if not side_long else P_short_base)
     P_chosen = P_long if side_long else P_short
 
-    # ---- 6. 发布判定 ----
+    # ---- 6. 发布判定（4级分级标准）----
     publish_cfg = params.get("publish", {})
-    prime_prob_min = publish_cfg.get("prime_prob_min", 0.62)
-    prime_dims_ok_min = publish_cfg.get("prime_dims_ok_min", 4)
-    prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
-    watch_prob_min = publish_cfg.get("watch_prob_min", 0.58)
 
+    # 新币特殊处理：应用分级标准
+    if is_ultra_new:
+        # 超新币（1-24小时）：超级谨慎
+        prime_prob_min = new_coin_cfg.get("ultra_new_prime_prob_min", 0.70)
+        prime_dims_ok_min = new_coin_cfg.get("ultra_new_dims_ok_min", 6)
+        prime_dim_threshold = 70  # 提高单维度门槛
+        watch_prob_min = 0.65  # 新币不发watch信号
+    elif is_phaseA:
+        # 阶段A（1-7天）：极度谨慎
+        prime_prob_min = new_coin_cfg.get("phaseA_prime_prob_min", 0.65)
+        prime_dims_ok_min = new_coin_cfg.get("phaseA_dims_ok_min", 5)
+        prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
+        watch_prob_min = 0.60
+    elif is_phaseB:
+        # 阶段B（7-30天）：谨慎
+        prime_prob_min = new_coin_cfg.get("phaseB_prime_prob_min", 0.63)
+        prime_dims_ok_min = new_coin_cfg.get("phaseB_dims_ok_min", 4)
+        prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
+        watch_prob_min = 0.60
+    else:
+        # 成熟币种：正常标准
+        prime_prob_min = publish_cfg.get("prime_prob_min", 0.62)
+        prime_dims_ok_min = publish_cfg.get("prime_dims_ok_min", 4)
+        prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
+        watch_prob_min = publish_cfg.get("watch_prob_min", 0.58)
+
+    # 改进的Prime判定逻辑：
+    # 1. 概率达标
+    # 2. 原因指标（资金推动）全部达标：C（资金流）+ V（量能）+ O（持仓）
+    #    这确保价格上涨/下跌是由真实资金推动的
     dims_ok = sum(1 for s in chosen_scores.values() if s >= prime_dim_threshold)
-    is_prime = (P_chosen >= prime_prob_min) and (dims_ok >= prime_dims_ok_min)
-    is_watch = (watch_prob_min <= P_chosen < prime_prob_min)
+
+    # 原因指标（资金推动因素）
+    # 注意：C现在是带符号的（-100到+100）
+    # 做多：C >= 65（买入压力），做空：C <= -65（卖出压力）
+    c_score = chosen_scores.get("C", 0)
+    c_ok = (c_score >= 65) if side_long else (c_score <= -65)
+
+    fund_dims_ok = all([
+        c_ok,                                 # 资金流（带方向）
+        chosen_scores.get("V", 0) >= 65,      # 量能
+        chosen_scores.get("O", 0) >= 65       # 持仓
+    ])
+
+    is_prime = (P_chosen >= prime_prob_min) and fund_dims_ok
+    is_watch = False  # 不再发布Watch信号，全部都是正式信号
 
     # ---- 6. 15分钟微确认 ----
     m15_ok = _check_microconfirm_15m(symbol, side_long, params.get("microconfirm_15m", {}), atr_now)
 
     # ---- 7. 给价计划 ----
+    # 只为Prime信号计算止盈止损（因为不发Watch信号了）
     pricing = None
     if is_prime:
         pricing = _calc_pricing(h, l, c, atr_now, params.get("pricing", {}), side_long)
@@ -278,6 +358,11 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
             "dims_ok": dims_ok,
             "ttl_h": 8
         },
+
+        # 新币信息
+        "coin_age_days": round(coin_age_days, 1),
+        "coin_phase": coin_phase,
+        "is_new_coin": is_new_coin,
 
         # 微确认
         "m15_ok": m15_ok,
@@ -419,7 +504,9 @@ def _calc_pricing(h, l, c, atr_now, cfg, side_long):
     try:
         from ats_core.features.pricing import price_plan
         return price_plan(h, l, c, atr_now, cfg, side_long)
-    except Exception:
+    except Exception as e:
+        from ats_core.logging import warn
+        warn(f"pricing计算失败: {e}, cfg={cfg}")
         return None
 
 def _zscore_last(series, window):

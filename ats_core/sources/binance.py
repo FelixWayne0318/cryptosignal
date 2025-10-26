@@ -12,6 +12,7 @@ from ats_core.backoff import sleep_retry  # 指数退避
 
 # 允许通过环境变量覆盖网关，便于内网代理或将来切换
 BASE = os.environ.get("BINANCE_FAPI_BASE", "https://fapi.binance.com")
+SPOT_BASE = os.environ.get("BINANCE_SPOT_BASE", "https://api.binance.com")
 
 
 def _get(
@@ -76,6 +77,46 @@ def get_klines(
         params["endTime"] = int(end_time)
 
     return _get("/fapi/v1/klines", params, timeout=10.0, retries=2)
+
+
+def get_spot_klines(
+    symbol: str,
+    interval: str,
+    limit: int = 300,
+    start_time: Optional[Union[int, float]] = None,
+    end_time: Optional[Union[int, float]] = None,
+) -> List[list]:
+    """
+    获取现货K线数据（Binance Spot API）
+
+    返回格式与合约相同：
+      [ openTime, open, high, low, close, volume, closeTime, quoteAssetVolume,
+        numberOfTrades, takerBuyBaseVolume, takerBuyQuoteVolume, ignore ]
+
+    Args:
+        symbol: 现货交易对（如 BTCUSDT）
+        interval: K线周期（1m, 5m, 15m, 1h, 4h, 1d等）
+        limit: 返回数量（最大1000）
+        start_time: 开始时间（毫秒时间戳）
+        end_time: 结束时间（毫秒时间戳）
+
+    Returns:
+        K线数据列表
+    """
+    symbol = symbol.upper()
+    limit = int(max(1, min(int(limit), 1000)))
+    params: Dict[str, Any] = {
+        "symbol": symbol,
+        "interval": interval,
+        "limit": limit,
+    }
+    if start_time is not None:
+        params["startTime"] = int(start_time)
+    if end_time is not None:
+        params["endTime"] = int(end_time)
+
+    # 使用现货API端点
+    return _get(SPOT_BASE + "/api/v3/klines", params, timeout=10.0, retries=2)
 
 
 # ------------------------- 未平仓量历史 -------------------------

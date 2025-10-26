@@ -114,7 +114,8 @@
 
   "base": {
     "min_quote_volume": 5000000,
-    "min_z24_abs": 0.5
+    "min_z24_abs": 0.5,
+    "min_pool_size": 20
   },
 
   "overlay": {
@@ -128,20 +129,32 @@
       "quote": 5000000
     },
     "triple_sync": {
-      "dP1h_abs_pct": 0.02,
-      "v5_over_v20": 1.3,
-      "cvd_mix_abs_per_h": 0.03
+      "mode": "2of3",
+      "dP1h_abs_pct": 0.015,
+      "v5_over_v20": 1.2,
+      "cvd_mix_abs_per_h": 0.025,
+      "anti_chase": {
+        "enabled": true,
+        "lookback": 72,
+        "max_distance_pct": 0.05
+      }
     }
   },
 
   "new_coin": {
-    "phaseA_days": 14,
+    "enabled": true,
+    "min_hours": 1,
+    "ultra_new_hours": 24,
+    "phaseA_days": 7,
     "phaseB_days": 30,
+    "max_days": 30,
+    "min_volume_24h": 10000000,
+    "ultra_new_prime_prob_min": 0.70,
+    "ultra_new_dims_ok_min": 6,
     "phaseA_prime_prob_min": 0.65,
-    "phaseA_sq_min": 0.75,
+    "phaseA_dims_ok_min": 5,
     "phaseB_prime_prob_min": 0.63,
-    "phaseB_sq_min": 0.72,
-    "phaseA_max_daily": 1
+    "phaseB_dims_ok_min": 4
   },
 
   "limits": {

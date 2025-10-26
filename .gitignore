@@ -22,6 +22,11 @@ logs/
 reports/
 *.log
 
+# --- Data / Cache ---
+data/cache/
+data/database/
+data/reports/
+
 # --- IDE / OS ---
 .vscode/
 .idea/

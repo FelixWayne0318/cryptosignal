@@ -30,17 +30,27 @@ try:
 except Exception:
     telegram_send = None
 
+# 数据库支持（可选）
+try:
+    from ats_core.database import save_signal, save_candidate_pool
+    DB_ENABLED = True
+except Exception as e:
+    DB_ENABLED = False
+    save_signal = None
+    save_candidate_pool = None
+    warn(f"⚠️  Database not available: {e}")
+
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="完整批量扫描并分析交易信号")
     ap.add_argument("--limit", type=int, default=None,
                     help="限制处理的交易对数量")
     ap.add_argument("--send", action="store_true",
-                    help="发送到 Telegram（默认只打印）")
-    ap.add_argument("--only-prime", dest="only_prime", action="store_true",
-                    help="只发送 prime=True 的信号")
+                    help="发送Prime信号到 Telegram（默认只打印）")
     ap.add_argument("--save-json", dest="save_json", action="store_true",
                     help="保存分析结果为 JSON 文件")
+    ap.add_argument("--no-db", dest="no_db", action="store_true",
+                    help="不保存到数据库")
 
     args = ap.parse_args(argv)
     do_send = args.send and (telegram_send is not None)
@@ -64,6 +74,18 @@ def main(argv: list[str]) -> int:
     # 合并并去重（overlay 优先）
     syms = overlay + [s for s in base if s not in overlay]
 
+    # 保存候选池到数据库
+    if DB_ENABLED and save_candidate_pool and not args.no_db:
+        try:
+            if base:
+                save_candidate_pool(base, pool_type='base', run_mode='manual')
+            if overlay:
+                save_candidate_pool(overlay, pool_type='overlay', run_mode='manual')
+            if syms:
+                save_candidate_pool(syms, pool_type='merged', run_mode='manual')
+        except Exception as e:
+            warn(f"保存候选池失败: {e}")
+
     if args.limit and args.limit > 0:
         syms = syms[:args.limit]
 
@@ -85,34 +107,37 @@ def main(argv: list[str]) -> int:
             r = analyze_symbol(sym)
             r["symbol"] = sym
 
+            # 保存所有信号到数据库（不管质量如何）
+            if DB_ENABLED and save_signal and not args.no_db:
+                try:
+                    save_signal(r)
+                except Exception as e:
+                    warn(f"[DB SAVE FAIL] {sym} -> {e}")
+
             pub = r.get("publish") or {}
             is_prime = pub.get("prime", False)
-            is_watch = pub.get("watch", False)
 
-            # 发布过滤：只处理符合 prime 或 watch 条件的信号
-            if not is_prime and not is_watch:
-                log(f"[SKIP] {sym} - 不符合发布条件 (P={r.get('probability', 0):.3f})")
+            # 只处理prime信号（高质量信号）
+            if not is_prime:
+                log(f"[SKIP] {sym} - 不是Prime信号 (P={r.get('probability', 0):.3f})")
                 continue
 
-            # 选择渲染方式
-            if is_prime:
-                txt = render_trade(r)
-                prime_cnt += 1
-            else:
-                txt = render_watch(r)
+            # 渲染为正式信号
+            txt = render_trade(r)
+            prime_cnt += 1
 
             print(f"\n{'='*60}")
-            print(f"  {sym} {'[PRIME]' if is_prime else '[WATCH]'}")
+            print(f"  {sym} [PRIME]")
             print(f"{'='*60}")
             print(txt)
             print()
 
-            # 保存结果
+            # 保存结果到JSON（可选）
             if args.save_json:
                 results.append(r)
 
-            # 发送到 Telegram（已经通过发布过滤）
-            if do_send and (not args.only_prime or is_prime):
+            # 发送到 Telegram（只发送prime信号）
+            if do_send:
                 try:
                     telegram_send(txt)
                     sent += 1

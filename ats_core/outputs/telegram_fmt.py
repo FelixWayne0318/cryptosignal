@@ -75,11 +75,33 @@ def _ttl_hours(r: Dict[str, Any]) -> int:
 # ---------- score → emoji / description ----------
 
 def _emoji_by_score(s: int) -> str:
+    """
+    分数转emoji（支持负数）
+
+    对于正常指标（0-100）：
+    - >= 60: 🟢 (强)
+    - 40-60: 🟡 (中)
+    - < 40: 🔴 (弱)
+
+    对于带符号指标（-100到+100，如CVD）：
+    - >= 60: 🟢 (强买入压力)
+    - 20~60: 🟡 (中等买入)
+    - -20~20: 🟡 (均衡)
+    - -60~-20: 🟡 (中等卖出)
+    - <= -60: 🔴 (强卖出压力)
+    """
+    # 处理带符号指标（CVD）
+    if s < 0:
+        if s <= -60:
+            return "🔴"  # 强烈卖出压力
+        else:
+            return "🟡"  # 中等/轻微卖出或均衡
+
+    # 处理正数
     if s >= 60:
-        return "🟢"
-    if s >= 40:
-        return "🟡"
-    return "🔴"
+        return "🟢"  # 强买入压力或强指标
+    else:
+        return "🟡"  # 中等/轻微或均衡
 
 def _desc_trend(s: int, is_long: bool = True, Tm: int = None) -> str:
     """
@@ -177,6 +199,69 @@ def _desc_accel(s: int, is_long: bool = True, cvd6: float = None) -> str:
 
     return desc
 
+def _desc_cvd_flow(s: int, is_long: bool = True, cvd6: float = None,
+                   consistency: float = None, is_consistent: bool = None) -> str:
+    """
+    描述CVD资金流（明确买入/卖出方向 + 持续性）
+
+    Args:
+        s: C 分数 (-100到+100，带符号！)
+        is_long: 是否做多（已弃用，仅保留兼容性）
+        cvd6: CVD 6小时变化（已归一化到价格）
+        consistency: （已弃用，保留参数兼容性）
+        is_consistent: 是否持续（R²>=0.7，变化平稳）
+
+    分数对称映射：
+        ≥ +80: 强劲资金流入
+        ≥ +60: 偏强资金流入
+        ≥ +40: 中等资金流入
+        ≥ +20: 轻微资金流入
+        -20~+20: 资金流平衡
+        ≤ -20: 轻微资金流出
+        ≤ -40: 中等资金流出
+        ≤ -60: 偏强资金流出
+        ≤ -80: 强劲资金流出
+    """
+    # 根据分数正负和强度确定资金流方向
+    # 正数 = 资金流入，负数 = 资金流出
+    if s >= 80:
+        desc = "强劲资金流入"
+    elif s >= 60:
+        desc = "偏强资金流入"
+    elif s >= 40:
+        desc = "中等资金流入"
+    elif s >= 20:
+        desc = "轻微资金流入"
+    elif s >= -20:
+        desc = "资金流平衡"
+    elif s >= -40:
+        desc = "轻微资金流出"
+    elif s >= -60:
+        desc = "中等资金流出"
+    elif s >= -80:
+        desc = "偏强资金流出"
+    else:  # s < -80
+        desc = "强劲资金流出"
+
+    # 附加 CVD 6小时变化百分比（归一化到价格）
+    if cvd6 is not None:
+        cvd_pct = cvd6 * 100
+        if cvd_pct >= 0:
+            desc += f" (CVD+{cvd_pct:.1f}%"
+        else:
+            desc += f" (CVD{cvd_pct:.1f}%"
+
+        # 附加持续性标注（基于R²拟合优度）
+        if is_consistent is not None:
+            if is_consistent:
+                desc += ", 持续✓"  # R²>=0.7，变化平稳
+            else:
+                desc += ", 震荡"    # R²<0.7，波动大
+
+        desc += ")"
+
+    return desc
+
 def _desc_positions(s: int, is_long: bool = True, oi24h_pct: float = None) -> str:
     """
     描述持仓
@@ -225,30 +310,24 @@ def _desc_fund_leading(s: int, leading_raw: float = None) -> str:
     描述资金领先性
 
     Args:
-        s: F 分数 (0-100)
-        leading_raw: 真实的领先性数值（可以是负数）
+        s: F 分数 (-100 到 +100)
+        leading_raw: 真实的领先性数值（用于调试，可选）
     """
-    # 基础描述
-    if s >= 75:
-        desc = "资金强势领先/蓄势待发"
-    elif s >= 60:
-        desc = "资金略微领先/机会较好"
-    elif s >= 40:
-        desc = "资金价格同步/一般"
-    elif s >= 25:
-        desc = "价格略微领先/追高风险"
+    # 带符号的描述体系（-100 到 +100）
+    if s >= 60:
+        desc = "资金强势领先价格 (蓄势待发)"
+    elif s >= 30:
+        desc = "资金温和领先价格 (机会较好)"
     elif s >= 10:
-        desc = "价格明显领先/风险较大"
+        desc = "资金略微领先 (同步偏好)"
+    elif s >= -10:
+        desc = "资金价格同步 (中性)"
+    elif s >= -30:
+        desc = "价格略微领先 (同步偏差)"
+    elif s >= -60:
+        desc = "价格温和领先资金 (追高风险)"
     else:
-        desc = "价格远超资金/极度危险"
-
-    # 如果有真实数值，附加显示
-    if leading_raw is not None:
-        leading_int = int(round(leading_raw))
-        if leading_raw >= 0:
-            return f"{desc} (资金领先+{leading_int})"
-        else:
-            return f"{desc} (价格领先{leading_int})"
+        desc = "价格强势领先资金 (风险很大)"
 
     return desc
 
@@ -345,8 +424,21 @@ def _score_momentum(r: Dict[str, Any]) -> int:
     return _as_int_score(v, 50)
 
 def _score_cvd_flow(r: Dict[str, Any]) -> int:
+    """
+    获取CVD分数（支持负数：-100到+100）
+
+    注意：CVD现在是带符号的，正数=买入压力，负数=卖出压力
+    """
     v = _get(r, "C")
-    return _as_int_score(v, 50)
+    if v is None:
+        return 0  # 默认0=中性
+    try:
+        # 直接转换，不做0-100限制
+        score = int(round(float(v)))
+        # 限制在-100到+100
+        return max(-100, min(100, score))
+    except Exception:
+        return 0
 
 def _score_fund_leading(r: Dict[str, Any]) -> int:
     v = _get(r, "F_score") or _get(r, "F")
@@ -401,9 +493,8 @@ def _header_lines(r: Dict[str, Any], is_watch: bool) -> Tuple[str, str]:
     conv, side_lbl = _conviction_and_side(r, six)
 
     line1 = f"🔹 {sym} · 现价 {price_s}"
-    tag = "观察" if is_watch else "正式"
-    icon = "👀" if is_watch else "📣"
-    line2 = f"{icon} {tag} · {side_lbl} {conv}% · 有效期{ttl_h}h"
+    # 不再区分观察/正式，统一为正式信号
+    line2 = f"{side_lbl} {conv}% · 有效期{ttl_h}h"
     return line1, line2
 
 def _six_block(r: Dict[str, Any]) -> str:
@@ -430,6 +521,8 @@ def _six_block(r: Dict[str, Any]) -> str:
     v5v20 = V_meta.get("v5v20")
     slope = M_meta.get("slope_now")
     cvd6 = C_meta.get("cvd6")
+    cvd_consistency = C_meta.get("consistency")
+    cvd_is_consistent = C_meta.get("is_consistent")
     oi24h_pct = O_meta.get("oi24h_pct")
     chop = E_meta.get("chop")
     leading_raw = F_meta.get("leading_raw")
@@ -437,19 +530,52 @@ def _six_block(r: Dict[str, Any]) -> str:
     lines = []
     lines.append(f"• 趋势 {_emoji_by_score(T)} {T:>2d} —— {_desc_trend(T, is_long, Tm)}")
     lines.append(f"• 动量 {_emoji_by_score(M)} {M:>2d} —— 价格动量")
-    lines.append(f"• 资金流 {_emoji_by_score(C)} {C:>2d} —— CVD变化")
+    lines.append(f"• 资金流 {_emoji_by_score(C)} {C:+4d} —— {_desc_cvd_flow(C, is_long, cvd6, cvd_consistency, cvd_is_consistent)}")  # 带符号显示+持续性
     lines.append(f"• 结构 {_emoji_by_score(S)} {S:>2d} —— {_desc_structure(S, theta)}")
     lines.append(f"• 量能 {_emoji_by_score(V)} {V:>2d} —— {_desc_volume(V, v5v20)}")
     lines.append(f"• 持仓 {_emoji_by_score(OI)} {OI:>2d} —— {_desc_positions(OI, is_long, oi24h_pct)}")
     lines.append(f"• 环境 {_emoji_by_score(E)} {E:>2d} —— {_desc_env(E, chop)}")
 
-    # F调节器信息
+    # F调节器信息（所有信号都显示）
     F_adj = _get(r, "F_adjustment", 1.0)
-    P_base = _get(r, "P_base")
-    if P_base and F_adj != 1.0:
-        lines.append(f"\n⚡ 资金领先 {F:>2d} → 概率调整 ×{F_adj:.2f}")
+    f_desc = _desc_fund_leading(F)
+    lines.append(f"\n⚡ {f_desc} (F={F:+d}) → 概率调整 ×{F_adj:.2f}")
 
     return "\n".join(lines)
+
+def _pricing_block(r: Dict[str, Any]) -> str:
+    """生成价格信息块（入场、止损、止盈）"""
+    pricing = _get(r, "pricing") or {}
+    if not pricing:
+        return ""
+
+    lines = []
+
+    # 入场区间
+    entry_lo = pricing.get("entry_lo")
+    entry_hi = pricing.get("entry_hi")
+    if entry_lo is not None and entry_hi is not None:
+        if abs(entry_lo - entry_hi) < 0.0001:
+            lines.append(f"📍 入场价: {_fmt_price(entry_lo)}")
+        else:
+            lines.append(f"📍 入场区间: {_fmt_price(entry_lo)} - {_fmt_price(entry_hi)}")
+
+    # 止损
+    sl = pricing.get("sl")
+    if sl is not None:
+        lines.append(f"🛑 止损: {_fmt_price(sl)}")
+
+    # 止盈
+    tp1 = pricing.get("tp1")
+    tp2 = pricing.get("tp2")
+    if tp1 is not None:
+        lines.append(f"🎯 止盈1: {_fmt_price(tp1)}")
+    if tp2 is not None:
+        lines.append(f"🎯 止盈2: {_fmt_price(tp2)}")
+
+    if lines:
+        return "\n" + "\n".join(lines)
+    return ""
 
 def _note_and_tags(r: Dict[str, Any], is_watch: bool) -> str:
     note = _get(r, "note") or _get(r, "publish.note") or ""
@@ -466,7 +592,9 @@ def render_signal(r: Dict[str, Any], is_watch: bool = False) -> str:
     """Unified template for both watch and trade."""
     l1, l2 = _header_lines(r, is_watch)
     six = _six_block(r)
-    body = f"{l1}\n{l2}\n\n六维分析\n{six}\n\n{_note_and_tags(r, is_watch)}"
+    pricing = _pricing_block(r)
+    # 价格信息放在七维分析前面（入场区间前空一行）
+    body = f"{l1}\n{l2}\n{pricing}\n\n七维分析\n{six}\n\n{_note_and_tags(r, is_watch)}"
     return body
 
 def render_watch(r: Dict[str, Any]) -> str:

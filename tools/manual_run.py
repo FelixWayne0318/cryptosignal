@@ -5,6 +5,7 @@ manual_run: 手动运行分析（使用现有候选池，强制发送）
 - 读取现有候选池（不重新构建）
 - 分析前N个币种（默认10个）
 - 强制发送所有分析结果（不管是否符合发布条件）
+- 自动保存信号到数据库（如果启用）
 """
 import os
 import sys
@@ -25,6 +26,14 @@ try:
     from ats_core.outputs.publisher import telegram_send
 except Exception:
     telegram_send = None
+
+# 数据库支持（可选）
+try:
+    from ats_core.database import save_signal
+    DB_ENABLED = True
+except Exception as e:
+    DB_ENABLED = False
+    warn(f"⚠️  Database not available: {e}")
 
 
 def load_existing_pool():
@@ -100,12 +109,22 @@ def main():
                     help="发送到Telegram（默认只打印）")
     ap.add_argument("--symbols", type=str, nargs="+",
                     help="指定币种列表（不使用候选池）")
+    ap.add_argument("--no-db", action="store_true",
+                    help="不保存到数据库")
 
     args = ap.parse_args()
     do_send = args.send and (telegram_send is not None)
+    do_save_db = DB_ENABLED and not args.no_db
 
     if not do_send:
         log("⚠️  未启用发送模式，只打印结果（使用 --send 启用发送）")
+
+    if do_save_db:
+        log("✅ 数据库记录已启用")
+    elif DB_ENABLED:
+        log("⚠️  数据库记录已禁用（--no-db）")
+    else:
+        log("⚠️  数据库不可用")
 
     # 获取币种列表
     if args.symbols:
@@ -126,6 +145,7 @@ def main():
     results = []
     sent_count = 0
     fail_count = 0
+    saved_count = 0
 
     for idx, sym in enumerate(symbols, 1):
         try:
@@ -162,6 +182,15 @@ def main():
             print(txt)
             print()
 
+            # 保存到数据库
+            signal_id = None
+            if do_save_db:
+                try:
+                    signal_id = save_signal(r)
+                    saved_count += 1
+                except Exception as e:
+                    warn(f"⚠️  Failed to save to database: {e}")
+
             results.append({
                 "symbol": sym,
                 "tag": tag,
@@ -169,6 +198,7 @@ def main():
                 "side": r.get("side"),
                 "F_score": r.get("F_score"),
                 "F_adjustment": r.get("F_adjustment"),
+                "signal_id": signal_id,
             })
 
             # 发送到Telegram（强制发送，不管是否符合条件）
@@ -198,6 +228,8 @@ def main():
     print(f"候选总数: {len(symbols)}")
     print(f"分析成功: {len(results)}")
     print(f"已发送: {sent_count}")
+    if do_save_db:
+        print(f"已保存到数据库: {saved_count}")
     print(f"失败: {fail_count}")
     print("="*60)
 
