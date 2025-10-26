@@ -292,50 +292,51 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         watch_prob_min = publish_cfg.get("watch_prob_min", 0.58)
 
     # ---- Prime评分系统（0-100分）----
-    # 替代原有的boolean AND逻辑，使用渐进式评分
-    # 目标：fund_strength >= 70 → is_prime
+    # 方案C2：超激进提升（目标减少80%信号量）
+    # 目标：prime_strength >= 82 → is_prime
 
     prime_strength = 0.0
 
-    # 1. 概率得分（40分）- 核心指标（方案B：激进提升）
-    if P_chosen >= 0.68:
+    # 1. 概率得分（40分）- 核心指标（方案C2：超激进提升）
+    if P_chosen >= 0.75:        # 提高：0.68 → 0.75 (+7%)
         prime_strength += 40
-    elif P_chosen >= 0.65:
+    elif P_chosen >= 0.72:      # 提高：0.65 → 0.72 (+7%)
         prime_strength += 35
-    elif P_chosen >= 0.62:
+    elif P_chosen >= 0.70:      # 提高：0.62 → 0.70 (+8%)
         prime_strength += 30
-    elif P_chosen >= 0.58:
+    elif P_chosen >= 0.68:      # 提高：0.58 → 0.68 (+10%)
         prime_strength += 20
+    # 概率<68%不给分
 
-    # 2. CVD资金流得分（20分）- 方向对称（方案B：50/30）
+    # 2. CVD资金流得分（20分）- 方向对称（方案C2：70/50）
     # 做多时：C > 0 好；做空时：C < 0 好
     if side_long:
-        if C > 50:
+        if C > 70:              # 提高：50 → 70 (+40%)
             prime_strength += 20
-        elif C > 30:
+        elif C > 50:            # 提高：30 → 50 (+67%)
             prime_strength += 10
     else:  # side_short
-        if C < -50:
+        if C < -70:             # 提高：-50 → -70 (+40%)
             prime_strength += 20
-        elif C < -30:
+        elif C < -50:           # 提高：-30 → -50 (+67%)
             prime_strength += 10
 
-    # 3. 量能得分（20分）- 使用绝对值（方案B：50/30）
+    # 3. 量能得分（20分）- 使用绝对值（方案C2：70/50）
     V_abs = abs(V)
-    if V_abs > 50:
+    if V_abs > 70:              # 提高：50 → 70 (+40%)
         prime_strength += 20
-    elif V_abs > 30:
+    elif V_abs > 50:            # 提高：30 → 50 (+67%)
         prime_strength += 10
 
-    # 4. 持仓得分（20分）- 使用绝对值（方案B：50/30）
+    # 4. 持仓得分（20分）- 使用绝对值（方案C2：70/50）
     O_abs = abs(O)
-    if O_abs > 50:
+    if O_abs > 70:              # 提高：50 → 70 (+40%)
         prime_strength += 20
-    elif O_abs > 30:
+    elif O_abs > 50:            # 提高：30 → 50 (+67%)
         prime_strength += 10
 
-    # Prime判定：得分 >= 75分（方案B：激进提升）
-    is_prime = (prime_strength >= 75)
+    # Prime判定：得分 >= 82分（方案C2：超激进提升，+7分）
+    is_prime = (prime_strength >= 82)
     is_watch = False  # 不再发布Watch信号
 
     # 计算达标维度数（保留用于元数据）
