@@ -1,8 +1,8 @@
 # coding: utf-8
 """
-趋势维度（改进版）
+趋势维度（±100系统）
 - 使用软映射替代硬阈值
-- 支持多空对称
+- 返回带符号的分数：+表示上涨趋势，-表示下跌趋势
 - 返回 (T分数, Tm方向)
 """
 from __future__ import annotations
@@ -13,15 +13,7 @@ from .scoring_utils import directional_score
 # -------------- 小工具：把"可能是列表"的值收敛成标量 ----------------
 
 def _scalar(x: Any, default: float = 0.0) -> float:
-    """
-    把 x 收敛成 float：
-    - 如果是数，直接转 float
-    - 如果是 list/tuple：
-        * 元素是数：取"平均值"
-        * 元素是二元组（如 (slope, r2)）：优先取第 2 项（r2），否则取第 1 项
-        * 其它结构：忽略
-      最终对收集到的数取平均值；若收集不到，返回 default
-    """
+    """把 x 收敛成 float"""
     if isinstance(x, (int, float)):
         return float(x)
     if isinstance(x, (list, tuple)):
@@ -41,7 +33,7 @@ def _scalar(x: Any, default: float = 0.0) -> float:
             return sum(buf) / len(buf)
     return float(default)
 
-# -------------- 指标计算（纯 Python，无第三方依赖） ----------------
+# -------------- 指标计算 ----------------
 
 def _ema(xs: List[float], period: int) -> List[float]:
     n = int(period)
@@ -73,9 +65,7 @@ def _atr(h: List[float], l: List[float], c: List[float], period: int) -> float:
     return max(1e-9, sum(trs[-n:]) / n)
 
 def _linreg_r2(y: List[float]) -> Tuple[float, float]:
-    """
-    对 y 与索引做简单一元线性回归，返回 (slope, r^2)
-    """
+    """对 y 与索引做简单一元线性回归，返回 (slope, r^2)"""
     n = len(y)
     if n <= 1:
         return 0.0, 0.0
@@ -93,33 +83,33 @@ def _linreg_r2(y: List[float]) -> Tuple[float, float]:
     r2 = max(0.0, min(1.0, r2))
     return slope, r2
 
-# -------------- 主函数：趋势打分（改进版：软映射 + 多空对称） ----------------
+# -------------- 主函数：趋势打分（±100系统） ----------------
 
 def score_trend(
     h: Iterable[float],
     l: Iterable[float],
     c: Iterable[float],
-    c4: Iterable[float],   # 兼容旧签名；本实现未用到，但保留参数位置
-    cfg: dict,
-    side_long: bool = True  # 新增参数：多空方向
+    c4: Iterable[float],   # 兼容旧签名；未用到
+    cfg: dict
 ) -> Tuple[int, int]:
     """
     返回 (T, Tm)
-    - T : 0~100 趋势分
-        * 做多时：上涨趋势 = 高分
-        * 做空时：下跌趋势 = 高分
+    - T : -100~+100 趋势分（带符号）
+        * 正值：上涨趋势
+        * 负值：下跌趋势
+        * 0：震荡/中性
     - Tm: -1(空) / 0(震荡) / 1(多) - 市场实际趋势方向
 
     改进点：
-    1. 使用软映射替代硬阈值
-    2. 多空对称：做多和做空时分数都是0-100
-    3. Tm仍表示市场方向，不受side_long影响
+    1. 统一为±100系统
+    2. 不再需要side_long参数
+    3. 直接返回带方向的分数
     """
     H = [float(x) for x in h]
     L = [float(x) for x in l]
     C = [float(x) for x in c]
     if not C or len(C) < 30:
-        return 50, 0  # 数据太短，给中性分
+        return 0, 0  # 数据太短，给中性分
 
     # 参数配置
     ema_order_min_bars = int(cfg.get("ema_order_min_bars", 6))
@@ -127,9 +117,9 @@ def score_trend(
     atr_period = int(cfg.get("atr_period", 14))
 
     # 软映射参数
-    slope_scale = float(cfg.get("slope_scale", 0.05))  # 斜率/ATR的标准差
-    ema_bonus = float(cfg.get("ema_bonus", 15.0))  # EMA排列的加分
-    r2_weight = float(cfg.get("r2_weight", 0.3))  # R²的权重
+    slope_scale = float(cfg.get("slope_scale", 0.05))
+    ema_bonus = float(cfg.get("ema_bonus", 15.0))
+    r2_weight = float(cfg.get("r2_weight", 0.3))
 
     # ========== 1. EMA 顺序（5/20） ==========
     ema5 = _ema(C, 5)
@@ -152,51 +142,49 @@ def score_trend(
     else:
         dir_flag = 0  # 震荡
 
-    # ========== 3. 使用软映射计算分数 ==========
-    # 根据做多/做空方向，调整斜率的符号
-    if side_long:
-        # 做多：斜率越大越好
-        slope_score = directional_score(
-            slope_per_bar,
-            neutral=0.0,
-            scale=slope_scale,
-            max_bonus=50.0
-        )
-    else:
-        # 做空：斜率越小（负值越大）越好
-        slope_score = directional_score(
-            -slope_per_bar,  # 取反
-            neutral=0.0,
-            scale=slope_scale,
-            max_bonus=50.0
-        )
+    # ========== 3. 使用软映射计算基础分数 ==========
+    # 基于斜率计算 0-100 的基础分数
+    slope_score_raw = directional_score(
+        slope_per_bar,
+        neutral=0.0,
+        scale=slope_scale,
+        max_bonus=50.0
+    )
 
-    # ========== 4. EMA排列加分 ==========
-    if side_long:
-        # 做多：EMA多头排列好
-        ema_score = ema_bonus if ema_up else 0
-    else:
-        # 做空：EMA空头排列好
-        ema_score = ema_bonus if ema_dn else 0
+    # 映射到 -100 到 +100
+    slope_score = (slope_score_raw - 50) * 2
+
+    # ========== 4. EMA排列加分（±30分） ==========
+    ema_score = 0
+    if ema_up:
+        # 多头排列：给正分
+        ema_score = ema_bonus * 2  # ±30分
+    elif ema_dn:
+        # 空头排列：给负分
+        ema_score = -ema_bonus * 2
 
     # ========== 5. R² 置信度加权 ==========
     r2_val = _scalar(r2, 0.0)
-    # R² 越高，趋势越清晰，给予加权
     confidence = r2_val  # 0-1之间
 
-    # 最终分数
-    T = 50 + slope_score * (1 - r2_weight) + ema_score
+    # 基础分数
+    T = slope_score + ema_score
 
-    # 如果R²高且方向一致，给予额外加分
-    if side_long and dir_flag == 1 and ema_up:
+    # R²加权：趋势明确时增强信号
+    if dir_flag == 1 and ema_up:
+        # 多头趋势且EMA排列 → 强化正分
+        T += r2_weight * 100 * confidence
+    elif dir_flag == -1 and ema_dn:
+        # 空头趋势且EMA排列 → 强化负分
+        T -= r2_weight * 100 * confidence
+    elif dir_flag == 1:
+        # 多头趋势但EMA未排列 → 适度加分
         T += r2_weight * 50 * confidence
-    elif not side_long and dir_flag == -1 and ema_dn:
-        T += r2_weight * 50 * confidence
-    elif (side_long and dir_flag == 1) or (not side_long and dir_flag == -1):
-        # 方向一致但EMA未排列
-        T += r2_weight * 25 * confidence
+    elif dir_flag == -1:
+        # 空头趋势但EMA未排列 → 适度减分
+        T -= r2_weight * 50 * confidence
 
-    T = int(round(max(0, min(100, T))))
+    T = int(round(max(-100, min(100, T))))
     Tm = int(dir_flag)
 
     return T, Tm

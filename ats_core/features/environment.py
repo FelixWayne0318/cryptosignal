@@ -46,10 +46,7 @@ def _chop14_from_bars(h: List[float], l: List[float], c: List[float]) -> float:
     return 100.0 * (math.log10(tr14 / rng) / math.log10(14))
 
 def _room_from_bars(h: List[float], l: List[float], c: List[float], atr_now: float) -> float:
-    """
-    Room (for env score only): lookback 72 highs/lows, pick the larger side gap to price, normalize by ATR.
-    Direction-agnostic here; give-price will refine by side later.
-    """
+    """Room: lookback 72 highs/lows, pick larger side gap to price, normalize by ATR"""
     if len(c) < 3:
         return 0.0
     look = min(72, len(c))
@@ -59,13 +56,19 @@ def _room_from_bars(h: List[float], l: List[float], c: List[float], atr_now: flo
     room_abs = max(hh - price, price - ll)
     return room_abs / max(1e-9, atr_now)
 
-# ---------- environment score (dual-signature compatible) ----------
+# ---------- environment score (±100 system) ----------
 def environment_score(*args) -> Tuple[int, Dict[str, Any]]:
     """
+    E（环境）评分 - 统一±100系统
+
+    返回：
+    - 正分：环境好（震荡低，空间大）
+    - 负分：环境差（震荡高，空间小）
+    - 0：中性
+
     Compatible with:
       1) environment_score(h, l, c, atr_now, params)
       2) environment_score(ch, room, params)
-    Returns: (E 0..100, meta={chop, room})
     """
     if len(args) == 5 and isinstance(args[0], list):
         h, l, c, atr_now, params = args
@@ -79,9 +82,30 @@ def environment_score(*args) -> Tuple[int, Dict[str, Any]]:
     chop14_max = float(params.get("chop14_max", 52))
     room_min   = float(params.get("room_min_for_bonus", 0.5))
 
+    # 计算0-100分数
     s = 0
     s += int(60 * _clamp((chop14_max - ch) / max(1e-9, chop14_max), 0.0, 1.0))
     s += int(40 * _clamp(room / max(1e-9, room_min), 0.0, 1.0))
     s = max(0, min(100, s))
-    return s, {"chop": round(ch, 1), "room": round(room, 2)}
 
+    # 映射到 -100 到 +100
+    E = (s - 50) * 2
+    E = max(-100, min(100, E))
+
+    # 解释
+    if E >= 40:
+        interpretation = "环境优越"
+    elif E >= 10:
+        interpretation = "环境良好"
+    elif E >= -10:
+        interpretation = "环境一般"
+    elif E >= -40:
+        interpretation = "环境偏差"
+    else:
+        interpretation = "环境恶劣"
+
+    return E, {
+        "chop": round(ch, 1),
+        "room": round(room, 2),
+        "interpretation": interpretation
+    }
