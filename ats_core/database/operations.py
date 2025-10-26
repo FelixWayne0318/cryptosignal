@@ -49,8 +49,8 @@ def save_signal(analysis_result: Dict) -> int:
             f_score=analysis_result.get('F_score'),
             f_adjustment=analysis_result.get('F_adjustment'),
 
-            # 加权分数
-            weighted_score=analysis_result.get('UpScore') if analysis_result.get('side') == 'long' else analysis_result.get('DownScore'),
+            # 加权分数（统一±100系统）
+            weighted_score=analysis_result.get('weighted_score', 0),
             base_probability=analysis_result.get('P_base'),
 
             # 给价计划（从pricing中正确提取）

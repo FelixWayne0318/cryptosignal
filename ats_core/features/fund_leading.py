@@ -35,11 +35,14 @@ def score_fund_leading(
     cvd_change: float,
     price_change_pct: float,
     price_slope: float,
-    side_long: bool,
     params: Dict[str, Any]
 ) -> Tuple[int, Dict[str, Any]]:
     """
-    F（资金领先性）评分
+    F（资金领先性）评分 - 移除circular dependency
+
+    计算资金动量与价格动量的差值（带符号）：
+    - F > 0: 资金偏多（OI上升、CVD流入、价格上涨但不强）→ 看多信号
+    - F < 0: 资金偏空（OI下降、CVD流出、价格下跌但不强）→ 看空信号
 
     Args:
         oi_change_pct: OI 24小时变化率（%），如 +3.5 表示上升 3.5%
@@ -47,11 +50,10 @@ def score_fund_leading(
         cvd_change: CVD 6小时变化（归一化到价格），通常在 -0.05 ~ +0.05 范围
         price_change_pct: 价格 24小时变化率（%）
         price_slope: 价格斜率（EMA30 的斜率/ATR）
-        side_long: 是否做多方向
         params: 参数配置
 
     Returns:
-        (F分数, 元数据)
+        (F分数 [-100, +100], 元数据)
     """
     # 默认参数
     default_params = {
@@ -76,44 +78,35 @@ def score_fund_leading(
     if isinstance(params, dict):
         p.update(params)
 
-    # ========== 1. 资金动量 ==========
-    # 做多时：希望 OI 上升、量能放大、CVD 流入
-    # 做空时：希望 OI 下降、量能放大、CVD 流出
+    # ========== 1. 资金动量（绝对方向计算）==========
+    # OI上升 → 正分，OI下降 → 负分
+    # CVD流入 → 正分，CVD流出 → 负分
+    # 量能放大 → 正分，量能萎缩 → 负分
 
-    if side_long:
-        # 做多方向
-        oi_score = directional_score(oi_change_pct, neutral=0.0, scale=p["oi_scale"])
-        cvd_score = directional_score(cvd_change, neutral=0.0, scale=p["cvd_scale"])
-    else:
-        # 做空方向：OI下降好，CVD流出好
-        oi_score = directional_score(-oi_change_pct, neutral=0.0, scale=p["oi_scale"])
-        cvd_score = directional_score(-cvd_change, neutral=0.0, scale=p["cvd_scale"])
-
-    # 量能：无论多空，量能放大都是好事
+    oi_score = directional_score(oi_change_pct, neutral=0.0, scale=p["oi_scale"])
+    cvd_score = directional_score(cvd_change, neutral=0.0, scale=p["cvd_scale"])
     vol_score = directional_score(vol_ratio, neutral=1.0, scale=p["vol_scale"])
 
-    # 加权平均
+    # 加权平均（返回 -100 到 +100 的带符号分数）
+    # 映射：10-100 → -100到+100
     fund_momentum = (
-        p["oi_weight"] * oi_score +
-        p["vol_weight"] * vol_score +
-        p["cvd_weight"] * cvd_score
+        p["oi_weight"] * ((oi_score - 50) * 2) +
+        p["vol_weight"] * ((vol_score - 50) * 2) +
+        p["cvd_weight"] * ((cvd_score - 50) * 2)
     )
 
-    # ========== 2. 价格动量 ==========
-    # 做多时：价格上涨
-    # 做空时：价格下跌
+    # ========== 2. 价格动量（绝对方向计算）==========
+    # 价格上涨 → 正分，价格下跌 → 负分
+    # 斜率向上 → 正分，斜率向下 → 负分
 
-    if side_long:
-        trend_score = directional_score(price_change_pct, neutral=0.0, scale=p["price_scale"])
-        slope_score = directional_score(price_slope, neutral=0.0, scale=p["slope_scale"])
-    else:
-        trend_score = directional_score(-price_change_pct, neutral=0.0, scale=p["price_scale"])
-        slope_score = directional_score(-price_slope, neutral=0.0, scale=p["slope_scale"])
+    trend_score = directional_score(price_change_pct, neutral=0.0, scale=p["price_scale"])
+    slope_score = directional_score(price_slope, neutral=0.0, scale=p["slope_scale"])
 
-    # 加权平均
+    # 加权平均（返回 -100 到 +100 的带符号分数）
+    # 映射：10-100 → -100到+100
     price_momentum = (
-        p["trend_weight"] * trend_score +
-        p["slope_weight"] * slope_score
+        p["trend_weight"] * ((trend_score - 50) * 2) +
+        p["slope_weight"] * ((slope_score - 50) * 2)
     )
 
     # ========== 3. 资金领先性 ==========
