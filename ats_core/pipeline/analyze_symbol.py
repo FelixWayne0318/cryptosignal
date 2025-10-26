@@ -155,7 +155,7 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     T, T_meta = _calc_trend(h, l, c, c4, params.get("trend", {}))
 
     # 动量（M）：-100（减速下跌）到 +100（加速上涨）
-    M, M_meta = _calc_momentum(c, params.get("momentum", {}))
+    M, M_meta = _calc_momentum(h, l, c, params.get("momentum", {}))
 
     # CVD资金流（C）：-100（流出）到 +100（流入）
     C, C_meta = _calc_cvd_flow(cvd_series, c, params.get("cvd_flow", {}))
@@ -184,15 +184,23 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     # F也使用统一的±100系统，但需要根据方向判断
     # 先用 weighted_score 初步判断方向（后面会重新算）
 
-    # ---- 3. Scorecard（统一±100系统）----
+    # ---- 3. Scorecard（统一±100系统，因果链权重）----
+    # 权重逻辑：原因 > 传导 > 结果
+    # 因果链：资金(C+O) → 传导(V+T) → 结果(M+S+E)
     weights = params.get("weights", {
-        "T": 20,  # 趋势
-        "M": 10,  # 动量
-        "C": 10,  # CVD资金流
-        "S": 10,  # 结构
-        "V": 20,  # 量能
-        "O": 15,  # 持仓
-        "E": 15   # 环境
+        # 原因层（资金）：45%
+        "C": 25,  # CVD资金流 - 主因（直接资金流向）
+        "O": 20,  # 持仓变化 - 辅因（市场参与度）
+
+        # 传导层：40%
+        "V": 25,  # 量能 - 资金活跃度
+        "T": 15,  # 趋势 - 价格方向
+
+        # 结果层：15%
+        "M": 5,   # 动量 - 价格加速度
+        "S": 5,   # 结构 - 支撑阻力
+        "E": 5    # 环境 - 波动性
+
         # F 不参与权重，作为调节器
     })
 
@@ -205,9 +213,9 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     # 方向判断（根据加权分数符号）
     side_long = (weighted_score > 0)
 
-    # 计算F调节器
+    # 计算F调节器（不再依赖side_long，避免循环依赖）
     F, F_meta = _calc_fund_leading(
-        oi_change_pct, vol_ratio, cvd6, price_change_24h, price_slope, side_long, params.get("fund_leading", {})
+        oi_change_pct, vol_ratio, cvd6, price_change_24h, price_slope, params.get("fund_leading", {})
     )
 
     # 元数据
@@ -230,23 +238,24 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     P_long_base, P_short_base = map_probability(edge, prior_up, Q)
     P_base = P_long_base if side_long else P_short_base
 
-    # ---- 5. F调节器调整概率 ----
-    # F范围：-100 到 +100
-    if F >= 60:
-        # 资金强势领先价格（蓄势待发）✅✅✅
-        adjustment = 1.15  # 提升15%
-    elif F >= 30:
-        # 资金温和领先价格（机会较好）✅
-        adjustment = 1.05  # 提升5%
-    elif F >= -30:
-        # 资金价格同步（中性）
-        adjustment = 1.0
-    elif F >= -60:
-        # 价格温和领先资金（追高风险）⚠️
-        adjustment = 0.9  # 降低10%
-    else:
-        # 价格强势领先资金（风险很大）❌
-        adjustment = 0.7  # 降低30%
+    # ---- 5. F调节器调整概率（平滑sigmoid）----
+    # F范围：-100（资金偏空）到 +100（资金偏多）
+    # 策略：F与交易方向一致时提升概率，不一致时降低
+    #
+    # 对齐F到交易方向：
+    # - 做多时：F > 0好（资金偏多），F < 0差（资金偏空）
+    # - 做空时：F < 0好（资金偏空），F > 0差（资金偏多）
+    import math
+    F_aligned = F if side_long else -F
+
+    # 平滑sigmoid调节器：adjustment = 1.0 + 0.3 * tanh(F_aligned / 40.0)
+    # 范围：[0.70, 1.30]
+    # F_aligned = +100 → ~1.30 (提升30%)
+    # F_aligned = +40  → ~1.23 (提升23%)
+    # F_aligned = 0    → 1.0  (中性)
+    # F_aligned = -40  → ~0.77 (降低23%)
+    # F_aligned = -100 → ~0.70 (降低30%)
+    adjustment = 1.0 + 0.3 * math.tanh(F_aligned / 40.0)
 
     # 最终概率
     P_long = min(0.95, P_long_base * adjustment if side_long else P_long_base)
@@ -282,26 +291,55 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
         watch_prob_min = publish_cfg.get("watch_prob_min", 0.58)
 
-    # 改进的Prime判定逻辑（±100系统）：
-    # 1. 概率达标
-    # 2. 维度分数的绝对值达标（代表强度）
+    # ---- Prime评分系统（0-100分）----
+    # 替代原有的boolean AND逻辑，使用渐进式评分
+    # 目标：fund_strength >= 70 → is_prime
 
-    # 计算达标维度数（使用绝对值）
-    dims_ok = sum(1 for s in scores.values() if abs(s) >= prime_dim_threshold)
+    prime_strength = 0.0
 
-    # 资金推动因素验证：
-    # - C（资金流）：流向与方向一致
-    # - V（量能）：放量（正值）
-    # - O（持仓）：增加（正值）
+    # 1. 概率得分（40分）- 核心指标
+    if P_chosen >= 0.62:
+        prime_strength += 40
+    elif P_chosen >= 0.58:
+        prime_strength += 30
+    elif P_chosen >= 0.54:
+        prime_strength += 20
+    elif P_chosen >= 0.50:
+        prime_strength += 10
 
-    c_ok = (C * weighted_score > 0)  # C和weighted_score同号（方向一致）
-    v_ok = (V > 20)  # 量能正值（放量）
-    o_ok = (O > 20)  # 持仓正值（增加）
+    # 2. CVD资金流得分（20分）- 方向对称
+    # 做多时：C > 0 好；做空时：C < 0 好
+    if side_long:
+        if C > 30:
+            prime_strength += 20
+        elif C > 10:
+            prime_strength += 10
+    else:  # side_short
+        if C < -30:
+            prime_strength += 20
+        elif C < -10:
+            prime_strength += 10
 
-    fund_dims_ok = (c_ok and v_ok and o_ok)
+    # 3. 量能得分（20分）- 使用绝对值（放量都是好的）
+    V_abs = abs(V)
+    if V_abs > 30:
+        prime_strength += 20
+    elif V_abs > 10:
+        prime_strength += 10
 
-    is_prime = (P_chosen >= prime_prob_min) and fund_dims_ok
+    # 4. 持仓得分（20分）- 使用绝对值
+    O_abs = abs(O)
+    if O_abs > 30:
+        prime_strength += 20
+    elif O_abs > 10:
+        prime_strength += 10
+
+    # Prime判定：得分 >= 70分
+    is_prime = (prime_strength >= 70)
     is_watch = False  # 不再发布Watch信号
+
+    # 计算达标维度数（保留用于元数据）
+    dims_ok = sum(1 for s in scores.values() if abs(s) >= prime_dim_threshold)
 
     # ---- 6. 15分钟微确认 ----
     m15_ok = _check_microconfirm_15m(symbol, side_long, params.get("microconfirm_15m", {}), atr_now)
@@ -347,6 +385,7 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
             "prime": is_prime,
             "watch": is_watch,
             "dims_ok": dims_ok,
+            "prime_strength": int(prime_strength),  # Prime评分（0-100）
             "ttl_h": 8
         },
 
@@ -392,11 +431,11 @@ def _calc_accel(c, cvd_series, cfg):
     except Exception:
         return 50, {"dslope30": 0.0, "cvd6": 0.0, "weak_ok": False}
 
-def _calc_momentum(c, cfg):
+def _calc_momentum(h, l, c, cfg):
     """动量打分（±100系统）"""
     try:
         from ats_core.features.momentum import score_momentum
-        M, meta = score_momentum(c, cfg)
+        M, meta = score_momentum(h, l, c, cfg)
         return int(M), meta
     except Exception:
         return 0, {"slope_now": 0.0, "accel": 0.0}
@@ -446,16 +485,16 @@ def _calc_environment(h, l, c, atr_now, cfg):
     except Exception:
         return 0, {"chop": 50.0, "room": 0.5}
 
-def _calc_fund_leading(oi_change_pct, vol_ratio, cvd_change, price_change_pct, price_slope, side_long, cfg):
-    """资金领先性打分"""
+def _calc_fund_leading(oi_change_pct, vol_ratio, cvd_change, price_change_pct, price_slope, cfg):
+    """资金领先性打分（移除circular dependency）"""
     try:
         from ats_core.features.fund_leading import score_fund_leading
-        F, meta = score_fund_leading(oi_change_pct, vol_ratio, cvd_change, price_change_pct, price_slope, side_long, cfg)
+        F, meta = score_fund_leading(oi_change_pct, vol_ratio, cvd_change, price_change_pct, price_slope, cfg)
         return int(F), meta
     except Exception as e:
         # 兜底：返回中性分数
-        return 50, {
-            "fund_momentum": 50.0,
+        return 0, {
+            "fund_momentum": 0.0,
             "price_momentum": 50.0,
             "leading_raw": 0.0,
             "error": str(e)
@@ -476,8 +515,8 @@ def _calc_quality(scores: Dict, n_klines: int, n_oi: int) -> float:
     if n_oi < 50:
         Q *= 0.90
 
-    # 维度弱证据过多（绝对值<65的维度）
-    weak_dims = sum(1 for s in scores.values() if abs(s) < 65)
+    # 维度弱证据过多（绝对值<40的维度 - 优化：降低门槛）
+    weak_dims = sum(1 for s in scores.values() if abs(s) < 40)
     if weak_dims >= 3:
         Q *= 0.85
 

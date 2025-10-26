@@ -79,7 +79,7 @@ def environment_score(*args) -> Tuple[int, Dict[str, Any]]:
     else:
         raise TypeError("environment_score: unexpected signature")
 
-    chop14_max = float(params.get("chop14_max", 52))
+    chop14_max = float(params.get("chop14_max", 70))  # 优化：52→70，更宽容震荡行情
     room_min   = float(params.get("room_min_for_bonus", 0.5))
 
     # 计算0-100分数

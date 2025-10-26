@@ -118,7 +118,7 @@ def score_trend(
 
     # 软映射参数
     slope_scale = float(cfg.get("slope_scale", 0.05))
-    ema_bonus = float(cfg.get("ema_bonus", 15.0))
+    ema_bonus = float(cfg.get("ema_bonus", 20.0))  # 优化：15→20（±40分代替±30分）
     r2_weight = float(cfg.get("r2_weight", 0.3))
 
     # ========== 1. EMA 顺序（5/20） ==========
@@ -154,11 +154,11 @@ def score_trend(
     # 映射到 -100 到 +100
     slope_score = (slope_score_raw - 50) * 2
 
-    # ========== 4. EMA排列加分（±30分） ==========
+    # ========== 4. EMA排列加分（±40分） ==========
     ema_score = 0
     if ema_up:
         # 多头排列：给正分
-        ema_score = ema_bonus * 2  # ±30分
+        ema_score = ema_bonus * 2  # ±40分
     elif ema_dn:
         # 空头排列：给负分
         ema_score = -ema_bonus * 2

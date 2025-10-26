@@ -9,10 +9,12 @@ M（动量）维度 - 价格动量/加速度（±100系统）
 返回范围：-100（强烈看空）~ 0（中性）~ +100（强烈看多）
 """
 from typing import List, Tuple, Dict, Any
-from .ta_core import ema
+from .ta_core import ema, atr
 from .scoring_utils import directional_score
 
 def score_momentum(
+    h: List[float],
+    l: List[float],
     c: List[float],
     params: Dict[str, Any] = None
 ) -> Tuple[int, Dict[str, Any]]:
@@ -25,6 +27,8 @@ def score_momentum(
     - 0：中性
 
     Args:
+        h: 最高价列表
+        l: 最低价列表
         c: 收盘价列表
         params: 参数配置
 
@@ -33,11 +37,12 @@ def score_momentum(
     """
     # 默认参数
     default_params = {
-        "slope_lookback": 30,      # EMA周期
+        "slope_lookback": 12,      # EMA周期（优化：30→12，更快响应）
         "slope_scale": 0.01,       # 斜率scale
         "accel_scale": 0.005,      # 加速度scale
         "slope_weight": 0.6,       # 斜率权重
         "accel_weight": 0.4,       # 加速度权重
+        "atr_period": 14,          # ATR周期
     }
 
     p = dict(default_params)
@@ -59,11 +64,12 @@ def score_momentum(
     # 加速度 = 斜率的变化
     accel = slope_now - slope_prev
 
-    # ========== 2. 归一化到ATR代理 ==========
-    # 使用价格的平均绝对值作为ATR代理
-    atr_proxy = (sum([abs(x) for x in c[-30:]]) / 30.0) / 1000.0
-    slope_normalized = slope_now / max(1e-9, atr_proxy)
-    accel_normalized = accel / max(1e-9, atr_proxy)
+    # ========== 2. 归一化到真实ATR ==========
+    # 使用真实ATR而非价格代理（修复：原来的atr_proxy导致M分数被低估50-70%）
+    atr_values = atr(h, l, c, p["atr_period"])
+    atr_val = atr_values[-1] if atr_values else 1.0
+    slope_normalized = slope_now / max(1e-9, atr_val)
+    accel_normalized = accel / max(1e-9, atr_val)
 
     # ========== 3. 软映射评分（±100系统）==========
     # directional_score 返回 10-100，需要映射到 -100到+100
