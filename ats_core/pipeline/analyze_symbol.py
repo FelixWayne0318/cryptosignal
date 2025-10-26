@@ -297,45 +297,45 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
 
     prime_strength = 0.0
 
-    # 1. 概率得分（40分）- 核心指标
-    if P_chosen >= 0.62:
+    # 1. 概率得分（40分）- 核心指标（方案B：激进提升）
+    if P_chosen >= 0.68:
         prime_strength += 40
-    elif P_chosen >= 0.58:
+    elif P_chosen >= 0.65:
+        prime_strength += 35
+    elif P_chosen >= 0.62:
         prime_strength += 30
-    elif P_chosen >= 0.54:
+    elif P_chosen >= 0.58:
         prime_strength += 20
-    elif P_chosen >= 0.50:
-        prime_strength += 10
 
-    # 2. CVD资金流得分（20分）- 方向对称
+    # 2. CVD资金流得分（20分）- 方向对称（方案B：50/30）
     # 做多时：C > 0 好；做空时：C < 0 好
     if side_long:
-        if C > 30:
+        if C > 50:
             prime_strength += 20
-        elif C > 10:
+        elif C > 30:
             prime_strength += 10
     else:  # side_short
-        if C < -30:
+        if C < -50:
             prime_strength += 20
-        elif C < -10:
+        elif C < -30:
             prime_strength += 10
 
-    # 3. 量能得分（20分）- 使用绝对值（放量都是好的）
+    # 3. 量能得分（20分）- 使用绝对值（方案B：50/30）
     V_abs = abs(V)
-    if V_abs > 30:
+    if V_abs > 50:
         prime_strength += 20
-    elif V_abs > 10:
+    elif V_abs > 30:
         prime_strength += 10
 
-    # 4. 持仓得分（20分）- 使用绝对值
+    # 4. 持仓得分（20分）- 使用绝对值（方案B：50/30）
     O_abs = abs(O)
-    if O_abs > 30:
+    if O_abs > 50:
         prime_strength += 20
-    elif O_abs > 10:
+    elif O_abs > 30:
         prime_strength += 10
 
-    # Prime判定：得分 >= 70分
-    is_prime = (prime_strength >= 70)
+    # Prime判定：得分 >= 75分（方案B：激进提升）
+    is_prime = (prime_strength >= 75)
     is_watch = False  # 不再发布Watch信号
 
     # 计算达标维度数（保留用于元数据）
