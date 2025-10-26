@@ -13,14 +13,16 @@ import math
 
 # ---------- small utils ----------
 
-def _clamp(x: float, lo: float = 0.0, hi: float = 100.0) -> float:
+def _clamp(x: float, lo: float = -100.0, hi: float = 100.0) -> float:
+    """v3.0: 支持±100范围"""
     try:
         v = float(x)
     except Exception:
-        return 50.0
+        return 0.0  # 中性改为0
     return max(lo, min(hi, v))
 
-def _as_int_score(x: Any, default: int = 50) -> int:
+def _as_int_score(x: Any, default: int = 0) -> int:
+    """v3.0: 支持±100范围，默认值改为0（中性）"""
     try:
         if x is None:
             return default
@@ -30,7 +32,7 @@ def _as_int_score(x: Any, default: int = 50) -> int:
                 x = x[-1]
             except Exception:
                 pass
-        return int(round(_clamp(float(x))))
+        return int(round(_clamp(float(x), -100.0, 100.0)))
     except Exception:
         return default
 
@@ -72,14 +74,23 @@ def _ttl_hours(r: Dict[str, Any]) -> int:
         or 8
     )
 
-# ---------- score → emoji / description ----------
+# ---------- score → emoji / description （v3.0：支持±100）----------
 
 def _emoji_by_score(s: int) -> str:
-    if s >= 60:
-        return "🟢"
-    if s >= 40:
-        return "🟡"
-    return "🔴"
+    """
+    根据分数返回emoji（v3.0：支持±100）
+
+    使用绝对值判断强度：
+    - |s| >= 60: 🟢 强
+    - |s| >= 20: 🟡 中
+    - |s| < 20: ⚪ 弱/中性
+    """
+    abs_s = abs(s)
+    if abs_s >= 60:
+        return "🟢"  # 强信号（无论正负）
+    if abs_s >= 20:
+        return "🟡"  # 中等信号
+    return "⚪"  # 弱信号/中性
 
 def _desc_trend(s: int, is_long: bool = True, Tm: int = None) -> str:
     """

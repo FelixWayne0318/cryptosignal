@@ -1,3 +1,12 @@
+# coding: utf-8
+"""
+S（结构）维度 - Zigzag结构分析（v2.0 ±100对称设计）
+
+改进v2.0：
+- ✅ 分数范围：-100 到 +100（0为中性）
+- ✅ 方向判断：根据zigzag形成上升/下降结构
+- ✅ 对称设计：正值=上升结构（HH+HL），负值=下降结构（LL+LH）
+"""
 from ats_core.features.ta_core import ema
 import math
 
@@ -67,6 +76,46 @@ def score_structure(h,l,c, ema30_last, atr_now, params, ctx):
     m15_ok = 1.0 if ctx.get("m15_ok", False) else 0.0
     # penalties (explosive bar etc) approximated by over
     penalty = 0.0 if over<=0.8 else 0.1
-    # aggregate
-    S = int(round(100*max(0.0, min(1.0, 0.22*cons + 0.18*icr + 0.18*retr + 0.14*timing + 0.20*not_over + 0.08*m15_ok - penalty ))))
-    return S, {"theta":th, "icr":icr, "retr":retr, "timing":timing, "not_over":(over<=0.8), "m15_ok":bool(ctx.get("m15_ok",False)), "penalty":penalty}
+    # 计算结构质量（0-100）
+    quality = 100 * max(0.0, min(1.0, 0.22*cons + 0.18*icr + 0.18*retr + 0.14*timing + 0.20*not_over + 0.08*m15_ok - penalty))
+
+    # ========== 判断结构方向（v2.0新增） ==========
+    direction = 0  # 默认中性
+
+    if len(zz) >= 4:
+        # 提取最近的高点和低点
+        highs = [(p[1], p[2]) for p in zz if p[0] == "H"]
+        lows = [(p[1], p[2]) for p in zz if p[0] == "L"]
+
+        if len(highs) >= 2 and len(lows) >= 2:
+            # 取最近两个高点和两个低点
+            h1, h2 = highs[-2][0], highs[-1][0]
+            l1, l2 = lows[-2][0], lows[-1][0]
+
+            # 上升结构：高点更高 AND 低点更高（HH + HL）
+            if h2 > h1 and l2 > l1:
+                direction = +1  # 上升结构 → 正分
+            # 下降结构：高点更低 AND 低点更低（LH + LL）
+            elif h2 < h1 and l2 < l1:
+                direction = -1  # 下降结构 → 负分
+            # 混乱结构：高低点不一致
+            else:
+                direction = 0   # 混乱 → 中性（质量打折）
+                quality *= 0.5  # 混乱结构，质量减半
+
+    # 对称评分：质量 × 方向
+    S = int(round(quality * direction))
+    S = max(-100, min(100, S))
+
+    return S, {
+        "theta": th,
+        "icr": icr,
+        "retr": retr,
+        "timing": timing,
+        "not_over": (over<=0.8),
+        "m15_ok": bool(ctx.get("m15_ok", False)),
+        "penalty": penalty,
+        "quality": int(round(quality)),
+        "direction": direction,
+        "interpretation": "上升结构" if direction == 1 else ("下降结构" if direction == -1 else "混乱结构")
+    }

@@ -1,31 +1,38 @@
 # coding: utf-8
 """
-M（动量）维度 - 价格动量/加速度
+M（动量）维度 - 价格动量/加速度（v2.0 ±100对称设计）
 从原A（加速）中分离出价格部分，不包含CVD
 
 核心指标：
 - 价格斜率的变化（加速度）
 - EMA30斜率
+
+改进v2.0：
+- ✅ 分数范围：-100 到 +100（0为中性）
+- ✅ 方向自包含：正值=向上动量，负值=向下动量
+- ✅ 移除side_long：不再需要多空参数
+- ✅ 使用对称评分函数
 """
 from typing import List, Tuple, Dict, Any
 from .ta_core import ema
-from .scoring_utils import directional_score
+from .scoring_utils import directional_score_symmetric
 
 def score_momentum(
     c: List[float],
-    side_long: bool,
     params: Dict[str, Any] = None
 ) -> Tuple[int, Dict[str, Any]]:
     """
-    M（动量）维度评分
+    M（动量）维度评分（v2.0 对称版本）
 
     Args:
         c: 收盘价列表
-        side_long: 是否做多
         params: 参数配置
 
     Returns:
-        (M分数, 元数据)
+        (M分数 -100~+100, 元数据)
+        - 正值：向上动量（价格加速上涨）→ 适合做多
+        - 负值：向下动量（价格加速下跌）→ 适合做空
+        - 0：无明显动量 → 中性
     """
     # 默认参数
     default_params = {
@@ -41,7 +48,13 @@ def score_momentum(
         p.update(params)
 
     if len(c) < 30:
-        return 50, {"slope_now": 0.0, "accel": 0.0, "slope_score": 50, "accel_score": 50}
+        return 0, {
+            "slope_now": 0.0,
+            "accel": 0.0,
+            "slope_score": 0,
+            "accel_score": 0,
+            "insufficient_data": True
+        }
 
     # ========== 1. 计算 EMA30 斜率 ==========
     ema30 = ema(c, p["slope_lookback"])
@@ -61,35 +74,24 @@ def score_momentum(
     slope_normalized = slope_now / max(1e-9, atr_proxy)
     accel_normalized = accel / max(1e-9, atr_proxy)
 
-    # ========== 3. 软映射评分（多空对称） ==========
-    if side_long:
-        # 做多：斜率越大越好，加速度越大越好
-        slope_score = directional_score(
-            slope_normalized,
-            neutral=0.0,
-            scale=p["slope_scale"]
-        )
-        accel_score = directional_score(
-            accel_normalized,
-            neutral=0.0,
-            scale=p["accel_scale"]
-        )
-    else:
-        # 做空：斜率越小（负值越大）越好，加速度越小越好
-        slope_score = directional_score(
-            -slope_normalized,  # 取反
-            neutral=0.0,
-            scale=p["slope_scale"]
-        )
-        accel_score = directional_score(
-            -accel_normalized,  # 取反
-            neutral=0.0,
-            scale=p["accel_scale"]
-        )
+    # ========== 3. 对称评分（无需side_long） ==========
+    # 正值 = 上涨 = 利多
+    # 负值 = 下跌 = 利空
+    slope_score = directional_score_symmetric(
+        slope_normalized,
+        neutral=0.0,
+        scale=p["slope_scale"]
+    )  # -100 到 +100
+
+    accel_score = directional_score_symmetric(
+        accel_normalized,
+        neutral=0.0,
+        scale=p["accel_scale"]
+    )  # -100 到 +100
 
     # ========== 4. 加权平均 ==========
     M = p["slope_weight"] * slope_score + p["accel_weight"] * accel_score
-    M = int(round(max(0, min(100, M))))
+    M = int(round(max(-100, min(100, M))))
 
     # ========== 5. 返回元数据 ==========
     return M, {
@@ -99,5 +101,6 @@ def score_momentum(
         "slope_normalized": round(slope_normalized, 6),
         "accel_normalized": round(accel_normalized, 6),
         "slope_score": slope_score,
-        "accel_score": accel_score
+        "accel_score": accel_score,
+        "interpretation": "向上" if M > 20 else ("向下" if M < -20 else "中性")
     }
