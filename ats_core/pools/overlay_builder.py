@@ -45,6 +45,40 @@ def _ma(xs, n):
 
 # ------- main -------
 def build() -> List[str]:
+    """
+    旧版接口（兼容性）
+
+    Returns:
+        币种列表
+    """
+    result = build_overlay_pool(exclude_symbols=[])
+    return result.get('symbols', [])
+
+
+def build_overlay_pool(exclude_symbols: List[str] = None) -> Dict[str, Any]:
+    """
+    优化版Overlay Pool构建器（专注异常币种+新币）
+
+    新特性:
+    1. 支持exclude_symbols参数（跳过Elite Pool中的币种）
+    2. 返回元数据（新币数量、异常数量、统计信息）
+    3. 专注异常检测（三重共振 + 新币）
+
+    Args:
+        exclude_symbols: 要排除的币种列表（通常是Elite Pool）
+
+    Returns:
+        {
+            'symbols': [...],
+            'metadata': {...},
+            'stats': {...}
+        }
+    """
+    if exclude_symbols is None:
+        exclude_symbols = []
+
+    exclude_set = set(exclude_symbols)
+
     params: Dict[str, Any] = CFG.get("overlay", default={})
     tri: Dict[str, Any] = params.get("triple_sync", {}) or {}
     new_coin_cfg: Dict[str, Any] = CFG.get("new_coin", default={}) or {}
@@ -58,6 +92,8 @@ def build() -> List[str]:
 
     out: List[str] = []
     new_coins: List[str] = []  # 记录新币
+    anomaly_coins: List[str] = []  # 记录异常币种（三重共振）
+    skipped_elite: int = 0  # 记录跳过的Elite币种数量
 
     # 可选：z24 & 24h 成交额过滤
     z24_q = params.get("z24_and_24h_quote", {})
@@ -68,9 +104,16 @@ def build() -> List[str]:
 
     log(f"📊 Overlay候选池：开始扫描 {len(uni)} 个交易对...")
     log(f"   检测模式：{'三选二' if tri.get('mode') == '2of3' else '全部满足'}")
+    if exclude_symbols:
+        log(f"   排除Elite Pool: {len(exclude_set)} 个币种")
 
     for idx, sym in enumerate(uni, 1):
         try:
+            # 优化：跳过Elite Pool中已有的币种
+            if sym in exclude_set:
+                skipped_elite += 1
+                continue
+
             # 显示进度（每10个显示一次，避免刷屏）
             if idx % 10 == 0 or idx == 1 or idx == len(uni):
                 log(f"   [{idx}/{len(uni)}] {sym}...")
@@ -101,8 +144,9 @@ def build() -> List[str]:
                         quote_vol = _to_f(t.get("quoteVolume", 0))
                         if quote_vol >= min_volume:
                             # 新币直接加入overlay（跳过三重共振检测）
-                            out.append(sym)
-                            new_coins.append(sym)
+                            if sym not in out:  # 防止重复
+                                out.append(sym)
+                                new_coins.append(sym)
                             if idx % 10 != 0 and idx != 1:
                                 log(f"   [{idx}/{len(uni)}] {sym} 🆕 新币 (上线{coin_age_days:.1f}天, 成交{quote_vol/1e6:.0f}M)")
                             continue  # 跳过后续的三重共振检测
@@ -165,13 +209,17 @@ def build() -> List[str]:
             if mode == "2of3":
                 # 三选二：至少满足2个条件
                 if sum(conditions) >= 2:
-                    out.append(sym)
+                    if sym not in out:  # 防止重复
+                        out.append(sym)
+                        anomaly_coins.append(sym)
                     if idx % 10 != 0 and idx != 1:
                         log(f"   [{idx}/{len(uni)}] {sym} ✓ 三重共振 (dP={dp1h:.2%}, v5/v20={v5_over_v20:.2f}, cvd={cvd_mix_abs_per_h:.2f})")
             else:
                 # 默认：全部满足（原有逻辑）
                 if all(conditions):
-                    out.append(sym)
+                    if sym not in out:  # 防止重复
+                        out.append(sym)
+                        anomaly_coins.append(sym)
                     if idx % 10 != 0 and idx != 1:
                         log(f"   [{idx}/{len(uni)}] {sym} ✓ 三重共振 (dP={dp1h:.2%}, v5/v20={v5_over_v20:.2f}, cvd={cvd_mix_abs_per_h:.2f})")
 
@@ -180,10 +228,31 @@ def build() -> List[str]:
 
     # 输出结果
     log(f"✅ Overlay候选池构建完成：{len(out)} 个交易对")
+    if exclude_symbols:
+        log(f"   🔄 跳过Elite币种: {skipped_elite} 个")
     if new_coins:
-        log(f"   🆕 新币: {len(new_coins)} 个 ({', '.join(new_coins)})")
+        log(f"   🆕 新币: {len(new_coins)} 个 ({', '.join(new_coins[:5])}{'...' if len(new_coins) > 5 else ''})")
+    if anomaly_coins:
+        log(f"   ⚡ 异常币种: {len(anomaly_coins)} 个")
     if len(out) > 0:
         log(f"   前5名: {', '.join(out[:5])}")
 
-    # 可选：Hot 衰减 / OI 变化 / 1h 成交额门槛等，仍按你 params.overlay 里的其他键在这里扩展
-    return out
+    # 返回结构化数据（支持缓存）
+    return {
+        'symbols': out,
+        'metadata': {
+            'new_coins': new_coins,
+            'anomaly_coins': anomaly_coins,
+            'new_coin_count': len(new_coins),
+            'anomaly_count': len(anomaly_coins),
+            'skipped_elite_count': skipped_elite,
+            'detection_mode': tri.get('mode', 'all')
+        },
+        'stats': {
+            'total_scanned': len(uni),
+            'total_selected': len(out),
+            'new_coin_ratio': len(new_coins) / len(out) if out else 0,
+            'anomaly_ratio': len(anomaly_coins) / len(out) if out else 0,
+            'skip_ratio': skipped_elite / len(uni) if uni else 0
+        }
+    }
