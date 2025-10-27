@@ -349,7 +349,45 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     # 计算达标维度数（保留用于元数据）
     dims_ok = sum(1 for s in scores.values() if abs(s) >= prime_dim_threshold)
 
-    # ---- 6. 15分钟微确认 ----
+    # ---- 6. BTC/ETH市场过滤器（方案B - 独立过滤）----
+    # 计算市场大盘趋势，避免逆势做单
+    import time
+    cache_key = f"{int(time.time() // 60)}"  # 按分钟缓存
+
+    try:
+        from ats_core.features.market_regime import calculate_market_regime, apply_market_filter
+
+        # 计算市场趋势
+        market_regime, market_meta = calculate_market_regime(cache_key)
+
+        # 应用市场过滤（逆势惩罚）
+        P_chosen_filtered, prime_strength_filtered, penalty_reason = apply_market_filter(
+            "long" if side_long else "short",
+            P_chosen,
+            prime_strength,
+            market_regime
+        )
+
+        # 更新概率和Prime强度
+        if penalty_reason:
+            # 有惩罚，更新概率和Prime强度
+            P_chosen = P_chosen_filtered
+            prime_strength = prime_strength_filtered
+            is_prime = (prime_strength >= 78)  # 重新判定Prime
+
+            # 更新对应方向的概率
+            if side_long:
+                P_long = P_chosen
+            else:
+                P_short = P_chosen
+
+    except Exception as e:
+        # 市场过滤器失败时不影响主流程
+        market_regime = 0
+        market_meta = {"error": str(e), "btc_trend": 0, "eth_trend": 0, "regime_desc": "计算失败"}
+        penalty_reason = ""
+
+    # ---- 7. 15分钟微确认 ----
     m15_ok = _check_microconfirm_15m(symbol, side_long, params.get("microconfirm_15m", {}), atr_now)
 
     # ---- 7. 给价计划 ----
@@ -411,6 +449,11 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         # CVD
         "cvd_z20": _zscore_last(cvd_series, 20) if cvd_series else 0.0,
         "cvd_mix_abs_per_h": abs(_last(cvd_mix)) if cvd_mix else 0.0,
+
+        # 市场过滤器（BTC/ETH大盘趋势）
+        "market_regime": market_regime,
+        "market_meta": market_meta,
+        "market_penalty": penalty_reason if penalty_reason else None,
     }
 
     # 兼容旧版 telegram_fmt.py：将分数直接放在顶层

@@ -610,6 +610,27 @@ def _six_block(r: Dict[str, Any]) -> str:
     lines.append(f"• 持仓 {_emoji_by_score(OI)} {OI:+4d} —— {_desc_positions(OI, oi24h_pct)}")
     lines.append(f"• 震荡 {_emoji_by_score(E)} {E:+4d} —— {_desc_env(E, chop)}")
 
+    # 市场大盘趋势（BTC/ETH过滤器）
+    market_regime = _get(r, "market_regime")
+    market_meta = _get(r, "market_meta") or {}
+    market_penalty = _get(r, "market_penalty")
+
+    if market_regime is not None:
+        regime_desc = market_meta.get("regime_desc", "未知")
+        btc_trend = market_meta.get("btc_trend", 0)
+        eth_trend = market_meta.get("eth_trend", 0)
+
+        # 市场趋势emoji
+        market_emoji = _emoji_by_score(market_regime)
+
+        # 显示市场状态
+        lines.append(f"\n📊 大盘趋势 {market_emoji} {regime_desc} (市场{market_regime:+d})")
+        lines.append(f"   BTC{btc_trend:+d} · ETH{eth_trend:+d}")
+
+        # 如果有逆势惩罚，显示警告
+        if market_penalty:
+            lines.append(f"   ⚠️ {market_penalty} → 概率和Prime已降低")
+
     # F调节器信息（所有信号都显示）
     F_adj = _get(r, "F_adjustment", 1.0)
     f_desc = _desc_fund_leading(F)
