@@ -92,7 +92,7 @@ echo ""
 # 步骤6：测试运行
 echo "🧪 [步骤6/6] 执行测试运行（不重建候选池）..."
 echo "----------------------------------------"
-python3 -u main.py --no-rebuild 2>&1 | tee /tmp/cryptosignal_test_$(date +%Y%m%d_%H%M%S).log
+python3 -u ats_core/pipeline/main.py --no-rebuild 2>&1 | tee /tmp/cryptosignal_test_$(date +%Y%m%d_%H%M%S).log
 
 if [ ${PIPESTATUS[0]} -eq 0 ]; then
     echo ""
