@@ -41,7 +41,7 @@ from ats_core.data.binance_async_client import BinanceAsyncClient
 from ats_core.data.realtime_kline_cache import RealtimeKlineCache
 from ats_core.pipeline.analyze_symbol import analyze_symbol
 from ats_core.outputs.telegram_fmt import render_trade
-from ats_core.outputs.publisher import send_message
+from ats_core.outputs.publisher import telegram_send
 
 
 # ============ 配置 ============
@@ -455,18 +455,11 @@ async def send_prime_signals(signals: List[Dict]):
             # 格式化消息
             message = render_trade(signal)
 
-            # 发送到Telegram
-            success = send_message(
-                message=message,
-                bot_token=token,
-                chat_id=chat_id
-            )
+            # 发送到Telegram（telegram_send会自动从环境变量读取token和chat_id）
+            telegram_send(text=message, chat_id=chat_id)
 
-            if success:
-                sent_count += 1
-                log(f"✅ 已发送: {signal['币种']}")
-            else:
-                error_count += 1
+            sent_count += 1
+            log(f"✅ 已发送: {signal['币种']}")
 
             # 限速（避免Telegram限制）
             await asyncio.sleep(1)
