@@ -366,29 +366,41 @@ def _desc_env(s: int, chop: float = None) -> str:
 
 def _desc_fund_leading(s: int, leading_raw: float = None) -> str:
     """
-    描述资金领先性（简化版，去除主观评价）
+    描述资金领先性（方案C：分开描述，去除程度修饰）
 
     Args:
         s: F 分数 (-100 到 +100)
         leading_raw: 真实的领先性数值（用于调试，可选）
+
+    Returns:
+        简洁描述（"资金领先价格" or "价格领先资金" or "资金价格同步"）
     """
-    # 带符号的描述体系（-100 到 +100），去除主观评价
-    if s >= 60:
-        desc = "资金强势领先价格"
-    elif s >= 30:
-        desc = "资金温和领先价格"
-    elif s >= 10:
-        desc = "资金略微领先"
+    if s >= 10:
+        desc = "资金领先价格"
     elif s >= -10:
         desc = "资金价格同步"
-    elif s >= -30:
-        desc = "价格略微领先"
-    elif s >= -60:
-        desc = "价格温和领先资金"
     else:
-        desc = "价格强势领先资金"
+        desc = "价格领先资金"
 
     return desc
+
+def _emoji_by_fund_leading(s: int) -> str:
+    """
+    F调节器质量标识（方案C：反映信号质量，不是方向）
+
+    资金领先价格 (F>0) = ✅ 好信号（蓄势待发）
+    价格领先资金 (F<0) = ⚠️ 风险（追涨/杀跌）
+
+    Args:
+        s: F 分数 (-100 到 +100)
+
+    Returns:
+        ✅ 或 ⚠️
+    """
+    if s >= 10:
+        return "✅"  # 资金领先，质量好
+    else:
+        return "⚠️"  # 价格领先或同步，有风险
 
 # ---------- extract scores robustly ----------
 
@@ -601,7 +613,8 @@ def _six_block(r: Dict[str, Any]) -> str:
     # F调节器信息（所有信号都显示）
     F_adj = _get(r, "F_adjustment", 1.0)
     f_desc = _desc_fund_leading(F)
-    lines.append(f"\n⚡ {f_desc} (F={F:+d}) → 概率调整 ×{F_adj:.2f}")
+    f_emoji = _emoji_by_fund_leading(F)
+    lines.append(f"\n⚡ F调节器 {f_emoji} {f_desc} (F{F:+d}) → 概率调整 ×{F_adj:.2f}")
 
     return "\n".join(lines)
 
