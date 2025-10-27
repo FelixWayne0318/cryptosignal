@@ -11,12 +11,12 @@ echo ""
 
 # 步骤1：验证目录
 echo "📁 [步骤1/6] 验证工作目录..."
-if [ ! -d "/home/user/cryptosignal" ]; then
-    echo "❌ 错误：目录 /home/user/cryptosignal 不存在"
+if [ ! -d "/home/cryptosignal/cryptosignal" ]; then
+    echo "❌ 错误：目录 /home/cryptosignal/cryptosignal 不存在"
     exit 1
 fi
 
-cd /home/user/cryptosignal
+cd /home/cryptosignal/cryptosignal
 echo "✅ 当前目录：$(pwd)"
 echo ""
 
