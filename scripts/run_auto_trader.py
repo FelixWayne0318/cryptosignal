@@ -202,8 +202,8 @@ async def main():
         log(f"📊 最小信号分数: {config['min_signal_score']}")
         log("=" * 60)
 
-        await trader.start_scheduled_scan(
-            interval_seconds=config['scan_interval_seconds'],
+        await trader.start_periodic_scan(
+            interval_minutes=config['scan_interval_seconds'] // 60,
             min_score=config['min_signal_score']
         )
 

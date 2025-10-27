@@ -18,7 +18,6 @@ import time
 from typing import List, Dict, Optional
 from ats_core.execution.binance_futures_client import get_binance_client
 from ats_core.data.realtime_kline_cache import get_kline_cache
-from ats_core.pools.pool_manager import get_pool_manager
 from ats_core.pipeline.analyze_symbol import analyze_symbol_with_preloaded_klines
 from ats_core.logging import log, warn, error
 
@@ -66,19 +65,25 @@ class OptimizedBatchScanner:
         self.client = get_binance_client()
         await self.client.initialize()
 
-        # 2. 获取候选币种
-        log("\n2️⃣  获取候选池...")
-        manager = get_pool_manager(
-            elite_cache_hours=24,
-            overlay_cache_hours=1,
-            verbose=True
-        )
-        symbols, metadata = manager.get_merged_universe()
+        # 2. 获取所有USDT合约币种
+        log("\n2️⃣  获取所有USDT合约币种...")
 
-        log(f"\n📊 候选池统计:")
-        log(f"   总币种: {len(symbols)}")
-        log(f"   Elite Pool: {metadata['elite_count']}")
-        log(f"   Overlay Pool: {metadata['overlay_count']}")
+        # 获取交易所信息
+        exchange_info = await self.client.get_exchange_info()
+
+        # 筛选USDT合约币种
+        all_symbols = [
+            s["symbol"] for s in exchange_info.get("symbols", [])
+            if s["symbol"].endswith("USDT")
+            and s["status"] == "TRADING"
+            and s["contractType"] == "PERPETUAL"
+        ]
+
+        # 取前100个（按字母顺序）
+        symbols = sorted(all_symbols)[:100]
+
+        log(f"   ✅ 获取到 {len(symbols)} 个USDT合约币种")
+        log(f"   示例: {', '.join(symbols[:5])}...")
 
         # 3. 批量初始化K线缓存（REST，一次性）
         log(f"\n3️⃣  批量初始化K线缓存（这是一次性操作）...")
@@ -135,13 +140,19 @@ class OptimizedBatchScanner:
 
         scan_start = time.time()
 
-        # 获取币种列表
-        manager = get_pool_manager(
-            elite_cache_hours=24,
-            overlay_cache_hours=1,
-            verbose=False
-        )
-        symbols, _ = manager.get_merged_universe()
+        # 获取币种列表（直接从交易所获取）
+        exchange_info = await self.client.get_exchange_info()
+
+        # 筛选USDT合约币种
+        all_symbols = [
+            s["symbol"] for s in exchange_info.get("symbols", [])
+            if s["symbol"].endswith("USDT")
+            and s["status"] == "TRADING"
+            and s["contractType"] == "PERPETUAL"
+        ]
+
+        # 取前100个（按字母顺序）
+        symbols = sorted(all_symbols)[:100]
 
         # 限制数量（测试用）
         if max_symbols:
