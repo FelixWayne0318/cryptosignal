@@ -16,6 +16,7 @@ from ats_core.cfg import CFG
 from ats_core.sources.tickers import all_24h
 from ats_core.sources.binance import get_klines, get_open_interest_hist
 from ats_core.features.cvd import cvd_mix_with_oi_price
+from ats_core.logging import log
 
 # ------- utils -------
 def _to_f(x) -> float:
@@ -65,8 +66,15 @@ def build() -> List[str]:
 
     t24 = {t["symbol"]: t for t in all_24h() if isinstance(t, dict) and t.get("symbol")}
 
-    for sym in uni:
+    log(f"📊 Overlay候选池：开始扫描 {len(uni)} 个交易对...")
+    log(f"   检测模式：{'三选二' if tri.get('mode') == '2of3' else '全部满足'}")
+
+    for idx, sym in enumerate(uni, 1):
         try:
+            # 显示进度（每10个显示一次，避免刷屏）
+            if idx % 10 == 0 or idx == 1 or idx == len(uni):
+                log(f"   [{idx}/{len(uni)}] {sym}...")
+
             t = t24.get(sym, {})
             if need_quote > 0 and _to_f(t.get("quoteVolume")) < need_quote:
                 continue
@@ -95,6 +103,8 @@ def build() -> List[str]:
                             # 新币直接加入overlay（跳过三重共振检测）
                             out.append(sym)
                             new_coins.append(sym)
+                            if idx % 10 != 0 and idx != 1:
+                                log(f"   [{idx}/{len(uni)}] {sym} 🆕 新币 (上线{coin_age_days:.1f}天, 成交{quote_vol/1e6:.0f}M)")
                             continue  # 跳过后续的三重共振检测
 
             # --- 1h K 线 + OI ---（常规币种三重共振检测）
@@ -156,17 +166,24 @@ def build() -> List[str]:
                 # 三选二：至少满足2个条件
                 if sum(conditions) >= 2:
                     out.append(sym)
+                    if idx % 10 != 0 and idx != 1:
+                        log(f"   [{idx}/{len(uni)}] {sym} ✓ 三重共振 (dP={dp1h:.2%}, v5/v20={v5_over_v20:.2f}, cvd={cvd_mix_abs_per_h:.2f})")
             else:
                 # 默认：全部满足（原有逻辑）
                 if all(conditions):
                     out.append(sym)
+                    if idx % 10 != 0 and idx != 1:
+                        log(f"   [{idx}/{len(uni)}] {sym} ✓ 三重共振 (dP={dp1h:.2%}, v5/v20={v5_over_v20:.2f}, cvd={cvd_mix_abs_per_h:.2f})")
 
         except Exception:
             continue
 
-    # 输出新币信息
+    # 输出结果
+    log(f"✅ Overlay候选池构建完成：{len(out)} 个交易对")
     if new_coins:
-        print(f"🆕 检测到 {len(new_coins)} 个新币: {', '.join(new_coins)}")
+        log(f"   🆕 新币: {len(new_coins)} 个 ({', '.join(new_coins)})")
+    if len(out) > 0:
+        log(f"   前5名: {', '.join(out[:5])}")
 
     # 可选：Hot 衰减 / OI 变化 / 1h 成交额门槛等，仍按你 params.overlay 里的其他键在这里扩展
     return out
