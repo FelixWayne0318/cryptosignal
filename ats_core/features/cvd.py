@@ -1,7 +1,8 @@
 # coding: utf-8
 from __future__ import annotations
-from typing import List, Sequence, Tuple
+from typing import List, Sequence, Tuple, Optional
 import math
+from ats_core.utils.outlier_detection import detect_volume_outliers, apply_outlier_weights
 
 def _to_f(x) -> float:
     try:
@@ -39,7 +40,12 @@ def _close_prices(kl: Sequence[Sequence]) -> List[float]:
     # Binance futures klines: [0] openTime, [1] open, [2] high, [3] low, [4] close, [5] volume, ...
     return _col(kl, 4)
 
-def cvd_from_klines(klines: Sequence[Sequence], use_taker_buy: bool = True) -> List[float]:
+def cvd_from_klines(
+    klines: Sequence[Sequence],
+    use_taker_buy: bool = True,
+    filter_outliers: bool = True,
+    outlier_weight: float = 0.5
+) -> List[float]:
     """
     计算CVD (Cumulative Volume Delta)
 
@@ -50,9 +56,17 @@ def cvd_from_klines(klines: Sequence[Sequence], use_taker_buy: bool = True) -> L
         use_taker_buy: 是否使用真实的taker buy volume
                       True: 使用真实数据（推荐）
                       False: 使用tick rule估算（兼容旧版）
+        filter_outliers: 是否过滤异常值（巨量K线）
+                        True: 对异常值降权（推荐）
+                        False: 不处理异常值
+        outlier_weight: 异常值权重（0-1），默认0.5表示降低50%
 
     Returns:
         CVD序列：Σ(买入量 - 卖出量)
+
+    改进（v2.1）:
+        - 添加IQR异常值检测
+        - 对巨量K线降权，避免被单笔大额交易误导
     """
     if use_taker_buy and klines and len(klines[0]) >= 10:
         # 优化方法：使用真实的taker buy volume
@@ -60,20 +74,30 @@ def cvd_from_klines(klines: Sequence[Sequence], use_taker_buy: bool = True) -> L
         total_vol = _col(klines, 5)  # 总成交量
         n = min(len(taker_buy), len(total_vol))
 
-        s = 0.0
-        cvd: List[float] = []
+        # ========== 异常值检测（新增） ==========
+        deltas: List[float] = []
         for i in range(n):
             buy = taker_buy[i]
             total = total_vol[i]
             if not (math.isfinite(buy) and math.isfinite(total)):
-                cvd.append(s)
-                continue
-            # CVD delta = (买入量 - 卖出量)
-            # = buy - (total - buy)
-            # = 2 * buy - total
-            delta = 2.0 * buy - total
+                deltas.append(0.0)
+            else:
+                delta = 2.0 * buy - total
+                deltas.append(delta)
+
+        # 检测成交量异常值
+        if filter_outliers and n >= 20:
+            outlier_mask = detect_volume_outliers(total_vol, deltas, multiplier=1.5)
+            # 对异常值降权
+            deltas = apply_outlier_weights(deltas, outlier_mask, outlier_weight)
+
+        # 累积CVD
+        s = 0.0
+        cvd: List[float] = []
+        for delta in deltas:
             s += delta
             cvd.append(s)
+
         return cvd
     else:
         # 旧方法：Tick Rule估算（兼容性）

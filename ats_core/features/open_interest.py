@@ -15,6 +15,7 @@ from statistics import median
 from typing import Dict, Tuple, Any, List
 from ats_core.sources.oi import fetch_oi_hourly, pct, pct_series
 from ats_core.features.scoring_utils import directional_score
+from ats_core.utils.outlier_detection import detect_outliers_iqr, apply_outlier_weights
 
 
 def _linreg_r2(y: List[float]) -> Tuple[float, float]:
@@ -108,15 +109,30 @@ def score_open_interest(symbol: str,
 
     den = median(oi[max(0, len(oi) - 168):])
 
-    # ========== 改进：使用线性回归（对标CVD） ==========
+    # ========== 改进v2.1：使用线性回归 + 异常值过滤（对标CVD） ==========
     # 初始化变量
     r_squared = 0.0
     is_consistent = False
+    outliers_filtered = 0
 
     # 旧方法：oi24 = pct(oi[-1], oi[-25], den)  # 简单两点比较
-    # 新方法：线性回归斜率 + R²验证
+    # 新方法：线性回归斜率 + R²验证 + 异常值过滤
     if len(oi) >= 25:
         oi_window = oi[-25:]  # 24小时窗口
+
+        # ========== 异常值检测和处理（新增v2.1） ==========
+        # 检测OI变化异常值（如巨鲸突然建仓）
+        oi_changes = [oi_window[i] - oi_window[i-1] for i in range(1, len(oi_window))]
+
+        if len(oi_window) >= 20:
+            outlier_mask = detect_outliers_iqr(oi_window, multiplier=1.5)
+            outliers_filtered = sum(outlier_mask)
+
+            # 对异常值降权（避免被巨鲸订单误导）
+            if outliers_filtered > 0:
+                oi_window = apply_outlier_weights(oi_window, outlier_mask, outlier_weight=0.5)
+
+        # 线性回归分析
         slope, r_squared = _linreg_r2(oi_window)
 
         # 归一化斜率（除以中位数，避免量级差异）
@@ -205,8 +221,10 @@ def score_open_interest(symbol: str,
         "align_score": int(align_score),
         "interpretation": interpretation,
         "data_source": "oi",
-        # 新增：线性回归指标（与CVD一致）
+        # v2.1: 线性回归指标（与CVD一致）
         "r_squared": round(r_squared, 3),
         "is_consistent": is_consistent,
-        "method": "linear_regression"  # 标记使用了线性回归
+        "method": "linear_regression+outlier_filter",  # 标记使用了线性回归+异常值过滤
+        # v2.1: 异常值过滤统计
+        "outliers_filtered": outliers_filtered
     }
