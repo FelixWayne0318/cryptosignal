@@ -51,13 +51,15 @@ def batch_run():
         time.sleep(CFG.get("limits","per_symbol_delay_ms", default=600)/1000.0)
 
 
-def batch_run_parallel(max_workers: int = 5, use_v2: bool = False) -> Dict[str, Any]:
+def batch_run_parallel(max_workers: int = 5, use_v2: bool = False, v2_config: str = None) -> Dict[str, Any]:
     """
     并行批量扫描（带API限流保护）
 
     Args:
         max_workers: 最大并发数（默认5，保守配置防止风控）
         use_v2: 是否使用v2分析器（默认False）
+        v2_config: V2配置文件名（默认None，使用factors_unified.json）
+                  可选: "factors_v2_lite.json"（8维轻量版）
 
     Returns:
         扫描统计信息
@@ -67,6 +69,7 @@ def batch_run_parallel(max_workers: int = 5, use_v2: bool = False) -> Dict[str, 
     - SafeRateLimiter防止API风控（60req/min）
     - 自动错误恢复
     - 实时进度显示
+    - 支持V2 Lite轻量版（8+1维，无需订单簿/清算数据）
     """
     from ats_core.pipeline.analyze_symbol_v2 import analyze_symbol_v2
 
@@ -80,6 +83,9 @@ def batch_run_parallel(max_workers: int = 5, use_v2: bool = False) -> Dict[str, 
     # 获取候选池
     syms, metadata = manager.get_merged_universe()
 
+    # 项目根目录（用于构建配置文件路径）
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
     log(f"🚀 开始并行批量扫描: {len(syms)} 个币种")
     log(f"   并发数: {max_workers} (保守配置，防风控)")
     log(f"   限流策略: {SAFE_LIMITER.requests_per_minute} req/min")
@@ -87,7 +93,17 @@ def batch_run_parallel(max_workers: int = 5, use_v2: bool = False) -> Dict[str, 
     log(f"   Overlay Pool: {metadata['overlay_count']} 个")
 
     # 分析函数选择
-    analyze_func = analyze_symbol_v2 if use_v2 else analyze_symbol
+    if use_v2:
+        if v2_config:
+            log(f"   分析器: V2 ({v2_config})")
+            config_path = os.path.join(project_root, "config", v2_config)
+            analyze_func = lambda sym: analyze_symbol_v2(sym, config_path=config_path)
+        else:
+            log(f"   分析器: V2 (默认配置)")
+            analyze_func = analyze_symbol_v2
+    else:
+        log(f"   分析器: V1 (生产版)")
+        analyze_func = analyze_symbol
 
     # 统计信息
     stats = {

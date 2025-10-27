@@ -346,17 +346,19 @@ def _calc_fund_leading(oi_change_pct: float, vol_ratio: float, cvd6: float,
 
 # ============ 主分析函数 ============
 
-def analyze_symbol_v2(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[str, Any]:
+def analyze_symbol_v2(symbol: str, elite_meta: Dict[str, Any] = None, config_path: str = None) -> Dict[str, Any]:
     """
-    统一因子分析系统 v2.0 - 10+1维有机整合
+    统一因子分析系统 v2.0 - 10+1维有机整合（支持Lite版）
 
     Args:
         symbol: 交易对符号（如 "BTCUSDT"）
         elite_meta: Elite Universe Builder生成的元数据（可选）
+        config_path: 配置文件路径（可选，默认factors_unified.json）
+                     使用 "factors_v2_lite.json" 启用Lite版（8维）
 
     Returns:
         完整分析结果，包括：
-        - 10维因子评分（T/M/C+/S/V+/O+/L/B/Q/I）
+        - N维因子评分（根据配置enabled字段）
         - F调节器评分
         - weighted_score: 加权总分（-100 to +100）
         - confidence: 置信度（0 to 100）
@@ -365,7 +367,7 @@ def analyze_symbol_v2(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[st
         - 元数据
     """
     # 加载配置
-    factor_config = get_factor_config()
+    factor_config = get_factor_config(config_path)
     params = CFG.params or {}
 
     # ---- 1. 获取数据 ----
@@ -483,56 +485,68 @@ def analyze_symbol_v2(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[st
     # === Layer 3: Microstructure (45点) ===
 
     # L (Liquidity) - 20点
-    try:
-        # 注意：真实环境需要订单簿API，这里使用模拟数据或优雅降级
-        # 实际应用中应该从exchange API获取orderbook
-        L, L_meta = calculate_liquidity(
-            orderbook={"bids": [], "asks": []},  # 优雅降级：空订单簿
-            params=factor_config.get_factor_params("L")
-        )
-        scores["L"] = L
-        metadata["L"] = L_meta
-    except Exception as e:
-        scores["L"] = 50.0  # 中性评分
-        metadata["L"] = {"error": str(e), "degraded": True}
+    if factor_config.is_factor_enabled("L"):
+        try:
+            # 注意：真实环境需要订单簿API，这里使用模拟数据或优雅降级
+            # 实际应用中应该从exchange API获取orderbook
+            L, L_meta = calculate_liquidity(
+                orderbook={"bids": [], "asks": []},  # 优雅降级：空订单簿
+                params=factor_config.get_factor_params("L")
+            )
+            scores["L"] = L
+            metadata["L"] = L_meta
+        except Exception as e:
+            scores["L"] = 50.0  # 中性评分
+            metadata["L"] = {"error": str(e), "degraded": True}
+    else:
+        # L因子禁用
+        metadata["L"] = {"disabled": True, "reason": "需要订单簿API"}
 
     # B (Basis + Funding) - 15点
-    try:
-        # 注意：需要现货价格和资金费率
-        # 简化版：使用ticker数据或优雅降级
-        perp_price = close_now
-        spot_price = close_now * 0.999  # 假设小幅基差
-        funding_rate = 0.0001  # 假设正常费率
+    if factor_config.is_factor_enabled("B"):
+        try:
+            # 注意：需要现货价格和资金费率
+            # 简化版：使用ticker数据或优雅降级
+            perp_price = close_now
+            spot_price = close_now * 0.999  # 假设小幅基差
+            funding_rate = 0.0001  # 假设正常费率
 
-        if ticker:
-            funding_rate = _to_f(ticker.get("lastFundingRate", 0.0001))
+            if ticker:
+                funding_rate = _to_f(ticker.get("lastFundingRate", 0.0001))
 
-        B, B_meta = calculate_basis_funding(
-            perp_price=perp_price,
-            spot_price=spot_price,
-            funding_rate=funding_rate,
-            params=factor_config.get_factor_params("B")
-        )
-        scores["B"] = B
-        metadata["B"] = B_meta
-    except Exception as e:
-        scores["B"] = 0.0
-        metadata["B"] = {"error": str(e)}
+            B, B_meta = calculate_basis_funding(
+                perp_price=perp_price,
+                spot_price=spot_price,
+                funding_rate=funding_rate,
+                params=factor_config.get_factor_params("B")
+            )
+            scores["B"] = B
+            metadata["B"] = B_meta
+        except Exception as e:
+            scores["B"] = 0.0
+            metadata["B"] = {"error": str(e)}
+    else:
+        # B因子禁用
+        metadata["B"] = {"disabled": True, "reason": "资金费率数据不稳定"}
 
     # Q (Liquidation) - 10点
-    try:
-        # 注意：需要清算数据API
-        # 优雅降级：无数据时返回中性
-        Q, Q_meta = calculate_liquidation(
-            liquidations=[],  # 优雅降级：空清算数据
-            current_price=close_now,
-            params=factor_config.get_factor_params("Q")
-        )
-        scores["Q"] = Q
-        metadata["Q"] = Q_meta
-    except Exception as e:
-        scores["Q"] = 0.0  # 中性评分
-        metadata["Q"] = {"error": str(e), "degraded": True}
+    if factor_config.is_factor_enabled("Q"):
+        try:
+            # 注意：需要清算数据API
+            # 优雅降级：无数据时返回中性
+            Q, Q_meta = calculate_liquidation(
+                liquidations=[],  # 优雅降级：空清算数据
+                current_price=close_now,
+                params=factor_config.get_factor_params("Q")
+            )
+            scores["Q"] = Q
+            metadata["Q"] = Q_meta
+        except Exception as e:
+            scores["Q"] = 0.0  # 中性评分
+            metadata["Q"] = {"error": str(e), "degraded": True}
+    else:
+        # Q因子禁用
+        metadata["Q"] = {"disabled": True, "reason": "需要清算数据API"}
 
     # === Layer 4: Market Context (10点) ===
 
@@ -646,7 +660,9 @@ def analyze_symbol_v2(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[st
         "metadata": metadata,
 
         # 系统版本
-        "version": "v2.0_unified_10+1"
+        "version": f"v{factor_config.version}",
+        "config_version": factor_config.version,
+        "enabled_factors": factor_config.get_enabled_factors()
     }
 
     return result
