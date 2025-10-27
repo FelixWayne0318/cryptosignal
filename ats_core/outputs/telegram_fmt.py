@@ -610,7 +610,9 @@ def _six_block(r: Dict[str, Any]) -> str:
     lines.append(f"• 持仓 {_emoji_by_score(OI)} {OI:+4d} —— {_desc_positions(OI, oi24h_pct)}")
     lines.append(f"• 震荡 {_emoji_by_score(E)} {E:+4d} —— {_desc_env(E, chop)}")
 
-    # 市场大盘趋势（BTC/ETH过滤器）
+    # ━━━━━━ 市场环境分析 ━━━━━━
+
+    # 1. BTC/ETH大盘趋势（外部市场环境）
     market_regime = _get(r, "market_regime")
     market_meta = _get(r, "market_meta") or {}
     market_penalty = _get(r, "market_penalty")
@@ -624,23 +626,25 @@ def _six_block(r: Dict[str, Any]) -> str:
         market_emoji = _emoji_by_score(market_regime)
 
         # 显示市场状态
-        lines.append(f"\n📊 大盘趋势 {market_emoji} {regime_desc} (市场{market_regime:+d})")
-        lines.append(f"   BTC{btc_trend:+d} · ETH{eth_trend:+d}")
+        lines.append(f"\n📊 大盘环境 {market_emoji} {regime_desc} (市场{market_regime:+d})")
+        lines.append(f"   └─ BTC{btc_trend:+d} · ETH{eth_trend:+d}")
 
-        # 如果有逆势惩罚，显示警告
+        # 如果有市场调整（奖励或惩罚），显示说明
         if market_penalty:
-            lines.append(f"   ⚠️ {market_penalty} → 概率和Prime已降低")
+            lines.append(f"   └─ {market_penalty}")
 
-    # F调节器信息（所有信号都显示）
+    # 2. F调节器（个币资金动量）
     F_adj = _get(r, "F_adjustment", 1.0)
     f_desc = _desc_fund_leading(F)
     f_emoji = _emoji_by_fund_leading(F)
     f_veto_warning = _get(r, "f_veto_warning")
 
-    f_line = f"\n⚡ F调节器 {f_emoji} {f_desc} (F{F:+d}) → 概率调整 ×{F_adj:.2f}"
-    if f_veto_warning:
-        f_line += f"\n   {f_veto_warning}"
+    f_line = f"\n⚡ 资金动量 {f_emoji} {f_desc} (F{F:+d})"
     lines.append(f_line)
+    lines.append(f"   └─ 概率调整 ×{F_adj:.2f}")
+
+    if f_veto_warning:
+        lines.append(f"   └─ {f_veto_warning}")
 
     return "\n".join(lines)
 
