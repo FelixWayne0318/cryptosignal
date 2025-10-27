@@ -161,6 +161,15 @@
     "per_symbol_delay_ms": 600
   },
 
+  "elite_universe": {
+    "_comment": "世界顶级候选池构建参数",
+    "min_quote_volume": 5000000,
+    "min_trades_24h": 10000,
+    "min_anomaly_score": 40,
+    "min_quality_score": 60,
+    "anti_chase_distance": 0.03
+  },
+
   "universe": [
     "BTCUSDT",
     "ETHUSDT",
