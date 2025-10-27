@@ -21,6 +21,9 @@ venv/
 logs/
 reports/
 *.log
+config/binance_credentials.json
+config/*credentials*.json
+config/*secret*.json
 
 # --- Data / Cache ---
 data/cache/

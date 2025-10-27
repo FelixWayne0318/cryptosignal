@@ -28,6 +28,17 @@ from ats_core.features.cvd import cvd_from_klines, cvd_mix_with_oi_price
 from ats_core.scoring.scorecard import scorecard
 from ats_core.scoring.probability import map_probability
 
+# ========== 世界顶级优化模块 ==========
+from ats_core.scoring.probability_v2 import (
+    map_probability_sigmoid,
+    get_adaptive_temperature
+)
+from ats_core.scoring.adaptive_weights import (
+    get_regime_weights,
+    blend_weights
+)
+from ats_core.features.multi_timeframe import multi_timeframe_coherence
+
 # ============ 工具函数 ============
 
 def _to_f(x) -> float:
@@ -71,25 +82,30 @@ def _safe_dict(obj: Any) -> Dict[str, Any]:
 
 # ============ 主分析函数 ============
 
-def analyze_symbol(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[str, Any]:
+def _analyze_symbol_core(
+    symbol: str,
+    k1: List,
+    k4: List,
+    oi_data: List,
+    spot_k1: List = None,
+    elite_meta: Dict[str, Any] = None
+) -> Dict[str, Any]:
     """
-    完整分析单个交易对，返回：
-    - 7维分数（T/M/C/S/V/O/E，统一±100系统）
-    - scorecard结果（weighted_score/confidence/edge）
-    - 概率（P_long/P_short/probability）
-    - 发布判定（prime/watch）
-    - 给价计划（入场/止损/止盈）
-    - 元数据
+    核心分析逻辑（使用已获取的K线数据）
 
-    统一±100系统：
-    - 所有分数：-100（看空/差）到 +100（看多/好）
-    - weighted_score > 0 → 看多，< 0 → 看空
-    - confidence = abs(weighted_score)
+    此函数包含完整的7维因子分析逻辑，但不负责获取数据。
+    由analyze_symbol()和analyze_symbol_with_preloaded_klines()调用。
 
     Args:
         symbol: 交易对符号
-        elite_meta: Elite Universe Builder生成的元数据（可选）
-                   包含long_score/short_score/pre_computed等信息
+        k1: 1小时K线数据
+        k4: 4小时K线数据
+        oi_data: OI数据
+        spot_k1: 现货K线（可选）
+        elite_meta: Elite Universe元数据（可选）
+
+    Returns:
+        分析结果字典
     """
     params = CFG.params or {}
 
@@ -104,18 +120,6 @@ def analyze_symbol(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[str, 
             "anomaly_dims": list(elite_meta.get("anomaly_details", {}).keys())[:3] if elite_meta.get("anomaly_details") else [],
             "pre_computed": elite_meta.get("pre_computed", {}),
         }
-
-    # ---- 1. 获取数据 ----
-    k1 = get_klines(symbol, "1h", 300)
-    k4 = get_klines(symbol, "4h", 200)
-    oi_data = get_open_interest_hist(symbol, "1h", 300)
-
-    # 尝试获取现货K线（用于CVD组合计算）
-    # 如果失败（某些币只有合约），cvd_mix_with_oi_price会自动降级到只用合约CVD
-    try:
-        spot_k1 = get_spot_klines(symbol, "1h", 300)
-    except Exception:
-        spot_k1 = None
 
     # ---- 新币检测（优先判断，决定数据要求）----
     new_coin_cfg = params.get("new_coin", {})
@@ -204,34 +208,32 @@ def analyze_symbol(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[str, 
         oi_change_pct, vol_ratio, cvd6, price_change_24h, price_slope, params.get("fund_leading", {})
     )
 
-    # ---- 3. Scorecard（统一±100系统，优化权重v4）----
-    # 权重调整理由：
-    # 1. 提升T(趋势)权重：避免在上涨趋势中误判做空
-    # 2. 降低C/O权重：减少资金层冗余（C/O相关性高）
-    # 3. F参与加权(7%)：让资金领先性影响方向判断，修复方向信息丢失问题
-    # 4. S/E小权重保留：提供止损参考和环境判断
-    # 权重分配v4：趋势(30%) + 资金(35%) + 成交(20%) + 动量(5%) + 资金领先(7%) + 环境(3%)
-    weights = params.get("weights", {
-        # 趋势层（主导）：30%
-        "T": 30,  # 趋势 - 价格方向（保持30%）
-
-        # 资金层（确认）：35%（降低5%，因为C/O相关性>0.7）
-        "C": 17,  # 资金 - CVD资金流（降低：20%→17%）
-        "O": 18,  # 持仓 - OI变化（降低：20%→18%）
-
-        # 成交层（辅助）：20%
-        "V": 20,  # 成交 - 量能活跃度（保持20%）
-
-        # 动量层：5%
-        "M": 5,   # 动量 - 价格加速度（保持5%）
-
-        # 资金领先层：7%（新增，修复F丢失方向信息问题）
-        "F": 7,   # 资金领先 - 资金/价格动量差（+表示资金领先，-表示价格领先）
-
-        # 环境层：3%
-        "S": 1,   # 结构 - 支撑阻力（降低：2%→1%）
-        "E": 2,   # 震荡 - 市场波动（降低：3%→2%）
+    # ---- 3. Scorecard（统一±100系统，优化权重v5 - 自适应权重）----
+    # 🚀 世界顶级优化：Regime-Dependent Weights
+    # 基础权重（从配置读取）
+    base_weights = params.get("weights", {
+        "T": 30, "C": 17, "O": 18, "V": 20,
+        "M": 5, "F": 7, "S": 1, "E": 2
     })
+
+    # 尝试提前获取市场状态（用于自适应权重）
+    try:
+        import time
+        from ats_core.features.market_regime import calculate_market_regime
+        cache_key = f"{int(time.time() // 60)}"
+        market_regime_early, _ = calculate_market_regime(cache_key)
+    except Exception:
+        # 如果获取失败，使用中性值
+        market_regime_early = 0
+
+    # 计算当前波动率
+    current_volatility = atr_now / close_now if close_now > 0 else 0.02
+
+    # 获取自适应权重
+    regime_weights = get_regime_weights(market_regime_early, current_volatility)
+
+    # 平滑混合（70%自适应 + 30%基础）
+    weights = blend_weights(regime_weights, base_weights, blend_ratio=0.7)
 
     # 8维分数（统一±100，F现在参与加权）
     scores = {"T": T, "M": M, "C": C, "S": S, "V": V, "O": O, "E": E, "F": F}
@@ -254,12 +256,15 @@ def analyze_symbol(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[str, 
         "F": F_meta
     }
 
-    # ---- 4. 基础概率计算 ----
+    # ---- 4. 基础概率计算（🚀 世界顶级优化：Sigmoid映射）----
     prior_up = 0.50  # 中性先验
     Q = _calc_quality(scores, len(k1), len(oi_data))
 
-    # 使用edge计算概率
-    P_long_base, P_short_base = map_probability(edge, prior_up, Q)
+    # 自适应温度参数
+    temperature = get_adaptive_temperature(market_regime_early, current_volatility)
+
+    # 使用Sigmoid概率映射（替代线性映射）
+    P_long_base, P_short_base = map_probability_sigmoid(edge, prior_up, Q, temperature)
     P_base = P_long_base if side_long else P_short_base
 
     # ★ Gold方案：贝叶斯先验调整（基于候选池质量分数）
@@ -386,6 +391,31 @@ def analyze_symbol(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[str, 
     O_abs = abs(O)
     prime_oi_score = max(0.0, min(20.0, O_abs / 100.0 * 20.0))
     prime_strength += prime_oi_score
+
+    # ---- 🚀 世界顶级优化：多时间框架协同验证 ----
+    # 在Prime判定前，验证15m/1h/4h/1d的一致性
+    mtf_result = None
+    mtf_coherence = 100.0  # 默认值（如果验证失败）
+
+    try:
+        mtf_result = multi_timeframe_coherence(symbol, verbose=False)
+        mtf_coherence = mtf_result['coherence_score']
+
+        # 一致性过滤: <60分惩罚
+        if mtf_coherence < 60:
+            # 时间框架不一致，降低概率和Prime评分
+            P_chosen *= 0.85  # 惩罚15%
+            prime_strength *= 0.90  # Prime评分降低10%
+
+            # 更新对应方向的概率
+            if side_long:
+                P_long = P_chosen
+            else:
+                P_short = P_chosen
+    except Exception as e:
+        # MTF验证失败，不影响主流程
+        from ats_core.logging import warn
+        warn(f"[MTF] {symbol}: 多时间框架验证失败 - {e}")
 
     # Prime判定：得分 >= 78分（适度放宽：82→78，-4分）
     is_prime = (prime_strength >= 78)
@@ -526,12 +556,81 @@ def analyze_symbol(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[str, 
 
         # F调节器否决警告
         "f_veto_warning": f_veto_warning,
+
+        # 🚀 世界顶级优化模块元数据
+        "optimization_meta": {
+            # Sigmoid概率映射
+            "probability_method": "sigmoid",
+            "temperature": temperature,
+            "volatility": current_volatility,
+
+            # 自适应权重
+            "weights_method": "regime_dependent",
+            "base_weights": base_weights,
+            "regime_weights": regime_weights,
+            "final_weights": weights,
+            "blend_ratio": 0.7,
+
+            # 多时间框架
+            "mtf_coherence": mtf_coherence,
+            "mtf_result": mtf_result,
+        },
     }
 
     # 兼容旧版 telegram_fmt.py：将分数直接放在顶层
     result.update(scores)
 
     return result
+
+
+def analyze_symbol(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    完整分析单个交易对（数据获取 + 分析）
+
+    此函数负责：
+    1. 从API获取K线和OI数据
+    2. 调用_analyze_symbol_core()进行分析
+
+    返回：
+    - 7维分数（T/M/C/S/V/O/E，统一±100系统）
+    - scorecard结果（weighted_score/confidence/edge）
+    - 概率（P_long/P_short/probability）
+    - 发布判定（prime/watch）
+    - 给价计划（入场/止损/止盈）
+    - 元数据
+
+    统一±100系统：
+    - 所有分数：-100（看空/差）到 +100（看多/好）
+    - weighted_score > 0 → 看多，< 0 → 看空
+    - confidence = abs(weighted_score)
+
+    Args:
+        symbol: 交易对符号
+        elite_meta: Elite Universe Builder生成的元数据（可选）
+                   包含long_score/short_score/pre_computed等信息
+    """
+    # ---- 1. 获取数据 ----
+    k1 = get_klines(symbol, "1h", 300)
+    k4 = get_klines(symbol, "4h", 200)
+    oi_data = get_open_interest_hist(symbol, "1h", 300)
+
+    # 尝试获取现货K线（用于CVD组合计算）
+    # 如果失败（某些币只有合约），cvd_mix_with_oi_price会自动降级到只用合约CVD
+    try:
+        spot_k1 = get_spot_klines(symbol, "1h", 300)
+    except Exception:
+        spot_k1 = None
+
+    # ---- 2. 调用核心分析函数 ----
+    return _analyze_symbol_core(
+        symbol=symbol,
+        k1=k1,
+        k4=k4,
+        oi_data=oi_data,
+        spot_k1=spot_k1,
+        elite_meta=elite_meta
+    )
+
 
 # ============ 特征计算辅助函数 ============
 
@@ -692,3 +791,44 @@ def _make_empty_result(symbol: str, reason: str):
         "P_short": 0.5,
         "F_score": 0
     }
+
+
+# ============ 批量扫描优化：支持预加载K线 ============
+
+def analyze_symbol_with_preloaded_klines(
+    symbol: str,
+    k1h: List,
+    k4h: List,
+    oi_data: List = None,
+    spot_k1h: List = None,
+    elite_meta: Dict = None
+) -> Dict[str, Any]:
+    """
+    使用预加载的K线数据分析币种（用于批量扫描优化）
+
+    Args:
+        symbol: 交易对符号
+        k1h: 1小时K线数据（300根）
+        k4h: 4小时K线数据（200根）
+        oi_data: OI数据（可选）
+        spot_k1h: 现货1小时K线（可选，用于CVD）
+        elite_meta: Elite Universe元数据（可选）
+
+    Returns:
+        分析结果字典（格式与analyze_symbol相同）
+
+    使用场景:
+        批量扫描时从WebSocket缓存读取K线，避免重复API调用
+
+    注意:
+        这个函数不会自动获取K线数据，调用者必须提供
+    """
+    # 🔧 修复：使用预加载的数据调用核心分析函数
+    return _analyze_symbol_core(
+        symbol=symbol,
+        k1=k1h,
+        k4=k4h,
+        oi_data=oi_data,
+        spot_k1=spot_k1h,
+        elite_meta=elite_meta
+    )
