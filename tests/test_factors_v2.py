@@ -235,37 +235,39 @@ def test_websocket_client():
 
 
 # ========== 强化学习框架测试 ==========
+# ⚠️ REMOVED: RL模块已删除 (2025-10-27)
+# 原因: 未在生产环境使用的骨架代码
 
-def test_rl_agent():
-    """测试强化学习止损智能体"""
-    from ats_core.rl.dynamic_stop_loss import DynamicStopLossAgent, build_state
-
-    agent = DynamicStopLossAgent()
-
-    # 构建测试状态
-    state = build_state(
-        entry_price=50000,
-        current_price=51000,
-        entry_time=0,
-        current_time=3600,
-        volatility=0.02,
-        signal_probability=0.7,
-        market_regime=60
-    )
-
-    assert state.shape == (5,)
-    assert -1 <= state[0] <= 1  # profit归一化
-
-    # 测试动作选择
-    action = agent.get_action(state, explore=False)
-    assert 0 <= action < 4
-
-    # 测试动作应用
-    new_sl = agent.apply_action(50000, 51000, 49000, action, "LONG")
-    assert isinstance(new_sl, float)
-
-    print(f"  RL状态维度: {state.shape}")
-    print(f"  动作: {action}")
+# def test_rl_agent():
+#     """测试强化学习止损智能体"""
+#     from ats_core.rl.dynamic_stop_loss import DynamicStopLossAgent, build_state
+#
+#     agent = DynamicStopLossAgent()
+#
+#     # 构建测试状态
+#     state = build_state(
+#         entry_price=50000,
+#         current_price=51000,
+#         entry_time=0,
+#         current_time=3600,
+#         volatility=0.02,
+#         signal_probability=0.7,
+#         market_regime=60
+#     )
+#
+#     assert state.shape == (5,)
+#     assert -1 <= state[0] <= 1  # profit归一化
+#
+#     # 测试动作选择
+#     action = agent.get_action(state, explore=False)
+#     assert 0 <= action < 4
+#
+#     # 测试动作应用
+#     new_sl = agent.apply_action(50000, 51000, 49000, action, "LONG")
+#     assert isinstance(new_sl, float)
+#
+#     print(f"  RL状态维度: {state.shape}")
+#     print(f"  动作: {action}")
 
 
 # ========== 测试运行器 ==========
@@ -287,7 +289,7 @@ if __name__ == "__main__":
         ("配置管理", test_factor_config),
         ("并行扫描", test_batch_scan_parallel_dry_run),
         ("WebSocket", test_websocket_client),
-        ("强化学习", test_rl_agent)
+        # ("强化学习", test_rl_agent)  # ⚠️ REMOVED: RL模块已删除
     ]
 
     passed = 0

@@ -1,5 +1,12 @@
 # coding: utf-8
 """
+⚠️ EXPERIMENTAL CODE - NOT IN PRODUCTION USE ⚠️
+
+This module is experimental and not actively used in production.
+See: ats_core/factors_v2/README.md for details.
+
+Production system uses: ats_core/pipeline/analyze_symbol.py (7+1 dimensions)
+
 统一因子分析系统 v2.0 - 10+1维有机整合
 
 整合12个世界顶级微观结构因子到7+1维系统，升级为10+1维有机架构：
