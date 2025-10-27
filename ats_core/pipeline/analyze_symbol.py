@@ -88,12 +88,12 @@ def _analyze_symbol_core(
     k4: List,
     oi_data: List,
     spot_k1: List = None,
-    elite_meta: Dict[str, Any] = None
+    elite_meta: Dict[str, Any] = None  # 保留参数兼容性，但不再使用
 ) -> Dict[str, Any]:
     """
     核心分析逻辑（使用已获取的K线数据）
 
-    此函数包含完整的7维因子分析逻辑，但不负责获取数据。
+    此函数包含完整的8维因子分析逻辑，但不负责获取数据。
     由analyze_symbol()和analyze_symbol_with_preloaded_klines()调用。
 
     Args:
@@ -102,24 +102,16 @@ def _analyze_symbol_core(
         k4: 4小时K线数据
         oi_data: OI数据
         spot_k1: 现货K线（可选）
-        elite_meta: Elite Universe元数据（可选）
+        elite_meta: 已废弃，保留仅为兼容性
 
     Returns:
         分析结果字典
     """
     params = CFG.params or {}
 
-    # ★ Gold方案：提取候选池先验信息
+    # 移除候选池先验逻辑（已废弃）
     elite_prior = {}
-    if elite_meta:
-        elite_prior = {
-            "long_score": elite_meta.get("long_score", 0),
-            "short_score": elite_meta.get("short_score", 0),
-            "trend_dir": elite_meta.get("trend_dir", "NEUTRAL"),
-            "anomaly_score": elite_meta.get("anomaly_score", 0),
-            "anomaly_dims": list(elite_meta.get("anomaly_details", {}).keys())[:3] if elite_meta.get("anomaly_details") else [],
-            "pre_computed": elite_meta.get("pre_computed", {}),
-        }
+    bayesian_boost = 0.0  # 不再使用贝叶斯先验
 
     # ---- 新币检测（优先判断，决定数据要求）----
     new_coin_cfg = params.get("new_coin", {})
@@ -267,37 +259,7 @@ def _analyze_symbol_core(
     P_long_base, P_short_base = map_probability_sigmoid(edge, prior_up, Q, temperature)
     P_base = P_long_base if side_long else P_short_base
 
-    # ★ Gold方案：贝叶斯先验调整（基于候选池质量分数）
-    bayesian_boost = 0.0
-    if elite_prior and elite_prior.get("long_score", 0) > 0:
-        # 计算先验概率调整因子
-        # 原理：P(A|B) ∝ P(B|A) × P(A)
-        # P(A) = 候选池先验，P(B|A) = 分析管道给出的概率
-
-        long_score = elite_prior["long_score"]
-        short_score = elite_prior["short_score"]
-
-        if side_long and long_score >= 70:
-            # 候选池强烈支持做多（70-100分）
-            # 先验提升：5%-15%
-            bayesian_boost = 0.05 + (long_score - 70) / 30 * 0.10
-        elif not side_long and short_score >= 70:
-            # 候选池强烈支持做空
-            bayesian_boost = 0.05 + (short_score - 70) / 30 * 0.10
-        elif side_long and long_score >= 60:
-            # 候选池温和支持做多（60-70分）
-            bayesian_boost = (long_score - 60) / 10 * 0.05
-        elif not side_long and short_score >= 60:
-            # 候选池温和支持做空
-            bayesian_boost = (short_score - 60) / 10 * 0.05
-
-        # 应用贝叶斯提升
-        if bayesian_boost > 0:
-            P_base = min(0.90, P_base * (1 + bayesian_boost))
-            if side_long:
-                P_long_base = P_base
-            else:
-                P_short_base = P_base
+    # 移除贝叶斯先验调整（已废弃候选池机制）
 
     # ---- 5. F调节器调整概率（平滑sigmoid + 极端值否决）----
     # F现在参与了加权（7%），但仍需作为概率调整器进行微调
@@ -521,10 +483,6 @@ def _analyze_symbol_core(
         "prior_up": prior_up,
         "Q": Q,
 
-        # ★ Gold方案：候选池先验信息
-        "elite_prior": elite_prior if elite_prior else None,
-        "bayesian_boost": bayesian_boost if bayesian_boost > 0 else None,
-
         # 发布
         "publish": {
             "prime": is_prime,
@@ -583,7 +541,7 @@ def _analyze_symbol_core(
     return result
 
 
-def analyze_symbol(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[str, Any]:
+def analyze_symbol(symbol: str) -> Dict[str, Any]:
     """
     完整分析单个交易对（数据获取 + 分析）
 
@@ -592,7 +550,7 @@ def analyze_symbol(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[str, 
     2. 调用_analyze_symbol_core()进行分析
 
     返回：
-    - 7维分数（T/M/C/S/V/O/E，统一±100系统）
+    - 8维分数（T/M/C/S/V/O/E/F，统一±100系统）
     - scorecard结果（weighted_score/confidence/edge）
     - 概率（P_long/P_short/probability）
     - 发布判定（prime/watch）
@@ -606,8 +564,6 @@ def analyze_symbol(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[str, 
 
     Args:
         symbol: 交易对符号
-        elite_meta: Elite Universe Builder生成的元数据（可选）
-                   包含long_score/short_score/pre_computed等信息
     """
     # ---- 1. 获取数据 ----
     k1 = get_klines(symbol, "1h", 300)
@@ -628,7 +584,7 @@ def analyze_symbol(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[str, 
         k4=k4,
         oi_data=oi_data,
         spot_k1=spot_k1,
-        elite_meta=elite_meta
+        elite_meta=None  # 不再使用候选池元数据
     )
 
 
