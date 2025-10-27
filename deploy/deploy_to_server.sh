@@ -65,14 +65,14 @@ if [ -d "$PROJECT_DIR" ]; then
     echo -e "${YELLOW}⚠️  项目目录已存在，正在更新...${NC}"
     cd $PROJECT_DIR
     git fetch origin
-    git checkout claude/system-optimization-review-011CUX7mA4wiYrxgjwDiofd8
-    git pull origin claude/system-optimization-review-011CUX7mA4wiYrxgjwDiofd8
+    git checkout claude/system-repo-analysis-011CUXnjHZshGm6qPffCn8Ya
+    git pull origin claude/system-repo-analysis-011CUXnjHZshGm6qPffCn8Ya
 else
     echo "正在克隆仓库..."
     cd /root
     git clone https://github.com/FelixWayne0318/cryptosignal.git
     cd cryptosignal
-    git checkout claude/system-optimization-review-011CUX7mA4wiYrxgjwDiofd8
+    git checkout claude/system-repo-analysis-011CUXnjHZshGm6qPffCn8Ya
 fi
 
 echo -e "${GREEN}✅ 代码已同步到最新版本${NC}"

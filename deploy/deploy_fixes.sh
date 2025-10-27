@@ -29,8 +29,8 @@ echo ""
 
 # 步骤3：Git操作
 echo "📥 [步骤3/6] 拉取最新代码..."
-git fetch origin claude/review-repository-code-011CUVErfuG52L92oxj8h5zD
-git pull origin claude/review-repository-code-011CUVErfuG52L92oxj8h5zD
+git fetch origin claude/system-repo-analysis-011CUXnjHZshGm6qPffCn8Ya
+git pull origin claude/system-repo-analysis-011CUXnjHZshGm6qPffCn8Ya
 echo "✅ 代码已更新到最新版本"
 echo ""
 
