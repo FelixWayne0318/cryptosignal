@@ -44,45 +44,27 @@ from ats_core.cfg import CFG
 from ats_core.sources.binance import (
     get_klines,
     get_open_interest_hist,
-    get_spot_klines
+    get_spot_klines,
+    get_orderbook_snapshot,
+    get_mark_price,
+    get_funding_rate,
+    get_liquidations
 )
-
-# 微观结构API（暂时模拟，后续需要实现）
-def get_orderbook_snapshot(symbol: str, limit: int = 20):
-    """临时：返回模拟订单簿数据"""
-    # TODO: 实现真实API调用
-    raise NotImplementedError("订单簿API待实现")
-
-def get_mark_price(symbol: str):
-    """临时：返回模拟标记价格"""
-    # TODO: 实现真实API调用
-    raise NotImplementedError("标记价格API待实现")
-
-def get_funding_rate(symbol: str):
-    """临时：返回模拟资金费率"""
-    # TODO: 实现真实API调用
-    raise NotImplementedError("资金费率API待实现")
-
-def get_liquidations(symbol: str, interval: str = '5m'):
-    """临时：返回模拟清算数据"""
-    # TODO: 实现真实API调用
-    raise NotImplementedError("清算数据API待实现")
 
 # ========== 旧因子（保留T/M） ==========
 from ats_core.features.trend import score_trend
 from ats_core.features.momentum import score_momentum
 
-# ========== 新因子系统 v2（暂时禁用，需要numpy） ==========
-# TODO: 安装numpy后启用
-# from ats_core.factors_v2 import (
-#     calculate_oi_regime,
-#     calculate_volume_trigger,
-#     calculate_liquidity,
-#     calculate_basis_funding,
-#     calculate_liquidation,
-#     calculate_independence,
-#     calculate_cvd_enhanced
-# )
+# ========== 新因子系统 v2（已启用） ==========
+from ats_core.factors_v2 import (
+    calculate_oi_regime,
+    calculate_volume_trigger,
+    calculate_liquidity,
+    calculate_basis_funding,
+    calculate_liquidation,
+    calculate_independence,
+    calculate_cvd_enhanced
+)
 
 # ========== 评分系统 ==========
 from ats_core.scoring.probability_v2 import (
@@ -203,61 +185,152 @@ def analyze_symbol_v3(symbol: str) -> Dict[str, Any]:
     # S: Structure (10分) - 暂时使用简化版
     scores['S'] = 50  # 默认中性
     metadata['S'] = {'status': 'simplified', 'weight': 10}
-    
-    # V+: Volume+Trigger (15分) - 暂时降级为简化版
-    from ats_core.features.volume import score_volume
-    try:
-        V_score = score_volume(k1)
-        scores['V+'] = V_score
-        metadata['V+'] = {'score': V_score, 'status': 'degraded', 'weight': 15}
-    except Exception as e:
-        warn(f"V+因子计算失败: {e}")
+
+    # V+: Volume+Trigger (15分) - 增强版
+    if factors_config.get('V+', {}).get('enabled', True):
+        try:
+            v_result = calculate_volume_trigger(k1, factors_config.get('V+', {}))
+            scores['V+'] = v_result['score']
+            metadata['V+'] = {
+                'score': v_result['score'],
+                'trigger_detected': v_result.get('trigger_detected', False),
+                'trigger_strength': v_result.get('trigger_strength', 0),
+                'weight': 15
+            }
+        except Exception as e:
+            warn(f"V+因子计算失败: {e}")
+            scores['V+'] = 50
+    else:
         scores['V+'] = 50
     
     # ========== 4. Layer 2: 资金流层 (40分) ==========
-    
-    # C+: Enhanced CVD (20分) - 降级为简化版
-    from ats_core.features.cvd import score_cvd
-    try:
-        C_score = score_cvd(k1, spot_k1 if spot_k1 else k1)
-        scores['C+'] = C_score
-        metadata['C+'] = {'score': C_score, 'status': 'degraded', 'weight': 20}
-    except Exception as e:
-        warn(f"C+因子计算失败: {e}")
+
+    # C+: Enhanced CVD (20分) - 增强版
+    if factors_config.get('C+', {}).get('enabled', True):
+        try:
+            c_result = calculate_cvd_enhanced(k1, spot_k1, factors_config.get('C+', {}))
+            scores['C+'] = c_result['score']
+            metadata['C+'] = {
+                'score': c_result['score'],
+                'cvd_signal': c_result.get('cvd_signal', 0),
+                'flow_pressure': c_result.get('flow_pressure', 0),
+                'weight': 20
+            }
+        except Exception as e:
+            warn(f"C+因子计算失败: {e}")
+            scores['C+'] = 0
+    else:
         scores['C+'] = 0
 
-    # O+: OI Regime (20分) - 降级为简化版
-    from ats_core.features.open_interest import score_open_interest
-    try:
-        O_score = score_open_interest(oi_hist, k1)
-        scores['O+'] = O_score
-        metadata['O+'] = {'score': O_score, 'status': 'degraded', 'weight': 20}
-    except Exception as e:
-        warn(f"O+因子计算失败: {e}")
+    # O+: OI Regime (20分) - 增强版（四象限）
+    if factors_config.get('O+', {}).get('enabled', True):
+        try:
+            o_result = calculate_oi_regime(oi_hist, k1, factors_config.get('O+', {}))
+            scores['O+'] = o_result['score']
+            metadata['O+'] = {
+                'score': o_result['score'],
+                'regime': o_result.get('regime', 'unknown'),
+                'oi_change': o_result.get('oi_change_pct', 0),
+                'weight': 20
+            }
+        except Exception as e:
+            warn(f"O+因子计算失败: {e}")
+            scores['O+'] = 0
+    else:
         scores['O+'] = 0
     
     # ========== 5. Layer 3: 微观结构层 (45分) ==========
-    
+
     # L: Liquidity (20分) ⭐⭐⭐⭐⭐
-    # 暂时禁用（API待实现）
-    scores['L'] = 70  # 默认良好流动性
-    metadata['L'] = {'status': 'API pending', 'weight': 20}
-    
+    if factors_config.get('L', {}).get('enabled', True):
+        try:
+            orderbook = get_orderbook_snapshot(symbol, limit=50)
+            l_result = calculate_liquidity(orderbook, k1, factors_config.get('L', {}))
+            scores['L'] = l_result['score']
+            metadata['L'] = {
+                'score': l_result['score'],
+                'spread_bps': l_result.get('spread_bps', 0),
+                'depth_score': l_result.get('depth_score', 0),
+                'impact_score': l_result.get('impact_score', 0),
+                'weight': 20
+            }
+        except Exception as e:
+            warn(f"L因子计算失败: {e}")
+            scores['L'] = 70  # 默认良好流动性
+            metadata['L'] = {'status': 'error', 'error': str(e), 'weight': 20}
+    else:
+        scores['L'] = 70
+
     # B: Basis+Funding (15分) ⭐⭐⭐⭐
-    # 暂时禁用（API待实现）
-    scores['B'] = 0  # 中性
-    metadata['B'] = {'status': 'API pending', 'weight': 15}
-    
+    if factors_config.get('B', {}).get('enabled', True):
+        try:
+            mark_price = get_mark_price(symbol)
+            funding_rate = get_funding_rate(symbol)
+            b_result = calculate_basis_funding(
+                spot_k1 if spot_k1 else k1,
+                k1,
+                mark_price,
+                funding_rate,
+                factors_config.get('B', {})
+            )
+            scores['B'] = b_result['score']
+            metadata['B'] = {
+                'score': b_result['score'],
+                'basis_bps': b_result.get('basis_bps', 0),
+                'funding_rate': b_result.get('funding_rate', 0),
+                'sentiment': b_result.get('sentiment', 'neutral'),
+                'weight': 15
+            }
+        except Exception as e:
+            warn(f"B因子计算失败: {e}")
+            scores['B'] = 0  # 中性
+            metadata['B'] = {'status': 'error', 'error': str(e), 'weight': 15}
+    else:
+        scores['B'] = 0
+
     # Q: Liquidation (10分) ⭐⭐⭐⭐
-    # 暂时禁用（API待实现）
-    scores['Q'] = 0  # 中性
-    metadata['Q'] = {'status': 'API pending', 'weight': 10}
+    if factors_config.get('Q', {}).get('enabled', True):
+        try:
+            liquidations = get_liquidations(symbol, interval='1h', limit=200)
+            q_result = calculate_liquidation(liquidations, k1, factors_config.get('Q', {}))
+            scores['Q'] = q_result['score']
+            metadata['Q'] = {
+                'score': q_result['score'],
+                'long_liq_ratio': q_result.get('long_liq_ratio', 0.5),
+                'short_liq_ratio': q_result.get('short_liq_ratio', 0.5),
+                'liq_pressure': q_result.get('liq_pressure', 0),
+                'weight': 10
+            }
+        except Exception as e:
+            warn(f"Q因子计算失败: {e}")
+            scores['Q'] = 0  # 中性
+            metadata['Q'] = {'status': 'error', 'error': str(e), 'weight': 10}
+    else:
+        scores['Q'] = 0
     
     # ========== 6. Layer 4: 市场环境层 (10分) ==========
-    
-    # I: Independence (10分) - 暂时使用中性值
-    scores['I'] = 50  # 默认中性（独立性一般）
-    metadata['I'] = {'status': 'pending', 'weight': 10}
+
+    # I: Independence (10分) - 独立性评估
+    if factors_config.get('I', {}).get('enabled', True):
+        try:
+            # 获取BTC和ETH的K线作为市场基准
+            btc_k1 = get_klines('BTCUSDT', '1h', 200)
+            eth_k1 = get_klines('ETHUSDT', '1h', 200)
+            i_result = calculate_independence(k1, btc_k1, eth_k1, factors_config.get('I', {}))
+            scores['I'] = i_result['score']
+            metadata['I'] = {
+                'score': i_result['score'],
+                'btc_beta': i_result.get('btc_beta', 1.0),
+                'eth_beta': i_result.get('eth_beta', 1.0),
+                'independence_level': i_result.get('independence_level', 'normal'),
+                'weight': 10
+            }
+        except Exception as e:
+            warn(f"I因子计算失败: {e}")
+            scores['I'] = 50  # 默认中性
+            metadata['I'] = {'status': 'error', 'error': str(e), 'weight': 10}
+    else:
+        scores['I'] = 50
     
     # ========== 7. 加权计算 ==========
     
