@@ -39,7 +39,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from ats_core.logging import log, warn, error
 from ats_core.data.binance_async_client import BinanceAsyncClient
 from ats_core.data.realtime_kline_cache import RealtimeKlineCache
-from ats_core.pipeline.analyze_symbol import analyze_symbol
+from ats_core.pipeline.analyze_symbol import analyze_symbol_with_preloaded_klines
 from ats_core.outputs.telegram_fmt import render_trade
 from ats_core.outputs.publisher import telegram_send
 
@@ -385,12 +385,12 @@ async def scan_market(cache: RealtimeKlineCache, symbols: List[str]):
                 loop = asyncio.get_event_loop()
                 result = await loop.run_in_executor(
                     None,
-                    analyze_symbol,
+                    analyze_symbol_with_preloaded_klines,
                     symbol,
                     k1,
                     k4,
-                    None,  # OI history
-                    None   # Spot klines
+                    [],  # OI history (空列表)
+                    []   # Spot klines (空列表)
                 )
 
                 analyzed_count += 1
