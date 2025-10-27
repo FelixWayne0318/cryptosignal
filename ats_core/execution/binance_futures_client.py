@@ -238,6 +238,31 @@ class BinanceFuturesClient:
             reduce_only: 只减仓
             stop_price: 触发价（止损单）
         """
+        # 🔧 修复：添加订单参数验证
+        if not symbol or not isinstance(symbol, str):
+            raise ValueError(f"无效的交易对: {symbol}")
+
+        if side not in ['BUY', 'SELL']:
+            raise ValueError(f"无效的订单方向: {side}（必须是 BUY 或 SELL）")
+
+        valid_order_types = ['MARKET', 'LIMIT', 'STOP', 'STOP_MARKET',
+                            'TAKE_PROFIT', 'TAKE_PROFIT_MARKET']
+        if order_type not in valid_order_types:
+            raise ValueError(f"无效的订单类型: {order_type}（必须是 {', '.join(valid_order_types)} 之一）")
+
+        if quantity <= 0:
+            raise ValueError(f"无效的数量: {quantity}（必须 > 0）")
+
+        if price is not None and price <= 0:
+            raise ValueError(f"无效的价格: {price}（必须 > 0）")
+
+        if stop_price is not None and stop_price <= 0:
+            raise ValueError(f"无效的触发价: {stop_price}（必须 > 0）")
+
+        # 限价单必须提供价格
+        if order_type == 'LIMIT' and price is None:
+            raise ValueError("限价单必须提供价格参数")
+
         params = {
             'symbol': symbol,
             'side': side,

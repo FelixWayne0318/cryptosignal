@@ -351,6 +351,10 @@ class AutoTrader:
         if self.position_manager:
             await self.position_manager.stop()
 
+        # 🔧 修复：关闭批量扫描器（释放WebSocket连接）
+        if self.batch_scanner:
+            await self.batch_scanner.close()
+
         # 关闭客户端
         if self.client:
             await self.client.close()

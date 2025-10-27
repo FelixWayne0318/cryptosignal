@@ -82,25 +82,30 @@ def _safe_dict(obj: Any) -> Dict[str, Any]:
 
 # ============ 主分析函数 ============
 
-def analyze_symbol(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[str, Any]:
+def _analyze_symbol_core(
+    symbol: str,
+    k1: List,
+    k4: List,
+    oi_data: List,
+    spot_k1: List = None,
+    elite_meta: Dict[str, Any] = None
+) -> Dict[str, Any]:
     """
-    完整分析单个交易对，返回：
-    - 7维分数（T/M/C/S/V/O/E，统一±100系统）
-    - scorecard结果（weighted_score/confidence/edge）
-    - 概率（P_long/P_short/probability）
-    - 发布判定（prime/watch）
-    - 给价计划（入场/止损/止盈）
-    - 元数据
+    核心分析逻辑（使用已获取的K线数据）
 
-    统一±100系统：
-    - 所有分数：-100（看空/差）到 +100（看多/好）
-    - weighted_score > 0 → 看多，< 0 → 看空
-    - confidence = abs(weighted_score)
+    此函数包含完整的7维因子分析逻辑，但不负责获取数据。
+    由analyze_symbol()和analyze_symbol_with_preloaded_klines()调用。
 
     Args:
         symbol: 交易对符号
-        elite_meta: Elite Universe Builder生成的元数据（可选）
-                   包含long_score/short_score/pre_computed等信息
+        k1: 1小时K线数据
+        k4: 4小时K线数据
+        oi_data: OI数据
+        spot_k1: 现货K线（可选）
+        elite_meta: Elite Universe元数据（可选）
+
+    Returns:
+        分析结果字典
     """
     params = CFG.params or {}
 
@@ -115,18 +120,6 @@ def analyze_symbol(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[str, 
             "anomaly_dims": list(elite_meta.get("anomaly_details", {}).keys())[:3] if elite_meta.get("anomaly_details") else [],
             "pre_computed": elite_meta.get("pre_computed", {}),
         }
-
-    # ---- 1. 获取数据 ----
-    k1 = get_klines(symbol, "1h", 300)
-    k4 = get_klines(symbol, "4h", 200)
-    oi_data = get_open_interest_hist(symbol, "1h", 300)
-
-    # 尝试获取现货K线（用于CVD组合计算）
-    # 如果失败（某些币只有合约），cvd_mix_with_oi_price会自动降级到只用合约CVD
-    try:
-        spot_k1 = get_spot_klines(symbol, "1h", 300)
-    except Exception:
-        spot_k1 = None
 
     # ---- 新币检测（优先判断，决定数据要求）----
     new_coin_cfg = params.get("new_coin", {})
@@ -589,6 +582,56 @@ def analyze_symbol(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[str, 
 
     return result
 
+
+def analyze_symbol(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    完整分析单个交易对（数据获取 + 分析）
+
+    此函数负责：
+    1. 从API获取K线和OI数据
+    2. 调用_analyze_symbol_core()进行分析
+
+    返回：
+    - 7维分数（T/M/C/S/V/O/E，统一±100系统）
+    - scorecard结果（weighted_score/confidence/edge）
+    - 概率（P_long/P_short/probability）
+    - 发布判定（prime/watch）
+    - 给价计划（入场/止损/止盈）
+    - 元数据
+
+    统一±100系统：
+    - 所有分数：-100（看空/差）到 +100（看多/好）
+    - weighted_score > 0 → 看多，< 0 → 看空
+    - confidence = abs(weighted_score)
+
+    Args:
+        symbol: 交易对符号
+        elite_meta: Elite Universe Builder生成的元数据（可选）
+                   包含long_score/short_score/pre_computed等信息
+    """
+    # ---- 1. 获取数据 ----
+    k1 = get_klines(symbol, "1h", 300)
+    k4 = get_klines(symbol, "4h", 200)
+    oi_data = get_open_interest_hist(symbol, "1h", 300)
+
+    # 尝试获取现货K线（用于CVD组合计算）
+    # 如果失败（某些币只有合约），cvd_mix_with_oi_price会自动降级到只用合约CVD
+    try:
+        spot_k1 = get_spot_klines(symbol, "1h", 300)
+    except Exception:
+        spot_k1 = None
+
+    # ---- 2. 调用核心分析函数 ----
+    return _analyze_symbol_core(
+        symbol=symbol,
+        k1=k1,
+        k4=k4,
+        oi_data=oi_data,
+        spot_k1=spot_k1,
+        elite_meta=elite_meta
+    )
+
+
 # ============ 特征计算辅助函数 ============
 
 def _calc_trend(h, l, c, c4, cfg):
@@ -780,76 +823,12 @@ def analyze_symbol_with_preloaded_klines(
     注意:
         这个函数不会自动获取K线数据，调用者必须提供
     """
-    params = CFG.params or {}
-
-    # ★ Gold方案：提取候选池先验信息
-    elite_prior = {}
-    if elite_meta:
-        elite_prior = {
-            "long_score": elite_meta.get("long_score", 0),
-            "short_score": elite_meta.get("short_score", 0),
-            "trend_dir": elite_meta.get("trend_dir", "NEUTRAL"),
-            "anomaly_score": elite_meta.get("anomaly_score", 0),
-            "anomaly_dims": list(elite_meta.get("anomaly_details", {}).keys())[:3] if elite_meta.get("anomaly_details") else [],
-            "pre_computed": elite_meta.get("pre_computed", {}),
-        }
-
-    # 使用传入的K线数据（而不是从API获取）
-    k1 = k1h
-    k4 = k4h
-    spot_k1 = spot_k1h
-
-    # 如果没有提供OI数据，尝试获取（但批量扫描可以选择跳过OI）
-    if oi_data is None:
-        try:
-            oi_data = get_open_interest_hist(symbol, "1h", 300)
-        except Exception:
-            oi_data = []
-
-    # ---- 新币检测 ----
-    new_coin_cfg = params.get("new_coin", {})
-    coin_age_hours = len(k1) if k1 else 0
-    coin_age_days = coin_age_hours / 24
-
-    ultra_new_hours = new_coin_cfg.get("ultra_new_hours", 24)
-    phaseA_days = new_coin_cfg.get("phaseA_days", 7)
-    phaseB_days = new_coin_cfg.get("phaseB_days", 30)
-
-    is_ultra_new = coin_age_hours <= ultra_new_hours
-    is_phaseA = coin_age_days <= phaseA_days and not is_ultra_new
-    is_phaseB = phaseA_days < coin_age_days <= phaseB_days
-    is_new_coin = coin_age_days <= phaseB_days
-
-    if is_ultra_new:
-        coin_phase = "ultra_new"
-        min_data = 10
-    elif is_phaseA:
-        coin_phase = "phaseA"
-        min_data = 24
-    elif is_phaseB:
-        coin_phase = "phaseB"
-        min_data = 48
-    else:
-        coin_phase = "mature"
-        min_data = 96
-
-    # 数据完整性检查
-    if not k1 or len(k1) < min_data:
-        return _empty_result(symbol, coin_phase)
-
-    # 从这里开始，代码逻辑与analyze_symbol相同
-    # 只是数据来源不同（传入 vs 从API获取）
-
-    # ---- 2. 计算7维特征 ----
-    # （省略具体实现，与原函数相同）
-    # 为了避免重复代码，这里调用原始函数的核心逻辑
-
-    # 临时解决方案：重新调用analyze_symbol，但这不是最优的
-    # 生产环境应该重构analyze_symbol，提取核心逻辑
-    # 但为了快速实施，我们暂时接受这个小的性能损失
-
-    # 实际上，我们需要将analyze_symbol的核心逻辑提取出来
-    # 这里简化处理：直接返回analyze_symbol的结果
-    # 只是跳过了K线获取部分
-
-    return analyze_symbol(symbol, elite_meta)
+    # 🔧 修复：使用预加载的数据调用核心分析函数
+    return _analyze_symbol_core(
+        symbol=symbol,
+        k1=k1h,
+        k4=k4h,
+        oi_data=oi_data,
+        spot_k1=spot_k1h,
+        elite_meta=elite_meta
+    )

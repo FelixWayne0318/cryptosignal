@@ -170,12 +170,26 @@ class RealtimeKlineCache:
         - 100币种 × 3周期 = 300个连接
         - 币安限制：300个/IP（刚好够用）
         """
+        # 🔧 修复：检查WebSocket连接数限制
+        total_connections = len(symbols) * len(intervals)
+        MAX_CONNECTIONS = 280  # 留20个缓冲
+
+        if total_connections > MAX_CONNECTIONS:
+            error(f"❌ WebSocket连接数超限！")
+            error(f"   请求: {total_connections} 个连接")
+            error(f"   限制: {MAX_CONNECTIONS} 个连接（币安限制300个/IP，留20个缓冲）")
+            error(f"   建议: 减少币种数量或K线周期")
+            raise ValueError(
+                f"WebSocket连接数超限: {total_connections} > {MAX_CONNECTIONS}. "
+                f"请减少币种数量（当前{len(symbols)}）或周期数量（当前{len(intervals)}）"
+            )
+
         log("=" * 60)
         log("🚀 批量启动WebSocket K线流...")
         log("=" * 60)
         log(f"   币种数: {len(symbols)}")
         log(f"   周期: {', '.join(intervals)}")
-        log(f"   WebSocket连接数: {len(symbols) * len(intervals)}")
+        log(f"   WebSocket连接数: {total_connections}/{MAX_CONNECTIONS}")
         log("=" * 60)
 
         success_count = 0
