@@ -131,7 +131,7 @@ def calculate_cvd_enhanced(
             - ema_period: EMA周期（默认12）
             - zscore_window: z-score窗口（默认60）
             - dynamic_weight: 是否启用动态权重（默认True）
-            - basis_correction: 是否启用basis校正（默认True）⭐新增
+            - basis_correction: 是否启用basis校正（默认False，需主动启用）⭐新增
             - basis_threshold_bps: Basis阈值，超过此值触发校正（默认50bps）⭐新增
             - cross_exchange_enabled: 是否启用跨交易所增强（默认False）
 
@@ -147,7 +147,7 @@ def calculate_cvd_enhanced(
     ema_period = params.get('ema_period', 12)
     zscore_window = params.get('zscore_window', 60)
     dynamic_weight = params.get('dynamic_weight', True)
-    basis_correction = params.get('basis_correction', True)  # ⭐新增
+    basis_correction = params.get('basis_correction', False)  # ⭐新增（默认关闭，需主动启用）
     basis_threshold_bps = params.get('basis_threshold_bps', 50.0)  # ⭐新增
 
     # === 1. 计算永续CVD ===
