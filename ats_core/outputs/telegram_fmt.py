@@ -635,7 +635,12 @@ def _six_block(r: Dict[str, Any]) -> str:
     F_adj = _get(r, "F_adjustment", 1.0)
     f_desc = _desc_fund_leading(F)
     f_emoji = _emoji_by_fund_leading(F)
-    lines.append(f"\n⚡ F调节器 {f_emoji} {f_desc} (F{F:+d}) → 概率调整 ×{F_adj:.2f}")
+    f_veto_warning = _get(r, "f_veto_warning")
+
+    f_line = f"\n⚡ F调节器 {f_emoji} {f_desc} (F{F:+d}) → 概率调整 ×{F_adj:.2f}"
+    if f_veto_warning:
+        f_line += f"\n   {f_veto_warning}"
+    lines.append(f_line)
 
     return "\n".join(lines)
 

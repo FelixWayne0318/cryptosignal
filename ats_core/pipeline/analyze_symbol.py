@@ -181,49 +181,49 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     price_change_24h = ((c[-1] - c[-25]) / c[-25] * 100) if len(c) >= 25 else 0.0
     price_slope = (ema30[-1] - ema30[-7]) / 6.0 / max(1e-9, atr_now)  # 归一化斜率
 
-    # F也使用统一的±100系统，但需要根据方向判断
-    # 先用 weighted_score 初步判断方向（后面会重新算）
+    # ---- 2.5. 计算F调节器（提前计算，让F参与方向判断）----
+    # F本身是带符号的（+表示资金领先，-表示价格领先），不需要依赖side_long
+    F, F_meta = _calc_fund_leading(
+        oi_change_pct, vol_ratio, cvd6, price_change_24h, price_slope, params.get("fund_leading", {})
+    )
 
-    # ---- 3. Scorecard（统一±100系统，优化权重v3）----
+    # ---- 3. Scorecard（统一±100系统，优化权重v4）----
     # 权重调整理由：
     # 1. 提升T(趋势)权重：避免在上涨趋势中误判做空
-    # 2. 降低C/V权重：减少资金层对方向的过度影响
-    # 3. S/E小权重保留：提供止损参考和环境判断
-    # 权重分配：趋势主导(30%) + 资金确认(40%) + 成交辅助(20%) + 动量(5%) + 结构/震荡(5%)
+    # 2. 降低C/O权重：减少资金层冗余（C/O相关性高）
+    # 3. F参与加权(7%)：让资金领先性影响方向判断，修复方向信息丢失问题
+    # 4. S/E小权重保留：提供止损参考和环境判断
+    # 权重分配v4：趋势(30%) + 资金(35%) + 成交(20%) + 动量(5%) + 资金领先(7%) + 环境(3%)
     weights = params.get("weights", {
         # 趋势层（主导）：30%
-        "T": 30,  # 趋势 - 价格方向（提升：15%→30%，避免方向误判）
+        "T": 30,  # 趋势 - 价格方向（保持30%）
 
-        # 资金层（确认）：40%
-        "C": 20,  # 资金 - CVD资金流（降低：25%→20%）
-        "O": 20,  # 持仓 - OI变化（保持20%）
+        # 资金层（确认）：35%（降低5%，因为C/O相关性>0.7）
+        "C": 17,  # 资金 - CVD资金流（降低：20%→17%）
+        "O": 18,  # 持仓 - OI变化（降低：20%→18%）
 
         # 成交层（辅助）：20%
-        "V": 20,  # 成交 - 量能活跃度（降低：25%→20%）
+        "V": 20,  # 成交 - 量能活跃度（保持20%）
 
         # 动量层：5%
         "M": 5,   # 动量 - 价格加速度（保持5%）
 
-        # 环境层：5%
-        "S": 2,   # 结构 - 支撑阻力（恢复：0%→2%，止损参考）
-        "E": 3,   # 震荡 - 市场波动（降低：5%→3%，环境判断）
+        # 资金领先层：7%（新增，修复F丢失方向信息问题）
+        "F": 7,   # 资金领先 - 资金/价格动量差（+表示资金领先，-表示价格领先）
 
-        # F 不参与权重，作为调节器
+        # 环境层：3%
+        "S": 1,   # 结构 - 支撑阻力（降低：2%→1%）
+        "E": 2,   # 震荡 - 市场波动（降低：3%→2%）
     })
 
-    # 7维分数（统一±100）
-    scores = {"T": T, "M": M, "C": C, "S": S, "V": V, "O": O, "E": E}
+    # 8维分数（统一±100，F现在参与加权）
+    scores = {"T": T, "M": M, "C": C, "S": S, "V": V, "O": O, "E": E, "F": F}
 
     # 计算加权分数（-100 到 +100）
     weighted_score, confidence, edge = scorecard(scores, weights)
 
     # 方向判断（根据加权分数符号）
     side_long = (weighted_score > 0)
-
-    # 计算F调节器（不再依赖side_long，避免循环依赖）
-    F, F_meta = _calc_fund_leading(
-        oi_change_pct, vol_ratio, cvd6, price_change_24h, price_slope, params.get("fund_leading", {})
-    )
 
     # 元数据
     scores_meta = {
@@ -245,24 +245,29 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     P_long_base, P_short_base = map_probability(edge, prior_up, Q)
     P_base = P_long_base if side_long else P_short_base
 
-    # ---- 5. F调节器调整概率（平滑sigmoid）----
-    # F范围：-100（资金偏空）到 +100（资金偏多）
-    # 策略：F与交易方向一致时提升概率，不一致时降低
+    # ---- 5. F调节器调整概率（平滑sigmoid + 极端值否决）----
+    # F现在参与了加权（7%），但仍需作为概率调整器进行微调
+    #
+    # 改进：添加F极端值否决机制
+    # - F极端反对（F_aligned < -70）→ 严厉惩罚（×0.6）
+    # - F正常范围 → 平滑调整（[0.70, 1.30]）
     #
     # 对齐F到交易方向：
-    # - 做多时：F > 0好（资金偏多），F < 0差（资金偏空）
-    # - 做空时：F < 0好（资金偏空），F > 0差（资金偏多）
+    # - 做多时：F > 0好（资金领先），F < 0差（价格领先）
+    # - 做空时：F < 0好（资金领先空），F > 0差（价格领先多）
     import math
     F_aligned = F if side_long else -F
 
-    # 平滑sigmoid调节器：adjustment = 1.0 + 0.3 * tanh(F_aligned / 40.0)
-    # 范围：[0.70, 1.30]
-    # F_aligned = +100 → ~1.30 (提升30%)
-    # F_aligned = +40  → ~1.23 (提升23%)
-    # F_aligned = 0    → 1.0  (中性)
-    # F_aligned = -40  → ~0.77 (降低23%)
-    # F_aligned = -100 → ~0.70 (降低30%)
-    adjustment = 1.0 + 0.3 * math.tanh(F_aligned / 40.0)
+    # F极端值否决机制
+    f_veto_warning = None
+    if F_aligned < -70:
+        # F强烈反对当前方向（资金/价格严重背离）
+        adjustment = 0.60  # 严厉惩罚
+        f_veto_warning = "⚠️ F极端反对（资金/价格严重背离）"
+    else:
+        # 正常平滑调整：adjustment = 1.0 + 0.3 * tanh(F_aligned / 40.0)
+        # 范围：[0.70, 1.30]
+        adjustment = 1.0 + 0.3 * math.tanh(F_aligned / 40.0)
 
     # 最终概率
     P_long = min(0.95, P_long_base * adjustment if side_long else P_long_base)
@@ -298,49 +303,40 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
         watch_prob_min = publish_cfg.get("watch_prob_min", 0.58)
 
-    # ---- Prime评分系统（0-100分）----
-    # 方案C2优化版：适度放宽（修复信号过少问题）
+    # ---- Prime评分系统（0-100分，平滑化）----
+    # 改进：使用平滑函数替代硬阈值，避免悬崖效应
     # 目标：prime_strength >= 78 → is_prime
 
     prime_strength = 0.0
 
-    # 1. 概率得分（40分）- 核心指标（适度放宽）
-    if P_chosen >= 0.72:        # 放宽：0.75 → 0.72 (-3%)
-        prime_strength += 40
-    elif P_chosen >= 0.70:      # 保持：0.72
-        prime_strength += 35
-    elif P_chosen >= 0.68:      # 放宽：0.70 → 0.68 (-2%)
-        prime_strength += 30
-    elif P_chosen >= 0.65:      # 放宽：0.68 → 0.65 (-3%)
-        prime_strength += 20
-    # 概率<65%不给分
+    # 1. 概率得分（40分）- 平滑线性映射
+    # 60%→0分, 75%→40分, >75%截断
+    if P_chosen >= 0.60:
+        prime_prob_score = min(40.0, (P_chosen - 0.60) / 0.15 * 40.0)
+        prime_strength += prime_prob_score
+    # 概率<60%不给分
 
-    # 2. CVD资金流得分（20分）- 方向对称（保持C2阈值）
-    # 做多时：C > 0 好；做空时：C < 0 好
+    # 2. CVD资金流得分（20分）- 平滑映射（方向对称）
+    # 做多时：C>0好；做空时：C<0好
     if side_long:
-        if C > 70:              # 保持70
-            prime_strength += 20
-        elif C > 50:            # 保持50
-            prime_strength += 10
-    else:  # side_short
-        if C < -70:             # 保持-70
-            prime_strength += 20
-        elif C < -50:           # 保持-50
-            prime_strength += 10
+        # C: 0→0分, +100→20分
+        prime_cvd_score = max(0.0, min(20.0, C / 100.0 * 20.0))
+    else:
+        # C: 0→0分, -100→20分
+        prime_cvd_score = max(0.0, min(20.0, abs(C) / 100.0 * 20.0))
+    prime_strength += prime_cvd_score
 
-    # 3. 量能得分（20分）- 使用绝对值（保持C2阈值）
+    # 3. 量能得分（20分）- 平滑映射（使用绝对值）
+    # V_abs: 0→0分, 100→20分
     V_abs = abs(V)
-    if V_abs > 70:              # 保持70
-        prime_strength += 20
-    elif V_abs > 50:            # 保持50
-        prime_strength += 10
+    prime_vol_score = max(0.0, min(20.0, V_abs / 100.0 * 20.0))
+    prime_strength += prime_vol_score
 
-    # 4. 持仓得分（20分）- 使用绝对值（保持C2阈值）
+    # 4. 持仓得分（20分）- 平滑映射（使用绝对值）
+    # O_abs: 0→0分, 100→20分
     O_abs = abs(O)
-    if O_abs > 70:              # 保持70
-        prime_strength += 20
-    elif O_abs > 50:            # 保持50
-        prime_strength += 10
+    prime_oi_score = max(0.0, min(20.0, O_abs / 100.0 * 20.0))
+    prime_strength += prime_oi_score
 
     # Prime判定：得分 >= 78分（适度放宽：82→78，-4分）
     is_prime = (prime_strength >= 78)
@@ -349,7 +345,7 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     # 计算达标维度数（保留用于元数据）
     dims_ok = sum(1 for s in scores.values() if abs(s) >= prime_dim_threshold)
 
-    # ---- 6. BTC/ETH市场过滤器（方案B - 独立过滤）----
+    # ---- 6. BTC/ETH市场过滤器（方案B - 独立过滤 + 避免双重惩罚）----
     # 计算市场大盘趋势，避免逆势做单
     import time
     cache_key = f"{int(time.time() // 60)}"  # 按分钟缓存
@@ -361,25 +357,45 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         market_regime, market_meta = calculate_market_regime(cache_key)
 
         # 应用市场过滤（逆势惩罚）
-        P_chosen_filtered, prime_strength_filtered, penalty_reason = apply_market_filter(
+        P_chosen_filtered, prime_strength_filtered, market_adjustment_reason = apply_market_filter(
             "long" if side_long else "short",
             P_chosen,
             prime_strength,
             market_regime
         )
 
-        # 更新概率和Prime强度
-        if penalty_reason:
-            # 有惩罚，更新概率和Prime强度
-            P_chosen = P_chosen_filtered
+        # 改进：避免双重惩罚（F调节器 + 市场过滤器）
+        # 策略：只应用更严格的一个惩罚
+        if market_adjustment_reason:
+            # 计算市场过滤器的乘数
+            market_multiplier = P_chosen_filtered / P_chosen if P_chosen > 0 else 1.0
+
+            # 比较F调节器和市场过滤器的惩罚
+            # adjustment来自F调节器，market_multiplier来自市场过滤器
+            # 取两者中更小的（更严格的惩罚）
+            if adjustment < 1.0 and market_multiplier < 1.0:
+                # 两个都是惩罚，取更严格的
+                combined_multiplier = min(adjustment, market_multiplier)
+                # 重新计算概率（避免叠加惩罚）
+                P_chosen = P_base * combined_multiplier
+                # 更新对应方向的概率
+                if side_long:
+                    P_long = P_chosen
+                else:
+                    P_short = P_chosen
+                # 添加合并惩罚的说明
+                if combined_multiplier == adjustment:
+                    market_adjustment_reason = f"（F调节器惩罚更严：×{adjustment:.2f}）"
+                else:
+                    market_adjustment_reason = market_adjustment_reason + f"（已合并F惩罚）"
+            else:
+                # 正常应用市场过滤（奖励或单一惩罚）
+                P_chosen = P_chosen_filtered
+
             prime_strength = prime_strength_filtered
             is_prime = (prime_strength >= 78)  # 重新判定Prime
 
-            # 更新对应方向的概率
-            if side_long:
-                P_long = P_chosen
-            else:
-                P_short = P_chosen
+        penalty_reason = market_adjustment_reason
 
     except Exception as e:
         # 市场过滤器失败时不影响主流程
@@ -454,6 +470,9 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         "market_regime": market_regime,
         "market_meta": market_meta,
         "market_penalty": penalty_reason if penalty_reason else None,
+
+        # F调节器否决警告
+        "f_veto_warning": f_veto_warning,
     }
 
     # 兼容旧版 telegram_fmt.py：将分数直接放在顶层

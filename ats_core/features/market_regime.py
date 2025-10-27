@@ -19,13 +19,14 @@ import math
 # 缓存市场趋势结果（避免重复计算）
 _market_cache = {}
 
-def _calc_single_trend(closes: list, ema30: list) -> int:
+def _calc_single_trend(closes: list) -> int:
     """
     计算单个币种的趋势分数（±100系统）
 
-    简化版趋势计算：
-    - 基于价格相对于EMA30的位置
-    - 基于EMA30的斜率
+    改进：使用与个币一致的1小时级别趋势计算
+    - EMA5/20排列判断（±40分）
+    - 12小时斜率/ATR强度（±60分）
+    - 时间尺度与个币对齐，响应更快
 
     Returns:
         -100（强势下跌）到 +100（强势上涨）
@@ -33,37 +34,75 @@ def _calc_single_trend(closes: list, ema30: list) -> int:
     if not closes or len(closes) < 30:
         return 0
 
-    if not ema30 or len(ema30) < 30:
-        return 0
-
     try:
-        # 当前价格
-        close_now = float(closes[-1])
-        ema30_now = float(ema30[-1])
+        closes_arr = [float(c) for c in closes]
 
-        # 1. 价格相对位置（50分权重）
-        # close > ema30 → 正分，close < ema30 → 负分
-        price_ratio = (close_now / ema30_now - 1.0) if ema30_now > 0 else 0.0
-        position_score = max(-50, min(50, price_ratio * 1000))  # ±5% → ±50分
+        # 计算EMA5和EMA20
+        ema5 = _ema(closes_arr, 5)
+        ema20 = _ema(closes_arr, 20)
 
-        # 2. EMA30斜率（50分权重）
-        # 斜率向上 → 正分，向下 → 负分
-        if len(ema30) >= 10:
-            ema30_10ago = float(ema30[-10])
-            if ema30_10ago > 0:
-                slope = (ema30_now / ema30_10ago - 1.0) / 10  # 10小时变化率
-                slope_score = max(-50, min(50, slope * 5000))  # ±1% → ±50分
-            else:
-                slope_score = 0
+        # 1. EMA排列判断（±40分）
+        # 检查最近6根K线的EMA排列
+        ema_order_bars = min(6, len(ema5))
+        ema_up = all(ema5[-i] > ema20[-i] for i in range(1, ema_order_bars + 1))
+        ema_dn = all(ema5[-i] < ema20[-i] for i in range(1, ema_order_bars + 1))
+
+        if ema_up:
+            ema_score = 40
+        elif ema_dn:
+            ema_score = -40
+        else:
+            ema_score = 0
+
+        # 2. 斜率/ATR强度（±60分）
+        # 计算12小时斜率
+        lookback = min(12, len(closes_arr))
+        if lookback >= 5:
+            # 简单线性回归
+            y = closes_arr[-lookback:]
+            n = len(y)
+            x = list(range(n))
+            x_mean = (n - 1) / 2.0
+            y_mean = sum(y) / n
+
+            numerator = sum((x[i] - x_mean) * (y[i] - y_mean) for i in range(n))
+            denominator = sum((x[i] - x_mean) ** 2 for i in range(n))
+            slope = numerator / denominator if denominator > 0 else 0.0
+
+            # 计算ATR（简化版）
+            atr = _simple_atr(closes_arr, 14)
+
+            # 斜率归一化
+            slope_per_bar = slope / max(1e-9, atr)
+
+            # 映射到±60分
+            # slope_per_bar > 0.10 → +60分（强势上涨）
+            # slope_per_bar < -0.10 → -60分（强势下跌）
+            import math
+            slope_score = 60.0 * math.tanh(slope_per_bar / 0.05)
         else:
             slope_score = 0
 
         # 总分
-        trend_score = int(position_score + slope_score)
+        trend_score = int(ema_score + slope_score)
         return max(-100, min(100, trend_score))
 
     except Exception:
         return 0
+
+
+def _simple_atr(closes: list, period: int = 14) -> float:
+    """简化ATR计算（仅用close价格）"""
+    if len(closes) < 2:
+        return 1.0
+
+    # 用相邻收盘价差异近似TR
+    changes = [abs(closes[i] - closes[i-1]) for i in range(1, len(closes))]
+
+    if len(changes) < period:
+        return sum(changes) / len(changes) if changes else 1.0
+
+    return sum(changes[-period:]) / period
 
 
 def calculate_market_regime(cache_key: str = None) -> Tuple[int, Dict[str, Any]]:
@@ -97,13 +136,9 @@ def calculate_market_regime(cache_key: str = None) -> Tuple[int, Dict[str, Any]]
         btc_closes = [float(k[4]) for k in btc_k1]
         eth_closes = [float(k[4]) for k in eth_k1]
 
-        # 计算EMA30
-        btc_ema30 = _ema(btc_closes, 30)
-        eth_ema30 = _ema(eth_closes, 30)
-
-        # 计算趋势分数
-        btc_trend = _calc_single_trend(btc_closes, btc_ema30)
-        eth_trend = _calc_single_trend(eth_closes, eth_ema30)
+        # 计算趋势分数（使用1小时级别算法）
+        btc_trend = _calc_single_trend(btc_closes)
+        eth_trend = _calc_single_trend(eth_closes)
 
         # 加权计算市场趋势（BTC 70%, ETH 30%）
         market_regime = int(btc_trend * 0.7 + eth_trend * 0.3)
@@ -170,7 +205,19 @@ def apply_market_filter(
     market_regime: int
 ) -> Tuple[float, float, str]:
     """
-    应用市场过滤器（逆势惩罚）
+    应用市场过滤器（对称奖惩机制）
+
+    改进：
+    1. 顺势奖励 + 逆势惩罚（对称设计）
+    2. 五档分级（强势/温和/中性）
+    3. 阈值放宽（±50替代±30，减少误杀）
+
+    档位设计：
+    - 强势顺势（|market| ≥ 60）：概率×1.20, Prime×1.10
+    - 温和顺势（50 ≤ |market| < 60）：概率×1.10, Prime×1.05
+    - 中性（|market| < 50）：无调整
+    - 温和逆势（-60 < |market| ≤ -50）：概率×0.85, Prime×0.92
+    - 强势逆势（|market| ≤ -60）：概率×0.70, Prime×0.85
 
     Args:
         side: "long" or "short"
@@ -179,24 +226,66 @@ def apply_market_filter(
         market_regime: 市场趋势（-100到+100）
 
     Returns:
-        (adjusted_prob, adjusted_prime, penalty_reason):
-        - adjusted_prob: 调整后概率
-        - adjusted_prime: 调整后Prime分数
-        - penalty_reason: 惩罚原因（空字符串表示无惩罚）
+        (adjusted_prob, adjusted_prime, adjustment_reason)
     """
-    penalty_reason = ""
+    adjustment_reason = ""
+    prob_multiplier = 1.0
+    prime_multiplier = 1.0
 
-    # 检查逆势交易
-    if side == "long" and market_regime < -30:
-        # 做多但大盘熊市
-        probability *= 0.7
-        prime_strength *= 0.8
-        penalty_reason = f"逆市做多（大盘{market_regime:+d}）"
+    if side == "long":
+        # 做多：market > 0 是顺势，market < 0 是逆势
+        if market_regime >= 60:
+            # 强势牛市做多 → 强化信号
+            prob_multiplier = 1.20
+            prime_multiplier = 1.10
+            adjustment_reason = f"✅ 强势顺势（大盘{market_regime:+d}）→ 概率×1.2"
 
-    elif side == "short" and market_regime > 30:
-        # 做空但大盘牛市
-        probability *= 0.7
-        prime_strength *= 0.8
-        penalty_reason = f"逆市做空（大盘{market_regime:+d}）"
+        elif market_regime >= 50:
+            # 温和牛市做多 → 增强信号
+            prob_multiplier = 1.10
+            prime_multiplier = 1.05
+            adjustment_reason = f"✅ 温和顺势（大盘{market_regime:+d}）→ 概率×1.1"
 
-    return probability, prime_strength, penalty_reason
+        elif market_regime <= -60:
+            # 强势熊市做多 → 高风险
+            prob_multiplier = 0.70
+            prime_multiplier = 0.85
+            adjustment_reason = f"⚠️ 强势逆市（大盘{market_regime:+d}）→ 概率×0.7"
+
+        elif market_regime <= -50:
+            # 温和熊市做多 → 谨慎
+            prob_multiplier = 0.85
+            prime_multiplier = 0.92
+            adjustment_reason = f"⚠️ 温和逆市（大盘{market_regime:+d}）→ 概率×0.85"
+
+    else:  # side == "short"
+        # 做空：market < 0 是顺势，market > 0 是逆势
+        if market_regime <= -60:
+            # 强势熊市做空 → 强化信号
+            prob_multiplier = 1.20
+            prime_multiplier = 1.10
+            adjustment_reason = f"✅ 强势顺势（大盘{market_regime:+d}）→ 概率×1.2"
+
+        elif market_regime <= -50:
+            # 温和熊市做空 → 增强信号
+            prob_multiplier = 1.10
+            prime_multiplier = 1.05
+            adjustment_reason = f"✅ 温和顺势（大盘{market_regime:+d}）→ 概率×1.1"
+
+        elif market_regime >= 60:
+            # 强势牛市做空 → 高风险
+            prob_multiplier = 0.70
+            prime_multiplier = 0.85
+            adjustment_reason = f"⚠️ 强势逆市（大盘{market_regime:+d}）→ 概率×0.7"
+
+        elif market_regime >= 50:
+            # 温和牛市做空 → 谨慎
+            prob_multiplier = 0.85
+            prime_multiplier = 0.92
+            adjustment_reason = f"⚠️ 温和逆市（大盘{market_regime:+d}）→ 概率×0.85"
+
+    # 应用调整（带上限保护）
+    adjusted_prob = min(0.95, probability * prob_multiplier)
+    adjusted_prime = min(100.0, prime_strength * prime_multiplier)
+
+    return adjusted_prob, adjusted_prime, adjustment_reason
