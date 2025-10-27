@@ -122,7 +122,7 @@ def calculate_cvd_enhanced(
     params: Dict[str, Any] = None
 ) -> Tuple[float, Dict[str, Any]]:
     """
-    计算增强CVD评分
+    计算增强CVD评分（含Basis校正）
 
     Args:
         klines_perp: 永续合约K线数据
@@ -131,6 +131,8 @@ def calculate_cvd_enhanced(
             - ema_period: EMA周期（默认12）
             - zscore_window: z-score窗口（默认60）
             - dynamic_weight: 是否启用动态权重（默认True）
+            - basis_correction: 是否启用basis校正（默认True）⭐新增
+            - basis_threshold_bps: Basis阈值，超过此值触发校正（默认50bps）⭐新增
             - cross_exchange_enabled: 是否启用跨交易所增强（默认False）
 
     Returns:
@@ -145,6 +147,8 @@ def calculate_cvd_enhanced(
     ema_period = params.get('ema_period', 12)
     zscore_window = params.get('zscore_window', 60)
     dynamic_weight = params.get('dynamic_weight', True)
+    basis_correction = params.get('basis_correction', True)  # ⭐新增
+    basis_threshold_bps = params.get('basis_threshold_bps', 50.0)  # ⭐新增
 
     # === 1. 计算永续CVD ===
     if not klines_perp or len(klines_perp) < ema_period + zscore_window:
@@ -187,6 +191,43 @@ def calculate_cvd_enhanced(
         # 静态权重
         w_perp = 1.0
         w_spot = 0.0
+
+    # === 3.5. Basis校正（防止套利影响）⭐新增 ===
+    basis_bps = 0.0
+    basis_adjusted = False
+
+    if basis_correction and has_spot and len(klines_perp) > 0 and len(klines_spot) > 0:
+        # 计算期现价差（Basis）
+        perp_price = _to_f(klines_perp[-1][4])  # 永续收盘价
+        spot_price = _to_f(klines_spot[-1][4])  # 现货收盘价
+
+        if spot_price > 0:
+            # Basis（单位：bps，1bps = 0.01%）
+            basis_pct = (perp_price - spot_price) / spot_price
+            basis_bps = basis_pct * 10000  # 转换为bps
+
+            # 如果Basis超过阈值，认为存在套利影响
+            if abs(basis_bps) > basis_threshold_bps:
+                # 计算校正因子
+                # Basis越大，套利盘越活跃，CVD越失真
+                # 校正策略：降低永续CVD权重
+                excess_basis = abs(basis_bps) - basis_threshold_bps
+
+                # 校正因子：每超过50bps，降低10%权重，最多降低50%
+                correction_factor = min(0.5, excess_basis / 50.0 * 0.1)
+
+                # 应用校正
+                w_perp_original = w_perp
+                w_perp = w_perp * (1.0 - correction_factor)
+                w_spot = 1.0 - w_perp  # 重新归一化
+
+                basis_adjusted = True
+            else:
+                basis_adjusted = False
+        else:
+            basis_adjusted = False
+    else:
+        basis_adjusted = False
 
     # === 4. 加权CVD ===
     if len(cvd_perp_ema) != len(cvd_spot_ema):
@@ -232,7 +273,11 @@ def calculate_cvd_enhanced(
         'cvd_score': cvd_score,
         'w_perp': w_perp,
         'w_spot': w_spot,
-        'has_spot_data': has_spot
+        'has_spot_data': has_spot,
+        # ⭐ Basis校正信息
+        'basis_bps': basis_bps,
+        'basis_adjusted': basis_adjusted,
+        'basis_correction_enabled': basis_correction
     }
 
     return cvd_score, metadata
