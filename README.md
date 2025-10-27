@@ -172,9 +172,17 @@ python scripts/run_auto_trader.py
 
 ## 📚 文档
 
+### 核心文档
 | 文档 | 说明 |
 |------|------|
-| [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md) | 项目结构详解 |
+| [docs/SYSTEM_OVERVIEW.md](./docs/SYSTEM_OVERVIEW.md) | **系统功能与完整流程** ⭐ |
+| [docs/PROJECT_STRUCTURE.md](./docs/PROJECT_STRUCTURE.md) | 项目结构详解 |
+| [docs/SYSTEM_ACTUAL_FUNCTIONALITY.md](./docs/SYSTEM_ACTUAL_FUNCTIONALITY.md) | 系统实际功能分析 |
+| [docs/CLEANUP_SUMMARY.md](./docs/CLEANUP_SUMMARY.md) | 代码清理总结 |
+
+### 技术文档
+| 文档 | 说明 |
+|------|------|
 | [docs/UNIFIED_SYSTEM_ARCHITECTURE.md](./docs/UNIFIED_SYSTEM_ARCHITECTURE.md) | 系统架构 |
 | [docs/AUTO_TRADING_DEPLOYMENT.md](./docs/AUTO_TRADING_DEPLOYMENT.md) | 自动交易部署 |
 | [docs/WEBSOCKET_OPTIMIZATION_ANALYSIS.md](./docs/WEBSOCKET_OPTIMIZATION_ANALYSIS.md) | WebSocket优化 |
