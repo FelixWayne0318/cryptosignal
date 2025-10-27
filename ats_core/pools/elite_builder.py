@@ -354,6 +354,20 @@ def _layer3_multifactor_scoring(anomalies: List[Dict], params: Dict) -> List[Dic
                 t["_long_score"] = long_score
                 t["_short_score"] = short_score
                 t["_trend_dir"] = "LONG" if trend_dir > 0 else "SHORT"
+
+                # ★ Gold方案核心：保存预计算数据，供analyze_symbol复用
+                t["_pre_computed"] = {
+                    "ema5": ema5[-1],
+                    "ema20": ema20[-1],
+                    "trend_dir_sign": trend_dir,  # +1=多头，-1=空头
+                    "trend_strength": trend_strength,
+                    "v5_v20_ratio": v5 / v20 if v20 > 0 else 1.0,
+                    "slope_6h": slope_6h,
+                    "oi_change_6h": oi_change_6h if oi and len(oi) >= 7 else 0.0,
+                    "close_now": closes[-1],
+                    "computed_at": "layer3",  # 标记数据来源
+                }
+
                 scored.append(t)
         except:
             continue
@@ -486,6 +500,7 @@ def build_elite_universe() -> Tuple[List[str], Dict[str, Any]]:
             "anomaly_score": t.get("_anomaly_score", 0),
             "anomaly_details": t.get("_anomaly_details", {}),
             "liquidity_score": t.get("_liquidity_score", 0),
+            "pre_computed": t.get("_pre_computed", {}),  # ★ 保存预计算数据
         }
 
     # 保存结果
