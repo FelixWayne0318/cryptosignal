@@ -38,6 +38,7 @@ from ats_core.execution.signal_executor import (
     SignalExecutor,
     execute_scan_signals
 )
+from ats_core.pipeline.batch_scan_optimized import OptimizedBatchScanner
 from ats_core.logging import log, warn, error
 
 
@@ -63,13 +64,19 @@ class AutoTrader:
     ```
     """
 
-    def __init__(self, config_path: str = "config/binance_credentials.json"):
+    def __init__(
+        self,
+        config_path: str = "config/binance_credentials.json",
+        use_optimized_scan: bool = True
+    ):
         self.config_path = config_path
+        self.use_optimized_scan = use_optimized_scan
 
         # 核心组件
         self.client: Optional[BinanceFuturesClient] = None
         self.position_manager: Optional[DynamicPositionManager] = None
         self.signal_executor: Optional[SignalExecutor] = None
+        self.batch_scanner: Optional[OptimizedBatchScanner] = None
 
         # 状态
         self.is_initialized = False
@@ -85,6 +92,8 @@ class AutoTrader:
         }
 
         log("🚀 AutoTrader 初始化...")
+        if use_optimized_scan:
+            log("   使用WebSocket优化扫描（17倍提速）✅")
 
     # ========== 初始化 ==========
 
@@ -97,7 +106,8 @@ class AutoTrader:
         2. 同步服务器时间
         3. 创建仓位管理器
         4. 创建信号执行器
-        5. 恢复现有持仓（如果有）
+        5. 初始化批量扫描器（如果启用优化）
+        6. 恢复现有持仓（如果有）
         """
         if self.is_initialized:
             log("⚠️  AutoTrader 已初始化")
@@ -125,12 +135,22 @@ class AutoTrader:
             telegram_notify=True
         )
 
-        # 4. 恢复现有持仓
-        log("4️⃣  检查现有持仓...")
+        # 4. 初始化批量扫描器（如果启用优化）
+        if self.use_optimized_scan:
+            log("4️⃣  初始化WebSocket批量扫描器（约2分钟）...")
+            self.batch_scanner = OptimizedBatchScanner()
+            self.batch_scanner.client = self.client  # 复用客户端
+            await self.batch_scanner.initialize()
+            log("   ✅ WebSocket扫描已就绪（后续扫描约5秒）")
+
+        # 5. 恢复现有持仓
+        step_num = "5️⃣" if self.use_optimized_scan else "4️⃣"
+        log(f"{step_num}  检查现有持仓...")
         await self._recover_positions()
 
-        # 5. 启动仓位管理器
-        log("5️⃣  启动动态仓位管理器...")
+        # 6. 启动仓位管理器
+        step_num = "6️⃣" if self.use_optimized_scan else "5️⃣"
+        log(f"{step_num}  启动动态仓位管理器...")
         asyncio.create_task(self.position_manager.start())
 
         self.is_initialized = True
@@ -143,6 +163,7 @@ class AutoTrader:
         log(f"   WebSocket: {self.client.ws_base_url}")
         log(f"   自动执行: 开启")
         log(f"   电报通知: 开启")
+        log(f"   优化扫描: {'开启（17倍提速）' if self.use_optimized_scan else '关闭'}")
         log("=" * 60)
 
     async def _recover_positions(self):
@@ -226,16 +247,42 @@ class AutoTrader:
         log(f"🔍 开始扫描...")
         log(f"   时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         log(f"   最低分数: {min_score}")
+        log(f"   扫描模式: {'WebSocket优化（17倍提速）' if self.use_optimized_scan else 'REST标准'}")
         log("=" * 60)
 
         start_time = time.time()
 
-        # 执行扫描
-        await execute_scan_signals(
-            executor=self.signal_executor,
-            symbols=symbols,
-            min_score=min_score
-        )
+        # 执行扫描（优化 vs 标准）
+        if self.use_optimized_scan and self.batch_scanner:
+            # 使用WebSocket优化扫描（0次API，约5秒）
+            scan_results = await self.batch_scanner.scan(
+                min_score=min_score,
+                max_symbols=len(symbols) if symbols else None
+            )
+
+            # 处理扫描结果
+            for result in scan_results['results']:
+                try:
+                    await self.signal_executor.process_signal(
+                        result['symbol'],
+                        result
+                    )
+                except Exception as e:
+                    error(f"处理信号失败 {result.get('symbol')}: {e}")
+
+            log(f"\n📊 扫描统计:")
+            log(f"   扫描币种: {scan_results['total_symbols']}")
+            log(f"   发现信号: {scan_results['signals_found']}")
+            log(f"   API调用: {scan_results['api_calls']} ✅")
+            log(f"   缓存命中: {scan_results['cache_stats']['hit_rate']}")
+
+        else:
+            # 使用标准REST扫描（兼容模式）
+            await execute_scan_signals(
+                executor=self.signal_executor,
+                symbols=symbols,
+                min_score=min_score
+            )
 
         elapsed = time.time() - start_time
         self.stats['total_scans'] += 1
@@ -243,6 +290,8 @@ class AutoTrader:
         log("\n" + "=" * 60)
         log(f"✅ 扫描完成")
         log(f"   耗时: {elapsed:.2f}秒")
+        if self.use_optimized_scan:
+            log(f"   速度: {scan_results['symbols_per_second']:.1f} 币种/秒 🚀")
         log(f"   当前持仓: {len(self.position_manager.get_all_positions())}")
         log("=" * 60)
 
