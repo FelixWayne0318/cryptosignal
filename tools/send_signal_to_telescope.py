@@ -44,13 +44,14 @@ def send_analysis(symbol: str, use_v3: bool = False):
         pub = result.get("publish", {})
         is_prime = pub.get("prime", False)
 
-        # 格式化消息（使用telegram_fmt.py样式）
-        if is_prime:
-            message = render_trade(result)
-            signal_type = "Prime交易信号"
-        else:
-            message = render_watch(result)
-            signal_type = "Watch观察信号"
+        # 【优化】仅发送Prime信号
+        if not is_prime:
+            print(f"⏭️  {symbol} - Watch信号（概率{result.get('probability', 0)*100:.0f}%），跳过")
+            return False
+
+        # 格式化Prime消息（使用telegram_fmt.py样式）
+        message = render_trade(result)
+        signal_type = "Prime交易信号"
 
         print(f"\n{'=' * 60}")
         print(f"📊 {signal_type}")
