@@ -90,25 +90,27 @@ def _ttl_hours(r: Dict[str, Any]) -> int:
 
 def _emoji_by_score(s: int) -> str:
     """
-    分数转emoji（统一±100系统）
+    分数转emoji（统一±100系统，优化颜色方案）
 
-    对于所有维度（-100到+100）：
-    - abs(s) >= 60: 🟢 (强势)
-    - 30 <= abs(s) < 60: 🟡 (中等)
-    - abs(s) < 30: ⚪ (弱/中性)
+    颜色方案（体现强度和方向）：
+    - s >= 60:  🟢 绿色（强势正向）
+    - 30-60:    🟡 黄色（中等正向）
+    - -30到+30: 🔵 蓝色（中性）
+    - -60到-30: 🟠 橙色（中等负向）
+    - s <= -60: 🔴 红色（强势负向）
 
-    注：
-    - 正数表示看多/好的方向
-    - 负数表示看空/差的方向
-    - emoji只显示强度，不显示方向（方向通过符号显示）
+    注：颜色同时体现方向和强度
     """
-    abs_score = abs(s)
-    if abs_score >= 60:
-        return "🟢"  # 强势
-    elif abs_score >= 30:
-        return "🟡"  # 中等
-    else:
-        return "⚪"  # 弱/中性
+    if s >= 60:
+        return "🟢"  # 强势正向
+    elif s >= 30:
+        return "🟡"  # 中等正向
+    elif s >= -30:
+        return "🔵"  # 中性
+    elif s >= -60:
+        return "🟠"  # 中等负向
+    else:  # s < -60
+        return "🔴"  # 强势负向
 
 def _desc_trend(s: int, Tm: int = None) -> str:
     """
@@ -291,7 +293,11 @@ def _desc_cvd_flow(s: int, is_long: bool = True, cvd6: float = None,
     # 附加 CVD 6小时变化百分比（归一化到价格）
     if cvd6 is not None:
         cvd_pct = cvd6 * 100
-        if cvd_pct >= 0:
+
+        # 数据异常检查：如果绝对值>1000%，说明数据异常，不显示
+        if abs(cvd_pct) > 1000:
+            desc += f" (CVD数据异常"
+        elif cvd_pct >= 0:
             desc += f" (CVD+{cvd_pct:.1f}%"
         else:
             desc += f" (CVD{cvd_pct:.1f}%"
@@ -336,21 +342,21 @@ def _desc_positions(s: int, oi24h_pct: float = None) -> str:
 
 def _desc_env(s: int, chop: float = None) -> str:
     """
-    描述环境（统一±100系统）
+    描述震荡（统一±100系统）
 
     Args:
-        s: E 分数 (-100到+100，正数=好，负数=差)
+        s: E 分数 (-100到+100，正数=震荡小空间大，负数=震荡大空间小)
         chop: Chop 指数 (0-100，越高越震荡)
     """
     # 基于符号的描述（±100系统）
     if s >= 60:
-        desc = "环境友好/空间充足"
+        desc = "趋势明确/空间充足"
     elif s >= 30:
-        desc = "环境偏友好"
+        desc = "偏趋势/空间尚可"
     elif s >= -30:
-        desc = "环境一般/空间有限"
+        desc = "震荡偏强/空间有限"
     else:  # s < -30
-        desc = "环境不佳/波动或流动性掣肘"
+        desc = "强烈震荡/空间狭窄"
 
     # 附加 Chop 指数
     if chop is not None:
@@ -360,29 +366,41 @@ def _desc_env(s: int, chop: float = None) -> str:
 
 def _desc_fund_leading(s: int, leading_raw: float = None) -> str:
     """
-    描述资金领先性
+    描述资金领先性（方案C：分开描述，去除程度修饰）
 
     Args:
         s: F 分数 (-100 到 +100)
         leading_raw: 真实的领先性数值（用于调试，可选）
+
+    Returns:
+        简洁描述（"资金领先价格" or "价格领先资金" or "资金价格同步"）
     """
-    # 带符号的描述体系（-100 到 +100）
-    if s >= 60:
-        desc = "资金强势领先价格 (蓄势待发)"
-    elif s >= 30:
-        desc = "资金温和领先价格 (机会较好)"
-    elif s >= 10:
-        desc = "资金略微领先 (同步偏好)"
+    if s >= 10:
+        desc = "资金领先价格"
     elif s >= -10:
-        desc = "资金价格同步 (中性)"
-    elif s >= -30:
-        desc = "价格略微领先 (同步偏差)"
-    elif s >= -60:
-        desc = "价格温和领先资金 (追高风险)"
+        desc = "资金价格同步"
     else:
-        desc = "价格强势领先资金 (风险很大)"
+        desc = "价格领先资金"
 
     return desc
+
+def _emoji_by_fund_leading(s: int) -> str:
+    """
+    F调节器质量标识（方案C：反映信号质量，不是方向）
+
+    资金领先价格 (F>0) = ✅ 好信号（蓄势待发）
+    价格领先资金 (F<0) = ⚠️ 风险（追涨/杀跌）
+
+    Args:
+        s: F 分数 (-100 到 +100)
+
+    Returns:
+        ✅ 或 ⚠️
+    """
+    if s >= 10:
+        return "✅"  # 资金领先，质量好
+    else:
+        return "⚠️"  # 价格领先或同步，有风险
 
 # ---------- extract scores robustly ----------
 
@@ -549,7 +567,7 @@ def _header_lines(r: Dict[str, Any], is_watch: bool) -> Tuple[str, str]:
 
     line1 = f"🔹 {sym} · 现价 {price_s}"
     # 不再区分观察/正式，统一为正式信号
-    line2 = f"{side_lbl} {conv}% · 有效期{ttl_h}h"
+    line2 = f"{side_lbl} 概率{conv}% · 有效期{ttl_h}h"
     return line1, line2
 
 def _six_block(r: Dict[str, Any]) -> str:
@@ -586,16 +604,47 @@ def _six_block(r: Dict[str, Any]) -> str:
     # 所有维度统一使用带符号显示（±100系统）
     lines.append(f"• 趋势 {_emoji_by_score(T)} {T:+4d} —— {_desc_trend(T, Tm)}")
     lines.append(f"• 动量 {_emoji_by_score(M)} {M:+4d} —— {_desc_momentum(M, slope)}")
-    lines.append(f"• 资金流 {_emoji_by_score(C)} {C:+4d} —— {_desc_cvd_flow(C, is_long, cvd6, cvd_consistency, cvd_is_consistent)}")
+    lines.append(f"• 资金 {_emoji_by_score(C)} {C:+4d} —— {_desc_cvd_flow(C, is_long, cvd6, cvd_consistency, cvd_is_consistent)}")
     lines.append(f"• 结构 {_emoji_by_score(S)} {S:+4d} —— {_desc_structure(S, theta)}")
-    lines.append(f"• 量能 {_emoji_by_score(V)} {V:+4d} —— {_desc_volume(V, v5v20)}")
+    lines.append(f"• 成交 {_emoji_by_score(V)} {V:+4d} —— {_desc_volume(V, v5v20)}")
     lines.append(f"• 持仓 {_emoji_by_score(OI)} {OI:+4d} —— {_desc_positions(OI, oi24h_pct)}")
-    lines.append(f"• 环境 {_emoji_by_score(E)} {E:+4d} —— {_desc_env(E, chop)}")
+    lines.append(f"• 震荡 {_emoji_by_score(E)} {E:+4d} —— {_desc_env(E, chop)}")
 
-    # F调节器信息（所有信号都显示）
+    # ━━━━━━ 市场环境分析 ━━━━━━
+
+    # 1. BTC/ETH大盘趋势（外部市场环境）
+    market_regime = _get(r, "market_regime")
+    market_meta = _get(r, "market_meta") or {}
+    market_penalty = _get(r, "market_penalty")
+
+    if market_regime is not None:
+        regime_desc = market_meta.get("regime_desc", "未知")
+        btc_trend = market_meta.get("btc_trend", 0)
+        eth_trend = market_meta.get("eth_trend", 0)
+
+        # 市场趋势emoji
+        market_emoji = _emoji_by_score(market_regime)
+
+        # 显示市场状态
+        lines.append(f"\n📊 大盘环境 {market_emoji} {regime_desc} (市场{market_regime:+d})")
+        lines.append(f"   └─ BTC{btc_trend:+d} · ETH{eth_trend:+d}")
+
+        # 如果有市场调整（奖励或惩罚），显示说明
+        if market_penalty:
+            lines.append(f"   └─ {market_penalty}")
+
+    # 2. F调节器（个币资金动量）
     F_adj = _get(r, "F_adjustment", 1.0)
     f_desc = _desc_fund_leading(F)
-    lines.append(f"\n⚡ {f_desc} (F={F:+d}) → 概率调整 ×{F_adj:.2f}")
+    f_emoji = _emoji_by_fund_leading(F)
+    f_veto_warning = _get(r, "f_veto_warning")
+
+    f_line = f"\n⚡ 资金动量 {f_emoji} {f_desc} (F{F:+d})"
+    lines.append(f_line)
+    lines.append(f"   └─ 概率调整 ×{F_adj:.2f}")
+
+    if f_veto_warning:
+        lines.append(f"   └─ {f_veto_warning}")
 
     return "\n".join(lines)
 

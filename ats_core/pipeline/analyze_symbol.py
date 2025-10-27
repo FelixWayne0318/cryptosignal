@@ -71,7 +71,7 @@ def _safe_dict(obj: Any) -> Dict[str, Any]:
 
 # ============ 主分析函数 ============
 
-def analyze_symbol(symbol: str) -> Dict[str, Any]:
+def analyze_symbol(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[str, Any]:
     """
     完整分析单个交易对，返回：
     - 7维分数（T/M/C/S/V/O/E，统一±100系统）
@@ -85,8 +85,25 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     - 所有分数：-100（看空/差）到 +100（看多/好）
     - weighted_score > 0 → 看多，< 0 → 看空
     - confidence = abs(weighted_score)
+
+    Args:
+        symbol: 交易对符号
+        elite_meta: Elite Universe Builder生成的元数据（可选）
+                   包含long_score/short_score/pre_computed等信息
     """
     params = CFG.params or {}
+
+    # ★ Gold方案：提取候选池先验信息
+    elite_prior = {}
+    if elite_meta:
+        elite_prior = {
+            "long_score": elite_meta.get("long_score", 0),
+            "short_score": elite_meta.get("short_score", 0),
+            "trend_dir": elite_meta.get("trend_dir", "NEUTRAL"),
+            "anomaly_score": elite_meta.get("anomaly_score", 0),
+            "anomaly_dims": list(elite_meta.get("anomaly_details", {}).keys())[:3] if elite_meta.get("anomaly_details") else [],
+            "pre_computed": elite_meta.get("pre_computed", {}),
+        }
 
     # ---- 1. 获取数据 ----
     k1 = get_klines(symbol, "1h", 300)
@@ -181,42 +198,49 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     price_change_24h = ((c[-1] - c[-25]) / c[-25] * 100) if len(c) >= 25 else 0.0
     price_slope = (ema30[-1] - ema30[-7]) / 6.0 / max(1e-9, atr_now)  # 归一化斜率
 
-    # F也使用统一的±100系统，但需要根据方向判断
-    # 先用 weighted_score 初步判断方向（后面会重新算）
+    # ---- 2.5. 计算F调节器（提前计算，让F参与方向判断）----
+    # F本身是带符号的（+表示资金领先，-表示价格领先），不需要依赖side_long
+    F, F_meta = _calc_fund_leading(
+        oi_change_pct, vol_ratio, cvd6, price_change_24h, price_slope, params.get("fund_leading", {})
+    )
 
-    # ---- 3. Scorecard（统一±100系统，因果链权重）----
-    # 权重逻辑：原因 > 传导 > 结果
-    # 因果链：资金(C+O) → 传导(V+T) → 结果(M+S+E)
+    # ---- 3. Scorecard（统一±100系统，优化权重v4）----
+    # 权重调整理由：
+    # 1. 提升T(趋势)权重：避免在上涨趋势中误判做空
+    # 2. 降低C/O权重：减少资金层冗余（C/O相关性高）
+    # 3. F参与加权(7%)：让资金领先性影响方向判断，修复方向信息丢失问题
+    # 4. S/E小权重保留：提供止损参考和环境判断
+    # 权重分配v4：趋势(30%) + 资金(35%) + 成交(20%) + 动量(5%) + 资金领先(7%) + 环境(3%)
     weights = params.get("weights", {
-        # 原因层（资金）：45%
-        "C": 25,  # CVD资金流 - 主因（直接资金流向）
-        "O": 20,  # 持仓变化 - 辅因（市场参与度）
+        # 趋势层（主导）：30%
+        "T": 30,  # 趋势 - 价格方向（保持30%）
 
-        # 传导层：40%
-        "V": 25,  # 量能 - 资金活跃度
-        "T": 15,  # 趋势 - 价格方向
+        # 资金层（确认）：35%（降低5%，因为C/O相关性>0.7）
+        "C": 17,  # 资金 - CVD资金流（降低：20%→17%）
+        "O": 18,  # 持仓 - OI变化（降低：20%→18%）
 
-        # 结果层：15%
-        "M": 5,   # 动量 - 价格加速度
-        "S": 5,   # 结构 - 支撑阻力
-        "E": 5    # 环境 - 波动性
+        # 成交层（辅助）：20%
+        "V": 20,  # 成交 - 量能活跃度（保持20%）
 
-        # F 不参与权重，作为调节器
+        # 动量层：5%
+        "M": 5,   # 动量 - 价格加速度（保持5%）
+
+        # 资金领先层：7%（新增，修复F丢失方向信息问题）
+        "F": 7,   # 资金领先 - 资金/价格动量差（+表示资金领先，-表示价格领先）
+
+        # 环境层：3%
+        "S": 1,   # 结构 - 支撑阻力（降低：2%→1%）
+        "E": 2,   # 震荡 - 市场波动（降低：3%→2%）
     })
 
-    # 7维分数（统一±100）
-    scores = {"T": T, "M": M, "C": C, "S": S, "V": V, "O": O, "E": E}
+    # 8维分数（统一±100，F现在参与加权）
+    scores = {"T": T, "M": M, "C": C, "S": S, "V": V, "O": O, "E": E, "F": F}
 
     # 计算加权分数（-100 到 +100）
     weighted_score, confidence, edge = scorecard(scores, weights)
 
     # 方向判断（根据加权分数符号）
     side_long = (weighted_score > 0)
-
-    # 计算F调节器（不再依赖side_long，避免循环依赖）
-    F, F_meta = _calc_fund_leading(
-        oi_change_pct, vol_ratio, cvd6, price_change_24h, price_slope, params.get("fund_leading", {})
-    )
 
     # 元数据
     scores_meta = {
@@ -238,24 +262,61 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     P_long_base, P_short_base = map_probability(edge, prior_up, Q)
     P_base = P_long_base if side_long else P_short_base
 
-    # ---- 5. F调节器调整概率（平滑sigmoid）----
-    # F范围：-100（资金偏空）到 +100（资金偏多）
-    # 策略：F与交易方向一致时提升概率，不一致时降低
+    # ★ Gold方案：贝叶斯先验调整（基于候选池质量分数）
+    bayesian_boost = 0.0
+    if elite_prior and elite_prior.get("long_score", 0) > 0:
+        # 计算先验概率调整因子
+        # 原理：P(A|B) ∝ P(B|A) × P(A)
+        # P(A) = 候选池先验，P(B|A) = 分析管道给出的概率
+
+        long_score = elite_prior["long_score"]
+        short_score = elite_prior["short_score"]
+
+        if side_long and long_score >= 70:
+            # 候选池强烈支持做多（70-100分）
+            # 先验提升：5%-15%
+            bayesian_boost = 0.05 + (long_score - 70) / 30 * 0.10
+        elif not side_long and short_score >= 70:
+            # 候选池强烈支持做空
+            bayesian_boost = 0.05 + (short_score - 70) / 30 * 0.10
+        elif side_long and long_score >= 60:
+            # 候选池温和支持做多（60-70分）
+            bayesian_boost = (long_score - 60) / 10 * 0.05
+        elif not side_long and short_score >= 60:
+            # 候选池温和支持做空
+            bayesian_boost = (short_score - 60) / 10 * 0.05
+
+        # 应用贝叶斯提升
+        if bayesian_boost > 0:
+            P_base = min(0.90, P_base * (1 + bayesian_boost))
+            if side_long:
+                P_long_base = P_base
+            else:
+                P_short_base = P_base
+
+    # ---- 5. F调节器调整概率（平滑sigmoid + 极端值否决）----
+    # F现在参与了加权（7%），但仍需作为概率调整器进行微调
+    #
+    # 改进：添加F极端值否决机制
+    # - F极端反对（F_aligned < -70）→ 严厉惩罚（×0.6）
+    # - F正常范围 → 平滑调整（[0.70, 1.30]）
     #
     # 对齐F到交易方向：
-    # - 做多时：F > 0好（资金偏多），F < 0差（资金偏空）
-    # - 做空时：F < 0好（资金偏空），F > 0差（资金偏多）
+    # - 做多时：F > 0好（资金领先），F < 0差（价格领先）
+    # - 做空时：F < 0好（资金领先空），F > 0差（价格领先多）
     import math
     F_aligned = F if side_long else -F
 
-    # 平滑sigmoid调节器：adjustment = 1.0 + 0.3 * tanh(F_aligned / 40.0)
-    # 范围：[0.70, 1.30]
-    # F_aligned = +100 → ~1.30 (提升30%)
-    # F_aligned = +40  → ~1.23 (提升23%)
-    # F_aligned = 0    → 1.0  (中性)
-    # F_aligned = -40  → ~0.77 (降低23%)
-    # F_aligned = -100 → ~0.70 (降低30%)
-    adjustment = 1.0 + 0.3 * math.tanh(F_aligned / 40.0)
+    # F极端值否决机制
+    f_veto_warning = None
+    if F_aligned < -70:
+        # F强烈反对当前方向（资金/价格严重背离）
+        adjustment = 0.60  # 严厉惩罚
+        f_veto_warning = "⚠️ F极端反对（资金/价格严重背离）"
+    else:
+        # 正常平滑调整：adjustment = 1.0 + 0.3 * tanh(F_aligned / 40.0)
+        # 范围：[0.70, 1.30]
+        adjustment = 1.0 + 0.3 * math.tanh(F_aligned / 40.0)
 
     # 最终概率
     P_long = min(0.95, P_long_base * adjustment if side_long else P_long_base)
@@ -291,58 +352,107 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
         watch_prob_min = publish_cfg.get("watch_prob_min", 0.58)
 
-    # ---- Prime评分系统（0-100分）----
-    # 方案C2：超激进提升（目标减少80%信号量）
-    # 目标：prime_strength >= 82 → is_prime
+    # ---- Prime评分系统（0-100分，平滑化）----
+    # 改进：使用平滑函数替代硬阈值，避免悬崖效应
+    # 目标：prime_strength >= 78 → is_prime
 
     prime_strength = 0.0
 
-    # 1. 概率得分（40分）- 核心指标（方案C2：超激进提升）
-    if P_chosen >= 0.75:        # 提高：0.68 → 0.75 (+7%)
-        prime_strength += 40
-    elif P_chosen >= 0.72:      # 提高：0.65 → 0.72 (+7%)
-        prime_strength += 35
-    elif P_chosen >= 0.70:      # 提高：0.62 → 0.70 (+8%)
-        prime_strength += 30
-    elif P_chosen >= 0.68:      # 提高：0.58 → 0.68 (+10%)
-        prime_strength += 20
-    # 概率<68%不给分
+    # 1. 概率得分（40分）- 平滑线性映射
+    # 60%→0分, 75%→40分, >75%截断
+    if P_chosen >= 0.60:
+        prime_prob_score = min(40.0, (P_chosen - 0.60) / 0.15 * 40.0)
+        prime_strength += prime_prob_score
+    # 概率<60%不给分
 
-    # 2. CVD资金流得分（20分）- 方向对称（方案C2：70/50）
-    # 做多时：C > 0 好；做空时：C < 0 好
+    # 2. CVD资金流得分（20分）- 平滑映射（方向对称）
+    # 做多时：C>0好；做空时：C<0好
     if side_long:
-        if C > 70:              # 提高：50 → 70 (+40%)
-            prime_strength += 20
-        elif C > 50:            # 提高：30 → 50 (+67%)
-            prime_strength += 10
-    else:  # side_short
-        if C < -70:             # 提高：-50 → -70 (+40%)
-            prime_strength += 20
-        elif C < -50:           # 提高：-30 → -50 (+67%)
-            prime_strength += 10
+        # C: 0→0分, +100→20分
+        prime_cvd_score = max(0.0, min(20.0, C / 100.0 * 20.0))
+    else:
+        # C: 0→0分, -100→20分
+        prime_cvd_score = max(0.0, min(20.0, abs(C) / 100.0 * 20.0))
+    prime_strength += prime_cvd_score
 
-    # 3. 量能得分（20分）- 使用绝对值（方案C2：70/50）
+    # 3. 量能得分（20分）- 平滑映射（使用绝对值）
+    # V_abs: 0→0分, 100→20分
     V_abs = abs(V)
-    if V_abs > 70:              # 提高：50 → 70 (+40%)
-        prime_strength += 20
-    elif V_abs > 50:            # 提高：30 → 50 (+67%)
-        prime_strength += 10
+    prime_vol_score = max(0.0, min(20.0, V_abs / 100.0 * 20.0))
+    prime_strength += prime_vol_score
 
-    # 4. 持仓得分（20分）- 使用绝对值（方案C2：70/50）
+    # 4. 持仓得分（20分）- 平滑映射（使用绝对值）
+    # O_abs: 0→0分, 100→20分
     O_abs = abs(O)
-    if O_abs > 70:              # 提高：50 → 70 (+40%)
-        prime_strength += 20
-    elif O_abs > 50:            # 提高：30 → 50 (+67%)
-        prime_strength += 10
+    prime_oi_score = max(0.0, min(20.0, O_abs / 100.0 * 20.0))
+    prime_strength += prime_oi_score
 
-    # Prime判定：得分 >= 82分（方案C2：超激进提升，+7分）
-    is_prime = (prime_strength >= 82)
+    # Prime判定：得分 >= 78分（适度放宽：82→78，-4分）
+    is_prime = (prime_strength >= 78)
     is_watch = False  # 不再发布Watch信号
 
     # 计算达标维度数（保留用于元数据）
     dims_ok = sum(1 for s in scores.values() if abs(s) >= prime_dim_threshold)
 
-    # ---- 6. 15分钟微确认 ----
+    # ---- 6. BTC/ETH市场过滤器（方案B - 独立过滤 + 避免双重惩罚）----
+    # 计算市场大盘趋势，避免逆势做单
+    import time
+    cache_key = f"{int(time.time() // 60)}"  # 按分钟缓存
+
+    try:
+        from ats_core.features.market_regime import calculate_market_regime, apply_market_filter
+
+        # 计算市场趋势
+        market_regime, market_meta = calculate_market_regime(cache_key)
+
+        # 应用市场过滤（逆势惩罚）
+        P_chosen_filtered, prime_strength_filtered, market_adjustment_reason = apply_market_filter(
+            "long" if side_long else "short",
+            P_chosen,
+            prime_strength,
+            market_regime
+        )
+
+        # 改进：避免双重惩罚（F调节器 + 市场过滤器）
+        # 策略：只应用更严格的一个惩罚
+        if market_adjustment_reason:
+            # 计算市场过滤器的乘数
+            market_multiplier = P_chosen_filtered / P_chosen if P_chosen > 0 else 1.0
+
+            # 比较F调节器和市场过滤器的惩罚
+            # adjustment来自F调节器，market_multiplier来自市场过滤器
+            # 取两者中更小的（更严格的惩罚）
+            if adjustment < 1.0 and market_multiplier < 1.0:
+                # 两个都是惩罚，取更严格的
+                combined_multiplier = min(adjustment, market_multiplier)
+                # 重新计算概率（避免叠加惩罚）
+                P_chosen = P_base * combined_multiplier
+                # 更新对应方向的概率
+                if side_long:
+                    P_long = P_chosen
+                else:
+                    P_short = P_chosen
+                # 添加合并惩罚的说明
+                if combined_multiplier == adjustment:
+                    market_adjustment_reason = f"（F调节器惩罚更严：×{adjustment:.2f}）"
+                else:
+                    market_adjustment_reason = market_adjustment_reason + f"（已合并F惩罚）"
+            else:
+                # 正常应用市场过滤（奖励或单一惩罚）
+                P_chosen = P_chosen_filtered
+
+            prime_strength = prime_strength_filtered
+            is_prime = (prime_strength >= 78)  # 重新判定Prime
+
+        penalty_reason = market_adjustment_reason
+
+    except Exception as e:
+        # 市场过滤器失败时不影响主流程
+        market_regime = 0
+        market_meta = {"error": str(e), "btc_trend": 0, "eth_trend": 0, "regime_desc": "计算失败"}
+        penalty_reason = ""
+
+    # ---- 7. 15分钟微确认 ----
     m15_ok = _check_microconfirm_15m(symbol, side_long, params.get("microconfirm_15m", {}), atr_now)
 
     # ---- 7. 给价计划 ----
@@ -381,6 +491,10 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         "prior_up": prior_up,
         "Q": Q,
 
+        # ★ Gold方案：候选池先验信息
+        "elite_prior": elite_prior if elite_prior else None,
+        "bayesian_boost": bayesian_boost if bayesian_boost > 0 else None,
+
         # 发布
         "publish": {
             "prime": is_prime,
@@ -404,6 +518,14 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         # CVD
         "cvd_z20": _zscore_last(cvd_series, 20) if cvd_series else 0.0,
         "cvd_mix_abs_per_h": abs(_last(cvd_mix)) if cvd_mix else 0.0,
+
+        # 市场过滤器（BTC/ETH大盘趋势）
+        "market_regime": market_regime,
+        "market_meta": market_meta,
+        "market_penalty": penalty_reason if penalty_reason else None,
+
+        # F调节器否决警告
+        "f_veto_warning": f_veto_warning,
     }
 
     # 兼容旧版 telegram_fmt.py：将分数直接放在顶层
