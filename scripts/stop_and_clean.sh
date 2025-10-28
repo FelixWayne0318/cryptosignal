@@ -37,7 +37,11 @@ fi
 # 2. 清空Python缓存
 echo ""
 echo "2️⃣  清空Python缓存..."
-cd /home/user/cryptosignal
+
+# 进入项目目录
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_DIR"
 
 # 删除__pycache__目录
 find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true

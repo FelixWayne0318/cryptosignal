@@ -9,7 +9,9 @@ echo "======================================================================"
 echo ""
 
 # 进入项目目录
-cd /home/user/cryptosignal
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_DIR"
 
 # 1. 备份当前代码（如果有修改）
 echo "1️⃣  备份当前代码..."
