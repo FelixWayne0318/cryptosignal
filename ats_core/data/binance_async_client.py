@@ -265,6 +265,156 @@ class BinanceAsyncClient:
             error(f"❌ 获取24h统计失败: {e}")
             return {}
 
+    async def get_all_book_tickers(self) -> List[Dict]:
+        """
+        批量获取所有交易对的订单簿行情（v2.2新增）
+
+        Returns:
+            订单簿列表，格式: [
+                {
+                    "symbol": "BTCUSDT",
+                    "bidPrice": "49000.0",
+                    "bidQty": "10.5",
+                    "askPrice": "49010.0",
+                    "askQty": "8.3",
+                    "time": 1638747600000
+                },
+                ...
+            ]
+
+        API权重: 2
+
+        说明:
+            - 单次请求获取所有币种的最优买卖价
+            - 用于计算OBI和价差
+            - 比逐个请求快1000倍
+        """
+        if not self.session:
+            raise RuntimeError("客户端未启动")
+
+        url = f"{self.BASE_URL}/fapi/v1/ticker/bookTicker"
+
+        try:
+            async with self.session.get(url) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+
+                if isinstance(data, dict) and 'code' in data:
+                    error(f"❌ API错误: {data.get('msg', 'Unknown error')}")
+                    return []
+
+                return data
+
+        except Exception as e:
+            error(f"❌ 批量获取订单簿失败: {e}")
+            return []
+
+    async def get_all_premium_index(self) -> List[Dict]:
+        """
+        批量获取所有交易对的标记价格和资金费率（v2.2新增）
+
+        Returns:
+            标记价格列表，格式: [
+                {
+                    "symbol": "BTCUSDT",
+                    "markPrice": "49123.45",
+                    "indexPrice": "49120.00",
+                    "lastFundingRate": "0.00010000",
+                    "nextFundingTime": 1638748800000,
+                    "time": 1638747600000
+                },
+                ...
+            ]
+
+        API权重: 1
+
+        说明:
+            - 单次请求获取所有币种的标记价格和资金费率
+            - 用于计算基差和FWI
+            - 比逐个请求快1000倍
+        """
+        if not self.session:
+            raise RuntimeError("客户端未启动")
+
+        url = f"{self.BASE_URL}/fapi/v1/premiumIndex"
+
+        try:
+            async with self.session.get(url) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+
+                if isinstance(data, dict) and 'code' in data:
+                    error(f"❌ API错误: {data.get('msg', 'Unknown error')}")
+                    return []
+
+                return data
+
+        except Exception as e:
+            error(f"❌ 批量获取标记价格失败: {e}")
+            return []
+
+    async def get_depth(
+        self,
+        symbol: str,
+        limit: int = 20
+    ) -> Dict:
+        """
+        获取订单簿深度（v2.2新增）
+
+        Args:
+            symbol: 币种
+            limit: 档位数量（5, 10, 20, 50, 100, 500, 1000）
+
+        Returns:
+            订单簿数据，格式:
+            {
+                "lastUpdateId": 1027024,
+                "E": 1638747600000,
+                "T": 1638747600000,
+                "bids": [
+                    ["49000.0", "10.5"],  # [price, qty]
+                    ["48995.0", "5.2"],
+                    ...
+                ],
+                "asks": [
+                    ["49010.0", "8.3"],
+                    ["49015.0", "12.1"],
+                    ...
+                ]
+            }
+
+        API权重: 根据limit不同（5-50: 2, 100: 5, 500: 10, 1000: 20）
+
+        说明:
+            - 获取指定币种的完整订单簿
+            - 用于计算OBI（订单簿失衡）
+        """
+        if not self.session:
+            raise RuntimeError("客户端未启动")
+
+        symbol = symbol.upper()
+        url = f"{self.BASE_URL}/fapi/v1/depth"
+
+        params = {
+            "symbol": symbol,
+            "limit": limit
+        }
+
+        try:
+            async with self.session.get(url, params=params) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+
+                if isinstance(data, dict) and 'code' in data:
+                    error(f"❌ API错误 {symbol}: {data.get('msg', 'Unknown error')}")
+                    return {}
+
+                return data
+
+        except Exception as e:
+            error(f"❌ 获取订单簿深度失败 {symbol}: {e}")
+            return {}
+
     # ============ WebSocket 方法 ============
 
     async def subscribe_kline(
