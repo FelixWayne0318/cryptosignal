@@ -377,29 +377,31 @@ def _analyze_symbol_core(
     prime_strength += prime_oi_score
 
     # ---- 🚀 世界顶级优化：多时间框架协同验证 ----
-    # 在Prime判定前，验证15m/1h/4h/1d的一致性
+    # 性能优化：临时禁用MTF验证（节省20-40秒/币种）
+    # MTF需要额外4次API调用（15m/1h/4h/1d K线），显著降低扫描速度
+    # TODO: 未来可使用预加载的K线数据重新启用
     mtf_result = None
-    mtf_coherence = 100.0  # 默认值（如果验证失败）
+    mtf_coherence = 100.0  # 默认值：跳过MTF验证
 
-    try:
-        mtf_result = multi_timeframe_coherence(symbol, verbose=False)
-        mtf_coherence = mtf_result['coherence_score']
-
-        # 一致性过滤: <60分惩罚
-        if mtf_coherence < 60:
-            # 时间框架不一致，降低概率和Prime评分
-            P_chosen *= 0.85  # 惩罚15%
-            prime_strength *= 0.90  # Prime评分降低10%
-
-            # 更新对应方向的概率
-            if side_long:
-                P_long = P_chosen
-            else:
-                P_short = P_chosen
-    except Exception as e:
-        # MTF验证失败，不影响主流程
-        from ats_core.logging import warn
-        warn(f"[MTF] {symbol}: 多时间框架验证失败 - {e}")
+    # try:
+    #     mtf_result = multi_timeframe_coherence(symbol, verbose=False)
+    #     mtf_coherence = mtf_result['coherence_score']
+    #
+    #     # 一致性过滤: <60分惩罚
+    #     if mtf_coherence < 60:
+    #         # 时间框架不一致，降低概率和Prime评分
+    #         P_chosen *= 0.85  # 惩罚15%
+    #         prime_strength *= 0.90  # Prime评分降低10%
+    #
+    #         # 更新对应方向的概率
+    #         if side_long:
+    #             P_long = P_chosen
+    #         else:
+    #             P_short = P_chosen
+    # except Exception as e:
+    #     # MTF验证失败，不影响主流程
+    #     from ats_core.logging import warn
+    #     warn(f"[MTF] {symbol}: 多时间框架验证失败 - {e}")
 
     # Prime判定：得分 >= 78分（适度放宽：82→78，-4分）
     is_prime = (prime_strength >= 78)
