@@ -272,10 +272,16 @@ class OptimizedBatchScanner:
                 log(f"  └─ 分析完成（耗时{analysis_time:.1f}秒）")
 
                 # 筛选高质量信号
-                final_score = abs(result.get('final_score', 0))
-                if final_score >= min_score:
+                # 使用confidence（abs(weighted_score)）作为信号强度
+                confidence_score = result.get('confidence', 0)
+                prime_strength = result.get('publish', {}).get('prime_strength', 0)
+
+                # 优先使用prime_strength，如果不存在则用confidence
+                signal_score = prime_strength if prime_strength > 0 else confidence_score
+
+                if signal_score >= min_score:
                     results.append(result)
-                    log(f"✅ {symbol}: 分数={final_score:.0f}")
+                    log(f"✅ {symbol}: Prime强度={prime_strength}, 置信度={confidence_score:.0f}")
 
                 # 进度显示（每20个）
                 if (i + 1) % 20 == 0:
@@ -379,12 +385,13 @@ async def run_optimized_scan(
 
             for r in results['results']:
                 symbol = r.get('symbol', 'UNKNOWN')
-                score = r.get('final_score', 0)
-                side = 'LONG' if score > 0 else 'SHORT'
+                weighted_score = r.get('weighted_score', 0)
+                side = 'LONG' if weighted_score > 0 else 'SHORT'
                 confidence = r.get('confidence', 0)
+                prime_strength = r.get('publish', {}).get('prime_strength', 0)
 
                 log(f"   {symbol} {side}: "
-                    f"分数={abs(score):.0f}, "
+                    f"Prime强度={prime_strength}, "
                     f"置信度={confidence:.0f}")
 
         return results
@@ -442,8 +449,8 @@ async def benchmark_comparison(test_symbols: int = 20):
     for symbol in symbols:
         try:
             result = analyze_symbol(symbol)
-            final_score = abs(result.get('final_score', 0))
-            if final_score >= 70:
+            prime_strength = result.get('publish', {}).get('prime_strength', 0)
+            if prime_strength >= 70:
                 rest_results.append(result)
         except Exception:
             pass
