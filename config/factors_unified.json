@@ -253,9 +253,9 @@
   },
 
   "thresholds": {
-    "prime_strength_min": 78,
+    "prime_strength_min": 65,
     "prime_prob_min": 0.62,
-    "watch_strength_min": 65,
+    "watch_strength_min": 55,
     "watch_prob_min": 0.55,
 
     "filters": {
