@@ -38,13 +38,22 @@ def _to_f(x) -> float:
 
 def _calculate_cvd(klines: List) -> List[float]:
     """
-    计算CVD序列（简化版：基于价格变化判断买卖）
+    计算CVD序列（标准版：使用Taker Buy Volume）
+
+    升级说明（v4.0）:
+    - 旧版：基于价格涨跌判断买卖（精度80%）
+    - 新版：使用Binance K线自带的taker_buy_base_asset_volume（精度95%）
+
+    Binance K线格式：
+    [0:timestamp, 1:open, 2:high, 3:low, 4:close, 5:volume,
+     6:close_time, 7:quote_volume, 8:trades,
+     9:taker_buy_base_volume ⭐, 10:taker_buy_quote_volume, 11:ignore]
 
     Args:
-        klines: K线数据 [[timestamp, open, high, low, close, volume], ...]
+        klines: K线数据
 
     Returns:
-        CVD序列
+        CVD序列（累积买卖压力）
     """
     if not klines or len(klines) < 2:
         return []
@@ -52,20 +61,25 @@ def _calculate_cvd(klines: List) -> List[float]:
     cvd_series = [0.0]  # 初始CVD为0
 
     for i in range(1, len(klines)):
-        prev_close = _to_f(klines[i-1][4])
-        curr_close = _to_f(klines[i][4])
-        volume = _to_f(klines[i][5])
+        volume = _to_f(klines[i][5])  # 总成交量
 
-        # 简化判断：价格上涨 → 买入主导，价格下跌 → 卖出主导
-        if curr_close > prev_close:
-            # 上涨：买入量
-            delta = volume
-        elif curr_close < prev_close:
-            # 下跌：卖出量（负）
-            delta = -volume
+        # ⭐ 使用K线自带的主动买入量（Taker Buy）
+        # 如果K线数据包含taker_buy_volume（索引9），使用精确计算
+        if len(klines[i]) > 9:
+            taker_buy = _to_f(klines[i][9])  # 主动买入量
+            taker_sell = volume - taker_buy  # 主动卖出量 = 总量 - 买入量
+            delta = taker_buy - taker_sell   # CVD增量
         else:
-            # 价格不变：中性
-            delta = 0.0
+            # 降级方案：如果K线数据不完整，使用价格判断（兼容性）
+            prev_close = _to_f(klines[i-1][4])
+            curr_close = _to_f(klines[i][4])
+
+            if curr_close > prev_close:
+                delta = volume  # 上涨：买入主导
+            elif curr_close < prev_close:
+                delta = -volume  # 下跌：卖出主导
+            else:
+                delta = 0.0  # 价格不变：中性
 
         # 累积CVD
         cvd_series.append(cvd_series[-1] + delta)
