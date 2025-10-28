@@ -98,7 +98,7 @@ class OptimizedBatchScanner:
                 # quoteVolume = USDT成交额
                 volume_map[symbol] = float(ticker.get('quoteVolume', 0))
 
-        # 按流动性排序，取TOP 140（避免WebSocket连接数超限：140币种×2周期=280<300限制）
+        # 按流动性排序，取TOP 140（WebSocket连接数：140币种×2周期=280<300限制）
         symbols = sorted(
             all_symbols,
             key=lambda s: volume_map.get(s, 0),
@@ -127,11 +127,14 @@ class OptimizedBatchScanner:
         # 4. 启动WebSocket实时更新（可选）
         if enable_websocket:
             log(f"\n4️⃣  启动WebSocket实时更新...")
+            log(f"   策略: 仅订阅关键周期（1h, 4h）以避免连接数超限")
+            log(f"   连接数: 140币种 × 2周期 = 280 < 300限制 ✅")
             await self.kline_cache.start_batch_realtime_update(
                 symbols=symbols,
-                intervals=['1h', '4h', '15m', '1d'],  # MTF需要所有周期
+                intervals=['1h', '4h'],  # 只订阅主要周期（15m和1d使用REST数据即可）
                 client=self.client
             )
+            log(f"   15m和1d周期: 使用REST API数据（更新频率低，无需实时订阅）")
         else:
             log(f"\n4️⃣  跳过WebSocket实时更新（测试模式）")
 
