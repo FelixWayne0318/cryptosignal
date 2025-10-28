@@ -228,6 +228,58 @@ def get_funding_rate(symbol: str) -> float:
     return float(result.get('lastFundingRate', 0))
 
 
+def get_spot_price(symbol: str) -> float:
+    """
+    获取现货价格（Binance Spot API）
+
+    /api/v3/ticker/price
+
+    Args:
+        symbol: 现货交易对符号（如 BTCUSDT）
+
+    Returns:
+        现货价格（float）
+    """
+    symbol = symbol.upper()
+    result = _get(SPOT_BASE + "/api/v3/ticker/price", {"symbol": symbol}, timeout=6.0, retries=2)
+    return float(result.get('price', 0))
+
+
+def get_all_spot_prices() -> Dict[str, float]:
+    """
+    批量获取所有现货价格（Binance Spot API）
+
+    /api/v3/ticker/price（无symbol参数）
+
+    Returns:
+        字典：{symbol: price}
+        例如：{"BTCUSDT": 50000.0, "ETHUSDT": 3000.0, ...}
+    """
+    result = _get(SPOT_BASE + "/api/v3/ticker/price", None, timeout=10.0, retries=2)
+    if isinstance(result, list):
+        return {item['symbol']: float(item['price']) for item in result}
+    return {}
+
+
+def get_all_premium_index() -> List[Dict[str, Any]]:
+    """
+    批量获取所有合约的标记价格和资金费率
+
+    /fapi/v1/premiumIndex（无symbol参数）
+
+    Returns:
+        列表，每个元素包含：
+        {
+            "symbol": "BTCUSDT",
+            "markPrice": "50000",
+            "lastFundingRate": "0.0001",
+            "nextFundingTime": 1234567890000,
+            "time": 1234567890000
+        }
+    """
+    return _get("/fapi/v1/premiumIndex", None, timeout=10.0, retries=2)
+
+
 # ------------------------- 强平订单（清算数据） -------------------------
 
 def get_liquidations(
