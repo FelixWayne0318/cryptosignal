@@ -439,40 +439,43 @@ def _analyze_symbol_core(
         prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
         watch_prob_min = publish_cfg.get("watch_prob_min", 0.58)
 
-    # ---- Prime评分系统（0-100分，平滑化）----
-    # 改进：使用平滑函数替代硬阈值，避免悬崖效应
+    # ---- Prime评分系统（v4.0 - 基于10维因子系统）----
+    # 重大改进：使用10维综合评分替代4维独立评分
+    #
+    # 旧逻辑问题：
+    # - 只用了概率(40) + C(20) + V(20) + O(20) = 100分
+    # - 新增的L（流动性）和B（基差+资金费）完全没有参与
+    # - 导致低流动性或极端资金费的币种仍能获得高分
+    #
+    # 新逻辑：
+    # - 基础强度（60分）= confidence（10维加权分数的绝对值）× 0.6
+    # - 概率加成（40分）= 基于P_chosen的额外奖励
+    # - 总分 0-100，所有10维因子都参与
+    #
     # 目标：prime_strength >= 65 → is_prime
 
     prime_strength = 0.0
 
-    # 1. 概率得分（40分）- 平滑线性映射
+    # 1. 基础强度：基于10维综合评分（60分）
+    # confidence = abs(weighted_score)，已包含T/M/C/S/V/O/L/B/Q/I全部因子
+    # 范围：0-100 → 映射到 0-60分
+    base_strength = confidence * 0.6
+    prime_strength += base_strength
+
+    # 2. 概率加成（40分）- 保持原逻辑
     # 60%→0分, 75%→40分, >75%截断
+    prob_bonus = 0.0
     if P_chosen >= 0.60:
-        prime_prob_score = min(40.0, (P_chosen - 0.60) / 0.15 * 40.0)
-        prime_strength += prime_prob_score
-    # 概率<60%不给分
+        prob_bonus = min(40.0, (P_chosen - 0.60) / 0.15 * 40.0)
+        prime_strength += prob_bonus
 
-    # 2. CVD资金流得分（20分）- 平滑映射（方向对称）
-    # 做多时：C>0好；做空时：C<0好
-    if side_long:
-        # C: 0→0分, +100→20分
-        prime_cvd_score = max(0.0, min(20.0, C / 100.0 * 20.0))
-    else:
-        # C: 0→0分, -100→20分
-        prime_cvd_score = max(0.0, min(20.0, abs(C) / 100.0 * 20.0))
-    prime_strength += prime_cvd_score
-
-    # 3. 量能得分（20分）- 平滑映射（使用绝对值）
-    # V_abs: 0→0分, 100→20分
-    V_abs = abs(V)
-    prime_vol_score = max(0.0, min(20.0, V_abs / 100.0 * 20.0))
-    prime_strength += prime_vol_score
-
-    # 4. 持仓得分（20分）- 平滑映射（使用绝对值）
-    # O_abs: 0→0分, 100→20分
-    O_abs = abs(O)
-    prime_oi_score = max(0.0, min(20.0, O_abs / 100.0 * 20.0))
-    prime_strength += prime_oi_score
+    # 记录各部分得分（用于调试）
+    prime_breakdown = {
+        'base_strength': round(base_strength, 1),
+        'prob_bonus': round(prob_bonus, 1),
+        'confidence': confidence,
+        'P_chosen': round(P_chosen, 4)
+    }
 
     # ---- 🚀 世界顶级优化：多时间框架协同验证（缓存版，零API调用）----
     # 性能优化：使用预加载的K线数据，零API调用
@@ -615,7 +618,7 @@ def _analyze_symbol_core(
         "F_score": F,  # F分数（-100到+100）
         "F_adjustment": adjustment,  # 调整系数
         "prior_up": prior_up,
-        "Q": Q,
+        "quality_score": quality_score,  # 质量系数（0.6-1.0）
 
         # 发布
         "publish": {
@@ -623,6 +626,7 @@ def _analyze_symbol_core(
             "watch": is_watch,
             "dims_ok": dims_ok,
             "prime_strength": int(prime_strength),  # Prime评分（0-100）
+            "prime_breakdown": prime_breakdown,  # Prime评分详细分解（v4.0新增）
             "ttl_h": 8
         },
 
