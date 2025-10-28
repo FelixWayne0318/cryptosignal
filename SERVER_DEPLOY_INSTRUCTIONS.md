@@ -50,7 +50,7 @@ source .env.telegram
 python scripts/realtime_signal_scanner.py --max-symbols 20 --no-telegram
 ```
 
-### 完整测试（200个币种，不发Telegram）
+### 完整测试（140个币种，不发Telegram）
 ```bash
 cd /home/user/cryptosignal
 source .env.telegram
@@ -92,13 +92,13 @@ screen -S signal_scanner -X quit
 总耗时：约1分钟
 ```
 
-### 完整测试（200个币种）
+### 完整测试（140个币种）
 ```
-初始化时间：3-4分钟
-扫描时间：12-15秒
-总耗时：约4-5分钟
+初始化时间：2-3分钟
+扫描时间：8-12秒
+总耗时：约3-4分钟
 
-vs 旧方案：40-60分钟 → 提升240倍！
+vs 旧方案：40-60分钟 → 提升300倍！
 ```
 
 ---

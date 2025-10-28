@@ -65,7 +65,7 @@ class OptimizedBatchScanner:
         self.client = get_binance_client()
         await self.client.initialize()
 
-        # 2. 获取高流动性USDT合约币种（TOP 200）
+        # 2. 获取高流动性USDT合约币种（TOP 140）
         log("\n2️⃣  获取高流动性USDT合约币种...")
 
         # 获取交易所信息
@@ -92,12 +92,12 @@ class OptimizedBatchScanner:
                 # quoteVolume = USDT成交额
                 volume_map[symbol] = float(ticker.get('quoteVolume', 0))
 
-        # 按流动性排序，取TOP 200
+        # 按流动性排序，取TOP 140（避免WebSocket连接数超限：140币种×2周期=280<300限制）
         symbols = sorted(
             all_symbols,
             key=lambda s: volume_map.get(s, 0),
             reverse=True
-        )[:200]
+        )[:140]
 
         # 过滤掉流动性太低的（<3M USDT/24h）
         MIN_VOLUME = 3_000_000
@@ -184,12 +184,12 @@ class OptimizedBatchScanner:
             if symbol in all_symbols:
                 volume_map[symbol] = float(ticker.get('quoteVolume', 0))
 
-        # 按流动性排序，取TOP 200
+        # 按流动性排序，取TOP 140（避免WebSocket连接数超限：140币种×2周期=280<300限制）
         symbols = sorted(
             all_symbols,
             key=lambda s: volume_map.get(s, 0),
             reverse=True
-        )[:200]
+        )[:140]
 
         # 过滤掉流动性太低的（<3M USDT/24h）
         MIN_VOLUME = 3_000_000
