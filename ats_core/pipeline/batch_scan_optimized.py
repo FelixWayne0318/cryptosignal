@@ -181,16 +181,25 @@ class OptimizedBatchScanner:
         skipped = 0
         errors = 0
 
+        log(f"\n开始扫描 {len(symbols)} 个币种...")
+
         for i, symbol in enumerate(symbols):
             try:
+                log(f"[{i+1}/{len(symbols)}] 正在分析 {symbol}...")
+
                 # 从缓存获取K线（0次API调用）✅
                 k1h = self.kline_cache.get_klines(symbol, '1h', 300)
                 k4h = self.kline_cache.get_klines(symbol, '4h', 200)
 
+                log(f"  └─ K线数据: 1h={len(k1h) if k1h else 0}根, 4h={len(k4h) if k4h else 0}根")
+
                 # 检查数据完整性
                 if not k1h or not k4h or len(k1h) < 96 or len(k4h) < 50:
                     skipped += 1
+                    log(f"  └─ ⚠️  跳过（数据不足）")
                     continue
+
+                log(f"  └─ 开始因子分析...")
 
                 # 因子分析（使用预加载的K线）
                 result = analyze_symbol_with_preloaded_klines(
@@ -198,6 +207,8 @@ class OptimizedBatchScanner:
                     k1h=k1h,
                     k4h=k4h
                 )
+
+                log(f"  └─ 分析完成")
 
                 # 筛选高质量信号
                 final_score = abs(result.get('final_score', 0))
