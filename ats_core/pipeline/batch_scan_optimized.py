@@ -37,6 +37,7 @@ class OptimizedBatchScanner:
         self.client = None
         self.kline_cache = get_kline_cache()
         self.initialized = False
+        self.symbols = []  # 保存初始化时的币种列表
 
         log("✅ 优化批量扫描器创建成功")
 
@@ -65,25 +66,50 @@ class OptimizedBatchScanner:
         self.client = get_binance_client()
         await self.client.initialize()
 
-        # 2. 获取所有USDT合约币种
-        log("\n2️⃣  获取所有USDT合约币种...")
+        # 2. 获取高流动性USDT合约币种（TOP 140）
+        log("\n2️⃣  获取高流动性USDT合约币种...")
 
         # 获取交易所信息
         exchange_info = await self.client.get_exchange_info()
 
-        # 筛选USDT合约币种
+        # 筛选USDT永续合约
         all_symbols = [
             s["symbol"] for s in exchange_info.get("symbols", [])
             if s["symbol"].endswith("USDT")
             and s["status"] == "TRADING"
             and s["contractType"] == "PERPETUAL"
         ]
+        log(f"   总计: {len(all_symbols)} 个USDT永续合约")
 
-        # 取前100个（按字母顺序）
-        symbols = sorted(all_symbols)[:100]
+        # 获取24h行情数据（用于流动性过滤）
+        log("   获取24h行情数据...")
+        ticker_24h = await self.client.get_ticker_24h()
 
-        log(f"   ✅ 获取到 {len(symbols)} 个USDT合约币种")
-        log(f"   示例: {', '.join(symbols[:5])}...")
+        # 构建成交额字典
+        volume_map = {}
+        for ticker in ticker_24h:
+            symbol = ticker.get('symbol', '')
+            if symbol in all_symbols:
+                # quoteVolume = USDT成交额
+                volume_map[symbol] = float(ticker.get('quoteVolume', 0))
+
+        # 按流动性排序，取TOP 140（避免WebSocket连接数超限：140币种×2周期=280<300限制）
+        symbols = sorted(
+            all_symbols,
+            key=lambda s: volume_map.get(s, 0),
+            reverse=True
+        )[:140]
+
+        # 过滤掉流动性太低的（<3M USDT/24h）
+        MIN_VOLUME = 3_000_000
+        symbols = [s for s in symbols if volume_map.get(s, 0) >= MIN_VOLUME]
+
+        log(f"   ✅ 筛选出 {len(symbols)} 个高流动性币种（24h成交额>3M USDT）")
+        log(f"   TOP 5: {', '.join(symbols[:5])}")
+        log(f"   成交额范围: {volume_map.get(symbols[0], 0)/1e6:.1f}M ~ {volume_map.get(symbols[-1], 0)/1e6:.1f}M USDT")
+
+        # 保存初始化的币种列表
+        self.symbols = symbols
 
         # 3. 批量初始化K线缓存（REST，一次性）
         log(f"\n3️⃣  批量初始化K线缓存（这是一次性操作）...")
@@ -140,25 +166,14 @@ class OptimizedBatchScanner:
 
         scan_start = time.time()
 
-        # 获取币种列表（直接从交易所获取）
-        exchange_info = await self.client.get_exchange_info()
-
-        # 筛选USDT合约币种
-        all_symbols = [
-            s["symbol"] for s in exchange_info.get("symbols", [])
-            if s["symbol"].endswith("USDT")
-            and s["status"] == "TRADING"
-            and s["contractType"] == "PERPETUAL"
-        ]
-
-        # 取前100个（按字母顺序）
-        symbols = sorted(all_symbols)[:100]
+        # 使用初始化时保存的币种列表（确保与缓存一致）
+        symbols = self.symbols.copy()
 
         # 限制数量（测试用）
         if max_symbols:
             symbols = symbols[:max_symbols]
 
-        log(f"   扫描币种: {len(symbols)}")
+        log(f"   扫描币种: {len(symbols)} 个高流动性币种")
         log(f"   最低分数: {min_score}")
         log("=" * 60)
 
@@ -166,16 +181,60 @@ class OptimizedBatchScanner:
         skipped = 0
         errors = 0
 
+        log(f"\n开始扫描 {len(symbols)} 个币种...")
+
         for i, symbol in enumerate(symbols):
             try:
+                log(f"[{i+1}/{len(symbols)}] 正在分析 {symbol}...")
+
                 # 从缓存获取K线（0次API调用）✅
                 k1h = self.kline_cache.get_klines(symbol, '1h', 300)
                 k4h = self.kline_cache.get_klines(symbol, '4h', 200)
 
+                log(f"  └─ K线数据: 1h={len(k1h) if k1h else 0}根, 4h={len(k4h) if k4h else 0}根")
+
+                # 动态数据要求（支持新币）
+                coin_age_hours = len(k1h) if k1h else 0
+
+                # 根据币种年龄确定最小数据要求
+                if coin_age_hours <= 24:
+                    # 超新币（1-24小时）
+                    min_k1h = 10
+                    min_k4h = 3
+                    coin_type = "超新币"
+                elif coin_age_hours <= 168:  # 7天
+                    # 阶段A（1-7天）
+                    min_k1h = 30
+                    min_k4h = 8
+                    coin_type = "新币A"
+                elif coin_age_hours <= 720:  # 30天
+                    # 阶段B（7-30天）
+                    min_k1h = 50
+                    min_k4h = 15
+                    coin_type = "新币B"
+                else:
+                    # 成熟币
+                    min_k1h = 96
+                    min_k4h = 50
+                    coin_type = "成熟币"
+
                 # 检查数据完整性
-                if not k1h or not k4h or len(k1h) < 96 or len(k4h) < 50:
+                if not k1h or len(k1h) < min_k1h:
                     skipped += 1
+                    log(f"  └─ ⚠️  跳过（{coin_type}，1h数据不足：{len(k1h) if k1h else 0}<{min_k1h}）")
                     continue
+
+                if not k4h or len(k4h) < min_k4h:
+                    skipped += 1
+                    log(f"  └─ ⚠️  跳过（{coin_type}，4h数据不足：{len(k4h) if k4h else 0}<{min_k4h}）")
+                    continue
+
+                log(f"  └─ 币种类型：{coin_type}（{coin_age_hours}小时）")
+
+                log(f"  └─ 开始因子分析...")
+
+                # 性能监控
+                analysis_start = time.time()
 
                 # 因子分析（使用预加载的K线）
                 result = analyze_symbol_with_preloaded_klines(
@@ -183,6 +242,22 @@ class OptimizedBatchScanner:
                     k1h=k1h,
                     k4h=k4h
                 )
+
+                analysis_time = time.time() - analysis_start
+
+                # 性能详情（慢速币种）
+                if analysis_time > 5:
+                    log(f"  └─ ⚠️  分析耗时较长: {analysis_time:.1f}秒")
+                    # 打印各指标耗时
+                    perf = result.get('perf', {})
+                    if perf:
+                        slow_steps = {k: v for k, v in perf.items() if v > 1.0}
+                        if slow_steps:
+                            log(f"      慢速步骤:")
+                            for step, t in sorted(slow_steps.items(), key=lambda x: -x[1]):
+                                log(f"      - {step}: {t:.1f}秒")
+
+                log(f"  └─ 分析完成（耗时{analysis_time:.1f}秒）")
 
                 # 筛选高质量信号
                 final_score = abs(result.get('final_score', 0))

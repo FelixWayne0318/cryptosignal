@@ -28,11 +28,16 @@ def score_cvd_flow(
 
     Returns:
         (C分数, 元数据)
+
+    改进（v2.1）：
+        - 添加拥挤度检测（学习OI的95分位数逻辑）
+        - 资金流过于拥挤时降权（避免追高）
     """
     # 默认参数
     default_params = {
         "lookback_hours": 6,       # CVD回看周期（小时）
         "cvd_scale": 0.02,         # CVD变化scale
+        "crowding_p95_penalty": 10,  # 拥挤度惩罚（百分比）
     }
 
     p = dict(default_params)
@@ -91,18 +96,51 @@ def score_cvd_flow(
         stability_factor = 0.7 + 0.3 * (r_squared / 0.7)
         cvd_score = cvd_score * min(1.0, stability_factor)
 
-    # ========== 4. 最终分数（保留符号） ==========
+    # ========== 4. 拥挤度检测（新增v2.1，学习OI的95分位数逻辑） ==========
+    crowding_warn = False
+    p95_cvd = None
+
+    # 计算CVD变化率的历史分布（至少需要30个数据点）
+    if len(cvd_series) >= 30:
+        # 计算所有6小时CVD变化率（归一化）
+        hist_cvd_changes = []
+        for i in range(6, len(cvd_series)):
+            window = cvd_series[i-6:i+1]
+            if len(window) == 7:
+                # 计算这个窗口的CVD变化率（与当前方法一致）
+                delta = (window[-1] - window[0]) / price
+                hist_cvd_changes.append(abs(delta))  # 使用绝对值（不管多空）
+
+        if len(hist_cvd_changes) >= 20:
+            # 计算95分位数
+            sorted_changes = sorted(hist_cvd_changes)
+            p95_idx = int(0.95 * (len(sorted_changes) - 1))
+            p95_cvd = sorted_changes[p95_idx]
+
+            # 检测当前CVD变化是否超过95分位数（拥挤）
+            cvd6 = (cvd_window[-1] - cvd_window[0]) / price
+            crowding_warn = (abs(cvd6) >= p95_cvd)
+
+    # 如果资金流拥挤，降权（避免追高/杀跌）
+    if crowding_warn:
+        penalty_factor = (100 - p["crowding_p95_penalty"]) / 100.0
+        cvd_score = cvd_score * penalty_factor
+
+    # ========== 5. 最终分数（保留符号） ==========
     C = int(round(max(-100, min(100, cvd_score))))
 
     # 计算cvd6用于显示（实际的起点终点变化）
     cvd6 = (cvd_window[-1] - cvd_window[0]) / price
 
-    # ========== 5. 返回元数据 ==========
+    # ========== 6. 返回元数据 ==========
     return C, {
         "cvd6": round(cvd6, 6),              # 实际变化（用于显示）
         "cvd_raw": round(cvd_window[-1] - cvd_window[0], 2),
         "cvd_score": cvd_score,
         "slope": round(slope_normalized, 8),  # 斜率（每小时平均变化）
         "r_squared": round(r_squared, 3),     # R²拟合优度（0-1）
-        "is_consistent": is_consistent        # 是否持续（R²>=0.7）
+        "is_consistent": is_consistent,       # 是否持续（R²>=0.7）
+        # v2.1: 拥挤度检测
+        "crowding_warn": crowding_warn,       # 是否拥挤
+        "p95_cvd": round(p95_cvd, 6) if p95_cvd is not None else None  # 95分位数阈值
     }

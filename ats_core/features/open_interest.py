@@ -6,11 +6,54 @@ O（持仓）评分 - 统一±100系统
 - OI上升 = 正分（看多或看空杠杆增加）
 - OI下降 = 负分（杠杆减少）
 - 配合价格方向判断多空
+
+改进（v2.1）：
+- 使用线性回归+R²（对标CVD）
+- 避免被单根K线异常值误导
 """
 from statistics import median
-from typing import Dict, Tuple, Any
+from typing import Dict, Tuple, Any, List
 from ats_core.sources.oi import fetch_oi_hourly, pct, pct_series
 from ats_core.features.scoring_utils import directional_score
+from ats_core.utils.outlier_detection import detect_outliers_iqr, apply_outlier_weights
+
+
+def _linreg_r2(y: List[float]) -> Tuple[float, float]:
+    """
+    线性回归计算（与CVD/Trend统一方法）
+
+    Args:
+        y: 数值序列（如OI序列）
+
+    Returns:
+        (slope, r_squared)
+        - slope: 斜率（趋势方向和强度）
+        - r_squared: R²拟合优度（0-1，越大越线性）
+    """
+    n = len(y)
+    if n <= 1:
+        return 0.0, 0.0
+
+    xs = list(range(n))
+    mean_x = (n - 1) / 2.0
+    mean_y = sum(y) / n
+
+    # 计算斜率
+    num = sum((xs[i] - mean_x) * (y[i] - mean_y) for i in range(n))
+    den = sum((xs[i] - mean_x) ** 2 for i in range(n))
+    slope = num / den if den != 0 else 0.0
+
+    # 计算R²
+    ss_tot = sum((yy - mean_y) ** 2 for yy in y)
+    ss_res = sum((y[i] - (slope * xs[i] + (mean_y - slope * mean_x))) ** 2 for i in range(n))
+    r2 = 1.0 - (ss_res / ss_tot) if ss_tot != 0 else 0.0
+
+    # 处理NaN和边界
+    if not (r2 == r2):  # NaN check
+        r2 = 0.0
+    r2 = max(0.0, min(1.0, r2))
+
+    return slope, r2
 
 def score_open_interest(symbol: str,
                         closes,
@@ -58,13 +101,59 @@ def score_open_interest(symbol: str,
             "dnup12":   None,
             "upup12":   None,
             "crowding_warn": False,
-            "data_source": "cvd_fallback"
+            "data_source": "cvd_fallback",
+            "r_squared": 0.0,
+            "is_consistent": False,
+            "method": "cvd_fallback"
         }
 
     den = median(oi[max(0, len(oi) - 168):])
-    # 归一变化率
-    oi1h = pct(oi[-1], oi[-2], den)
-    oi24 = pct(oi[-1], oi[-25], den) if len(oi) >= 25 else 0.0
+
+    # ========== 改进v2.1：使用线性回归 + 异常值过滤（对标CVD） ==========
+    # 初始化变量
+    r_squared = 0.0
+    is_consistent = False
+    outliers_filtered = 0
+
+    # 旧方法：oi24 = pct(oi[-1], oi[-25], den)  # 简单两点比较
+    # 新方法：线性回归斜率 + R²验证 + 异常值过滤
+    if len(oi) >= 25:
+        oi_window = oi[-25:]  # 24小时窗口
+
+        # ========== 异常值检测和处理（新增v2.1） ==========
+        # 检测OI变化异常值（如巨鲸突然建仓）
+        oi_changes = [oi_window[i] - oi_window[i-1] for i in range(1, len(oi_window))]
+
+        if len(oi_window) >= 20:
+            outlier_mask = detect_outliers_iqr(oi_window, multiplier=1.5)
+            outliers_filtered = sum(outlier_mask)
+
+            # 对异常值降权（避免被巨鲸订单误导）
+            if outliers_filtered > 0:
+                oi_window = apply_outlier_weights(oi_window, outlier_mask, outlier_weight=0.5)
+
+        # 线性回归分析
+        slope, r_squared = _linreg_r2(oi_window)
+
+        # 归一化斜率（除以中位数，避免量级差异）
+        slope_normalized = slope / max(1e-12, den)
+
+        # 24小时总变化 = 斜率 × 24（平均每小时 × 小时数）
+        oi24_trend = slope_normalized * 24
+
+        # R²持续性验证（与CVD一致）
+        is_consistent = (r_squared >= 0.7)
+        if not is_consistent:
+            # R²低时打折（震荡市，0.7x ~ 1.0x）
+            stability_factor = 0.7 + 0.3 * (r_squared / 0.7)
+            oi24_trend *= stability_factor
+
+        oi24 = oi24_trend
+    else:
+        oi24 = 0.0
+
+    # 1小时变化（保留用于参考）
+    oi1h = pct(oi[-1], oi[-2], den) if len(oi) >= 2 else 0.0
 
     # 最近 12 小时价格 vs OI 同向统计
     k = min(12, len(closes) - 1, len(oi) - 1)
@@ -131,5 +220,11 @@ def score_open_interest(symbol: str,
         "oi_score": int(oi_score),
         "align_score": int(align_score),
         "interpretation": interpretation,
-        "data_source": "oi"
+        "data_source": "oi",
+        # v2.1: 线性回归指标（与CVD一致）
+        "r_squared": round(r_squared, 3),
+        "is_consistent": is_consistent,
+        "method": "linear_regression+outlier_filter",  # 标记使用了线性回归+异常值过滤
+        # v2.1: 异常值过滤统计
+        "outliers_filtered": outliers_filtered
     }

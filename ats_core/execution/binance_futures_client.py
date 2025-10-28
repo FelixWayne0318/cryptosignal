@@ -208,6 +208,28 @@ class BinanceFuturesClient:
         return await self._request('GET', '/fapi/v1/premiumIndex',
                                    params={'symbol': symbol})
 
+    async def get_exchange_info(self) -> Dict:
+        """获取交易所信息（所有交易对）"""
+        return await self._request('GET', '/fapi/v1/exchangeInfo')
+
+    async def get_ticker_24h(self, symbol: str = None) -> List[Dict]:
+        """
+        获取24小时行情
+
+        Args:
+            symbol: 交易对，None=所有交易对
+
+        Returns:
+            单个交易对返回dict，所有交易对返回list
+        """
+        params = {'symbol': symbol} if symbol else {}
+        result = await self._request('GET', '/fapi/v1/ticker/24hr', params=params)
+
+        # 如果是单个币种，返回list包装
+        if symbol:
+            return [result] if isinstance(result, dict) else result
+        return result
+
     async def get_open_interest(self, symbol: str) -> Dict:
         """获取持仓量"""
         return await self._request('GET', '/fapi/v1/openInterest',

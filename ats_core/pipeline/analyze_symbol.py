@@ -88,12 +88,12 @@ def _analyze_symbol_core(
     k4: List,
     oi_data: List,
     spot_k1: List = None,
-    elite_meta: Dict[str, Any] = None
+    elite_meta: Dict[str, Any] = None  # 保留参数兼容性，但不再使用
 ) -> Dict[str, Any]:
     """
     核心分析逻辑（使用已获取的K线数据）
 
-    此函数包含完整的7维因子分析逻辑，但不负责获取数据。
+    此函数包含完整的8维因子分析逻辑，但不负责获取数据。
     由analyze_symbol()和analyze_symbol_with_preloaded_klines()调用。
 
     Args:
@@ -102,24 +102,16 @@ def _analyze_symbol_core(
         k4: 4小时K线数据
         oi_data: OI数据
         spot_k1: 现货K线（可选）
-        elite_meta: Elite Universe元数据（可选）
+        elite_meta: 已废弃，保留仅为兼容性
 
     Returns:
         分析结果字典
     """
     params = CFG.params or {}
 
-    # ★ Gold方案：提取候选池先验信息
+    # 移除候选池先验逻辑（已废弃）
     elite_prior = {}
-    if elite_meta:
-        elite_prior = {
-            "long_score": elite_meta.get("long_score", 0),
-            "short_score": elite_meta.get("short_score", 0),
-            "trend_dir": elite_meta.get("trend_dir", "NEUTRAL"),
-            "anomaly_score": elite_meta.get("anomaly_score", 0),
-            "anomaly_dims": list(elite_meta.get("anomaly_details", {}).keys())[:3] if elite_meta.get("anomaly_details") else [],
-            "pre_computed": elite_meta.get("pre_computed", {}),
-        }
+    bayesian_boost = 0.0  # 不再使用贝叶斯先验
 
     # ---- 新币检测（优先判断，决定数据要求）----
     new_coin_cfg = params.get("new_coin", {})
@@ -161,39 +153,61 @@ def _analyze_symbol_core(
     q = [_to_f(r[7]) for r in k1]  # quote volume
     c4 = [_to_f(r[4]) for r in k4] if k4 and len(k4) >= 30 else c
 
+    # 性能监控
+    import time
+    perf = {}
+
     # 基础指标
+    t0 = time.time()
     ema30 = _ema(c, 30)
     atr_series = _atr(h, l, c, 14)
     atr_now = _last(atr_series)
     close_now = _last(c)
+    perf['基础指标'] = time.time() - t0
 
     # CVD（现货+合约组合，如果有现货数据）
+    t0 = time.time()
     cvd_series, cvd_mix = cvd_mix_with_oi_price(k1, oi_data, window=20, spot_klines=spot_k1)
+    perf['CVD计算'] = time.time() - t0
 
     # ---- 2. 计算7维特征（统一±100系统）----
 
     # 趋势（T）：-100（下跌）到 +100（上涨）
+    t0 = time.time()
     T, T_meta = _calc_trend(h, l, c, c4, params.get("trend", {}))
+    perf['T趋势'] = time.time() - t0
 
     # 动量（M）：-100（减速下跌）到 +100（加速上涨）
+    t0 = time.time()
     M, M_meta = _calc_momentum(h, l, c, params.get("momentum", {}))
+    perf['M动量'] = time.time() - t0
 
     # CVD资金流（C）：-100（流出）到 +100（流入）
+    t0 = time.time()
     C, C_meta = _calc_cvd_flow(cvd_series, c, params.get("cvd_flow", {}))
+    perf['C资金流'] = time.time() - t0
 
     # 结构（S）：-100（差）到 +100（好）
+    t0 = time.time()
     ctx = {"bigcap": False, "overlay": False, "phaseA": False, "strong": (abs(T) > 75), "m15_ok": False}
     S, S_meta = _calc_structure(h, l, c, _last(ema30), atr_now, params.get("structure", {}), ctx)
+    perf['S结构'] = time.time() - t0
 
     # 量能（V）：-100（缩量）到 +100（放量）
+    t0 = time.time()
     V, V_meta = _calc_volume(q)
+    perf['V量能'] = time.time() - t0
 
     # 持仓（O）：-100（减少）到 +100（增加）
+    t0 = time.time()
     cvd6 = (cvd_series[-1] - cvd_series[-7]) / max(1e-12, abs(close_now)) if len(cvd_series) >= 7 else 0.0
     O, O_meta = _calc_oi(symbol, c, params.get("open_interest", {}), cvd6)
+    perf['O持仓'] = time.time() - t0
 
     # 环境（E）：-100（差）到 +100（好）
+    t0 = time.time()
     E, E_meta = _calc_environment(h, l, c, atr_now, params.get("environment", {}))
+    perf['E环境'] = time.time() - t0
 
     # ---- 2.5. 资金领先性（F调节器）----
     # F不参与基础评分，仅用于概率调整
@@ -267,37 +281,7 @@ def _analyze_symbol_core(
     P_long_base, P_short_base = map_probability_sigmoid(edge, prior_up, Q, temperature)
     P_base = P_long_base if side_long else P_short_base
 
-    # ★ Gold方案：贝叶斯先验调整（基于候选池质量分数）
-    bayesian_boost = 0.0
-    if elite_prior and elite_prior.get("long_score", 0) > 0:
-        # 计算先验概率调整因子
-        # 原理：P(A|B) ∝ P(B|A) × P(A)
-        # P(A) = 候选池先验，P(B|A) = 分析管道给出的概率
-
-        long_score = elite_prior["long_score"]
-        short_score = elite_prior["short_score"]
-
-        if side_long and long_score >= 70:
-            # 候选池强烈支持做多（70-100分）
-            # 先验提升：5%-15%
-            bayesian_boost = 0.05 + (long_score - 70) / 30 * 0.10
-        elif not side_long and short_score >= 70:
-            # 候选池强烈支持做空
-            bayesian_boost = 0.05 + (short_score - 70) / 30 * 0.10
-        elif side_long and long_score >= 60:
-            # 候选池温和支持做多（60-70分）
-            bayesian_boost = (long_score - 60) / 10 * 0.05
-        elif not side_long and short_score >= 60:
-            # 候选池温和支持做空
-            bayesian_boost = (short_score - 60) / 10 * 0.05
-
-        # 应用贝叶斯提升
-        if bayesian_boost > 0:
-            P_base = min(0.90, P_base * (1 + bayesian_boost))
-            if side_long:
-                P_long_base = P_base
-            else:
-                P_short_base = P_base
+    # 移除贝叶斯先验调整（已废弃候选池机制）
 
     # ---- 5. F调节器调整概率（平滑sigmoid + 极端值否决）----
     # F现在参与了加权（7%），但仍需作为概率调整器进行微调
@@ -498,6 +482,9 @@ def _analyze_symbol_core(
         "ema30": _last(ema30),
         "atr_now": atr_now,
 
+        # 性能分析（用于调试）
+        "perf": perf,
+
         # 7维分数（统一±100）
         "scores": scores,
         "scores_meta": scores_meta,
@@ -520,10 +507,6 @@ def _analyze_symbol_core(
         "F_adjustment": adjustment,  # 调整系数
         "prior_up": prior_up,
         "Q": Q,
-
-        # ★ Gold方案：候选池先验信息
-        "elite_prior": elite_prior if elite_prior else None,
-        "bayesian_boost": bayesian_boost if bayesian_boost > 0 else None,
 
         # 发布
         "publish": {
@@ -583,7 +566,7 @@ def _analyze_symbol_core(
     return result
 
 
-def analyze_symbol(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[str, Any]:
+def analyze_symbol(symbol: str) -> Dict[str, Any]:
     """
     完整分析单个交易对（数据获取 + 分析）
 
@@ -592,7 +575,7 @@ def analyze_symbol(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[str, 
     2. 调用_analyze_symbol_core()进行分析
 
     返回：
-    - 7维分数（T/M/C/S/V/O/E，统一±100系统）
+    - 8维分数（T/M/C/S/V/O/E/F，统一±100系统）
     - scorecard结果（weighted_score/confidence/edge）
     - 概率（P_long/P_short/probability）
     - 发布判定（prime/watch）
@@ -606,8 +589,6 @@ def analyze_symbol(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[str, 
 
     Args:
         symbol: 交易对符号
-        elite_meta: Elite Universe Builder生成的元数据（可选）
-                   包含long_score/short_score/pre_computed等信息
     """
     # ---- 1. 获取数据 ----
     k1 = get_klines(symbol, "1h", 300)
@@ -628,7 +609,7 @@ def analyze_symbol(symbol: str, elite_meta: Dict[str, Any] = None) -> Dict[str, 
         k4=k4,
         oi_data=oi_data,
         spot_k1=spot_k1,
-        elite_meta=elite_meta
+        elite_meta=None  # 不再使用候选池元数据
     )
 
 
@@ -824,11 +805,12 @@ def analyze_symbol_with_preloaded_klines(
         这个函数不会自动获取K线数据，调用者必须提供
     """
     # 🔧 修复：使用预加载的数据调用核心分析函数
+    # 如果oi_data为None，使用空列表避免NoneType错误
     return _analyze_symbol_core(
         symbol=symbol,
         k1=k1h,
         k4=k4h,
-        oi_data=oi_data,
+        oi_data=oi_data if oi_data is not None else [],
         spot_k1=spot_k1h,
         elite_meta=elite_meta
     )

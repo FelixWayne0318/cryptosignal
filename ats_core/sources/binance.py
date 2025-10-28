@@ -165,6 +165,122 @@ def get_funding_hist(
     return list(rows) if isinstance(rows, list) else []
 
 
+# ------------------------- 订单簿深度 -------------------------
+
+def get_orderbook_snapshot(symbol: str, limit: int = 20) -> Dict[str, Any]:
+    """
+    获取订单簿快照
+
+    /fapi/v1/depth
+
+    Args:
+        symbol: 交易对符号
+        limit: 深度档位 (5, 10, 20, 50, 100, 500, 1000)
+
+    Returns:
+        {
+            "lastUpdateId": 12345,
+            "bids": [["price", "qty"], ...],  # 买单（价格从高到低）
+            "asks": [["price", "qty"], ...]   # 卖单（价格从低到高）
+        }
+    """
+    symbol = symbol.upper()
+    # 限制在合法范围
+    valid_limits = [5, 10, 20, 50, 100, 500, 1000]
+    limit = min(valid_limits, key=lambda x: abs(x - limit))
+
+    return _get("/fapi/v1/depth", {"symbol": symbol, "limit": limit}, timeout=6.0, retries=2)
+
+
+# ------------------------- 标记价格与资金费率 -------------------------
+
+def get_mark_price(symbol: str) -> float:
+    """
+    获取标记价格
+
+    /fapi/v1/premiumIndex
+
+    Args:
+        symbol: 交易对符号
+
+    Returns:
+        标记价格（float）
+    """
+    symbol = symbol.upper()
+    result = _get("/fapi/v1/premiumIndex", {"symbol": symbol}, timeout=6.0, retries=2)
+    return float(result.get('markPrice', 0))
+
+
+def get_funding_rate(symbol: str) -> float:
+    """
+    获取当前资金费率
+
+    /fapi/v1/premiumIndex
+
+    Args:
+        symbol: 交易对符号
+
+    Returns:
+        资金费率（float，例如 0.0001 表示 0.01%）
+    """
+    symbol = symbol.upper()
+    result = _get("/fapi/v1/premiumIndex", {"symbol": symbol}, timeout=6.0, retries=2)
+    return float(result.get('lastFundingRate', 0))
+
+
+# ------------------------- 强平订单（清算数据） -------------------------
+
+def get_liquidations(
+    symbol: str,
+    interval: str = '5m',
+    limit: int = 100,
+    start_time: Optional[Union[int, float]] = None,
+    end_time: Optional[Union[int, float]] = None
+) -> List[Dict[str, Any]]:
+    """
+    获取强平订单数据（清算数据）
+
+    /fapi/v1/forceOrders
+
+    注意：此API返回最近7天的数据，interval参数用于后续聚合处理
+
+    Args:
+        symbol: 交易对符号
+        interval: 时间间隔（用于聚合，不是API参数）
+        limit: 返回数量（最大1000）
+        start_time: 开始时间（毫秒时间戳）
+        end_time: 结束时间（毫秒时间戳）
+
+    Returns:
+        强平订单列表，每条记录包含：
+        {
+            "symbol": "BTCUSDT",
+            "price": "50000",
+            "origQty": "0.1",
+            "executedQty": "0.1",
+            "averagePrice": "49999",
+            "status": "FILLED",
+            "timeInForce": "IOC",
+            "type": "LIMIT",
+            "side": "SELL",  # SELL表示多单被强平，BUY表示空单被强平
+            "time": 1234567890000
+        }
+    """
+    symbol = symbol.upper()
+    limit = int(max(1, min(int(limit), 1000)))
+
+    params: Dict[str, Any] = {
+        "symbol": symbol,
+        "limit": limit
+    }
+    if start_time is not None:
+        params["startTime"] = int(start_time)
+    if end_time is not None:
+        params["endTime"] = int(end_time)
+
+    return _get("/fapi/v1/allForceOrders", params, timeout=8.0, retries=2)
+
+
 # ------------------------- 24h 统计 -------------------------
 
 def get_ticker_24h(symbol: Optional[str] = None):
