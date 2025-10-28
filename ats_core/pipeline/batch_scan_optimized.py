@@ -41,15 +41,20 @@ class OptimizedBatchScanner:
 
         log("✅ 优化批量扫描器创建成功")
 
-    async def initialize(self):
+    async def initialize(self, enable_websocket: bool = True):
         """
         初始化（仅一次，约2分钟）
+
+        Args:
+            enable_websocket: 是否启用WebSocket实时更新（默认True）
+                - True: 生产模式，启用实时更新
+                - False: 测试模式，跳过WebSocket（避免连接数超限）
 
         步骤:
         1. 初始化Binance客户端
         2. 获取候选币种列表
         3. 批量初始化K线缓存（REST）
-        4. 启动WebSocket实时更新
+        4. 启动WebSocket实时更新（可选）
         """
         if self.initialized:
             log("⚠️  已初始化，跳过")
@@ -119,13 +124,16 @@ class OptimizedBatchScanner:
             client=self.client
         )
 
-        # 4. 启动WebSocket实时更新
-        log(f"\n4️⃣  启动WebSocket实时更新...")
-        await self.kline_cache.start_batch_realtime_update(
-            symbols=symbols,
-            intervals=['1h', '4h', '15m', '1d'],  # MTF需要所有周期
-            client=self.client
-        )
+        # 4. 启动WebSocket实时更新（可选）
+        if enable_websocket:
+            log(f"\n4️⃣  启动WebSocket实时更新...")
+            await self.kline_cache.start_batch_realtime_update(
+                symbols=symbols,
+                intervals=['1h', '4h', '15m', '1d'],  # MTF需要所有周期
+                client=self.client
+            )
+        else:
+            log(f"\n4️⃣  跳过WebSocket实时更新（测试模式）")
 
         self.initialized = True
 
