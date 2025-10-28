@@ -50,12 +50,12 @@ from ats_core.logging import log, warn, error
 class SignalScanner:
     """WebSocket实时信号扫描器"""
 
-    def __init__(self, min_score: int = 70, send_telegram: bool = True):
+    def __init__(self, min_score: int = 50, send_telegram: bool = True):
         """
         初始化扫描器
 
         Args:
-            min_score: 最低信号分数（推荐70-75）
+            min_score: 最低信号分数（默认50，可调整：40-70）
             send_telegram: 是否发送Telegram通知
         """
         self.scanner = OptimizedBatchScanner()
