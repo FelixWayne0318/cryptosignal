@@ -193,13 +193,48 @@ class OptimizedBatchScanner:
 
                 log(f"  └─ K线数据: 1h={len(k1h) if k1h else 0}根, 4h={len(k4h) if k4h else 0}根")
 
+                # 动态数据要求（支持新币）
+                coin_age_hours = len(k1h) if k1h else 0
+
+                # 根据币种年龄确定最小数据要求
+                if coin_age_hours <= 24:
+                    # 超新币（1-24小时）
+                    min_k1h = 10
+                    min_k4h = 3
+                    coin_type = "超新币"
+                elif coin_age_hours <= 168:  # 7天
+                    # 阶段A（1-7天）
+                    min_k1h = 30
+                    min_k4h = 8
+                    coin_type = "新币A"
+                elif coin_age_hours <= 720:  # 30天
+                    # 阶段B（7-30天）
+                    min_k1h = 50
+                    min_k4h = 15
+                    coin_type = "新币B"
+                else:
+                    # 成熟币
+                    min_k1h = 96
+                    min_k4h = 50
+                    coin_type = "成熟币"
+
                 # 检查数据完整性
-                if not k1h or not k4h or len(k1h) < 96 or len(k4h) < 50:
+                if not k1h or len(k1h) < min_k1h:
                     skipped += 1
-                    log(f"  └─ ⚠️  跳过（数据不足）")
+                    log(f"  └─ ⚠️  跳过（{coin_type}，1h数据不足：{len(k1h) if k1h else 0}<{min_k1h}）")
                     continue
 
+                if not k4h or len(k4h) < min_k4h:
+                    skipped += 1
+                    log(f"  └─ ⚠️  跳过（{coin_type}，4h数据不足：{len(k4h) if k4h else 0}<{min_k4h}）")
+                    continue
+
+                log(f"  └─ 币种类型：{coin_type}（{coin_age_hours}小时）")
+
                 log(f"  └─ 开始因子分析...")
+
+                # 性能监控
+                analysis_start = time.time()
 
                 # 因子分析（使用预加载的K线）
                 result = analyze_symbol_with_preloaded_klines(
@@ -208,7 +243,10 @@ class OptimizedBatchScanner:
                     k4h=k4h
                 )
 
-                log(f"  └─ 分析完成")
+                analysis_time = time.time() - analysis_start
+                if analysis_time > 5:
+                    log(f"  └─ ⚠️  分析耗时较长: {analysis_time:.1f}秒")
+                log(f"  └─ 分析完成（耗时{analysis_time:.1f}秒）")
 
                 # 筛选高质量信号
                 final_score = abs(result.get('final_score', 0))
