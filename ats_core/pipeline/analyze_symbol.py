@@ -347,7 +347,7 @@ def _analyze_symbol_core(
 
     # ---- Prime评分系统（0-100分，平滑化）----
     # 改进：使用平滑函数替代硬阈值，避免悬崖效应
-    # 目标：prime_strength >= 78 → is_prime
+    # 目标：prime_strength >= 65 → is_prime
 
     prime_strength = 0.0
 
@@ -416,8 +416,8 @@ def _analyze_symbol_core(
         from ats_core.logging import warn
         warn(f"[MTF-Cached] {symbol}: 多时间框架验证失败 - {e}")
 
-    # Prime判定：得分 >= 78分（适度放宽：82→78，-4分）
-    is_prime = (prime_strength >= 78)
+    # Prime判定：得分 >= 65分（放宽阈值以发现更多信号）
+    is_prime = (prime_strength >= 65)
     is_watch = False  # 不再发布Watch信号
 
     # 计算达标维度数（保留用于元数据）
@@ -471,7 +471,7 @@ def _analyze_symbol_core(
                 P_chosen = P_chosen_filtered
 
             prime_strength = prime_strength_filtered
-            is_prime = (prime_strength >= 78)  # 重新判定Prime
+            is_prime = (prime_strength >= 65)  # 重新判定Prime
 
         penalty_reason = market_adjustment_reason
 
