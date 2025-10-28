@@ -152,7 +152,8 @@ class OptimizedBatchScanner:
     async def scan(
         self,
         min_score: int = 70,
-        max_symbols: Optional[int] = None
+        max_symbols: Optional[int] = None,
+        on_signal_found: Optional[callable] = None
     ) -> Dict:
         """
         批量扫描（超快速，约5秒）
@@ -160,6 +161,8 @@ class OptimizedBatchScanner:
         Args:
             min_score: 最低信号分数
             max_symbols: 最大扫描数量（用于测试）
+            on_signal_found: 发现信号时的回调函数（实时处理信号）
+                            async def callback(signal_dict) -> None
 
         Returns:
             扫描结果字典
@@ -282,6 +285,14 @@ class OptimizedBatchScanner:
                 if is_prime:
                     results.append(result)
                     log(f"✅ {symbol}: Prime强度={prime_strength}, 置信度={confidence:.0f}")
+
+                    # 实时回调：立即处理新发现的信号
+                    if on_signal_found:
+                        try:
+                            await on_signal_found(result)
+                        except Exception as e:
+                            from ats_core.logging import warn
+                            warn(f"⚠️  信号回调失败: {e}")
 
                 # 进度显示（每20个）
                 if (i + 1) % 20 == 0:
