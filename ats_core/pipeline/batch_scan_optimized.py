@@ -65,25 +65,47 @@ class OptimizedBatchScanner:
         self.client = get_binance_client()
         await self.client.initialize()
 
-        # 2. 获取所有USDT合约币种
-        log("\n2️⃣  获取所有USDT合约币种...")
+        # 2. 获取高流动性USDT合约币种（TOP 200）
+        log("\n2️⃣  获取高流动性USDT合约币种...")
 
         # 获取交易所信息
         exchange_info = await self.client.get_exchange_info()
 
-        # 筛选USDT合约币种
+        # 筛选USDT永续合约
         all_symbols = [
             s["symbol"] for s in exchange_info.get("symbols", [])
             if s["symbol"].endswith("USDT")
             and s["status"] == "TRADING"
             and s["contractType"] == "PERPETUAL"
         ]
+        log(f"   总计: {len(all_symbols)} 个USDT永续合约")
 
-        # 取前100个（按字母顺序）
-        symbols = sorted(all_symbols)[:100]
+        # 获取24h行情数据（用于流动性过滤）
+        log("   获取24h行情数据...")
+        ticker_24h = await self.client.get_ticker_24h()
 
-        log(f"   ✅ 获取到 {len(symbols)} 个USDT合约币种")
-        log(f"   示例: {', '.join(symbols[:5])}...")
+        # 构建成交额字典
+        volume_map = {}
+        for ticker in ticker_24h:
+            symbol = ticker.get('symbol', '')
+            if symbol in all_symbols:
+                # quoteVolume = USDT成交额
+                volume_map[symbol] = float(ticker.get('quoteVolume', 0))
+
+        # 按流动性排序，取TOP 200
+        symbols = sorted(
+            all_symbols,
+            key=lambda s: volume_map.get(s, 0),
+            reverse=True
+        )[:200]
+
+        # 过滤掉流动性太低的（<3M USDT/24h）
+        MIN_VOLUME = 3_000_000
+        symbols = [s for s in symbols if volume_map.get(s, 0) >= MIN_VOLUME]
+
+        log(f"   ✅ 筛选出 {len(symbols)} 个高流动性币种（24h成交额>3M USDT）")
+        log(f"   TOP 5: {', '.join(symbols[:5])}")
+        log(f"   成交额范围: {volume_map.get(symbols[0], 0)/1e6:.1f}M ~ {volume_map.get(symbols[-1], 0)/1e6:.1f}M USDT")
 
         # 3. 批量初始化K线缓存（REST，一次性）
         log(f"\n3️⃣  批量初始化K线缓存（这是一次性操作）...")
@@ -140,10 +162,11 @@ class OptimizedBatchScanner:
 
         scan_start = time.time()
 
-        # 获取币种列表（直接从交易所获取）
+        # 获取高流动性币种列表
+        log("   获取高流动性币种列表...")
         exchange_info = await self.client.get_exchange_info()
 
-        # 筛选USDT合约币种
+        # 筛选USDT永续合约
         all_symbols = [
             s["symbol"] for s in exchange_info.get("symbols", [])
             if s["symbol"].endswith("USDT")
@@ -151,15 +174,34 @@ class OptimizedBatchScanner:
             and s["contractType"] == "PERPETUAL"
         ]
 
-        # 取前100个（按字母顺序）
-        symbols = sorted(all_symbols)[:100]
+        # 获取24h行情数据（用于流动性过滤）
+        ticker_24h = await self.client.get_ticker_24h()
+
+        # 构建成交额字典
+        volume_map = {}
+        for ticker in ticker_24h:
+            symbol = ticker.get('symbol', '')
+            if symbol in all_symbols:
+                volume_map[symbol] = float(ticker.get('quoteVolume', 0))
+
+        # 按流动性排序，取TOP 200
+        symbols = sorted(
+            all_symbols,
+            key=lambda s: volume_map.get(s, 0),
+            reverse=True
+        )[:200]
+
+        # 过滤掉流动性太低的（<3M USDT/24h）
+        MIN_VOLUME = 3_000_000
+        symbols = [s for s in symbols if volume_map.get(s, 0) >= MIN_VOLUME]
 
         # 限制数量（测试用）
         if max_symbols:
             symbols = symbols[:max_symbols]
 
-        log(f"   扫描币种: {len(symbols)}")
+        log(f"   扫描币种: {len(symbols)} 个高流动性币种")
         log(f"   最低分数: {min_score}")
+        log(f"   流动性阈值: >3M USDT/24h")
         log("=" * 60)
 
         results = []
