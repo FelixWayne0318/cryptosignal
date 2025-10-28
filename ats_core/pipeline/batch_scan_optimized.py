@@ -192,7 +192,7 @@ class OptimizedBatchScanner:
         orderbook_failed = 0
 
         # 分批获取，避免速率限制
-        batch_size = 20
+        batch_size = 10  # 降低批次大小，从20降到10
         for i in range(0, len(symbols), batch_size):
             batch = symbols[i:i+batch_size]
 
@@ -201,12 +201,15 @@ class OptimizedBatchScanner:
                     orderbook = get_orderbook_snapshot(symbol, limit=20)
                     self.orderbook_cache[symbol] = orderbook
                     orderbook_success += 1
-                except Exception:
+                except Exception as e:
                     orderbook_failed += 1
+                    # 记录前5个失败的详细信息，避免日志过多
+                    if orderbook_failed <= 5:
+                        warn(f"       获取{symbol}订单簿失败: {e}")
 
-            # 每批次后短暂延迟，避免触发速率限制
+            # 每批次后延迟1秒，避免触发速率限制（从0.5秒增加到1秒）
             if i + batch_size < len(symbols):
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(1.0)
 
             # 进度显示
             if (i + batch_size) % 60 == 0 or (i + batch_size) >= len(symbols):

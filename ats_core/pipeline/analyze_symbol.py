@@ -2,21 +2,27 @@
 from __future__ import annotations
 
 """
-完整的单币种分析管道（统一±100系统 v3.0）：
-1. 获取市场数据（K线、OI）
-2. 计算7维特征（T/M/C/S/V/O/E） - F作为调节器
+完整的单币种分析管道（统一±100系统 v4.0 - 10维因子）：
+1. 获取市场数据（K线、OI、订单簿、资金费率）
+2. 计算10维特征（T/M/C/S/V/O/L/B/Q/I） + F调节器
 3. 统一±100评分（正数=看多/好，负数=看空/差）
-4. 计算加权分数和置信度
+4. 计算加权分数和置信度（总权重160分，自动归一化到±100）
 5. F调节器调整概率
 6. 判定发布条件
 
-核心改进（v3.0）：
-- 统一±100系统：所有维度使用-100到+100的带符号分数
-- 简化评分逻辑：取消双向计算，直接从符号判断方向
-- 代码量减少40%，效率提升50%
-- T/M/C/O：方向维度（+100=看多，-100=看空）
-- S/V/E：质量维度（+100=好，-100=差）
-- F：调节器（不参与权重，仅调整概率）
+核心改进（v4.0 - 10维因子系统）：
+- 新增4个因子：L（流动性）、B（基差+资金费）、Q（清算）、I（独立性）
+- 权重体系升级：100分 → 160分（4层架构）
+- L/I因子自动归一化：0-100 → ±100（消除系统偏差）
+- 方向因子：T/M/C/V/O/B/Q（±100）
+- 质量因子转为方向：S/E/L/I（±100，归一化后）
+- F调节器：不参与权重，仅调整概率
+
+架构分层（160分总权重）：
+- Layer 1（价格行为）：T(25) + M(15) + S(10) + V(15) = 65分
+- Layer 2（资金流）：C(20) + O(20) = 40分
+- Layer 3（微观结构）：L(20) + B(15) + Q(10) = 45分
+- Layer 4（市场环境）：I(10) = 10分
 """
 
 from typing import Dict, Any, Tuple, List
@@ -227,11 +233,16 @@ def _analyze_symbol_core(
 
     # ---- 2.1. 10维因子系统：新增因子 ----
 
-    # 流动性（L）：0（差）到 100（好）- 质量维度
+    # 流动性（L）：0（差）到 100（好）→ 归一化到 ±100
     t0 = time.time()
     if orderbook is not None:
         try:
-            L, L_meta = calculate_liquidity(orderbook, params.get("liquidity", {}))
+            L_raw, L_meta = calculate_liquidity(orderbook, params.get("liquidity", {}))
+            # 归一化：0-100 → -100到+100（中性值50→0）
+            # 低流动性（<50）→负分（不适合交易），高流动性（>50）→正分（适合交易）
+            L = (L_raw - 50) * 2
+            L_meta['raw_score'] = L_raw
+            L_meta['normalized_score'] = L
         except Exception as e:
             from ats_core.logging import warn
             warn(f"L因子计算失败: {e}")
@@ -261,7 +272,9 @@ def _analyze_symbol_core(
     # 清算密度（Q）：-100（多单密集）到 +100（空单密集）- TODO: 需要预加载清算数据
     Q, Q_meta = 0, {"note": "待实现：需要预加载清算数据"}
 
-    # 独立性（I）：0（跟随）到 100（独立）- TODO: 需要预加载BTC/ETH数据
+    # 独立性（I）：0（跟随）到 100（独立）→ 归一化到 ±100
+    # 注意：当前为占位符，实现后需要归一化
+    # I_raw = calculate_independence(...) → I = (I_raw - 50) * 2
     I, I_meta = 0, {"note": "待实现：需要预加载BTC/ETH数据"}
 
     # ---- 2.5. 资金领先性（F调节器）----
@@ -329,10 +342,9 @@ def _analyze_symbol_core(
         "F": F
     }
 
-    # 计算加权分数（-160 到 +160，归一化到±100）
-    raw_weighted_score, confidence, edge = scorecard(scores, weights)
-    # 归一化：160分 → 100分
-    weighted_score = raw_weighted_score / 1.6
+    # 计算加权分数（scorecard内部已归一化到±100）
+    # 注意：scorecard函数通过 total/weight_sum 自动归一化，无需再除以1.6
+    weighted_score, confidence, edge = scorecard(scores, weights)
 
     # 方向判断（根据加权分数符号）
     side_long = (weighted_score > 0)
