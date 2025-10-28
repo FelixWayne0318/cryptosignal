@@ -780,11 +780,12 @@ def analyze_symbol_with_preloaded_klines(
         这个函数不会自动获取K线数据，调用者必须提供
     """
     # 🔧 修复：使用预加载的数据调用核心分析函数
+    # 如果oi_data为None，使用空列表避免NoneType错误
     return _analyze_symbol_core(
         symbol=symbol,
         k1=k1h,
         k4=k4h,
-        oi_data=oi_data,
+        oi_data=oi_data if oi_data is not None else [],
         spot_k1=spot_k1h,
         elite_meta=elite_meta
     )
