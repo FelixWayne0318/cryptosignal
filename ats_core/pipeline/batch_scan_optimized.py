@@ -39,6 +39,12 @@ class OptimizedBatchScanner:
         self.initialized = False
         self.symbols = []  # 保存初始化时的币种列表
 
+        # 10维因子系统：预加载的市场数据缓存
+        self.orderbook_cache = {}      # {symbol: orderbook_dict}
+        self.mark_price_cache = {}     # {symbol: mark_price}
+        self.funding_rate_cache = {}   # {symbol: funding_rate}
+        self.spot_price_cache = {}     # {symbol: spot_price}
+
         log("✅ 优化批量扫描器创建成功")
 
     async def initialize(self, enable_websocket: bool = True):
@@ -137,6 +143,80 @@ class OptimizedBatchScanner:
             log(f"   15m和1d周期: 使用REST API数据（更新频率低，无需实时订阅）")
         else:
             log(f"\n4️⃣  跳过WebSocket实时更新（测试模式）")
+
+        # 5. 预加载10维因子系统所需的市场数据
+        log(f"\n5️⃣  预加载10维因子系统数据（订单簿、资金费率、现货价格）...")
+        data_start = time.time()
+
+        # 导入新增的批量数据获取函数
+        from ats_core.sources.binance import (
+            get_all_spot_prices,
+            get_all_premium_index,
+            get_orderbook_snapshot
+        )
+
+        # 5.1 批量获取现货价格（1次API调用）
+        log("   5.1 批量获取现货价格...")
+        try:
+            all_spot_prices = get_all_spot_prices()
+            self.spot_price_cache = {
+                symbol: all_spot_prices.get(symbol, 0)
+                for symbol in symbols
+                if symbol in all_spot_prices
+            }
+            log(f"       ✅ 获取 {len(self.spot_price_cache)} 个币种的现货价格")
+        except Exception as e:
+            warn(f"       ⚠️  现货价格获取失败: {e}")
+            self.spot_price_cache = {}
+
+        # 5.2 批量获取标记价格和资金费率（1次API调用）
+        log("   5.2 批量获取标记价格和资金费率...")
+        try:
+            all_premium = get_all_premium_index()
+            for item in all_premium:
+                symbol = item.get('symbol', '')
+                if symbol in symbols:
+                    self.mark_price_cache[symbol] = float(item.get('markPrice', 0))
+                    self.funding_rate_cache[symbol] = float(item.get('lastFundingRate', 0))
+            log(f"       ✅ 获取 {len(self.mark_price_cache)} 个币种的标记价格和资金费率")
+        except Exception as e:
+            warn(f"       ⚠️  标记价格/资金费率获取失败: {e}")
+            self.mark_price_cache = {}
+            self.funding_rate_cache = {}
+
+        # 5.3 批量获取订单簿快照（逐个获取，约140次API调用）
+        log("   5.3 批量获取订单簿深度（20档）...")
+        log("       注意：此步骤需要~140次API调用，预计15-20秒")
+
+        orderbook_success = 0
+        orderbook_failed = 0
+
+        # 分批获取，避免速率限制
+        batch_size = 20
+        for i in range(0, len(symbols), batch_size):
+            batch = symbols[i:i+batch_size]
+
+            for symbol in batch:
+                try:
+                    orderbook = get_orderbook_snapshot(symbol, limit=20)
+                    self.orderbook_cache[symbol] = orderbook
+                    orderbook_success += 1
+                except Exception:
+                    orderbook_failed += 1
+
+            # 每批次后短暂延迟，避免触发速率限制
+            if i + batch_size < len(symbols):
+                await asyncio.sleep(0.5)
+
+            # 进度显示
+            if (i + batch_size) % 60 == 0 or (i + batch_size) >= len(symbols):
+                progress = min(i + batch_size, len(symbols))
+                log(f"       进度: {progress}/{len(symbols)} ({progress/len(symbols)*100:.0f}%)")
+
+        log(f"       ✅ 成功: {orderbook_success}, 失败: {orderbook_failed}")
+
+        data_elapsed = time.time() - data_start
+        log(f"   数据预加载完成，耗时: {data_elapsed:.1f}秒")
 
         self.initialized = True
 
@@ -252,13 +332,23 @@ class OptimizedBatchScanner:
                 # 性能监控
                 analysis_start = time.time()
 
-                # 因子分析（使用预加载的K线，支持MTF）
+                # 获取10维因子系统所需的市场数据
+                orderbook = self.orderbook_cache.get(symbol)
+                mark_price = self.mark_price_cache.get(symbol)
+                funding_rate = self.funding_rate_cache.get(symbol)
+                spot_price = self.spot_price_cache.get(symbol)
+
+                # 因子分析（使用预加载的K线和市场数据，支持10维因子系统）
                 result = analyze_symbol_with_preloaded_klines(
                     symbol=symbol,
                     k1h=k1h,
                     k4h=k4h,
                     k15m=k15m,  # 用于微确认和MTF
-                    k1d=k1d     # 用于MTF
+                    k1d=k1d,    # 用于MTF
+                    orderbook=orderbook,       # L（流动性）
+                    mark_price=mark_price,     # B（基差+资金费）
+                    funding_rate=funding_rate, # B（基差+资金费）
+                    spot_price=spot_price      # B（基差+资金费）
                 )
 
                 analysis_time = time.time() - analysis_start
