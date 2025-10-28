@@ -1,10 +1,11 @@
 # coding: utf-8
 """
-Telegram message formatting (unified "formal" six-dimension template)
+Telegram message formatting (unified 10-dimension template v4.0)
 - Both watch and trade use the same professional & readable template.
-- Always shows 6 dimensions with score and plain-language notes.
-- Robust to missing fields: falls back to neutral 50 with explanation.
+- Shows 10 dimensions: T/M/C/S/V/O/L/B/Q/I + F regulator
+- Robust to missing fields: falls back to neutral 0 with explanation.
 - Header order: line1 = symbol & price, line2 = status (watch/trade + side + conviction + ttl).
+- v4.0 upgrade: Added L(Liquidity), B(Basis+Funding), Q(Liquidation), I(Independence)
 """
 
 from __future__ import annotations
@@ -384,6 +385,120 @@ def _desc_fund_leading(s: int, leading_raw: float = None) -> str:
 
     return desc
 
+def _desc_liquidity(s: int, spread_bps: float = None, obi: float = None) -> str:
+    """
+    描述流动性（v4.0新增，统一±100系统）
+
+    Args:
+        s: L 分数 (-100到+100，正数=高流动性，负数=低流动性）
+        spread_bps: 价差（基点）
+        obi: 订单簿失衡度（-1到+1）
+    """
+    if s >= 60:
+        desc = "流动性极佳/深度充足"
+    elif s >= 30:
+        desc = "流动性良好/承载力强"
+    elif s >= -30:
+        desc = "流动性一般/注意滑点"
+    else:  # s < -30
+        desc = "流动性不足/高滑点风险"
+
+    # 附加价差信息
+    if spread_bps is not None:
+        desc += f" (点差{spread_bps:.1f}bps"
+        if obi is not None:
+            desc += f", OBI{obi:+.2f}"
+        desc += ")"
+    elif obi is not None:
+        desc += f" (OBI{obi:+.2f})"
+
+    return desc
+
+def _desc_basis_funding(s: int, basis_bps: float = None, funding_rate: float = None) -> str:
+    """
+    描述基差+资金费（v4.0新增，统一±100系统）
+
+    Args:
+        s: B 分数 (-100到+100，正数=看涨情绪，负数=看跌情绪）
+        basis_bps: 基差（基点，正数=期货溢价）
+        funding_rate: 资金费率（小数，如0.0001=0.01%）
+    """
+    if s >= 60:
+        desc = "强烈看涨情绪/市场亢奋"
+    elif s >= 30:
+        desc = "偏多情绪/期货溢价"
+    elif s >= -30:
+        desc = "市场情绪中性"
+    elif s >= -60:
+        desc = "偏空情绪/期货折价"
+    else:  # s < -60
+        desc = "强烈看跌情绪/恐慌性贴水"
+
+    # 附加基差和资金费率信息
+    details = []
+    if basis_bps is not None:
+        if basis_bps >= 0:
+            details.append(f"基差+{basis_bps:.0f}bps")
+        else:
+            details.append(f"基差{basis_bps:.0f}bps")
+    if funding_rate is not None:
+        funding_pct = funding_rate * 100
+        if funding_pct >= 0:
+            details.append(f"费率+{funding_pct:.3f}%")
+        else:
+            details.append(f"费率{funding_pct:.3f}%")
+
+    if details:
+        desc += f" ({', '.join(details)})"
+
+    return desc
+
+def _desc_liquidation(s: int, lti: float = None) -> str:
+    """
+    描述清算密度（v4.0新增，统一±100系统）
+
+    Args:
+        s: Q 分数 (-100到+100，正数=空单密集，负数=多单密集）
+        lti: LTI清算倾斜指数
+    """
+    if s >= 60:
+        desc = "空单密集/向上清算风险"
+    elif s >= 30:
+        desc = "偏空清算/上行阻力"
+    elif s >= -30:
+        desc = "清算分布均衡"
+    elif s >= -60:
+        desc = "偏多清算/下行支撑"
+    else:  # s < -60
+        desc = "多单密集/向下清算风险"
+
+    if lti is not None:
+        desc += f" (LTI{lti:+.2f})"
+
+    return desc
+
+def _desc_independence(s: int, beta_sum: float = None) -> str:
+    """
+    描述独立性（v4.0新增，统一±100系统）
+
+    Args:
+        s: I 分数 (-100到+100，正数=独立，负数=跟随）
+        beta_sum: β总和（vs BTC/ETH）
+    """
+    if s >= 60:
+        desc = "高度独立/自主行情"
+    elif s >= 30:
+        desc = "偏独立/弱相关性"
+    elif s >= -30:
+        desc = "中等相关/跟随市场"
+    else:  # s < -30
+        desc = "高度跟随/被动走势"
+
+    if beta_sum is not None:
+        desc += f" (β={beta_sum:.2f})"
+
+    return desc
+
 def _emoji_by_fund_leading(s: int) -> str:
     """
     F调节器质量标识（方案C：反映信号质量，不是方向）
@@ -517,8 +632,28 @@ def _score_fund_leading(r: Dict[str, Any]) -> int:
     v = _get(r, "F_score") or _get(r, "F")
     return _as_int_score(v, default=0, allow_negative=True)
 
+def _score_liquidity(r: Dict[str, Any]) -> int:
+    # L因子（v4.0新增，±100系统）
+    v = _get(r, "L")
+    return _as_int_score(v, default=0, allow_negative=True)
+
+def _score_basis_funding(r: Dict[str, Any]) -> int:
+    # B因子（v4.0新增，±100系统）
+    v = _get(r, "B")
+    return _as_int_score(v, default=0, allow_negative=True)
+
+def _score_liquidation(r: Dict[str, Any]) -> int:
+    # Q因子（v4.0新增，±100系统）
+    v = _get(r, "Q")
+    return _as_int_score(v, default=0, allow_negative=True)
+
+def _score_independence(r: Dict[str, Any]) -> int:
+    # I因子（v4.0新增，±100系统）
+    v = _get(r, "I")
+    return _as_int_score(v, default=0, allow_negative=True)
+
 def _six_scores(r: Dict[str, Any]) -> Tuple[int,int,int,int,int,int,int]:
-    """兼容：返回T/S/V/M/C/O/E/F（实际8维）"""
+    """兼容：返回T/S/V/M/C/O/E/F（实际8维）- 保留向后兼容"""
     T  = _score_trend(r)
     S  = _score_structure(r)
     V  = _score_volume(r)
@@ -528,6 +663,21 @@ def _six_scores(r: Dict[str, Any]) -> Tuple[int,int,int,int,int,int,int]:
     E  = _score_env(r)
     F  = _score_fund_leading(r)
     return T, S, V, M, OI, E, F  # 返回7维+F（去掉C保持兼容）
+
+def _ten_scores(r: Dict[str, Any]) -> Tuple[int,int,int,int,int,int,int,int,int,int,int]:
+    """v4.0：返回T/M/C/S/V/O/L/B/Q/I/F（10维+调节器）"""
+    T  = _score_trend(r)
+    M  = _score_momentum(r)
+    C  = _score_cvd_flow(r)
+    S  = _score_structure(r)
+    V  = _score_volume(r)
+    OI = _score_positions(r)
+    L  = _score_liquidity(r)
+    B  = _score_basis_funding(r)
+    Q  = _score_liquidation(r)
+    I  = _score_independence(r)
+    F  = _score_fund_leading(r)
+    return T, M, C, S, V, OI, L, B, Q, I, F
 
 def _conviction_and_side(r: Dict[str, Any], seven: Tuple[int,int,int,int,int,int,int]) -> Tuple[int, str]:
     # 优先使用概率 P（转换为百分比）
@@ -571,8 +721,8 @@ def _header_lines(r: Dict[str, Any], is_watch: bool) -> Tuple[str, str]:
     return line1, line2
 
 def _six_block(r: Dict[str, Any]) -> str:
-    T, S, V, M, OI, E, F = _six_scores(r)
-    C = _score_cvd_flow(r)  # 单独获取C
+    """生成10维因子显示块（v4.0升级）"""
+    T, M, C, S, V, OI, L, B, Q, I, F = _ten_scores(r)
 
     # 获取方向
     side = (_get(r, "side") or "").lower()
@@ -586,6 +736,10 @@ def _six_block(r: Dict[str, Any]) -> str:
     C_meta = _get(r, "scores_meta.C") or {}
     O_meta = _get(r, "scores_meta.O") or {}
     E_meta = _get(r, "scores_meta.E") or {}
+    L_meta = _get(r, "scores_meta.L") or {}
+    B_meta = _get(r, "scores_meta.B") or {}
+    Q_meta = _get(r, "scores_meta.Q") or {}
+    I_meta = _get(r, "scores_meta.I") or {}
     F_meta = _get(r, "scores_meta.F") or {}
 
     # 提取具体指标
@@ -600,15 +754,34 @@ def _six_block(r: Dict[str, Any]) -> str:
     chop = E_meta.get("chop")
     leading_raw = F_meta.get("leading_raw")
 
+    # v4.0新因子元数据
+    spread_bps = L_meta.get("spread_bps")
+    obi = L_meta.get("obi")
+    basis_bps = B_meta.get("basis_bps")
+    funding_rate = B_meta.get("funding_rate")
+    lti = Q_meta.get("lti")
+    beta_sum = I_meta.get("beta_sum")
+
     lines = []
-    # 所有维度统一使用带符号显示（±100系统）
+    # Layer 1: 价格行为层（65分）
     lines.append(f"• 趋势 {_emoji_by_score(T)} {T:+4d} —— {_desc_trend(T, Tm)}")
     lines.append(f"• 动量 {_emoji_by_score(M)} {M:+4d} —— {_desc_momentum(M, slope)}")
-    lines.append(f"• 资金 {_emoji_by_score(C)} {C:+4d} —— {_desc_cvd_flow(C, is_long, cvd6, cvd_consistency, cvd_is_consistent)}")
     lines.append(f"• 结构 {_emoji_by_score(S)} {S:+4d} —— {_desc_structure(S, theta)}")
     lines.append(f"• 成交 {_emoji_by_score(V)} {V:+4d} —— {_desc_volume(V, v5v20)}")
+
+    # Layer 2: 资金流层（40分）
+    lines.append(f"• 资金 {_emoji_by_score(C)} {C:+4d} —— {_desc_cvd_flow(C, is_long, cvd6, cvd_consistency, cvd_is_consistent)}")
     lines.append(f"• 持仓 {_emoji_by_score(OI)} {OI:+4d} —— {_desc_positions(OI, oi24h_pct)}")
-    lines.append(f"• 震荡 {_emoji_by_score(E)} {E:+4d} —— {_desc_env(E, chop)}")
+
+    # Layer 3: 微观结构层（45分） - v4.0新增
+    lines.append(f"• 流动 {_emoji_by_score(L)} {L:+4d} —— {_desc_liquidity(L, spread_bps, obi)}")
+    lines.append(f"• 情绪 {_emoji_by_score(B)} {B:+4d} —— {_desc_basis_funding(B, basis_bps, funding_rate)}")
+    if Q != 0:  # 只在有数据时显示
+        lines.append(f"• 清算 {_emoji_by_score(Q)} {Q:+4d} —— {_desc_liquidation(Q, lti)}")
+
+    # Layer 4: 市场环境层（10分） - v4.0新增
+    if I != 0:  # 只在有数据时显示
+        lines.append(f"• 独立 {_emoji_by_score(I)} {I:+4d} —— {_desc_independence(I, beta_sum)}")
 
     # ━━━━━━ 市场环境分析 ━━━━━━
 
@@ -694,12 +867,12 @@ def _note_and_tags(r: Dict[str, Any], is_watch: bool) -> str:
     return tail
 
 def render_signal(r: Dict[str, Any], is_watch: bool = False) -> str:
-    """Unified template for both watch and trade."""
+    """Unified template for both watch and trade (v4.0: 10-dimension system)."""
     l1, l2 = _header_lines(r, is_watch)
-    six = _six_block(r)
+    ten = _six_block(r)  # 虽然叫six_block，但已升级为10维
     pricing = _pricing_block(r)
-    # 价格信息放在七维分析前面（入场区间前空一行）
-    body = f"{l1}\n{l2}\n{pricing}\n\n七维分析\n{six}\n\n{_note_and_tags(r, is_watch)}"
+    # 价格信息放在10维分析前面（入场区间前空一行）
+    body = f"{l1}\n{l2}\n{pricing}\n\n━━━━━ 10维因子分析 ━━━━━\n{ten}\n\n{_note_and_tags(r, is_watch)}"
     return body
 
 def render_watch(r: Dict[str, Any]) -> str:
