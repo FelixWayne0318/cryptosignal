@@ -244,8 +244,19 @@ class OptimizedBatchScanner:
                 )
 
                 analysis_time = time.time() - analysis_start
+
+                # 性能详情（慢速币种）
                 if analysis_time > 5:
                     log(f"  └─ ⚠️  分析耗时较长: {analysis_time:.1f}秒")
+                    # 打印各指标耗时
+                    perf = result.get('perf', {})
+                    if perf:
+                        slow_steps = {k: v for k, v in perf.items() if v > 1.0}
+                        if slow_steps:
+                            log(f"      慢速步骤:")
+                            for step, t in sorted(slow_steps.items(), key=lambda x: -x[1]):
+                                log(f"      - {step}: {t:.1f}秒")
+
                 log(f"  └─ 分析完成（耗时{analysis_time:.1f}秒）")
 
                 # 筛选高质量信号

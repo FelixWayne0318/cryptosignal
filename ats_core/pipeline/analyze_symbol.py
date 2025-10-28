@@ -153,39 +153,61 @@ def _analyze_symbol_core(
     q = [_to_f(r[7]) for r in k1]  # quote volume
     c4 = [_to_f(r[4]) for r in k4] if k4 and len(k4) >= 30 else c
 
+    # 性能监控
+    import time
+    perf = {}
+
     # 基础指标
+    t0 = time.time()
     ema30 = _ema(c, 30)
     atr_series = _atr(h, l, c, 14)
     atr_now = _last(atr_series)
     close_now = _last(c)
+    perf['基础指标'] = time.time() - t0
 
     # CVD（现货+合约组合，如果有现货数据）
+    t0 = time.time()
     cvd_series, cvd_mix = cvd_mix_with_oi_price(k1, oi_data, window=20, spot_klines=spot_k1)
+    perf['CVD计算'] = time.time() - t0
 
     # ---- 2. 计算7维特征（统一±100系统）----
 
     # 趋势（T）：-100（下跌）到 +100（上涨）
+    t0 = time.time()
     T, T_meta = _calc_trend(h, l, c, c4, params.get("trend", {}))
+    perf['T趋势'] = time.time() - t0
 
     # 动量（M）：-100（减速下跌）到 +100（加速上涨）
+    t0 = time.time()
     M, M_meta = _calc_momentum(h, l, c, params.get("momentum", {}))
+    perf['M动量'] = time.time() - t0
 
     # CVD资金流（C）：-100（流出）到 +100（流入）
+    t0 = time.time()
     C, C_meta = _calc_cvd_flow(cvd_series, c, params.get("cvd_flow", {}))
+    perf['C资金流'] = time.time() - t0
 
     # 结构（S）：-100（差）到 +100（好）
+    t0 = time.time()
     ctx = {"bigcap": False, "overlay": False, "phaseA": False, "strong": (abs(T) > 75), "m15_ok": False}
     S, S_meta = _calc_structure(h, l, c, _last(ema30), atr_now, params.get("structure", {}), ctx)
+    perf['S结构'] = time.time() - t0
 
     # 量能（V）：-100（缩量）到 +100（放量）
+    t0 = time.time()
     V, V_meta = _calc_volume(q)
+    perf['V量能'] = time.time() - t0
 
     # 持仓（O）：-100（减少）到 +100（增加）
+    t0 = time.time()
     cvd6 = (cvd_series[-1] - cvd_series[-7]) / max(1e-12, abs(close_now)) if len(cvd_series) >= 7 else 0.0
     O, O_meta = _calc_oi(symbol, c, params.get("open_interest", {}), cvd6)
+    perf['O持仓'] = time.time() - t0
 
     # 环境（E）：-100（差）到 +100（好）
+    t0 = time.time()
     E, E_meta = _calc_environment(h, l, c, atr_now, params.get("environment", {}))
+    perf['E环境'] = time.time() - t0
 
     # ---- 2.5. 资金领先性（F调节器）----
     # F不参与基础评分，仅用于概率调整
@@ -459,6 +481,9 @@ def _analyze_symbol_core(
         "price": close_now,
         "ema30": _last(ema30),
         "atr_now": atr_now,
+
+        # 性能分析（用于调试）
+        "perf": perf,
 
         # 7维分数（统一±100）
         "scores": scores,
