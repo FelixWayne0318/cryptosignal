@@ -37,6 +37,7 @@ class OptimizedBatchScanner:
         self.client = None
         self.kline_cache = get_kline_cache()
         self.initialized = False
+        self.symbols = []  # 保存初始化时的币种列表
 
         log("✅ 优化批量扫描器创建成功")
 
@@ -107,6 +108,9 @@ class OptimizedBatchScanner:
         log(f"   TOP 5: {', '.join(symbols[:5])}")
         log(f"   成交额范围: {volume_map.get(symbols[0], 0)/1e6:.1f}M ~ {volume_map.get(symbols[-1], 0)/1e6:.1f}M USDT")
 
+        # 保存初始化的币种列表
+        self.symbols = symbols
+
         # 3. 批量初始化K线缓存（REST，一次性）
         log(f"\n3️⃣  批量初始化K线缓存（这是一次性操作）...")
         await self.kline_cache.initialize_batch(
@@ -162,38 +166,8 @@ class OptimizedBatchScanner:
 
         scan_start = time.time()
 
-        # 获取高流动性币种列表
-        log("   获取高流动性币种列表...")
-        exchange_info = await self.client.get_exchange_info()
-
-        # 筛选USDT永续合约
-        all_symbols = [
-            s["symbol"] for s in exchange_info.get("symbols", [])
-            if s["symbol"].endswith("USDT")
-            and s["status"] == "TRADING"
-            and s["contractType"] == "PERPETUAL"
-        ]
-
-        # 获取24h行情数据（用于流动性过滤）
-        ticker_24h = await self.client.get_ticker_24h()
-
-        # 构建成交额字典
-        volume_map = {}
-        for ticker in ticker_24h:
-            symbol = ticker.get('symbol', '')
-            if symbol in all_symbols:
-                volume_map[symbol] = float(ticker.get('quoteVolume', 0))
-
-        # 按流动性排序，取TOP 140（避免WebSocket连接数超限：140币种×2周期=280<300限制）
-        symbols = sorted(
-            all_symbols,
-            key=lambda s: volume_map.get(s, 0),
-            reverse=True
-        )[:140]
-
-        # 过滤掉流动性太低的（<3M USDT/24h）
-        MIN_VOLUME = 3_000_000
-        symbols = [s for s in symbols if volume_map.get(s, 0) >= MIN_VOLUME]
+        # 使用初始化时保存的币种列表（确保与缓存一致）
+        symbols = self.symbols.copy()
 
         # 限制数量（测试用）
         if max_symbols:
@@ -201,7 +175,6 @@ class OptimizedBatchScanner:
 
         log(f"   扫描币种: {len(symbols)} 个高流动性币种")
         log(f"   最低分数: {min_score}")
-        log(f"   流动性阈值: >3M USDT/24h")
         log("=" * 60)
 
         results = []
