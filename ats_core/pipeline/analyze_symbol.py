@@ -39,6 +39,10 @@ from ats_core.scoring.adaptive_weights import (
 )
 from ats_core.features.multi_timeframe import multi_timeframe_coherence
 
+# ========== 10维因子系统 ==========
+from ats_core.factors_v2.liquidity import calculate_liquidity
+from ats_core.factors_v2.basis_funding import calculate_basis_funding
+
 # ============ 工具函数 ============
 
 def _to_f(x) -> float:
@@ -90,12 +94,16 @@ def _analyze_symbol_core(
     spot_k1: List = None,
     elite_meta: Dict[str, Any] = None,  # 保留参数兼容性，但不再使用
     k15m: List = None,  # MTF优化：15分钟K线
-    k1d: List = None    # MTF优化：1天K线
+    k1d: List = None,   # MTF优化：1天K线
+    orderbook: Dict = None,     # 10维因子：订单簿数据（L）
+    mark_price: float = None,   # 10维因子：标记价格（B）
+    funding_rate: float = None, # 10维因子：资金费率（B）
+    spot_price: float = None    # 10维因子：现货价格（B）
 ) -> Dict[str, Any]:
     """
     核心分析逻辑（使用已获取的K线数据）
 
-    此函数包含完整的8维因子分析逻辑，但不负责获取数据。
+    此函数包含完整的10维因子分析逻辑，但不负责获取数据。
     由analyze_symbol()和analyze_symbol_with_preloaded_klines()调用。
 
     Args:
@@ -107,6 +115,10 @@ def _analyze_symbol_core(
         elite_meta: 已废弃，保留仅为兼容性
         k15m: 15分钟K线（可选，用于MTF）
         k1d: 1天K线（可选，用于MTF）
+        orderbook: 订单簿数据（可选，用于L因子）
+        mark_price: 标记价格（可选，用于B因子）
+        funding_rate: 资金费率（可选，用于B因子）
+        spot_price: 现货价格（可选，用于B因子）
 
     Returns:
         分析结果字典
@@ -213,6 +225,45 @@ def _analyze_symbol_core(
     E, E_meta = _calc_environment(h, l, c, atr_now, params.get("environment", {}))
     perf['E环境'] = time.time() - t0
 
+    # ---- 2.1. 10维因子系统：新增因子 ----
+
+    # 流动性（L）：0（差）到 100（好）- 质量维度
+    t0 = time.time()
+    if orderbook is not None:
+        try:
+            L, L_meta = calculate_liquidity(orderbook, params.get("liquidity", {}))
+        except Exception as e:
+            from ats_core.logging import warn
+            warn(f"L因子计算失败: {e}")
+            L, L_meta = 0, {"error": str(e)}
+    else:
+        L, L_meta = 0, {"note": "无订单簿数据"}
+    perf['L流动性'] = time.time() - t0
+
+    # 基差+资金费（B）：-100（看跌）到 +100（看涨）- 方向维度
+    t0 = time.time()
+    if mark_price is not None and spot_price is not None and funding_rate is not None:
+        try:
+            B, B_meta = calculate_basis_funding(
+                perp_price=mark_price,
+                spot_price=spot_price,
+                funding_rate=funding_rate,
+                params=params.get("basis_funding", {})
+            )
+        except Exception as e:
+            from ats_core.logging import warn
+            warn(f"B因子计算失败: {e}")
+            B, B_meta = 0, {"error": str(e)}
+    else:
+        B, B_meta = 0, {"note": "缺少mark_price/spot_price/funding_rate数据"}
+    perf['B基差资金费'] = time.time() - t0
+
+    # 清算密度（Q）：-100（多单密集）到 +100（空单密集）- TODO: 需要预加载清算数据
+    Q, Q_meta = 0, {"note": "待实现：需要预加载清算数据"}
+
+    # 独立性（I）：0（跟随）到 100（独立）- TODO: 需要预加载BTC/ETH数据
+    I, I_meta = 0, {"note": "待实现：需要预加载BTC/ETH数据"}
+
     # ---- 2.5. 资金领先性（F调节器）----
     # F不参与基础评分，仅用于概率调整
     oi_change_pct = O_meta.get("oi24h_pct", 0.0) if O_meta.get("oi24h_pct") is not None else 0.0
@@ -226,12 +277,27 @@ def _analyze_symbol_core(
         oi_change_pct, vol_ratio, cvd6, price_change_24h, price_slope, params.get("fund_leading", {})
     )
 
-    # ---- 3. Scorecard（统一±100系统，优化权重v5 - 自适应权重）----
-    # 🚀 世界顶级优化：Regime-Dependent Weights
-    # 基础权重（从配置读取）
+    # ---- 3. Scorecard（10维统一±100系统 + F调节器）----
+    # 🚀 世界顶级优化：10维因子系统
+    # 基础权重（从配置读取，10维系统：总权重160，归一化到±100）
     base_weights = params.get("weights", {
-        "T": 30, "C": 17, "O": 18, "V": 20,
-        "M": 5, "F": 7, "S": 1, "E": 2
+        # Layer 1: 价格行为层（65分）
+        "T": 25,   # 趋势
+        "M": 15,   # 动量
+        "S": 10,   # 结构
+        "V": 15,   # 量能（已包含触发K）
+        # Layer 2: 资金流层（40分）
+        "C": 20,   # CVD
+        "O": 20,   # OI持仓
+        # Layer 3: 微观结构层（45分）
+        "L": 20,   # 流动性（新增）
+        "B": 15,   # 基差+资金费（新增）
+        "Q": 10,   # 清算密度（新增，待实现）
+        # Layer 4: 市场环境层（10分）
+        "I": 10,   # 独立性（新增，待实现）
+        # 保留旧因子以兼容
+        "E": 0,    # 环境（已废弃，权重0）
+        "F": 0     # F现在是调节器，不参与权重
     })
 
     # 尝试提前获取市场状态（用于自适应权重）
@@ -253,17 +319,27 @@ def _analyze_symbol_core(
     # 平滑混合（70%自适应 + 30%基础）
     weights = blend_weights(regime_weights, base_weights, blend_ratio=0.7)
 
-    # 8维分数（统一±100，F现在参与加权）
-    scores = {"T": T, "M": M, "C": C, "S": S, "V": V, "O": O, "E": E, "F": F}
+    # 10维分数（统一±100）+ F调节器
+    scores = {
+        # 8个旧因子
+        "T": T, "M": M, "C": C, "S": S, "V": V, "O": O, "E": E,
+        # 4个新因子
+        "L": L, "B": B, "Q": Q, "I": I,
+        # F调节器
+        "F": F
+    }
 
-    # 计算加权分数（-100 到 +100）
-    weighted_score, confidence, edge = scorecard(scores, weights)
+    # 计算加权分数（-160 到 +160，归一化到±100）
+    raw_weighted_score, confidence, edge = scorecard(scores, weights)
+    # 归一化：160分 → 100分
+    weighted_score = raw_weighted_score / 1.6
 
     # 方向判断（根据加权分数符号）
     side_long = (weighted_score > 0)
 
     # 元数据
     scores_meta = {
+        # 旧因子
         "T": T_meta,
         "M": M_meta,
         "C": C_meta,
@@ -271,18 +347,24 @@ def _analyze_symbol_core(
         "V": V_meta,
         "O": O_meta,
         "E": E_meta,
+        # 新因子
+        "L": L_meta,
+        "B": B_meta,
+        "Q": Q_meta,
+        "I": I_meta,
+        # 调节器
         "F": F_meta
     }
 
     # ---- 4. 基础概率计算（🚀 世界顶级优化：Sigmoid映射）----
     prior_up = 0.50  # 中性先验
-    Q = _calc_quality(scores, len(k1), len(oi_data))
+    quality_score = _calc_quality(scores, len(k1), len(oi_data))
 
     # 自适应温度参数
     temperature = get_adaptive_temperature(market_regime_early, current_volatility)
 
     # 使用Sigmoid概率映射（替代线性映射）
-    P_long_base, P_short_base = map_probability_sigmoid(edge, prior_up, Q, temperature)
+    P_long_base, P_short_base = map_probability_sigmoid(edge, prior_up, quality_score, temperature)
     P_base = P_long_base if side_long else P_short_base
 
     # 移除贝叶斯先验调整（已废弃候选池机制）
@@ -799,7 +881,11 @@ def analyze_symbol_with_preloaded_klines(
     spot_k1h: List = None,
     elite_meta: Dict = None,
     k15m: List = None,  # MTF优化：15分钟K线
-    k1d: List = None    # MTF优化：1天K线
+    k1d: List = None,   # MTF优化：1天K线
+    orderbook: Dict = None,     # 10维因子：订单簿数据（L）
+    mark_price: float = None,   # 10维因子：标记价格（B）
+    funding_rate: float = None, # 10维因子：资金费率（B）
+    spot_price: float = None    # 10维因子：现货价格（B）
 ) -> Dict[str, Any]:
     """
     使用预加载的K线数据分析币种（用于批量扫描优化）
@@ -813,6 +899,10 @@ def analyze_symbol_with_preloaded_klines(
         elite_meta: Elite Universe元数据（可选）
         k15m: 15分钟K线（可选，用于MTF）
         k1d: 1天K线（可选，用于MTF）
+        orderbook: 订单簿数据（可选，用于L因子）
+        mark_price: 标记价格（可选，用于B因子）
+        funding_rate: 资金费率（可选，用于B因子）
+        spot_price: 现货价格（可选，用于B因子）
 
     Returns:
         分析结果字典（格式与analyze_symbol相同）
@@ -833,5 +923,9 @@ def analyze_symbol_with_preloaded_klines(
         spot_k1=spot_k1h,
         elite_meta=elite_meta,
         k15m=k15m,  # 传递15m K线
-        k1d=k1d     # 传递1d K线
+        k1d=k1d,    # 传递1d K线
+        orderbook=orderbook,         # 传递订单簿（L）
+        mark_price=mark_price,       # 传递标记价格（B）
+        funding_rate=funding_rate,   # 传递资金费率（B）
+        spot_price=spot_price        # 传递现货价格（B）
     )
