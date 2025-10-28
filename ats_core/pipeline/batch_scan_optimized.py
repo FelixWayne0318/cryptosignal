@@ -115,7 +115,7 @@ class OptimizedBatchScanner:
         log(f"\n3️⃣  批量初始化K线缓存（这是一次性操作）...")
         await self.kline_cache.initialize_batch(
             symbols=symbols,
-            intervals=['1h', '4h'],  # 只初始化需要的周期
+            intervals=['1h', '4h', '15m', '1d'],  # MTF需要：15m/1h/4h/1d
             client=self.client
         )
 
@@ -123,7 +123,7 @@ class OptimizedBatchScanner:
         log(f"\n4️⃣  启动WebSocket实时更新...")
         await self.kline_cache.start_batch_realtime_update(
             symbols=symbols,
-            intervals=['1h', '4h'],
+            intervals=['1h', '4h', '15m', '1d'],  # MTF需要所有周期
             client=self.client
         )
 
@@ -187,11 +187,13 @@ class OptimizedBatchScanner:
             try:
                 log(f"[{i+1}/{len(symbols)}] 正在分析 {symbol}...")
 
-                # 从缓存获取K线（0次API调用）✅
+                # 从缓存获取K线（0次API调用，支持MTF）✅
                 k1h = self.kline_cache.get_klines(symbol, '1h', 300)
                 k4h = self.kline_cache.get_klines(symbol, '4h', 200)
+                k15m = self.kline_cache.get_klines(symbol, '15m', 200)
+                k1d = self.kline_cache.get_klines(symbol, '1d', 100)
 
-                log(f"  └─ K线数据: 1h={len(k1h) if k1h else 0}根, 4h={len(k4h) if k4h else 0}根")
+                log(f"  └─ K线数据: 1h={len(k1h) if k1h else 0}根, 4h={len(k4h) if k4h else 0}根, 15m={len(k15m) if k15m else 0}根, 1d={len(k1d) if k1d else 0}根")
 
                 # 动态数据要求（支持新币）
                 coin_age_hours = len(k1h) if k1h else 0
@@ -236,11 +238,13 @@ class OptimizedBatchScanner:
                 # 性能监控
                 analysis_start = time.time()
 
-                # 因子分析（使用预加载的K线）
+                # 因子分析（使用预加载的K线，支持MTF）
                 result = analyze_symbol_with_preloaded_klines(
                     symbol=symbol,
                     k1h=k1h,
-                    k4h=k4h
+                    k4h=k4h,
+                    k15m=k15m,  # 用于微确认和MTF
+                    k1d=k1d     # 用于MTF
                 )
 
                 analysis_time = time.time() - analysis_start
