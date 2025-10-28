@@ -162,9 +162,9 @@ class OptimizedBatchScanner:
             self.spot_price_cache = {
                 symbol: all_spot_prices.get(symbol, 0)
                 for symbol in symbols
-                if symbol in all_spot_prices
             }
-            log(f"       ✅ 获取 {len(self.spot_price_cache)} 个币种的现货价格")
+            found_count = sum(1 for v in self.spot_price_cache.values() if v > 0)
+            log(f"       ✅ 获取 {found_count}/{len(symbols)} 个币种的现货价格")
         except Exception as e:
             warn(f"       ⚠️  现货价格获取失败: {e}")
             self.spot_price_cache = {}
