@@ -61,12 +61,39 @@
   },
 
   "funding_rate": {
-    "_comment": "v2.2新增：资金费率与基差指标（F）+ FWI",
+    "_comment": "v2.2新增：资金费率与基差指标（F）+ FWI - 已废弃，迁移到basis_funding",
     "basis_scale": 50.0,
     "funding_scale": 10.0,
     "extreme_funding_threshold": 0.0015,
     "fwi_window_minutes": 30,
     "fwi_warning_threshold": 2.0
+  },
+
+  "liquidity": {
+    "_comment": "v4.0新增：L因子 - 流动性评分",
+    "spread_good_bps": 2.0,
+    "spread_bad_bps": 10.0,
+    "depth_target_usdt": 1000000,
+    "impact_notional_usdt": 100000,
+    "impact_max_pct": 0.01,
+    "orderbook_depth_levels": 10,
+    "spread_weight": 0.3,
+    "depth_weight": 0.3,
+    "impact_weight": 0.3,
+    "obi_weight": 0.1
+  },
+
+  "basis_funding": {
+    "_comment": "v4.0新增：B因子 - 基差+资金费",
+    "basis_neutral_bps": 50,
+    "basis_extreme_bps": 100,
+    "funding_neutral_rate": 0.001,
+    "funding_extreme_rate": 0.002,
+    "basis_weight": 0.6,
+    "funding_weight": 0.4,
+    "fwi_enabled": false,
+    "fwi_window_minutes": 30,
+    "fwi_boost_max": 20
   },
 
   "microconfirm_15m": {
@@ -99,31 +126,29 @@
   },
 
   "weights": {
-    "T": 35,
-    "M": 10,
-    "C": 25,
-    "S": 2,
-    "V": 3,
-    "O": 12,
-    "D": 8,
-    "F": 5
+    "T": 25,
+    "M": 15,
+    "C": 20,
+    "S": 10,
+    "V": 15,
+    "O": 20,
+    "L": 20,
+    "B": 15,
+    "Q": 10,
+    "I": 10,
+    "E": 0,
+    "F": 0
   },
   "weights_comment": {
-    "_version": "v2.2 - 集成微观结构指标",
-    "_logic": "三层因果关系权重分配",
-    "_layer1_cause": "C(25) + O(12) + D(8) + F(5) = 50分 - 原因层：资金流、持仓、流动性、资金费",
-    "_layer2_trend": "T(35) + M(10) = 45分 - 趋势层：价格运动方向和动量",
-    "_layer3_result": "V(3) + S(2) = 5分 - 结果层：成交量和结构确认",
-    "_removed": "E (环境层) - 已删除，过于模糊",
-    "_changes": {
-      "M": "15→10 (-5%): 与T相关性高，降权",
-      "O": "15→12 (-3%): 增加D/F后降权",
-      "V": "5→3 (-2%): 结果层，降权",
-      "S": "3→2 (-1%): 简化为仅trigger candle检测",
-      "E": "2→0 (-2%): 删除",
-      "D": "0→8 (+8%): 新增订单簿深度（OBI）",
-      "F": "0→5 (+5%): 新增资金费率与基差"
-    }
+    "_version": "v4.0 - 10维因子系统",
+    "_total_weight": "160分（自动归一化到±100）",
+    "_layer1_price_action": "T(25) + M(15) + S(10) + V(15) = 65分 - 价格行为层",
+    "_layer2_money_flow": "C(20) + O(20) = 40分 - 资金流层",
+    "_layer3_microstructure": "L(20) + B(15) + Q(10) = 45分 - 微观结构层",
+    "_layer4_market_context": "I(10) = 10分 - 市场环境层",
+    "_regulator": "F(0) - 调节器，不参与权重，仅调整概率",
+    "_deprecated": "E(0) - 环境因子已废弃，D因子已整合到L",
+    "_new_factors": "L（流动性）、B（基差+资金费）、Q（清算密度）、I（独立性）"
   },
 
   "fund_leading": {

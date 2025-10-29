@@ -39,17 +39,31 @@ class OptimizedBatchScanner:
         self.initialized = False
         self.symbols = []  # 保存初始化时的币种列表
 
+        # 10维因子系统：预加载的市场数据缓存
+        self.orderbook_cache = {}      # {symbol: orderbook_dict}
+        self.mark_price_cache = {}     # {symbol: mark_price}
+        self.funding_rate_cache = {}   # {symbol: funding_rate}
+        self.spot_price_cache = {}     # {symbol: spot_price}
+        self.liquidation_cache = {}    # {symbol: agg_trades_list} - Q因子（使用aggTrades替代已废弃的清算API）
+        self.btc_klines = []           # BTC K线数据 - I因子
+        self.eth_klines = []           # ETH K线数据 - I因子
+
         log("✅ 优化批量扫描器创建成功")
 
-    async def initialize(self):
+    async def initialize(self, enable_websocket: bool = True):
         """
         初始化（仅一次，约2分钟）
+
+        Args:
+            enable_websocket: 是否启用WebSocket实时更新（默认True）
+                - True: 生产模式，启用实时更新
+                - False: 测试模式，跳过WebSocket（避免连接数超限）
 
         步骤:
         1. 初始化Binance客户端
         2. 获取候选币种列表
         3. 批量初始化K线缓存（REST）
-        4. 启动WebSocket实时更新
+        4. 启动WebSocket实时更新（可选）
         """
         if self.initialized:
             log("⚠️  已初始化，跳过")
@@ -93,7 +107,7 @@ class OptimizedBatchScanner:
                 # quoteVolume = USDT成交额
                 volume_map[symbol] = float(ticker.get('quoteVolume', 0))
 
-        # 按流动性排序，取TOP 140（避免WebSocket连接数超限：140币种×2周期=280<300限制）
+        # 按流动性排序，取TOP 140（WebSocket连接数：140币种×2周期=280<300限制）
         symbols = sorted(
             all_symbols,
             key=lambda s: volume_map.get(s, 0),
@@ -115,17 +129,166 @@ class OptimizedBatchScanner:
         log(f"\n3️⃣  批量初始化K线缓存（这是一次性操作）...")
         await self.kline_cache.initialize_batch(
             symbols=symbols,
-            intervals=['1h', '4h'],  # 只初始化需要的周期
+            intervals=['1h', '4h', '15m', '1d'],  # MTF需要：15m/1h/4h/1d
             client=self.client
         )
 
-        # 4. 启动WebSocket实时更新
-        log(f"\n4️⃣  启动WebSocket实时更新...")
-        await self.kline_cache.start_batch_realtime_update(
-            symbols=symbols,
-            intervals=['1h', '4h'],
-            client=self.client
+        # 4. 启动WebSocket实时更新（可选）
+        if enable_websocket:
+            log(f"\n4️⃣  启动WebSocket实时更新...")
+            log(f"   策略: 仅订阅关键周期（1h, 4h）以避免连接数超限")
+            log(f"   连接数: 140币种 × 2周期 = 280 < 300限制 ✅")
+            await self.kline_cache.start_batch_realtime_update(
+                symbols=symbols,
+                intervals=['1h', '4h'],  # 只订阅主要周期（15m和1d使用REST数据即可）
+                client=self.client
+            )
+            log(f"   15m和1d周期: 使用REST API数据（更新频率低，无需实时订阅）")
+        else:
+            log(f"\n4️⃣  跳过WebSocket实时更新（测试模式）")
+
+        # 5. 预加载10维因子系统所需的市场数据
+        log(f"\n5️⃣  预加载10维因子系统数据（订单簿、资金费率、现货价格）...")
+        data_start = time.time()
+
+        # 导入新增的批量数据获取函数
+        from ats_core.sources.binance import (
+            get_all_spot_prices,
+            get_all_premium_index,
+            get_orderbook_snapshot
         )
+
+        # 5.1 批量获取现货价格（1次API调用）
+        log("   5.1 批量获取现货价格...")
+        try:
+            all_spot_prices = get_all_spot_prices()
+            self.spot_price_cache = {
+                symbol: all_spot_prices.get(symbol, 0)
+                for symbol in symbols
+            }
+            found_count = sum(1 for v in self.spot_price_cache.values() if v > 0)
+            log(f"       ✅ 获取 {found_count}/{len(symbols)} 个币种的现货价格")
+        except Exception as e:
+            warn(f"       ⚠️  现货价格获取失败: {e}")
+            self.spot_price_cache = {}
+
+        # 5.2 批量获取标记价格和资金费率（1次API调用）
+        log("   5.2 批量获取标记价格和资金费率...")
+        try:
+            all_premium = get_all_premium_index()
+            for item in all_premium:
+                symbol = item.get('symbol', '')
+                if symbol in symbols:
+                    self.mark_price_cache[symbol] = float(item.get('markPrice', 0))
+                    self.funding_rate_cache[symbol] = float(item.get('lastFundingRate', 0))
+            log(f"       ✅ 获取 {len(self.mark_price_cache)} 个币种的标记价格和资金费率")
+        except Exception as e:
+            warn(f"       ⚠️  标记价格/资金费率获取失败: {e}")
+            self.mark_price_cache = {}
+            self.funding_rate_cache = {}
+
+        # 5.3 批量获取订单簿快照（逐个获取，约140次API调用）
+        log("   5.3 批量获取订单簿深度（20档）...")
+        log("       注意：此步骤需要~140次API调用，预计15-20秒")
+
+        orderbook_success = 0
+        orderbook_failed = 0
+
+        # 分批获取，避免速率限制
+        batch_size = 10  # 降低批次大小，从20降到10
+        for i in range(0, len(symbols), batch_size):
+            batch = symbols[i:i+batch_size]
+
+            for symbol in batch:
+                try:
+                    orderbook = get_orderbook_snapshot(symbol, limit=20)
+                    self.orderbook_cache[symbol] = orderbook
+                    orderbook_success += 1
+                except Exception as e:
+                    orderbook_failed += 1
+                    # 记录前5个失败的详细信息，避免日志过多
+                    if orderbook_failed <= 5:
+                        warn(f"       获取{symbol}订单簿失败: {e}")
+
+            # 每批次后延迟1秒，避免触发速率限制（从0.5秒增加到1秒）
+            if i + batch_size < len(symbols):
+                await asyncio.sleep(1.0)
+
+            # 进度显示
+            if (i + batch_size) % 60 == 0 or (i + batch_size) >= len(symbols):
+                progress = min(i + batch_size, len(symbols))
+                log(f"       进度: {progress}/{len(symbols)} ({progress/len(symbols)*100:.0f}%)")
+
+        log(f"       ✅ 成功: {orderbook_success}, 失败: {orderbook_failed}")
+
+        # DEBUG: 验证缓存内容
+        log(f"\n   [DEBUG] 缓存验证:")
+        log(f"       - orderbook_cache: {len(self.orderbook_cache)} 条目")
+        log(f"       - mark_price_cache: {len(self.mark_price_cache)} 条目")
+        log(f"       - funding_rate_cache: {len(self.funding_rate_cache)} 条目")
+        log(f"       - spot_price_cache: {len(self.spot_price_cache)} 条目")
+
+        # 检查BTCUSDT样本数据
+        if 'BTCUSDT' in self.orderbook_cache:
+            sample_ob = self.orderbook_cache['BTCUSDT']
+            if sample_ob:
+                log(f"       - BTCUSDT订单簿样本: bids={len(sample_ob.get('bids', []))}, asks={len(sample_ob.get('asks', []))}")
+            else:
+                log(f"       - BTCUSDT订单簿样本: None或空")
+        if 'BTCUSDT' in self.mark_price_cache:
+            log(f"       - BTCUSDT标记价格: {self.mark_price_cache['BTCUSDT']}")
+        if 'BTCUSDT' in self.funding_rate_cache:
+            log(f"       - BTCUSDT资金费率: {self.funding_rate_cache['BTCUSDT']}")
+        if 'BTCUSDT' in self.spot_price_cache:
+            log(f"       - BTCUSDT现货价格: {self.spot_price_cache['BTCUSDT']}")
+
+        # 5.4 批量获取聚合成交数据（Q因子 - 使用aggTrades替代已废弃的清算API）
+        log("   5.4 批量获取聚合成交数据（Q因子）...")
+        from ats_core.sources.binance import get_agg_trades
+
+        agg_trades_success = 0
+        agg_trades_failed = 0
+
+        for symbol in symbols:
+            try:
+                # 获取最近500笔聚合成交（用于分析大额异常交易）
+                agg_trades = get_agg_trades(symbol, limit=500)
+
+                # aggTrades格式可直接使用，无需转换
+                # API返回: {"a": id, "p": "price", "q": "qty", "T": time, "m": isBuyerMaker}
+                self.liquidation_cache[symbol] = agg_trades  # 复用cache变量名
+                agg_trades_success += 1
+            except Exception as e:
+                # 失败时设置为空列表，避免后续get()返回None
+                self.liquidation_cache[symbol] = []
+                agg_trades_failed += 1
+                if agg_trades_failed <= 5:
+                    warn(f"       获取{symbol}聚合成交数据失败: {e}")
+
+        log(f"       ✅ 成功: {agg_trades_success}, 失败: {agg_trades_failed}")
+
+        # 5.5 获取BTC和ETH K线数据（I因子）
+        log("   5.5 获取BTC和ETH K线数据（I因子）...")
+        from ats_core.sources.binance import get_klines
+
+        try:
+            # 获取BTC 1小时K线（最近48小时，用于计算相关性）
+            self.btc_klines = get_klines('BTCUSDT', '1h', 48)
+            log(f"       ✅ 获取BTC K线: {len(self.btc_klines)}根")
+        except Exception as e:
+            warn(f"       ⚠️  BTC K线获取失败: {e}")
+            self.btc_klines = []
+
+        try:
+            # 获取ETH 1小时K线（最近48小时）
+            self.eth_klines = get_klines('ETHUSDT', '1h', 48)
+            log(f"       ✅ 获取ETH K线: {len(self.eth_klines)}根")
+        except Exception as e:
+            warn(f"       ⚠️  ETH K线获取失败: {e}")
+            self.eth_klines = []
+
+        data_elapsed = time.time() - data_start
+        log(f"   数据预加载完成，耗时: {data_elapsed:.1f}秒")
 
         self.initialized = True
 
@@ -141,7 +304,8 @@ class OptimizedBatchScanner:
     async def scan(
         self,
         min_score: int = 70,
-        max_symbols: Optional[int] = None
+        max_symbols: Optional[int] = None,
+        on_signal_found: Optional[callable] = None
     ) -> Dict:
         """
         批量扫描（超快速，约5秒）
@@ -149,6 +313,8 @@ class OptimizedBatchScanner:
         Args:
             min_score: 最低信号分数
             max_symbols: 最大扫描数量（用于测试）
+            on_signal_found: 发现信号时的回调函数（实时处理信号）
+                            async def callback(signal_dict) -> None
 
         Returns:
             扫描结果字典
@@ -187,11 +353,13 @@ class OptimizedBatchScanner:
             try:
                 log(f"[{i+1}/{len(symbols)}] 正在分析 {symbol}...")
 
-                # 从缓存获取K线（0次API调用）✅
+                # 从缓存获取K线（0次API调用，支持MTF）✅
                 k1h = self.kline_cache.get_klines(symbol, '1h', 300)
                 k4h = self.kline_cache.get_klines(symbol, '4h', 200)
+                k15m = self.kline_cache.get_klines(symbol, '15m', 200)
+                k1d = self.kline_cache.get_klines(symbol, '1d', 100)
 
-                log(f"  └─ K线数据: 1h={len(k1h) if k1h else 0}根, 4h={len(k4h) if k4h else 0}根")
+                log(f"  └─ K线数据: 1h={len(k1h) if k1h else 0}根, 4h={len(k4h) if k4h else 0}根, 15m={len(k15m) if k15m else 0}根, 1d={len(k1d) if k1d else 0}根")
 
                 # 动态数据要求（支持新币）
                 coin_age_hours = len(k1h) if k1h else 0
@@ -236,11 +404,45 @@ class OptimizedBatchScanner:
                 # 性能监控
                 analysis_start = time.time()
 
-                # 因子分析（使用预加载的K线）
+                # 获取10维因子系统所需的市场数据
+                orderbook = self.orderbook_cache.get(symbol)
+                mark_price = self.mark_price_cache.get(symbol)
+                funding_rate = self.funding_rate_cache.get(symbol)
+                spot_price = self.spot_price_cache.get(symbol)
+                liquidations = self.liquidation_cache.get(symbol)  # Q因子
+                btc_klines = self.btc_klines  # I因子
+                eth_klines = self.eth_klines  # I因子
+
+                # DEBUG: 打印前3个币种的数据传递情况
+                if i < 3:
+                    log(f"  [DEBUG] {symbol} 数据传递:")
+                    if orderbook:
+                        bids_count = len(orderbook.get('bids', []))
+                        asks_count = len(orderbook.get('asks', []))
+                        log(f"      orderbook: 存在 (bids={bids_count} asks={asks_count})")
+                    else:
+                        log(f"      orderbook: None")
+                    log(f"      mark_price: {mark_price}")
+                    log(f"      funding_rate: {funding_rate}")
+                    log(f"      spot_price: {spot_price}")
+                    log(f"      agg_trades: {len(liquidations) if liquidations else 0}笔（Q因子）")
+                    log(f"      btc_klines: {len(btc_klines)}根")
+                    log(f"      eth_klines: {len(eth_klines)}根")
+
+                # 因子分析（使用预加载的K线和市场数据，支持完整10维因子系统）
                 result = analyze_symbol_with_preloaded_klines(
                     symbol=symbol,
                     k1h=k1h,
-                    k4h=k4h
+                    k4h=k4h,
+                    k15m=k15m,  # 用于微确认和MTF
+                    k1d=k1d,    # 用于MTF
+                    orderbook=orderbook,       # L（流动性）
+                    mark_price=mark_price,     # B（基差+资金费）
+                    funding_rate=funding_rate, # B（基差+资金费）
+                    spot_price=spot_price,     # B（基差+资金费）
+                    agg_trades=liquidations,   # Q（清算密度 - 使用aggTrades）
+                    btc_klines=btc_klines,     # I（独立性）
+                    eth_klines=eth_klines      # I（独立性）
                 )
 
                 analysis_time = time.time() - analysis_start
@@ -259,11 +461,22 @@ class OptimizedBatchScanner:
 
                 log(f"  └─ 分析完成（耗时{analysis_time:.1f}秒）")
 
-                # 筛选高质量信号
-                final_score = abs(result.get('final_score', 0))
-                if final_score >= min_score:
+                # 筛选Prime信号（只添加is_prime=True的币种）
+                is_prime = result.get('publish', {}).get('prime', False)
+                prime_strength = result.get('publish', {}).get('prime_strength', 0)
+                confidence = result.get('confidence', 0)
+
+                if is_prime:
                     results.append(result)
-                    log(f"✅ {symbol}: 分数={final_score:.0f}")
+                    log(f"✅ {symbol}: Prime强度={prime_strength}, 置信度={confidence:.0f}")
+
+                    # 实时回调：立即处理新发现的信号
+                    if on_signal_found:
+                        try:
+                            await on_signal_found(result)
+                        except Exception as e:
+                            from ats_core.logging import warn
+                            warn(f"⚠️  信号回调失败: {e}")
 
                 # 进度显示（每20个）
                 if (i + 1) % 20 == 0:
@@ -367,12 +580,13 @@ async def run_optimized_scan(
 
             for r in results['results']:
                 symbol = r.get('symbol', 'UNKNOWN')
-                score = r.get('final_score', 0)
-                side = 'LONG' if score > 0 else 'SHORT'
+                weighted_score = r.get('weighted_score', 0)
+                side = 'LONG' if weighted_score > 0 else 'SHORT'
                 confidence = r.get('confidence', 0)
+                prime_strength = r.get('publish', {}).get('prime_strength', 0)
 
                 log(f"   {symbol} {side}: "
-                    f"分数={abs(score):.0f}, "
+                    f"Prime强度={prime_strength}, "
                     f"置信度={confidence:.0f}")
 
         return results
@@ -430,8 +644,8 @@ async def benchmark_comparison(test_symbols: int = 20):
     for symbol in symbols:
         try:
             result = analyze_symbol(symbol)
-            final_score = abs(result.get('final_score', 0))
-            if final_score >= 70:
+            prime_strength = result.get('publish', {}).get('prime_strength', 0)
+            if prime_strength >= 70:
                 rest_results.append(result)
         except Exception:
             pass
@@ -470,8 +684,8 @@ async def benchmark_comparison(test_symbols: int = 20):
 
 
 if __name__ == "__main__":
-    # 运行优化扫描
-    # asyncio.run(run_optimized_scan(min_score=75))
+    # 运行优化扫描（扫描全部币种）
+    asyncio.run(run_optimized_scan(min_score=65))
 
-    # 或运行性能对比测试
-    asyncio.run(benchmark_comparison(test_symbols=20))
+    # 性能对比测试（需要pool_manager模块）
+    # asyncio.run(benchmark_comparison(test_symbols=20))

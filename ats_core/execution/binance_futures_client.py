@@ -76,9 +76,12 @@ class BinanceFuturesClient:
         """关闭客户端"""
         self.is_running = False
 
-        # 关闭所有WebSocket连接
-        for ws in self.ws_connections.values():
-            await ws.close()
+        # 关闭所有WebSocket连接（使用list避免迭代时字典修改）
+        for ws in list(self.ws_connections.values()):
+            try:
+                await ws.close()
+            except Exception:
+                pass
 
         # 关闭HTTP会话
         if self.session:

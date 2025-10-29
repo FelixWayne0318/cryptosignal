@@ -1,6 +1,8 @@
 # coding: utf-8
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
 import time
@@ -13,6 +15,10 @@ from ats_core.backoff import sleep_retry  # 指数退避
 # 允许通过环境变量覆盖网关，便于内网代理或将来切换
 BASE = os.environ.get("BINANCE_FAPI_BASE", "https://fapi.binance.com")
 SPOT_BASE = os.environ.get("BINANCE_SPOT_BASE", "https://api.binance.com")
+
+# API认证（可选，用于需要签名的端点）
+API_KEY = os.environ.get("BINANCE_API_KEY", "")
+API_SECRET = os.environ.get("BINANCE_API_SECRET", "")
 
 
 def _get(
@@ -43,6 +49,61 @@ def _get(
             last_err = e
             sleep_retry(i)
     # 若仍失败，抛出最后一次的异常
+    if last_err:
+        raise last_err
+    raise RuntimeError("unknown http error")
+
+
+def _get_signed(
+    path: str,
+    params: Optional[Dict[str, Any]] = None,
+    *,
+    timeout: float = 8.0,
+    retries: int = 2,
+) -> Any:
+    """
+    带签名的 GET 请求（需要API key和secret）
+
+    用于需要认证的端点（如部分清算数据端点）
+    """
+    if not API_KEY or not API_SECRET:
+        raise RuntimeError("需要API认证：请设置BINANCE_API_KEY和BINANCE_API_SECRET环境变量")
+
+    url = BASE + path
+    params = params or {}
+
+    # 添加时间戳
+    params['timestamp'] = int(time.time() * 1000)
+
+    # 生成签名
+    query_string = urllib.parse.urlencode(sorted(params.items()))
+    signature = hmac.new(
+        API_SECRET.encode('utf-8'),
+        query_string.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+    params['signature'] = signature
+
+    # 构建完整URL
+    full = f"{url}?{urllib.parse.urlencode(params)}"
+
+    last_err: Optional[Exception] = None
+    for i in range(retries + 1):
+        try:
+            req = urllib.request.Request(
+                full,
+                headers={
+                    "User-Agent": "ats-analyzer/1.0",
+                    "X-MBX-APIKEY": API_KEY
+                }
+            )
+            with urllib.request.urlopen(req, timeout=float(timeout)) as r:
+                data = r.read()
+                return json.loads(data)
+        except Exception as e:
+            last_err = e
+            sleep_retry(i)
+
     if last_err:
         raise last_err
     raise RuntimeError("unknown http error")
@@ -228,6 +289,58 @@ def get_funding_rate(symbol: str) -> float:
     return float(result.get('lastFundingRate', 0))
 
 
+def get_spot_price(symbol: str) -> float:
+    """
+    获取现货价格（Binance Spot API）
+
+    /api/v3/ticker/price
+
+    Args:
+        symbol: 现货交易对符号（如 BTCUSDT）
+
+    Returns:
+        现货价格（float）
+    """
+    symbol = symbol.upper()
+    result = _get(SPOT_BASE + "/api/v3/ticker/price", {"symbol": symbol}, timeout=6.0, retries=2)
+    return float(result.get('price', 0))
+
+
+def get_all_spot_prices() -> Dict[str, float]:
+    """
+    批量获取所有现货价格（Binance Spot API）
+
+    /api/v3/ticker/price（无symbol参数）
+
+    Returns:
+        字典：{symbol: price}
+        例如：{"BTCUSDT": 50000.0, "ETHUSDT": 3000.0, ...}
+    """
+    result = _get(SPOT_BASE + "/api/v3/ticker/price", None, timeout=10.0, retries=2)
+    if isinstance(result, list):
+        return {item['symbol']: float(item['price']) for item in result}
+    return {}
+
+
+def get_all_premium_index() -> List[Dict[str, Any]]:
+    """
+    批量获取所有合约的标记价格和资金费率
+
+    /fapi/v1/premiumIndex（无symbol参数）
+
+    Returns:
+        列表，每个元素包含：
+        {
+            "symbol": "BTCUSDT",
+            "markPrice": "50000",
+            "lastFundingRate": "0.0001",
+            "nextFundingTime": 1234567890000,
+            "time": 1234567890000
+        }
+    """
+    return _get("/fapi/v1/premiumIndex", None, timeout=10.0, retries=2)
+
+
 # ------------------------- 强平订单（清算数据） -------------------------
 
 def get_liquidations(
@@ -240,9 +353,13 @@ def get_liquidations(
     """
     获取强平订单数据（清算数据）
 
-    /fapi/v1/forceOrders
+    尝试两种方式：
+    1. /fapi/v1/forceOrders (公开接口，无需签名)
+    2. /fapi/v1/allForceOrders (需要签名，如果公开接口失败则尝试)
 
-    注意：此API返回最近7天的数据，interval参数用于后续聚合处理
+    注意：
+    - 此API返回最近7天的数据，interval参数用于后续聚合处理
+    - 如果设置了BINANCE_API_KEY和BINANCE_API_SECRET环境变量，将自动使用签名API
 
     Args:
         symbol: 交易对符号
@@ -278,7 +395,66 @@ def get_liquidations(
     if end_time is not None:
         params["endTime"] = int(end_time)
 
-    return _get("/fapi/v1/allForceOrders", params, timeout=8.0, retries=2)
+    # 策略1：先尝试公开接口（不需要签名）
+    try:
+        return _get("/fapi/v1/forceOrders", params, timeout=8.0, retries=1)
+    except Exception as e:
+        error_str = str(e)
+        # 如果是401错误且配置了API认证，尝试签名接口
+        if "401" in error_str and API_KEY and API_SECRET:
+            try:
+                return _get_signed("/fapi/v1/allForceOrders", params, timeout=8.0, retries=2)
+            except Exception as e2:
+                # 签名接口也失败，抛出原始错误
+                raise e
+        # 其他错误或未配置API认证，直接抛出
+        raise e
+
+
+# ------------------------- 聚合成交数据（清算数据替代方案）-------------------------
+
+def get_agg_trades(
+    symbol: str,
+    limit: int = 500,
+    start_time: Optional[Union[int, float]] = None,
+    end_time: Optional[Union[int, float]] = None
+) -> List[Dict[str, Any]]:
+    """
+    获取聚合成交数据（用于替代清算数据）
+
+    由于Binance清算数据API已停止维护，使用aggTrades分析大额异常交易
+
+    Args:
+        symbol: 交易对符号
+        limit: 返回数量（最大1000）
+        start_time: 开始时间（毫秒时间戳）
+        end_time: 结束时间（毫秒时间戳）
+
+    Returns:
+        聚合成交列表，每条记录包含：
+        {
+            "a": 聚合交易ID,
+            "p": "价格",
+            "q": "数量",
+            "f": 第一笔交易ID,
+            "l": 最后一笔交易ID,
+            "T": 时间戳,
+            "m": isBuyerMaker (True=卖单, False=买单)
+        }
+    """
+    symbol = symbol.upper()
+    limit = int(max(1, min(int(limit), 1000)))
+
+    params: Dict[str, Any] = {
+        "symbol": symbol,
+        "limit": limit
+    }
+    if start_time is not None:
+        params["startTime"] = int(start_time)
+    if end_time is not None:
+        params["endTime"] = int(end_time)
+
+    return _get("/fapi/v1/aggTrades", params, timeout=8.0, retries=2)
 
 
 # ------------------------- 24h 统计 -------------------------
