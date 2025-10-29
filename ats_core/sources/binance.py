@@ -411,6 +411,52 @@ def get_liquidations(
         raise e
 
 
+# ------------------------- 聚合成交数据（清算数据替代方案）-------------------------
+
+def get_agg_trades(
+    symbol: str,
+    limit: int = 500,
+    start_time: Optional[Union[int, float]] = None,
+    end_time: Optional[Union[int, float]] = None
+) -> List[Dict[str, Any]]:
+    """
+    获取聚合成交数据（用于替代清算数据）
+
+    由于Binance清算数据API已停止维护，使用aggTrades分析大额异常交易
+
+    Args:
+        symbol: 交易对符号
+        limit: 返回数量（最大1000）
+        start_time: 开始时间（毫秒时间戳）
+        end_time: 结束时间（毫秒时间戳）
+
+    Returns:
+        聚合成交列表，每条记录包含：
+        {
+            "a": 聚合交易ID,
+            "p": "价格",
+            "q": "数量",
+            "f": 第一笔交易ID,
+            "l": 最后一笔交易ID,
+            "T": 时间戳,
+            "m": isBuyerMaker (True=卖单, False=买单)
+        }
+    """
+    symbol = symbol.upper()
+    limit = int(max(1, min(int(limit), 1000)))
+
+    params: Dict[str, Any] = {
+        "symbol": symbol,
+        "limit": limit
+    }
+    if start_time is not None:
+        params["startTime"] = int(start_time)
+    if end_time is not None:
+        params["endTime"] = int(end_time)
+
+    return _get("/fapi/v1/aggTrades", params, timeout=8.0, retries=2)
+
+
 # ------------------------- 24h 统计 -------------------------
 
 def get_ticker_24h(symbol: Optional[str] = None):

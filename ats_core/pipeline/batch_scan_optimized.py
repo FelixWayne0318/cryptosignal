@@ -44,7 +44,7 @@ class OptimizedBatchScanner:
         self.mark_price_cache = {}     # {symbol: mark_price}
         self.funding_rate_cache = {}   # {symbol: funding_rate}
         self.spot_price_cache = {}     # {symbol: spot_price}
-        self.liquidation_cache = {}    # {symbol: liquidations_list} - Q因子
+        self.liquidation_cache = {}    # {symbol: agg_trades_list} - Q因子（使用aggTrades替代已废弃的清算API）
         self.btc_klines = []           # BTC K线数据 - I因子
         self.eth_klines = []           # ETH K线数据 - I因子
 
@@ -242,51 +242,30 @@ class OptimizedBatchScanner:
         if 'BTCUSDT' in self.spot_price_cache:
             log(f"       - BTCUSDT现货价格: {self.spot_price_cache['BTCUSDT']}")
 
-        # 5.4 批量获取清算数据（Q因子）
-        log("   5.4 批量获取清算数据（Q因子）...")
-        from ats_core.sources.binance import get_liquidations
+        # 5.4 批量获取聚合成交数据（Q因子 - 使用aggTrades替代已废弃的清算API）
+        log("   5.4 批量获取聚合成交数据（Q因子）...")
+        from ats_core.sources.binance import get_agg_trades
 
-        liquidation_success = 0
-        liquidation_failed = 0
+        agg_trades_success = 0
+        agg_trades_failed = 0
 
         for symbol in symbols:
             try:
-                # 获取最近24小时的清算数据
-                raw_liquidations = get_liquidations(symbol, limit=500)
+                # 获取最近500笔聚合成交（用于分析大额异常交易）
+                agg_trades = get_agg_trades(symbol, limit=500)
 
-                # 转换数据格式以匹配liquidation.py的期望
-                # Binance API: {"side": "SELL", "price": "50000", "origQty": "0.1", "time": ...}
-                # liquidation.py: {"side": "long", "volume": 5000, "price": 50000, "timestamp": ...}
-                converted_liquidations = []
-                for liq in raw_liquidations:
-                    try:
-                        price = float(liq.get('price', 0))
-                        qty = float(liq.get('origQty', 0))
-                        binance_side = liq.get('side', '')
-
-                        # SELL=多单被强平, BUY=空单被强平
-                        side = 'long' if binance_side == 'SELL' else 'short'
-
-                        converted_liquidations.append({
-                            'side': side,
-                            'volume': price * qty,  # USDT价值
-                            'price': price,
-                            'timestamp': liq.get('time', 0)
-                        })
-                    except Exception:
-                        # 跳过格式错误的记录
-                        continue
-
-                self.liquidation_cache[symbol] = converted_liquidations
-                liquidation_success += 1
+                # aggTrades格式可直接使用，无需转换
+                # API返回: {"a": id, "p": "price", "q": "qty", "T": time, "m": isBuyerMaker}
+                self.liquidation_cache[symbol] = agg_trades  # 复用cache变量名
+                agg_trades_success += 1
             except Exception as e:
                 # 失败时设置为空列表，避免后续get()返回None
                 self.liquidation_cache[symbol] = []
-                liquidation_failed += 1
-                if liquidation_failed <= 5:
-                    warn(f"       获取{symbol}清算数据失败: {e}")
+                agg_trades_failed += 1
+                if agg_trades_failed <= 5:
+                    warn(f"       获取{symbol}聚合成交数据失败: {e}")
 
-        log(f"       ✅ 成功: {liquidation_success}, 失败: {liquidation_failed}")
+        log(f"       ✅ 成功: {agg_trades_success}, 失败: {agg_trades_failed}")
 
         # 5.5 获取BTC和ETH K线数据（I因子）
         log("   5.5 获取BTC和ETH K线数据（I因子）...")
@@ -446,7 +425,7 @@ class OptimizedBatchScanner:
                     log(f"      mark_price: {mark_price}")
                     log(f"      funding_rate: {funding_rate}")
                     log(f"      spot_price: {spot_price}")
-                    log(f"      liquidations: {len(liquidations) if liquidations else 0}条")
+                    log(f"      agg_trades: {len(liquidations) if liquidations else 0}笔（Q因子）")
                     log(f"      btc_klines: {len(btc_klines)}根")
                     log(f"      eth_klines: {len(eth_klines)}根")
 
@@ -461,7 +440,7 @@ class OptimizedBatchScanner:
                     mark_price=mark_price,     # B（基差+资金费）
                     funding_rate=funding_rate, # B（基差+资金费）
                     spot_price=spot_price,     # B（基差+资金费）
-                    liquidations=liquidations, # Q（清算密度）
+                    agg_trades=liquidations,   # Q（清算密度 - 使用aggTrades）
                     btc_klines=btc_klines,     # I（独立性）
                     eth_klines=eth_klines      # I（独立性）
                 )

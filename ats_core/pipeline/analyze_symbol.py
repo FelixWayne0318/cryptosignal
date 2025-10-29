@@ -107,9 +107,10 @@ def _analyze_symbol_core(
     mark_price: float = None,   # 10维因子：标记价格（B）
     funding_rate: float = None, # 10维因子：资金费率（B）
     spot_price: float = None,   # 10维因子：现货价格（B）
-    liquidations: List = None,  # 10维因子：清算数据（Q）
+    agg_trades: List = None,    # 10维因子：聚合成交数据（Q - 替代清算数据）
     btc_klines: List = None,    # 10维因子：BTC K线（I）
-    eth_klines: List = None     # 10维因子：ETH K线（I）
+    eth_klines: List = None,    # 10维因子：ETH K线（I）
+    liquidations: List = None   # 向后兼容：旧的清算数据（已废弃）
 ) -> Dict[str, Any]:
     """
     核心分析逻辑（使用已获取的K线数据）
@@ -297,7 +298,21 @@ def _analyze_symbol_core(
     # 清算密度（Q）：-100（空单密集清算，超涨回调，看空）到 +100（多单密集清算，超跌反弹，看多）
     # 逻辑：大量多单清算后抛压减轻可能反弹，大量空单清算后买压减轻可能回调
     t0 = time.time()
-    if liquidations is not None and len(liquidations) > 0:
+    if agg_trades is not None and len(agg_trades) > 0:
+        # 使用aggTrades数据（新方法 - 分析大额异常交易）
+        try:
+            from ats_core.factors_v2.liquidation_v2 import calculate_liquidation_from_trades
+            Q, Q_meta = calculate_liquidation_from_trades(
+                agg_trades=agg_trades,
+                current_price=close_now,
+                params=params.get("liquidation", {})
+            )
+        except Exception as e:
+            from ats_core.logging import warn
+            warn(f"Q因子计算失败(aggTrades): {e}")
+            Q, Q_meta = 0, {"error": str(e)}
+    elif liquidations is not None and len(liquidations) > 0:
+        # 向后兼容：如果有旧的清算数据则使用（已废弃）
         try:
             Q, Q_meta = calculate_liquidation(
                 liquidations=liquidations,
@@ -307,10 +322,10 @@ def _analyze_symbol_core(
             )
         except Exception as e:
             from ats_core.logging import warn
-            warn(f"Q因子计算失败: {e}")
+            warn(f"Q因子计算失败(liquidations): {e}")
             Q, Q_meta = 0, {"error": str(e)}
     else:
-        Q, Q_meta = 0, {"note": "无清算数据"}
+        Q, Q_meta = 0, {"note": "无清算数据或聚合成交数据"}
     perf['Q清算密度'] = time.time() - t0
 
     # 独立性（I）：0（完全相关）到 100（完全独立）→ 归一化到 ±100
@@ -833,36 +848,15 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         warn(f"获取{symbol}现货价格失败: {e}")
         spot_price = None
 
-    # 获取清算数据（Q因子）
+    # 获取清算数据（Q因子）- 使用aggTrades替代已废弃的清算API
     try:
-        raw_liquidations = get_liquidations(symbol, limit=500)
-
-        # 转换数据格式以匹配liquidation.py的期望
-        # Binance API: {"side": "SELL", "price": "50000", "origQty": "0.1", "time": ...}
-        # liquidation.py: {"side": "long", "volume": 5000, "price": 50000, "timestamp": ...}
-        liquidations = []
-        for liq in raw_liquidations:
-            try:
-                price = float(liq.get('price', 0))
-                qty = float(liq.get('origQty', 0))
-                binance_side = liq.get('side', '')
-
-                # SELL=多单被强平, BUY=空单被强平
-                side = 'long' if binance_side == 'SELL' else 'short'
-
-                liquidations.append({
-                    'side': side,
-                    'volume': price * qty,  # USDT价值
-                    'price': price,
-                    'timestamp': liq.get('time', 0)
-                })
-            except Exception:
-                # 跳过格式错误的记录
-                continue
+        from ats_core.sources.binance import get_agg_trades
+        # 获取最近500笔聚合成交（分析大额异常交易）
+        agg_trades = get_agg_trades(symbol, limit=500)
     except Exception as e:
         from ats_core.logging import warn
-        warn(f"获取{symbol}清算数据失败: {e}")
-        liquidations = []
+        warn(f"获取{symbol}聚合成交数据失败: {e}")
+        agg_trades = []
 
     # 获取BTC/ETH K线数据（I因子）
     # 注意：只需要获取一次，不需要每个币种都获取
@@ -893,7 +887,7 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         mark_price=mark_price,       # B（基差+资金费）
         funding_rate=funding_rate,   # B（基差+资金费）
         spot_price=spot_price,       # B（基差+资金费）
-        liquidations=liquidations,   # Q（清算密度）
+        agg_trades=agg_trades,       # Q（清算密度 - 使用aggTrades）
         btc_klines=btc_klines,       # I（独立性）
         eth_klines=eth_klines        # I（独立性）
     )
@@ -1075,7 +1069,8 @@ def analyze_symbol_with_preloaded_klines(
     mark_price: float = None,   # 10维因子：标记价格（B）
     funding_rate: float = None, # 10维因子：资金费率（B）
     spot_price: float = None,   # 10维因子：现货价格（B）
-    liquidations: List = None,  # 10维因子：清算数据（Q）
+    agg_trades: List = None,    # 10维因子：聚合成交数据（Q - 使用aggTrades替代清算数据）
+    liquidations: List = None,  # 10维因子：清算数据（Q - 已废弃，向后兼容）
     btc_klines: List = None,    # 10维因子：BTC K线（I）
     eth_klines: List = None     # 10维因子：ETH K线（I）
 ) -> Dict[str, Any]:
@@ -1095,7 +1090,8 @@ def analyze_symbol_with_preloaded_klines(
         mark_price: 标记价格（可选，用于B因子）
         funding_rate: 资金费率（可选，用于B因子）
         spot_price: 现货价格（可选，用于B因子）
-        liquidations: 清算数据列表（可选，用于Q因子）
+        agg_trades: 聚合成交数据列表（可选，用于Q因子 - 新方法）
+        liquidations: 清算数据列表（可选，用于Q因子 - 已废弃，仅保留向后兼容）
         btc_klines: BTC K线数据（可选，用于I因子）
         eth_klines: ETH K线数据（可选，用于I因子）
 
@@ -1123,7 +1119,8 @@ def analyze_symbol_with_preloaded_klines(
         mark_price=mark_price,       # 传递标记价格（B）
         funding_rate=funding_rate,   # 传递资金费率（B）
         spot_price=spot_price,       # 传递现货价格（B）
-        liquidations=liquidations,   # 传递清算数据（Q）
+        agg_trades=agg_trades,       # 传递聚合成交数据（Q - 新方法）
+        liquidations=liquidations,   # 传递清算数据（Q - 已废弃，向后兼容）
         btc_klines=btc_klines,       # 传递BTC K线（I）
         eth_klines=eth_klines        # 传递ETH K线（I）
     )
