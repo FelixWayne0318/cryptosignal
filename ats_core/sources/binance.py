@@ -290,11 +290,13 @@ def get_liquidations(
     end_time: Optional[Union[int, float]] = None
 ) -> List[Dict[str, Any]]:
     """
-    获取强平订单数据（清算数据）
+    获取强平订单数据（清算数据） - 公开接口
 
-    /fapi/v1/forceOrders
+    /fapi/v1/forceOrders (公开，无需签名)
 
-    注意：此API返回最近7天的数据，interval参数用于后续聚合处理
+    注意：
+    - 此API返回最近7天的数据，interval参数用于后续聚合处理
+    - 不同于 /fapi/v1/allForceOrders（需要签名认证）
 
     Args:
         symbol: 交易对符号
@@ -330,7 +332,9 @@ def get_liquidations(
     if end_time is not None:
         params["endTime"] = int(end_time)
 
-    return _get("/fapi/v1/allForceOrders", params, timeout=8.0, retries=2)
+    # 使用公开接口 /fapi/v1/forceOrders (不需要签名)
+    # 而不是 /fapi/v1/allForceOrders (需要签名)
+    return _get("/fapi/v1/forceOrders", params, timeout=8.0, retries=2)
 
 
 # ------------------------- 24h 统计 -------------------------
