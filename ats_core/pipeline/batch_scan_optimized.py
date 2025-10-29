@@ -218,6 +218,27 @@ class OptimizedBatchScanner:
 
         log(f"       ✅ 成功: {orderbook_success}, 失败: {orderbook_failed}")
 
+        # DEBUG: 验证缓存内容
+        log(f"\n   [DEBUG] 缓存验证:")
+        log(f"       - orderbook_cache: {len(self.orderbook_cache)} 条目")
+        log(f"       - mark_price_cache: {len(self.mark_price_cache)} 条目")
+        log(f"       - funding_rate_cache: {len(self.funding_rate_cache)} 条目")
+        log(f"       - spot_price_cache: {len(self.spot_price_cache)} 条目")
+
+        # 检查BTCUSDT样本数据
+        if 'BTCUSDT' in self.orderbook_cache:
+            sample_ob = self.orderbook_cache['BTCUSDT']
+            if sample_ob:
+                log(f"       - BTCUSDT订单簿样本: bids={len(sample_ob.get('bids', []))}, asks={len(sample_ob.get('asks', []))}")
+            else:
+                log(f"       - BTCUSDT订单簿样本: None或空")
+        if 'BTCUSDT' in self.mark_price_cache:
+            log(f"       - BTCUSDT标记价格: {self.mark_price_cache['BTCUSDT']}")
+        if 'BTCUSDT' in self.funding_rate_cache:
+            log(f"       - BTCUSDT资金费率: {self.funding_rate_cache['BTCUSDT']}")
+        if 'BTCUSDT' in self.spot_price_cache:
+            log(f"       - BTCUSDT现货价格: {self.spot_price_cache['BTCUSDT']}")
+
         data_elapsed = time.time() - data_start
         log(f"   数据预加载完成，耗时: {data_elapsed:.1f}秒")
 
@@ -340,6 +361,19 @@ class OptimizedBatchScanner:
                 mark_price = self.mark_price_cache.get(symbol)
                 funding_rate = self.funding_rate_cache.get(symbol)
                 spot_price = self.spot_price_cache.get(symbol)
+
+                # DEBUG: 打印前3个币种的数据传递情况
+                if i < 3:
+                    log(f"  [DEBUG] {symbol} 数据传递:")
+                    if orderbook:
+                        bids_count = len(orderbook.get('bids', []))
+                        asks_count = len(orderbook.get('asks', []))
+                        log(f"      orderbook: 存在 (bids={bids_count} asks={asks_count})")
+                    else:
+                        log(f"      orderbook: None")
+                    log(f"      mark_price: {mark_price}")
+                    log(f"      funding_rate: {funding_rate}")
+                    log(f"      spot_price: {spot_price}")
 
                 # 因子分析（使用预加载的K线和市场数据，支持10维因子系统）
                 result = analyze_symbol_with_preloaded_klines(

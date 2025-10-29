@@ -129,6 +129,20 @@ def _analyze_symbol_core(
     Returns:
         分析结果字典
     """
+    # DEBUG: 打印前3个币种的数据接收情况
+    if symbol in ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']:
+        from ats_core.logging import log
+        log(f"  [DEBUG] _analyze_symbol_core收到 {symbol}:")
+        if orderbook:
+            bids_count = len(orderbook.get('bids', []))
+            asks_count = len(orderbook.get('asks', []))
+            log(f"      orderbook: 存在 (bids={bids_count} asks={asks_count})")
+        else:
+            log(f"      orderbook: None")
+        log(f"      mark_price: {mark_price}")
+        log(f"      funding_rate: {funding_rate}")
+        log(f"      spot_price: {spot_price}")
+
     params = CFG.params or {}
 
     # 移除候选池先验逻辑（已废弃）
@@ -715,6 +729,46 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     except Exception:
         spot_k1 = None
 
+    # 10维因子系统：获取L/B因子所需数据
+    from ats_core.sources.binance import (
+        get_orderbook_snapshot,
+        get_mark_price,
+        get_funding_rate,
+        get_spot_price
+    )
+
+    # 获取订单簿数据（L因子）
+    try:
+        orderbook = get_orderbook_snapshot(symbol, limit=20)
+    except Exception as e:
+        from ats_core.logging import warn
+        warn(f"获取{symbol}订单簿失败: {e}")
+        orderbook = None
+
+    # 获取标记价格（B因子）
+    try:
+        mark_price = get_mark_price(symbol)
+    except Exception as e:
+        from ats_core.logging import warn
+        warn(f"获取{symbol}标记价格失败: {e}")
+        mark_price = None
+
+    # 获取资金费率（B因子）
+    try:
+        funding_rate = get_funding_rate(symbol)
+    except Exception as e:
+        from ats_core.logging import warn
+        warn(f"获取{symbol}资金费率失败: {e}")
+        funding_rate = None
+
+    # 获取现货价格（B因子）
+    try:
+        spot_price = get_spot_price(symbol)
+    except Exception as e:
+        from ats_core.logging import warn
+        warn(f"获取{symbol}现货价格失败: {e}")
+        spot_price = None
+
     # ---- 2. 调用核心分析函数 ----
     return _analyze_symbol_core(
         symbol=symbol,
@@ -722,7 +776,11 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         k4=k4,
         oi_data=oi_data,
         spot_k1=spot_k1,
-        elite_meta=None  # 不再使用候选池元数据
+        elite_meta=None,  # 不再使用候选池元数据
+        orderbook=orderbook,         # L（流动性）
+        mark_price=mark_price,       # B（基差+资金费）
+        funding_rate=funding_rate,   # B（基差+资金费）
+        spot_price=spot_price        # B（基差+资金费）
     )
 
 
