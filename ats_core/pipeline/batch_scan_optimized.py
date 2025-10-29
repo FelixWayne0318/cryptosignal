@@ -187,36 +187,54 @@ class OptimizedBatchScanner:
             self.mark_price_cache = {}
             self.funding_rate_cache = {}
 
-        # 5.3 批量获取订单簿快照（逐个获取，约140次API调用）
+        # 5.3 批量获取订单簿快照（并发获取，约140次API调用）
         log("   5.3 批量获取订单簿深度（20档）...")
-        log("       注意：此步骤需要~140次API调用，预计15-20秒")
+        log("       🚀 使用并发模式，预计20-30秒")
 
         orderbook_success = 0
         orderbook_failed = 0
 
-        # 分批获取，避免速率限制
-        batch_size = 10  # 降低批次大小，从20降到10
+        # 🔧 FIX: 使用并发获取，大幅提升速度
+        async def fetch_one_orderbook(symbol: str):
+            """异步获取单个订单簿"""
+            try:
+                # 在线程池中运行同步函数，避免阻塞事件循环
+                loop = asyncio.get_event_loop()
+                orderbook = await loop.run_in_executor(
+                    None,  # 使用默认线程池
+                    lambda: get_orderbook_snapshot(symbol, limit=20)
+                )
+                return symbol, orderbook, None
+            except Exception as e:
+                return symbol, None, e
+
+        # 分批并发获取（避免速率限制）
+        batch_size = 20  # 每批20个并发请求
         for i in range(0, len(symbols), batch_size):
             batch = symbols[i:i+batch_size]
 
-            for symbol in batch:
-                try:
-                    orderbook = get_orderbook_snapshot(symbol, limit=20)
+            # 并发获取这一批的所有订单簿
+            tasks = [fetch_one_orderbook(symbol) for symbol in batch]
+            results = await asyncio.gather(*tasks)
+
+            # 处理结果
+            for symbol, orderbook, error in results:
+                if error is None and orderbook:
                     self.orderbook_cache[symbol] = orderbook
                     orderbook_success += 1
-                except Exception as e:
+                else:
                     orderbook_failed += 1
-                    # 记录前5个失败的详细信息，避免日志过多
+                    # 记录前5个失败的详细信息
                     if orderbook_failed <= 5:
-                        warn(f"       获取{symbol}订单簿失败: {e}")
+                        warn(f"       获取{symbol}订单簿失败: {error}")
 
-            # 每批次后延迟1秒，避免触发速率限制（从0.5秒增加到1秒）
+            # 批间延迟（避免速率限制）
             if i + batch_size < len(symbols):
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(0.5)  # 减少延迟，因为并发了
 
             # 进度显示
-            if (i + batch_size) % 60 == 0 or (i + batch_size) >= len(symbols):
-                progress = min(i + batch_size, len(symbols))
+            progress = min(i + batch_size, len(symbols))
+            if progress % 40 == 0 or progress >= len(symbols):
                 log(f"       进度: {progress}/{len(symbols)} ({progress/len(symbols)*100:.0f}%)")
 
         log(f"       ✅ 成功: {orderbook_success}, 失败: {orderbook_failed}")
@@ -244,26 +262,53 @@ class OptimizedBatchScanner:
 
         # 5.4 批量获取聚合成交数据（Q因子 - 使用aggTrades替代已废弃的清算API）
         log("   5.4 批量获取聚合成交数据（Q因子）...")
+        log("       🚀 使用并发模式，预计10-15秒")
         from ats_core.sources.binance import get_agg_trades
 
         agg_trades_success = 0
         agg_trades_failed = 0
 
-        for symbol in symbols:
+        # 🔧 FIX: 使用并发获取，大幅提升速度
+        async def fetch_one_agg_trades(symbol: str):
+            """异步获取单个币种的聚合成交数据"""
             try:
-                # 获取最近500笔聚合成交（用于分析大额异常交易）
-                agg_trades = get_agg_trades(symbol, limit=500)
-
-                # aggTrades格式可直接使用，无需转换
-                # API返回: {"a": id, "p": "price", "q": "qty", "T": time, "m": isBuyerMaker}
-                self.liquidation_cache[symbol] = agg_trades  # 复用cache变量名
-                agg_trades_success += 1
+                loop = asyncio.get_event_loop()
+                agg_trades = await loop.run_in_executor(
+                    None,
+                    lambda: get_agg_trades(symbol, limit=500)
+                )
+                return symbol, agg_trades, None
             except Exception as e:
-                # 失败时设置为空列表，避免后续get()返回None
-                self.liquidation_cache[symbol] = []
-                agg_trades_failed += 1
-                if agg_trades_failed <= 5:
-                    warn(f"       获取{symbol}聚合成交数据失败: {e}")
+                return symbol, [], e
+
+        # 分批并发获取
+        batch_size = 20  # 每批20个并发请求
+        for i in range(0, len(symbols), batch_size):
+            batch = symbols[i:i+batch_size]
+
+            # 并发获取这一批的所有聚合成交数据
+            tasks = [fetch_one_agg_trades(symbol) for symbol in batch]
+            results = await asyncio.gather(*tasks)
+
+            # 处理结果
+            for symbol, agg_trades, error in results:
+                if error is None:
+                    self.liquidation_cache[symbol] = agg_trades
+                    agg_trades_success += 1
+                else:
+                    self.liquidation_cache[symbol] = []
+                    agg_trades_failed += 1
+                    if agg_trades_failed <= 5:
+                        warn(f"       获取{symbol}聚合成交数据失败: {error}")
+
+            # 批间延迟
+            if i + batch_size < len(symbols):
+                await asyncio.sleep(0.5)
+
+            # 进度显示
+            progress = min(i + batch_size, len(symbols))
+            if progress % 40 == 0 or progress >= len(symbols):
+                log(f"       进度: {progress}/{len(symbols)} ({progress/len(symbols)*100:.0f}%)")
 
         log(f"       ✅ 成功: {agg_trades_success}, 失败: {agg_trades_failed}")
 

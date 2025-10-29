@@ -70,6 +70,9 @@ class BinanceFuturesClient:
         # 同步服务器时间
         await self._sync_time()
 
+        # 🔧 FIX: 设置运行状态为True，使WebSocket连接保持活跃
+        self.is_running = True
+
         log("✅ 客户端初始化完成，服务器时间已同步")
 
     async def close(self):
