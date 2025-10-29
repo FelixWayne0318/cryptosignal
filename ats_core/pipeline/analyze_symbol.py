@@ -48,6 +48,8 @@ from ats_core.features.multi_timeframe import multi_timeframe_coherence
 # ========== 10维因子系统 ==========
 from ats_core.factors_v2.liquidity import calculate_liquidity
 from ats_core.factors_v2.basis_funding import calculate_basis_funding
+from ats_core.factors_v2.liquidation import calculate_liquidation
+from ats_core.factors_v2.independence import calculate_independence
 
 # ============ 工具函数 ============
 
@@ -104,7 +106,10 @@ def _analyze_symbol_core(
     orderbook: Dict = None,     # 10维因子：订单簿数据（L）
     mark_price: float = None,   # 10维因子：标记价格（B）
     funding_rate: float = None, # 10维因子：资金费率（B）
-    spot_price: float = None    # 10维因子：现货价格（B）
+    spot_price: float = None,   # 10维因子：现货价格（B）
+    liquidations: List = None,  # 10维因子：清算数据（Q）
+    btc_klines: List = None,    # 10维因子：BTC K线（I）
+    eth_klines: List = None     # 10维因子：ETH K线（I）
 ) -> Dict[str, Any]:
     """
     核心分析逻辑（使用已获取的K线数据）
@@ -125,6 +130,9 @@ def _analyze_symbol_core(
         mark_price: 标记价格（可选，用于B因子）
         funding_rate: 资金费率（可选，用于B因子）
         spot_price: 现货价格（可选，用于B因子）
+        liquidations: 清算数据列表（可选，用于Q因子）
+        btc_klines: BTC K线数据（可选，用于I因子）
+        eth_klines: ETH K线数据（可选，用于I因子）
 
     Returns:
         分析结果字典
@@ -283,13 +291,55 @@ def _analyze_symbol_core(
         B, B_meta = 0, {"note": "缺少mark_price/spot_price/funding_rate数据"}
     perf['B基差资金费'] = time.time() - t0
 
-    # 清算密度（Q）：-100（多单密集）到 +100（空单密集）- TODO: 需要预加载清算数据
-    Q, Q_meta = 0, {"note": "待实现：需要预加载清算数据"}
+    # 清算密度（Q）：-100（多单密集清算，看跌）到 +100（空单密集清算，看涨）
+    t0 = time.time()
+    if liquidations is not None and len(liquidations) > 0:
+        try:
+            Q, Q_meta = calculate_liquidation(
+                liquidations=liquidations,
+                current_price=close_now,
+                liquidation_map=None,
+                params=params.get("liquidation", {})
+            )
+        except Exception as e:
+            from ats_core.logging import warn
+            warn(f"Q因子计算失败: {e}")
+            Q, Q_meta = 0, {"error": str(e)}
+    else:
+        Q, Q_meta = 0, {"note": "无清算数据"}
+    perf['Q清算密度'] = time.time() - t0
 
-    # 独立性（I）：0（跟随）到 100（独立）→ 归一化到 ±100
-    # 注意：当前为占位符，实现后需要归一化
-    # I_raw = calculate_independence(...) → I = (I_raw - 50) * 2
-    I, I_meta = 0, {"note": "待实现：需要预加载BTC/ETH数据"}
+    # 独立性（I）：0（完全相关）到 100（完全独立）→ 归一化到 ±100
+    # 越独立越好，所以高分=正分，低分=负分
+    t0 = time.time()
+    if btc_klines and eth_klines and len(c) >= 48:
+        try:
+            # 提取最近48小时的价格数据（用于回归分析）
+            alt_prices = c[-48:]
+            btc_prices = [_to_f(k[4]) for k in btc_klines[-48:]]  # Close prices
+            eth_prices = [_to_f(k[4]) for k in eth_klines[-48:]]  # Close prices
+
+            # 计算独立性分数（0-100）
+            I_raw, beta_sum, I_meta = calculate_independence(
+                alt_prices=alt_prices,
+                btc_prices=btc_prices,
+                eth_prices=eth_prices,
+                params=params.get("independence", {})
+            )
+
+            # 归一化：0-100 → -100到+100（中性值50→0）
+            # 低独立性（<50）→负分（跟随大盘），高独立性（>50）→正分（独立走势）
+            I = (I_raw - 50) * 2
+            I_meta['raw_score'] = I_raw
+            I_meta['normalized_score'] = I
+            I_meta['beta_sum'] = beta_sum
+        except Exception as e:
+            from ats_core.logging import warn
+            warn(f"I因子计算失败: {e}")
+            I, I_meta = 0, {"error": str(e)}
+    else:
+        I, I_meta = 0, {"note": "缺少BTC/ETH K线数据"}
+    perf['I独立性'] = time.time() - t0
 
     # ---- 2.5. 资金领先性（F调节器）----
     # F不参与基础评分，仅用于概率调整
@@ -959,7 +1009,10 @@ def analyze_symbol_with_preloaded_klines(
     orderbook: Dict = None,     # 10维因子：订单簿数据（L）
     mark_price: float = None,   # 10维因子：标记价格（B）
     funding_rate: float = None, # 10维因子：资金费率（B）
-    spot_price: float = None    # 10维因子：现货价格（B）
+    spot_price: float = None,   # 10维因子：现货价格（B）
+    liquidations: List = None,  # 10维因子：清算数据（Q）
+    btc_klines: List = None,    # 10维因子：BTC K线（I）
+    eth_klines: List = None     # 10维因子：ETH K线（I）
 ) -> Dict[str, Any]:
     """
     使用预加载的K线数据分析币种（用于批量扫描优化）
@@ -977,6 +1030,9 @@ def analyze_symbol_with_preloaded_klines(
         mark_price: 标记价格（可选，用于B因子）
         funding_rate: 资金费率（可选，用于B因子）
         spot_price: 现货价格（可选，用于B因子）
+        liquidations: 清算数据列表（可选，用于Q因子）
+        btc_klines: BTC K线数据（可选，用于I因子）
+        eth_klines: ETH K线数据（可选，用于I因子）
 
     Returns:
         分析结果字典（格式与analyze_symbol相同）
@@ -1001,5 +1057,8 @@ def analyze_symbol_with_preloaded_klines(
         orderbook=orderbook,         # 传递订单簿（L）
         mark_price=mark_price,       # 传递标记价格（B）
         funding_rate=funding_rate,   # 传递资金费率（B）
-        spot_price=spot_price        # 传递现货价格（B）
+        spot_price=spot_price,       # 传递现货价格（B）
+        liquidations=liquidations,   # 传递清算数据（Q）
+        btc_klines=btc_klines,       # 传递BTC K线（I）
+        eth_klines=eth_klines        # 传递ETH K线（I）
     )

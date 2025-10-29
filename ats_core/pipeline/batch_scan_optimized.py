@@ -44,6 +44,9 @@ class OptimizedBatchScanner:
         self.mark_price_cache = {}     # {symbol: mark_price}
         self.funding_rate_cache = {}   # {symbol: funding_rate}
         self.spot_price_cache = {}     # {symbol: spot_price}
+        self.liquidation_cache = {}    # {symbol: liquidations_list} - Q因子
+        self.btc_klines = []           # BTC K线数据 - I因子
+        self.eth_klines = []           # ETH K线数据 - I因子
 
         log("✅ 优化批量扫描器创建成功")
 
@@ -239,6 +242,46 @@ class OptimizedBatchScanner:
         if 'BTCUSDT' in self.spot_price_cache:
             log(f"       - BTCUSDT现货价格: {self.spot_price_cache['BTCUSDT']}")
 
+        # 5.4 批量获取清算数据（Q因子）
+        log("   5.4 批量获取清算数据（Q因子）...")
+        from ats_core.sources.binance import get_liquidations
+
+        liquidation_success = 0
+        liquidation_failed = 0
+
+        for symbol in symbols:
+            try:
+                # 获取最近24小时的清算数据
+                liquidations = get_liquidations(symbol, limit=500)
+                self.liquidation_cache[symbol] = liquidations
+                liquidation_success += 1
+            except Exception as e:
+                liquidation_failed += 1
+                if liquidation_failed <= 5:
+                    warn(f"       获取{symbol}清算数据失败: {e}")
+
+        log(f"       ✅ 成功: {liquidation_success}, 失败: {liquidation_failed}")
+
+        # 5.5 获取BTC和ETH K线数据（I因子）
+        log("   5.5 获取BTC和ETH K线数据（I因子）...")
+        from ats_core.sources.binance import get_klines
+
+        try:
+            # 获取BTC 1小时K线（最近48小时，用于计算相关性）
+            self.btc_klines = get_klines('BTCUSDT', '1h', 48)
+            log(f"       ✅ 获取BTC K线: {len(self.btc_klines)}根")
+        except Exception as e:
+            warn(f"       ⚠️  BTC K线获取失败: {e}")
+            self.btc_klines = []
+
+        try:
+            # 获取ETH 1小时K线（最近48小时）
+            self.eth_klines = get_klines('ETHUSDT', '1h', 48)
+            log(f"       ✅ 获取ETH K线: {len(self.eth_klines)}根")
+        except Exception as e:
+            warn(f"       ⚠️  ETH K线获取失败: {e}")
+            self.eth_klines = []
+
         data_elapsed = time.time() - data_start
         log(f"   数据预加载完成，耗时: {data_elapsed:.1f}秒")
 
@@ -361,6 +404,9 @@ class OptimizedBatchScanner:
                 mark_price = self.mark_price_cache.get(symbol)
                 funding_rate = self.funding_rate_cache.get(symbol)
                 spot_price = self.spot_price_cache.get(symbol)
+                liquidations = self.liquidation_cache.get(symbol)  # Q因子
+                btc_klines = self.btc_klines  # I因子
+                eth_klines = self.eth_klines  # I因子
 
                 # DEBUG: 打印前3个币种的数据传递情况
                 if i < 3:
@@ -374,8 +420,11 @@ class OptimizedBatchScanner:
                     log(f"      mark_price: {mark_price}")
                     log(f"      funding_rate: {funding_rate}")
                     log(f"      spot_price: {spot_price}")
+                    log(f"      liquidations: {len(liquidations) if liquidations else 0}条")
+                    log(f"      btc_klines: {len(btc_klines)}根")
+                    log(f"      eth_klines: {len(eth_klines)}根")
 
-                # 因子分析（使用预加载的K线和市场数据，支持10维因子系统）
+                # 因子分析（使用预加载的K线和市场数据，支持完整10维因子系统）
                 result = analyze_symbol_with_preloaded_klines(
                     symbol=symbol,
                     k1h=k1h,
@@ -385,7 +434,10 @@ class OptimizedBatchScanner:
                     orderbook=orderbook,       # L（流动性）
                     mark_price=mark_price,     # B（基差+资金费）
                     funding_rate=funding_rate, # B（基差+资金费）
-                    spot_price=spot_price      # B（基差+资金费）
+                    spot_price=spot_price,     # B（基差+资金费）
+                    liquidations=liquidations, # Q（清算密度）
+                    btc_klines=btc_klines,     # I（独立性）
+                    eth_klines=eth_klines      # I（独立性）
                 )
 
                 analysis_time = time.time() - analysis_start
