@@ -593,8 +593,8 @@ async def benchmark_comparison(test_symbols: int = 20):
 
 
 if __name__ == "__main__":
-    # 运行优化扫描
-    # asyncio.run(run_optimized_scan(min_score=75))
+    # 运行优化扫描（扫描全部币种）
+    asyncio.run(run_optimized_scan(min_score=65))
 
-    # 或运行性能对比测试
-    asyncio.run(benchmark_comparison(test_symbols=20))
+    # 性能对比测试（需要pool_manager模块）
+    # asyncio.run(benchmark_comparison(test_symbols=20))
