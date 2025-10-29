@@ -792,12 +792,13 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     except Exception:
         spot_k1 = None
 
-    # 10维因子系统：获取L/B因子所需数据
+    # 10维因子系统：获取L/B/Q/I因子所需数据
     from ats_core.sources.binance import (
         get_orderbook_snapshot,
         get_mark_price,
         get_funding_rate,
-        get_spot_price
+        get_spot_price,
+        get_liquidations
     )
 
     # 获取订单簿数据（L因子）
@@ -832,6 +833,54 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         warn(f"获取{symbol}现货价格失败: {e}")
         spot_price = None
 
+    # 获取清算数据（Q因子）
+    try:
+        raw_liquidations = get_liquidations(symbol, limit=500)
+
+        # 转换数据格式以匹配liquidation.py的期望
+        # Binance API: {"side": "SELL", "price": "50000", "origQty": "0.1", "time": ...}
+        # liquidation.py: {"side": "long", "volume": 5000, "price": 50000, "timestamp": ...}
+        liquidations = []
+        for liq in raw_liquidations:
+            try:
+                price = float(liq.get('price', 0))
+                qty = float(liq.get('origQty', 0))
+                binance_side = liq.get('side', '')
+
+                # SELL=多单被强平, BUY=空单被强平
+                side = 'long' if binance_side == 'SELL' else 'short'
+
+                liquidations.append({
+                    'side': side,
+                    'volume': price * qty,  # USDT价值
+                    'price': price,
+                    'timestamp': liq.get('time', 0)
+                })
+            except Exception:
+                # 跳过格式错误的记录
+                continue
+    except Exception as e:
+        from ats_core.logging import warn
+        warn(f"获取{symbol}清算数据失败: {e}")
+        liquidations = []
+
+    # 获取BTC/ETH K线数据（I因子）
+    # 注意：只需要获取一次，不需要每个币种都获取
+    # 但为了保持analyze_symbol()的独立性，这里还是获取
+    try:
+        btc_klines = get_klines('BTCUSDT', '1h', 48)
+    except Exception as e:
+        from ats_core.logging import warn
+        warn(f"获取BTC K线失败: {e}")
+        btc_klines = []
+
+    try:
+        eth_klines = get_klines('ETHUSDT', '1h', 48)
+    except Exception as e:
+        from ats_core.logging import warn
+        warn(f"获取ETH K线失败: {e}")
+        eth_klines = []
+
     # ---- 2. 调用核心分析函数 ----
     return _analyze_symbol_core(
         symbol=symbol,
@@ -843,7 +892,10 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         orderbook=orderbook,         # L（流动性）
         mark_price=mark_price,       # B（基差+资金费）
         funding_rate=funding_rate,   # B（基差+资金费）
-        spot_price=spot_price        # B（基差+资金费）
+        spot_price=spot_price,       # B（基差+资金费）
+        liquidations=liquidations,   # Q（清算密度）
+        btc_klines=btc_klines,       # I（独立性）
+        eth_klines=eth_klines        # I（独立性）
     )
 
 
