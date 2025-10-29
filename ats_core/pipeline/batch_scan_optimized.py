@@ -280,6 +280,8 @@ class OptimizedBatchScanner:
                 self.liquidation_cache[symbol] = converted_liquidations
                 liquidation_success += 1
             except Exception as e:
+                # 失败时设置为空列表，避免后续get()返回None
+                self.liquidation_cache[symbol] = []
                 liquidation_failed += 1
                 if liquidation_failed <= 5:
                     warn(f"       获取{symbol}清算数据失败: {e}")

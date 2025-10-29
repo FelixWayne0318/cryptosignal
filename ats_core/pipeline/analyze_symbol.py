@@ -150,6 +150,9 @@ def _analyze_symbol_core(
         log(f"      mark_price: {mark_price}")
         log(f"      funding_rate: {funding_rate}")
         log(f"      spot_price: {spot_price}")
+        log(f"      liquidations: {len(liquidations) if liquidations else 0}条")
+        log(f"      btc_klines: {len(btc_klines) if btc_klines else 0}根")
+        log(f"      eth_klines: {len(eth_klines) if eth_klines else 0}根")
 
     params = CFG.params or {}
 
