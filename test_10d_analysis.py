@@ -23,24 +23,24 @@ for symbol in test_symbols:
     confidence = result.get('confidence', 0)
     weighted_score = result.get('weighted_score', 0)
 
-    # ✅ 正确：从 factors 字典中提取10维分数
-    factors = result.get('factors', {})
-    T = factors.get('T', 0)
-    M = factors.get('M', 0)
-    C = factors.get('C', 0)
-    S = factors.get('S', 0)
-    V = factors.get('V', 0)
-    O = factors.get('O', 0)
-    L = factors.get('L', 0)
-    B = factors.get('B', 0)
-    Q = factors.get('Q', 0)
-    I = factors.get('I', 0)
+    # ✅ 正确：从 scores 字典中提取10维分数
+    scores = result.get('scores', {})
+    T = scores.get('T', 0)
+    M = scores.get('M', 0)
+    C = scores.get('C', 0)
+    S = scores.get('S', 0)
+    V = scores.get('V', 0)
+    O = scores.get('O', 0)
+    L = scores.get('L', 0)
+    B = scores.get('B', 0)
+    Q = scores.get('Q', 0)
+    I = scores.get('I', 0)
 
     # L和B元数据
-    meta = result.get('meta', {})
-    L_meta = meta.get('L', {})
-    B_meta = meta.get('B', {})
-    O_meta = meta.get('O', {})
+    scores_meta = result.get('scores_meta', {})
+    L_meta = scores_meta.get('L', {})
+    B_meta = scores_meta.get('B', {})
+    O_meta = scores_meta.get('O', {})
 
     # Layer汇总
     layer1 = T + M + S + V  # 价格行为（65分权重）
@@ -133,10 +133,10 @@ for r in results:
     prime = r.get('publish', {}).get('prime_strength', 0)
     prob = r.get('probability', 0) * 100
 
-    factors = r.get('factors', {})
-    L = factors.get('L', 0)
-    B = factors.get('B', 0)
-    Q = factors.get('Q', 0)
+    scores = r.get('scores', {})
+    L = scores.get('L', 0)
+    B = scores.get('B', 0)
+    Q = scores.get('Q', 0)
     layer3 = L + B + Q
 
     print(f'{symbol:<10} {prime:>6.1f}  {prob:>6.1f}%  {L:>+6.0f}  {B:>+6.0f}  {layer3:>+8.0f}')
