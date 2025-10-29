@@ -1,6 +1,8 @@
 # coding: utf-8
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
 import time
@@ -13,6 +15,10 @@ from ats_core.backoff import sleep_retry  # 指数退避
 # 允许通过环境变量覆盖网关，便于内网代理或将来切换
 BASE = os.environ.get("BINANCE_FAPI_BASE", "https://fapi.binance.com")
 SPOT_BASE = os.environ.get("BINANCE_SPOT_BASE", "https://api.binance.com")
+
+# API认证（可选，用于需要签名的端点）
+API_KEY = os.environ.get("BINANCE_API_KEY", "")
+API_SECRET = os.environ.get("BINANCE_API_SECRET", "")
 
 
 def _get(
@@ -43,6 +49,61 @@ def _get(
             last_err = e
             sleep_retry(i)
     # 若仍失败，抛出最后一次的异常
+    if last_err:
+        raise last_err
+    raise RuntimeError("unknown http error")
+
+
+def _get_signed(
+    path: str,
+    params: Optional[Dict[str, Any]] = None,
+    *,
+    timeout: float = 8.0,
+    retries: int = 2,
+) -> Any:
+    """
+    带签名的 GET 请求（需要API key和secret）
+
+    用于需要认证的端点（如部分清算数据端点）
+    """
+    if not API_KEY or not API_SECRET:
+        raise RuntimeError("需要API认证：请设置BINANCE_API_KEY和BINANCE_API_SECRET环境变量")
+
+    url = BASE + path
+    params = params or {}
+
+    # 添加时间戳
+    params['timestamp'] = int(time.time() * 1000)
+
+    # 生成签名
+    query_string = urllib.parse.urlencode(sorted(params.items()))
+    signature = hmac.new(
+        API_SECRET.encode('utf-8'),
+        query_string.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+    params['signature'] = signature
+
+    # 构建完整URL
+    full = f"{url}?{urllib.parse.urlencode(params)}"
+
+    last_err: Optional[Exception] = None
+    for i in range(retries + 1):
+        try:
+            req = urllib.request.Request(
+                full,
+                headers={
+                    "User-Agent": "ats-analyzer/1.0",
+                    "X-MBX-APIKEY": API_KEY
+                }
+            )
+            with urllib.request.urlopen(req, timeout=float(timeout)) as r:
+                data = r.read()
+                return json.loads(data)
+        except Exception as e:
+            last_err = e
+            sleep_retry(i)
+
     if last_err:
         raise last_err
     raise RuntimeError("unknown http error")
@@ -290,13 +351,15 @@ def get_liquidations(
     end_time: Optional[Union[int, float]] = None
 ) -> List[Dict[str, Any]]:
     """
-    获取强平订单数据（清算数据） - 公开接口
+    获取强平订单数据（清算数据）
 
-    /fapi/v1/forceOrders (公开，无需签名)
+    尝试两种方式：
+    1. /fapi/v1/forceOrders (公开接口，无需签名)
+    2. /fapi/v1/allForceOrders (需要签名，如果公开接口失败则尝试)
 
     注意：
     - 此API返回最近7天的数据，interval参数用于后续聚合处理
-    - 不同于 /fapi/v1/allForceOrders（需要签名认证）
+    - 如果设置了BINANCE_API_KEY和BINANCE_API_SECRET环境变量，将自动使用签名API
 
     Args:
         symbol: 交易对符号
@@ -332,9 +395,20 @@ def get_liquidations(
     if end_time is not None:
         params["endTime"] = int(end_time)
 
-    # 使用公开接口 /fapi/v1/forceOrders (不需要签名)
-    # 而不是 /fapi/v1/allForceOrders (需要签名)
-    return _get("/fapi/v1/forceOrders", params, timeout=8.0, retries=2)
+    # 策略1：先尝试公开接口（不需要签名）
+    try:
+        return _get("/fapi/v1/forceOrders", params, timeout=8.0, retries=1)
+    except Exception as e:
+        error_str = str(e)
+        # 如果是401错误且配置了API认证，尝试签名接口
+        if "401" in error_str and API_KEY and API_SECRET:
+            try:
+                return _get_signed("/fapi/v1/allForceOrders", params, timeout=8.0, retries=2)
+            except Exception as e2:
+                # 签名接口也失败，抛出原始错误
+                raise e
+        # 其他错误或未配置API认证，直接抛出
+        raise e
 
 
 # ------------------------- 24h 统计 -------------------------
