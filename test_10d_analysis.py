@@ -23,7 +23,7 @@ for symbol in test_symbols:
     confidence = result.get('confidence', 0)
     weighted_score = result.get('weighted_score', 0)
 
-    # ✅ 正确：从 scores 字典中提取10维分数
+    # ✅ 正确：从 scores 字典中提取13个因子
     scores = result.get('scores', {})
     T = scores.get('T', 0)
     M = scores.get('M', 0)
@@ -31,10 +31,12 @@ for symbol in test_symbols:
     S = scores.get('S', 0)
     V = scores.get('V', 0)
     O = scores.get('O', 0)
+    E = scores.get('E', 0)  # 环境因子（不参与Layer汇总）
     L = scores.get('L', 0)
     B = scores.get('B', 0)
     Q = scores.get('Q', 0)
     I = scores.get('I', 0)
+    F = scores.get('F', 0)  # 资金领先调节器（不参与Layer汇总）
 
     # L和B元数据
     scores_meta = result.get('scores_meta', {})
@@ -54,11 +56,12 @@ for symbol in test_symbols:
     print(f'  置信度: {confidence:.1f}')
     print(f'  加权分数: {weighted_score:+.1f}')
 
-    print(f'\n  10维评分:')
+    print(f'\n  13因子评分（10维系统+旧因子+调节器）:')
     print(f'    Layer1（价格行为，65分）: T={T:+4.0f} M={M:+4.0f} S={S:+4.0f} V={V:+4.0f} → {layer1:+4.0f}')
     print(f'    Layer2（资金流，40分）  : C={C:+4.0f} O={O:+4.0f}                   → {layer2:+4.0f}')
     print(f'    Layer3（微观结构，45分）: L={L:+4.0f} B={B:+4.0f} Q={Q:+4.0f}       → {layer3:+4.0f}')
     print(f'    Layer4（市场环境，10分）: I={I:+4.0f}                            → {layer4:+4.0f}')
+    print(f'    -------（不参与Layer）: E={E:+4.0f} F={F:+4.0f}')
 
     # L因子详情
     if L_meta and 'note' not in L_meta:
@@ -93,11 +96,41 @@ for symbol in test_symbols:
 
     # O因子详情
     if O_meta:
-        regime = O_meta.get('regime', 'unknown')
-        oi_change = O_meta.get('oi_change_pct', 0)
         print(f'\n  O(持仓量): {O:+.1f}')
-        print(f'    制度: {regime}')
-        print(f'    OI变化: {oi_change:+.1f}%')
+        # 旧版O因子元数据字段
+        oi1h = O_meta.get('oi1h_pct')
+        oi24h = O_meta.get('oi24h_pct')
+        if oi1h is not None:
+            print(f'    1小时OI变化: {oi1h:+.2f}%')
+        if oi24h is not None:
+            print(f'    24小时OI变化: {oi24h:+.2f}%')
+        # 新版O+因子元数据字段（如果存在）
+        regime = O_meta.get('regime')
+        oi_change = O_meta.get('oi_change_pct')
+        if regime:
+            print(f'    制度: {regime}')
+        if oi_change is not None:
+            print(f'    OI变化: {oi_change:+.1f}%')
+
+    # E因子详情
+    E_meta = scores_meta.get('E', {})
+    if E_meta:
+        print(f'\n  E(环境): {E:+.1f}')
+        atr_pct = E_meta.get('atr_pct')
+        volatility = E_meta.get('volatility_level')
+        if atr_pct is not None:
+            print(f'    ATR%: {atr_pct:.2f}%')
+        if volatility:
+            print(f'    波动性: {volatility}')
+
+    # F因子详情
+    F_meta = scores_meta.get('F', {})
+    if F_meta:
+        print(f'\n  F(资金领先): {F:+.1f}')
+        fund_leading = F_meta.get('fund_leading')
+        if fund_leading is not None:
+            leadership = '资金领先' if fund_leading else '价格领先'
+            print(f'    领先关系: {leadership}')
 
     # Prime判定
     is_prime = result.get('publish', {}).get('prime', False)
