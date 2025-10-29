@@ -291,7 +291,8 @@ def _analyze_symbol_core(
         B, B_meta = 0, {"note": "缺少mark_price/spot_price/funding_rate数据"}
     perf['B基差资金费'] = time.time() - t0
 
-    # 清算密度（Q）：-100（多单密集清算，看跌）到 +100（空单密集清算，看涨）
+    # 清算密度（Q）：-100（空单密集清算，超涨回调，看空）到 +100（多单密集清算，超跌反弹，看多）
+    # 逻辑：大量多单清算后抛压减轻可能反弹，大量空单清算后买压减轻可能回调
     t0 = time.time()
     if liquidations is not None and len(liquidations) > 0:
         try:
@@ -312,27 +313,36 @@ def _analyze_symbol_core(
     # 独立性（I）：0（完全相关）到 100（完全独立）→ 归一化到 ±100
     # 越独立越好，所以高分=正分，低分=负分
     t0 = time.time()
-    if btc_klines and eth_klines and len(c) >= 48:
+    if btc_klines and eth_klines and len(c) >= 25:  # 至少需要25个点（默认window=24）
         try:
-            # 提取最近48小时的价格数据（用于回归分析）
-            alt_prices = c[-48:]
-            btc_prices = [_to_f(k[4]) for k in btc_klines[-48:]]  # Close prices
-            eth_prices = [_to_f(k[4]) for k in eth_klines[-48:]]  # Close prices
+            # 提取价格数据，确保三个序列长度一致
+            # 使用最小长度来避免长度不匹配
+            min_len = min(len(c), len(btc_klines), len(eth_klines))
+            # 建议使用48小时数据，但至少需要25小时
+            use_len = min(min_len, 48) if min_len >= 25 else 0
 
-            # 计算独立性分数（0-100）
-            I_raw, beta_sum, I_meta = calculate_independence(
-                alt_prices=alt_prices,
-                btc_prices=btc_prices,
-                eth_prices=eth_prices,
-                params=params.get("independence", {})
-            )
+            if use_len >= 25:
+                alt_prices = c[-use_len:]
+                btc_prices = [_to_f(k[4]) for k in btc_klines[-use_len:]]  # Close prices
+                eth_prices = [_to_f(k[4]) for k in eth_klines[-use_len:]]  # Close prices
 
-            # 归一化：0-100 → -100到+100（中性值50→0）
-            # 低独立性（<50）→负分（跟随大盘），高独立性（>50）→正分（独立走势）
-            I = (I_raw - 50) * 2
-            I_meta['raw_score'] = I_raw
-            I_meta['normalized_score'] = I
-            I_meta['beta_sum'] = beta_sum
+                # 计算独立性分数（0-100）
+                I_raw, beta_sum, I_meta = calculate_independence(
+                    alt_prices=alt_prices,
+                    btc_prices=btc_prices,
+                    eth_prices=eth_prices,
+                    params=params.get("independence", {})
+                )
+
+                # 归一化：0-100 → -100到+100（中性值50→0）
+                # 低独立性（<50）→负分（跟随大盘），高独立性（>50）→正分（独立走势）
+                I = (I_raw - 50) * 2
+                I_meta['raw_score'] = I_raw
+                I_meta['normalized_score'] = I
+                I_meta['beta_sum'] = beta_sum
+                I_meta['data_points'] = use_len
+            else:
+                I, I_meta = 0, {"note": f"数据不足（需要25小时，实际{min_len}小时）"}
         except Exception as e:
             from ats_core.logging import warn
             warn(f"I因子计算失败: {e}")

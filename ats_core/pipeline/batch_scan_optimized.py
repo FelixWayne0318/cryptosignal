@@ -252,8 +252,32 @@ class OptimizedBatchScanner:
         for symbol in symbols:
             try:
                 # 获取最近24小时的清算数据
-                liquidations = get_liquidations(symbol, limit=500)
-                self.liquidation_cache[symbol] = liquidations
+                raw_liquidations = get_liquidations(symbol, limit=500)
+
+                # 转换数据格式以匹配liquidation.py的期望
+                # Binance API: {"side": "SELL", "price": "50000", "origQty": "0.1", "time": ...}
+                # liquidation.py: {"side": "long", "volume": 5000, "price": 50000, "timestamp": ...}
+                converted_liquidations = []
+                for liq in raw_liquidations:
+                    try:
+                        price = float(liq.get('price', 0))
+                        qty = float(liq.get('origQty', 0))
+                        binance_side = liq.get('side', '')
+
+                        # SELL=多单被强平, BUY=空单被强平
+                        side = 'long' if binance_side == 'SELL' else 'short'
+
+                        converted_liquidations.append({
+                            'side': side,
+                            'volume': price * qty,  # USDT价值
+                            'price': price,
+                            'timestamp': liq.get('time', 0)
+                        })
+                    except Exception:
+                        # 跳过格式错误的记录
+                        continue
+
+                self.liquidation_cache[symbol] = converted_liquidations
                 liquidation_success += 1
             except Exception as e:
                 liquidation_failed += 1
