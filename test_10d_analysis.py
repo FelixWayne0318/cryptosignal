@@ -116,21 +116,39 @@ for symbol in test_symbols:
     E_meta = scores_meta.get('E', {})
     if E_meta:
         print(f'\n  E(环境): {E:+.1f}')
-        atr_pct = E_meta.get('atr_pct')
-        volatility = E_meta.get('volatility_level')
-        if atr_pct is not None:
-            print(f'    ATR%: {atr_pct:.2f}%')
-        if volatility:
-            print(f'    波动性: {volatility}')
+        chop = E_meta.get('chop')
+        room = E_meta.get('room')
+        interp = E_meta.get('interpretation')
+        if chop is not None:
+            print(f'    震荡指标: {chop:.1f}')
+        if room is not None:
+            print(f'    空间: {room:.2f}')
+        if interp:
+            print(f'    解释: {interp}')
 
     # F因子详情
     F_meta = scores_meta.get('F', {})
     if F_meta:
         print(f'\n  F(资金领先): {F:+.1f}')
-        fund_leading = F_meta.get('fund_leading')
-        if fund_leading is not None:
-            leadership = '资金领先' if fund_leading else '价格领先'
-            print(f'    领先关系: {leadership}')
+        fund_mom = F_meta.get('fund_momentum')
+        price_mom = F_meta.get('price_momentum')
+        leading = F_meta.get('leading_raw')
+
+        if fund_mom is not None and price_mom is not None:
+            print(f'    资金动量: {fund_mom:+.1f}')
+            print(f'    价格动量: {price_mom:+.1f}')
+        if leading is not None:
+            print(f'    领先性: {leading:+.1f}')
+            if leading >= 60:
+                print(f'    解释: 资金强势领先价格（蓄势待发）✅✅✅')
+            elif leading >= 30:
+                print(f'    解释: 资金温和领先价格（机会较好）✅')
+            elif leading >= -30:
+                print(f'    解释: 资金价格同步（一般）')
+            elif leading >= -60:
+                print(f'    解释: 价格温和领先资金（追高风险）⚠️')
+            else:
+                print(f'    解释: 价格强势领先资金（风险很大）❌')
 
     # Prime判定
     is_prime = result.get('publish', {}).get('prime', False)
