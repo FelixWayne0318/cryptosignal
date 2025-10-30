@@ -169,7 +169,7 @@
   "publish": {
     "prime_prob_min": 0.62,
     "prime_dims_ok_min": 4,
-    "prime_dim_threshold": 65,
+    "prime_dim_threshold": 35,
     "watch_prob_min": 0.58,
     "watch_prob_max": 0.61
   },
