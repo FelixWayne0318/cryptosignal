@@ -4,15 +4,16 @@
 
 ---
 
-## 🎯 修改代码的标准流程（6步）
+## 🎯 修改代码的标准流程（7步）
 
 ```
-1. 查文档  → standards/MODIFICATION_RULES.md（确定改哪个文件）
-2. 改代码  → 只改允许的文件
-3. 清缓存  → find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
-4. 测试    → python3 scripts/realtime_signal_scanner.py --max-symbols 20 --once
-5. 提交    → git commit -m "<类型>: <描述>"
-6. 推送    → git push
+1. 修改前  → 查阅 standards/MODIFICATION_RULES.md 确定修改哪个文件
+2. 修改中  → 只修改允许的文件，遵循规范
+3. 修改后  → 必须清除缓存：find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
+4. 测试时  → 使用 --max-symbols 20 --once 快速测试
+5. 提交时  → 使用规范格式：<类型>: <描述>
+6. 文档同步 → 如有配置或逻辑变更，必须更新文档
+7. 推送    → git push
 ```
 
 ---
@@ -275,54 +276,93 @@ standards/
 
 ### 场景1: 调整因子权重（2分钟）
 ```bash
-# 1. 修改配置
+# 1. 查阅文档（确定修改文件）
+cat standards/MODIFICATION_RULES.md  # 确认修改 config/params.json
+
+# 2. 修改配置
 vim config/params.json
 # T: 13.9 → 15.0, F: 10.0 → 8.9
 
-# 2. 验证权重
-python3 -c "import json; w=json.load(open('config/params.json'))['weights']; assert abs(sum(w.values())-100)<0.01"
+# 3. 验证权重总和=100%
+python3 -c "import json; w=json.load(open('config/params.json'))['weights']; assert abs(sum(w.values())-100)<0.01; print('✓ 权重总和正确')"
 
-# 3. 清除缓存并测试
+# 4. 清除缓存
 find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
+
+# 5. 测试
 python3 scripts/realtime_signal_scanner.py --max-symbols 20 --once
 
-# 4. 提交
+# 6. 更新文档（如有重大权重调整）
+# vim standards/CONFIGURATION_GUIDE.md  # 如有必要
+
+# 7. 提交并推送
 git add config/params.json
-git commit -m "config: 调整T和F因子权重"
+git commit -m "config: 调整T和F因子权重
+
+- T: 13.9% → 15.0%（增强趋势权重）
+- F: 10.0% → 8.9%（平衡整体权重）
+- 总权重: 100.0% ✓
+"
 git push
 ```
 
 ### 场景2: 修复Bug（5分钟）
 ```bash
-# 1. 定位并修复
+# 1. 查阅文档（理解数据结构）
+cat standards/ARCHITECTURE.md  # 查看batch_scan返回格式
+
+# 2. 定位并修复Bug
 vim scripts/realtime_signal_scanner.py
+# 修改 line 234-235: s.get('tier') → s.get('publish', {}).get('prime', False)
 
-# 2. 清除缓存并测试
+# 3. 清除缓存
 find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
-python3 scripts/realtime_signal_scanner.py --max-symbols 20 --once
 
-# 3. 提交
+# 4. 测试修复
+python3 scripts/realtime_signal_scanner.py --max-symbols 20 --once
+# 验证Prime信号正确发送到Telegram
+
+# 5. 提交（无需更新文档，因为是Bug修复不改变规范）
+
+# 6. 提交并推送
 git add scripts/realtime_signal_scanner.py
 git commit -m "fix: 修复Prime信号过滤逻辑
 
-问题: 使用了不存在的tier字段
-修复: 改为使用publish.prime字段
+问题: 使用了不存在的tier字段导致Prime信号全部被过滤
+修复: 改为使用publish.prime字段判断
+影响: Prime信号现在能正确发送至Telegram
+测试: 20个币种测试通过，Prime信号正常发送
 "
 git push
 ```
 
 ### 场景3: 修改Telegram格式（3分钟）
 ```bash
-# 1. 修改格式化代码
+# 1. 查阅文档（确认修改文件）
+cat standards/MODIFICATION_RULES.md  # 确认修改 telegram_fmt.py
+
+# 2. 修改格式化代码
 vim ats_core/outputs/telegram_fmt.py
+# 修改消息格式逻辑
 
-# 2. 清除缓存并测试
+# 3. 清除缓存
 find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
-python3 scripts/realtime_signal_scanner.py --max-symbols 1 --once
 
-# 3. 提交
+# 4. 测试（发送单个币种验证格式）
+python3 scripts/realtime_signal_scanner.py --max-symbols 1 --once
+# 检查Telegram消息格式是否正确
+
+# 5. 更新文档（如有格式规范变更）
+# vim standards/ARCHITECTURE.md  # 如果改变了消息格式规范
+
+# 6. 提交并推送
 git add ats_core/outputs/telegram_fmt.py
-git commit -m "feat: 增强Telegram消息格式"
+git commit -m "feat: 增强Telegram消息格式
+
+- 添加因子值emoji指示器
+- 优化Prime信号高亮显示
+- 调整字段对齐和可读性
+"
 git push
 ```
 
@@ -335,7 +375,8 @@ git push
 3. **清除缓存**: 每次修改后必须清除 `__pycache__`
 4. **权重总和**: 必须=100.0，否则不生效
 5. **测试优先**: 修改后必须测试，通过后才提交
-6. **规范提交**: 使用 `<类型>: <描述>` 格式
+6. **文档同步**: 配置或逻辑变更必须同步更新文档
+7. **规范提交**: 使用 `<类型>: <描述>` 格式
 
 ---
 
