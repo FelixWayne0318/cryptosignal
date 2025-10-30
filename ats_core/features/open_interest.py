@@ -58,7 +58,8 @@ def _linreg_r2(y: List[float]) -> Tuple[float, float]:
 def score_open_interest(symbol: str,
                         closes,
                         params: Dict[str, Any],
-                        cvd6_fallback: float) -> Tuple[int, Dict[str, Any]]:
+                        cvd6_fallback: float,
+                        oi_data: List = None) -> Tuple[int, Dict[str, Any]]:
     """
     O（持仓）评分 - 统一±100系统
 
@@ -72,6 +73,7 @@ def score_open_interest(symbol: str,
         closes: 收盘价列表
         params: 参数配置
         cvd6_fallback: CVD 6小时变化（数据不足时兜底）
+        oi_data: 预加载的OI数据（可选，优先使用）
 
     Returns:
         (O分数 [-100, +100], 元数据)
@@ -89,7 +91,25 @@ def score_open_interest(symbol: str,
     if isinstance(params, dict):
         par.update(params)
 
-    oi = fetch_oi_hourly(symbol, limit=200)
+    # 优先使用预加载的数据，否则重新获取（向后兼容）
+    if oi_data is not None and len(oi_data) > 0:
+        # 预加载的数据可能是字典列表（原始API格式）或浮点数列表（已转换格式）
+        # 统一转换为浮点数列表
+        oi = []
+        for x in oi_data:
+            if isinstance(x, dict):
+                # 字典格式：提取sumOpenInterest或openInterest字段
+                v = x.get("sumOpenInterest") or x.get("openInterest")
+                if v is not None:
+                    try:
+                        oi.append(float(v))
+                    except:
+                        pass
+            elif isinstance(x, (int, float)):
+                # 已经是数值格式，直接使用
+                oi.append(float(x))
+    else:
+        oi = fetch_oi_hourly(symbol, limit=200)
     # 兜底：数据不足时使用 CVD proxy
     if len(oi) < par["min_oi_samples"]:
         # CVD作为代理（已经是带符号的）

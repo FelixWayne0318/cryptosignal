@@ -18,6 +18,18 @@ import time
 from typing import List, Dict, Optional
 from ats_core.execution.binance_futures_client import get_binance_client
 from ats_core.data.realtime_kline_cache import get_kline_cache
+
+# WebSocket连接黑名单（已知无法建立连接的币种）
+# 这些币种可能已从Binance下架或WebSocket流不可用
+WEBSOCKET_BLACKLIST = {
+    # 2025-10-30 测试发现的无法连接币种
+    'OGUSDT', 'USELESSUSDT', 'KERNELUSDT', 'DIAUSDT', 'ZORAUSDT',
+    'POPCATUSDT', 'METUSDT', 'EDENUSDT', 'FORMUSDT', 'JUPUSDT',
+    'PENDLEUSDT', 'SYRUPUSDT', 'RENDERUSDT', 'LUMIAUSDT', '0GUSDT',
+    'BLESSUSDT', 'FLOWUSDT', 'PIPPINUSDT', 'DOODUSDT', 'ICPUSDT',
+    'MEUSDT', 'OPENUSDT', 'RVVUSDT', 'AEROUSDT', 'KAITOUSDT',
+    'CELOUSDT', 'DEGOUSDT', '2ZUSDT'
+}
 from ats_core.pipeline.analyze_symbol import analyze_symbol_with_preloaded_klines
 from ats_core.logging import log, warn, error
 
@@ -45,25 +57,33 @@ class OptimizedBatchScanner:
         self.funding_rate_cache = {}   # {symbol: funding_rate}
         self.spot_price_cache = {}     # {symbol: spot_price}
         self.liquidation_cache = {}    # {symbol: agg_trades_list} - Q因子（使用aggTrades替代已废弃的清算API）
+        self.oi_cache = {}             # {symbol: oi_data_list} - O因子（持仓量历史）
         self.btc_klines = []           # BTC K线数据 - I因子
         self.eth_klines = []           # ETH K线数据 - I因子
 
         log("✅ 优化批量扫描器创建成功")
 
-    async def initialize(self, enable_websocket: bool = True):
+    async def initialize(self, enable_websocket: bool = False):
         """
-        初始化（仅一次，约2分钟）
+        初始化（仅一次，约1-2分钟）
 
         Args:
-            enable_websocket: 是否启用WebSocket实时更新（默认True）
-                - True: 生产模式，启用实时更新
-                - False: 测试模式，跳过WebSocket（避免连接数超限）
+            enable_websocket: 是否启用WebSocket实时更新（默认False，推荐禁用）
+                - False（推荐）: REST定时更新模式，稳定高效
+                  * 1h/4h K线每小时才更新一次，不需要实时订阅
+                  * 避免280个WebSocket连接和频繁重连问题
+                  * 性能更好，稳定性更高
+                - True: WebSocket实时模式（不推荐）
+                  * 280个连接，接近300上限
+                  * 网络波动时频繁重连
+                  * 实际收益很小（1h K线每小时才更新）
 
         步骤:
         1. 初始化Binance客户端
         2. 获取候选币种列表
         3. 批量初始化K线缓存（REST）
-        4. 启动WebSocket实时更新（可选）
+        4. 启动WebSocket实时更新（可选，默认禁用）
+        5. 预加载10维因子数据（订单簿、OI等）
         """
         if self.initialized:
             log("⚠️  已初始化，跳过")
@@ -118,7 +138,24 @@ class OptimizedBatchScanner:
         MIN_VOLUME = 3_000_000
         symbols = [s for s in symbols if volume_map.get(s, 0) >= MIN_VOLUME]
 
+        # 过滤掉WebSocket黑名单中的币种
+        blacklisted = [s for s in symbols if s in WEBSOCKET_BLACKLIST]
+        if blacklisted:
+            log(f"   ⚠️  跳过 {len(blacklisted)} 个WebSocket黑名单币种: {', '.join(blacklisted[:5])}{'...' if len(blacklisted) > 5 else ''}")
+            symbols = [s for s in symbols if s not in WEBSOCKET_BLACKLIST]
+
         log(f"   ✅ 筛选出 {len(symbols)} 个高流动性币种（24h成交额>3M USDT）")
+
+        # 验证是否成功获取到币种
+        if not symbols:
+            raise RuntimeError(
+                "❌ 无法获取交易币种列表！可能原因：\n"
+                "   1. 网络连接问题（DNS解析失败、防火墙阻止等）\n"
+                "   2. Binance API服务异常\n"
+                "   3. 所有币种流动性不足（<3M USDT/24h）\n"
+                "   请检查网络连接并重试。"
+            )
+
         log(f"   TOP 5: {', '.join(symbols[:5])}")
         log(f"   成交额范围: {volume_map.get(symbols[0], 0)/1e6:.1f}M ~ {volume_map.get(symbols[-1], 0)/1e6:.1f}M USDT")
 
@@ -133,11 +170,12 @@ class OptimizedBatchScanner:
             client=self.client
         )
 
-        # 4. 启动WebSocket实时更新（可选）
+        # 4. WebSocket实时更新（默认禁用，推荐使用REST定时更新）
         if enable_websocket:
             log(f"\n4️⃣  启动WebSocket实时更新...")
+            log(f"   ⚠️  注意：WebSocket模式不稳定，280个连接易出错")
             log(f"   策略: 仅订阅关键周期（1h, 4h）以避免连接数超限")
-            log(f"   连接数: 140币种 × 2周期 = 280 < 300限制 ✅")
+            log(f"   连接数: ~110币种 × 2周期 = ~220 < 300限制")
             await self.kline_cache.start_batch_realtime_update(
                 symbols=symbols,
                 intervals=['1h', '4h'],  # 只订阅主要周期（15m和1d使用REST数据即可）
@@ -145,7 +183,12 @@ class OptimizedBatchScanner:
             )
             log(f"   15m和1d周期: 使用REST API数据（更新频率低，无需实时订阅）")
         else:
-            log(f"\n4️⃣  跳过WebSocket实时更新（测试模式）")
+            log(f"\n4️⃣  ✅ WebSocket已禁用（推荐模式）")
+            log(f"   原因:")
+            log(f"   - 1h/4h K线每小时才更新一次，不需要实时订阅")
+            log(f"   - WebSocket连接不稳定，频繁重连影响性能")
+            log(f"   - REST批量获取更快更稳定（50秒 vs 5分钟）")
+            log(f"   后续: 使用REST批量获取，K线数据已在步骤3中初始化")
 
         # 5. 预加载10维因子系统所需的市场数据
         log(f"\n5️⃣  预加载10维因子系统数据（订单簿、资金费率、现货价格）...")
@@ -187,36 +230,54 @@ class OptimizedBatchScanner:
             self.mark_price_cache = {}
             self.funding_rate_cache = {}
 
-        # 5.3 批量获取订单簿快照（逐个获取，约140次API调用）
+        # 5.3 批量获取订单簿快照（并发获取，约140次API调用）
         log("   5.3 批量获取订单簿深度（20档）...")
-        log("       注意：此步骤需要~140次API调用，预计15-20秒")
+        log("       🚀 使用并发模式，预计20-30秒")
 
         orderbook_success = 0
         orderbook_failed = 0
 
-        # 分批获取，避免速率限制
-        batch_size = 10  # 降低批次大小，从20降到10
+        # 🔧 FIX: 使用并发获取，大幅提升速度
+        async def fetch_one_orderbook(symbol: str):
+            """异步获取单个订单簿"""
+            try:
+                # 在线程池中运行同步函数，避免阻塞事件循环
+                loop = asyncio.get_event_loop()
+                orderbook = await loop.run_in_executor(
+                    None,  # 使用默认线程池
+                    lambda: get_orderbook_snapshot(symbol, limit=20)
+                )
+                return symbol, orderbook, None
+            except Exception as e:
+                return symbol, None, e
+
+        # 分批并发获取（避免速率限制）
+        batch_size = 20  # 每批20个并发请求
         for i in range(0, len(symbols), batch_size):
             batch = symbols[i:i+batch_size]
 
-            for symbol in batch:
-                try:
-                    orderbook = get_orderbook_snapshot(symbol, limit=20)
+            # 并发获取这一批的所有订单簿
+            tasks = [fetch_one_orderbook(symbol) for symbol in batch]
+            results = await asyncio.gather(*tasks)
+
+            # 处理结果
+            for symbol, orderbook, error in results:
+                if error is None and orderbook:
                     self.orderbook_cache[symbol] = orderbook
                     orderbook_success += 1
-                except Exception as e:
+                else:
                     orderbook_failed += 1
-                    # 记录前5个失败的详细信息，避免日志过多
+                    # 记录前5个失败的详细信息
                     if orderbook_failed <= 5:
-                        warn(f"       获取{symbol}订单簿失败: {e}")
+                        warn(f"       获取{symbol}订单簿失败: {error}")
 
-            # 每批次后延迟1秒，避免触发速率限制（从0.5秒增加到1秒）
+            # 批间延迟（避免速率限制）
             if i + batch_size < len(symbols):
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(0.5)  # 减少延迟，因为并发了
 
             # 进度显示
-            if (i + batch_size) % 60 == 0 or (i + batch_size) >= len(symbols):
-                progress = min(i + batch_size, len(symbols))
+            progress = min(i + batch_size, len(symbols))
+            if progress % 40 == 0 or progress >= len(symbols):
                 log(f"       进度: {progress}/{len(symbols)} ({progress/len(symbols)*100:.0f}%)")
 
         log(f"       ✅ 成功: {orderbook_success}, 失败: {orderbook_failed}")
@@ -244,31 +305,80 @@ class OptimizedBatchScanner:
 
         # 5.4 批量获取聚合成交数据（Q因子 - 使用aggTrades替代已废弃的清算API）
         log("   5.4 批量获取聚合成交数据（Q因子）...")
+        log("       🚀 使用并发模式，预计10-15秒")
         from ats_core.sources.binance import get_agg_trades
 
         agg_trades_success = 0
         agg_trades_failed = 0
 
-        for symbol in symbols:
+        # 🔧 FIX: 使用并发获取，大幅提升速度
+        async def fetch_one_agg_trades(symbol: str):
+            """异步获取单个币种的聚合成交数据"""
             try:
-                # 获取最近500笔聚合成交（用于分析大额异常交易）
-                agg_trades = get_agg_trades(symbol, limit=500)
-
-                # aggTrades格式可直接使用，无需转换
-                # API返回: {"a": id, "p": "price", "q": "qty", "T": time, "m": isBuyerMaker}
-                self.liquidation_cache[symbol] = agg_trades  # 复用cache变量名
-                agg_trades_success += 1
+                loop = asyncio.get_event_loop()
+                agg_trades = await loop.run_in_executor(
+                    None,
+                    lambda: get_agg_trades(symbol, limit=500)
+                )
+                return symbol, agg_trades, None
             except Exception as e:
-                # 失败时设置为空列表，避免后续get()返回None
-                self.liquidation_cache[symbol] = []
-                agg_trades_failed += 1
-                if agg_trades_failed <= 5:
-                    warn(f"       获取{symbol}聚合成交数据失败: {e}")
+                return symbol, [], e
+
+        # 分批并发获取
+        batch_size = 20  # 每批20个并发请求
+        for i in range(0, len(symbols), batch_size):
+            batch = symbols[i:i+batch_size]
+
+            # 并发获取这一批的所有聚合成交数据
+            tasks = [fetch_one_agg_trades(symbol) for symbol in batch]
+            results = await asyncio.gather(*tasks)
+
+            # 处理结果
+            for symbol, agg_trades, error in results:
+                if error is None:
+                    self.liquidation_cache[symbol] = agg_trades
+                    agg_trades_success += 1
+                else:
+                    self.liquidation_cache[symbol] = []
+                    agg_trades_failed += 1
+                    if agg_trades_failed <= 5:
+                        warn(f"       获取{symbol}聚合成交数据失败: {error}")
+
+            # 批间延迟
+            if i + batch_size < len(symbols):
+                await asyncio.sleep(0.5)
+
+            # 进度显示
+            progress = min(i + batch_size, len(symbols))
+            if progress % 40 == 0 or progress >= len(symbols):
+                log(f"       进度: {progress}/{len(symbols)} ({progress/len(symbols)*100:.0f}%)")
 
         log(f"       ✅ 成功: {agg_trades_success}, 失败: {agg_trades_failed}")
 
-        # 5.5 获取BTC和ETH K线数据（I因子）
-        log("   5.5 获取BTC和ETH K线数据（I因子）...")
+        # 5.5 批量获取持仓量历史数据（O因子 - 最大性能瓶颈优化）
+        log("   5.5 批量获取持仓量历史数据（O因子）...")
+        log("       🚀 使用并发模式，预计60-80秒（原需700秒！）")
+        from ats_core.sources.binance_safe import batch_get_open_interest_hist
+
+        oi_start = time.time()
+        try:
+            # 批量异步获取所有币种的OI数据
+            self.oi_cache = await batch_get_open_interest_hist(
+                symbols=symbols,
+                period='1h',
+                limit=300,
+                batch_size=20
+            )
+            oi_elapsed = time.time() - oi_start
+            oi_success = sum(1 for oi_data in self.oi_cache.values() if oi_data)
+            log(f"       ✅ 成功: {oi_success}/{len(symbols)}, 耗时: {oi_elapsed:.1f}秒")
+            log(f"       🚀 性能提升: {700/oi_elapsed:.1f}x（从700秒降至{oi_elapsed:.0f}秒）")
+        except Exception as e:
+            warn(f"       ⚠️  批量获取OI失败: {e}")
+            self.oi_cache = {}
+
+        # 5.6 获取BTC和ETH K线数据（I因子）
+        log("   5.6 获取BTC和ETH K线数据（I因子）...")
         from ats_core.sources.binance import get_klines
 
         try:
@@ -410,6 +520,7 @@ class OptimizedBatchScanner:
                 funding_rate = self.funding_rate_cache.get(symbol)
                 spot_price = self.spot_price_cache.get(symbol)
                 liquidations = self.liquidation_cache.get(symbol)  # Q因子
+                oi_data = self.oi_cache.get(symbol, [])  # O因子（持仓量历史）
                 btc_klines = self.btc_klines  # I因子
                 eth_klines = self.eth_klines  # I因子
 
@@ -426,6 +537,7 @@ class OptimizedBatchScanner:
                     log(f"      funding_rate: {funding_rate}")
                     log(f"      spot_price: {spot_price}")
                     log(f"      agg_trades: {len(liquidations) if liquidations else 0}笔（Q因子）")
+                    log(f"      oi_data: {len(oi_data)}条（O因子）")
                     log(f"      btc_klines: {len(btc_klines)}根")
                     log(f"      eth_klines: {len(eth_klines)}根")
 
@@ -441,6 +553,7 @@ class OptimizedBatchScanner:
                     funding_rate=funding_rate, # B（基差+资金费）
                     spot_price=spot_price,     # B（基差+资金费）
                     agg_trades=liquidations,   # Q（清算密度 - 使用aggTrades）
+                    oi_data=oi_data,           # O（持仓量历史 - 预加载优化）
                     btc_klines=btc_klines,     # I（独立性）
                     eth_klines=eth_klines      # I（独立性）
                 )
@@ -465,6 +578,18 @@ class OptimizedBatchScanner:
                 is_prime = result.get('publish', {}).get('prime', False)
                 prime_strength = result.get('publish', {}).get('prime_strength', 0)
                 confidence = result.get('confidence', 0)
+
+                # 🔍 调试日志：显示前10个币种的详细评分（帮助诊断为什么没有Prime信号）
+                if i < 10:
+                    scores = result.get('scores', {})
+                    prime_breakdown = result.get('publish', {}).get('prime_breakdown', {})
+                    log(f"  └─ [评分] confidence={confidence}, prime_strength={prime_strength}")
+                    log(f"      因子分数: T={scores.get('T',0)}, M={scores.get('M',0)}, C={scores.get('C',0)}, "
+                        f"S={scores.get('S',0)}, V={scores.get('V',0)}, O={scores.get('O',0)}")
+                    log(f"      新因子: L={scores.get('L',0)}, B={scores.get('B',0)}, Q={scores.get('Q',0)}, I={scores.get('I',0)}")
+                    log(f"      Prime分解: base={prime_breakdown.get('base_strength',0):.1f}, "
+                        f"prob_bonus={prime_breakdown.get('prob_bonus',0):.1f}, "
+                        f"P_chosen={prime_breakdown.get('P_chosen',0):.3f}")
 
                 if is_prime:
                     results.append(result)

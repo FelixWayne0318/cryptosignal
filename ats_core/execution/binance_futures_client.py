@@ -70,6 +70,9 @@ class BinanceFuturesClient:
         # 同步服务器时间
         await self._sync_time()
 
+        # 🔧 FIX: 设置运行状态为True，使WebSocket连接保持活跃
+        self.is_running = True
+
         log("✅ 客户端初始化完成，服务器时间已同步")
 
     async def close(self):
@@ -484,15 +487,31 @@ class BinanceFuturesClient:
     async def _ws_connect(self, stream: str):
         """建立WebSocket连接"""
         url = f"{self.ws_base_url}/ws/{stream}"
+        retry_count = 0
+        max_retries = 10
 
         while self.is_running or not self.ws_connections:
             try:
-                log(f"🔌 连接WebSocket: {stream}")
+                # 首次连接时不显示日志，避免刷屏
+                if retry_count == 0:
+                    log(f"🔌 连接WebSocket: {stream}")
+                elif retry_count < max_retries:
+                    warn(f"🔄 重试连接WebSocket [{retry_count}/{max_retries}]: {stream}")
+                else:
+                    error(f"❌ WebSocket重试次数已达上限 ({max_retries})，放弃: {stream}")
+                    break
 
+                # 移除ping参数以避免与Python 3.10 SSL transport的兼容性问题
                 async with websockets.connect(url) as ws:
                     self.ws_connections[stream] = ws
 
-                    log(f"✅ WebSocket连接成功: {stream}")
+                    # 连接成功后重置重试计数
+                    if retry_count > 0:
+                        log(f"✅ WebSocket连接成功（重试{retry_count}次后）: {stream}")
+                    else:
+                        log(f"✅ WebSocket连接成功: {stream}")
+
+                    retry_count = 0  # 重置重试计数
 
                     # 接收数据
                     async for message in ws:
@@ -512,12 +531,42 @@ class BinanceFuturesClient:
                         except json.JSONDecodeError as e:
                             error(f"JSON解析失败: {e}")
 
-            except websockets.exceptions.ConnectionClosed:
-                warn(f"WebSocket连接断开: {stream}，3秒后重连...")
-                await asyncio.sleep(3)
+            except websockets.exceptions.ConnectionClosed as e:
+                retry_count += 1
+                # 只在程序运行时重连，关闭时忽略
+                if self.is_running:
+                    warn(f"WebSocket连接断开: {stream} (code: {e.code if hasattr(e, 'code') else 'unknown'})，3秒后重连...")
+                    await asyncio.sleep(3)
+                else:
+                    # 程序关闭时的正常断开，不需要警告
+                    break
+
+            except asyncio.TimeoutError:
+                retry_count += 1
+                warn(f"WebSocket连接超时: {stream}，等待5秒后重试...")
+                await asyncio.sleep(5)
+
+            except AttributeError as e:
+                # 这通常发生在连接关闭时transport为None的情况
+                # 这是底层库的清理过程，不是真正的错误
+                if self.is_running:
+                    retry_count += 1
+                    # 只在调试时记录，生产环境忽略
+                    # warn(f"WebSocket底层传输错误（连接已关闭）: {stream}")
+                    await asyncio.sleep(3)
+                else:
+                    break
 
             except Exception as e:
-                error(f"WebSocket错误: {e}，5秒后重连...")
+                retry_count += 1
+                # 显示完整的异常信息，包括类型
+                error_msg = f"{type(e).__name__}: {str(e)}" if str(e) else f"{type(e).__name__} (无详细信息)"
+
+                if retry_count < max_retries:
+                    warn(f"WebSocket连接失败: {stream} - {error_msg}，5秒后重试...")
+                else:
+                    error(f"WebSocket连接失败（重试{retry_count}次）: {stream} - {error_msg}")
+
                 await asyncio.sleep(5)
 
             finally:

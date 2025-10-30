@@ -144,8 +144,8 @@ class SignalScanner:
         log("\n" + "=" * 60)
         log("📊 扫描结果")
         log("=" * 60)
-        log(f"   总扫描: {scan_result.get('total', 0)} 个币种")
-        log(f"   耗时: {scan_result.get('elapsed', 0):.1f}秒")
+        log(f"   总扫描: {scan_result.get('total_symbols', 0)} 个币种")  # 🔧 FIX: 修正键名 total -> total_symbols
+        log(f"   耗时: {scan_result.get('elapsed_seconds', 0):.1f}秒")  # 🔧 FIX: 修正键名 elapsed -> elapsed_seconds
         log(f"   发现信号: {len(signals)} 个")
         log(f"   Prime信号: {len(prime_signals)} 个")
         log("=" * 60)
