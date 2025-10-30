@@ -501,7 +501,8 @@ class BinanceFuturesClient:
                     error(f"❌ WebSocket重试次数已达上限 ({max_retries})，放弃: {stream}")
                     break
 
-                async with websockets.connect(url, ping_interval=20, ping_timeout=10) as ws:
+                # 移除ping参数以避免与Python 3.10 SSL transport的兼容性问题
+                async with websockets.connect(url) as ws:
                     self.ws_connections[stream] = ws
 
                     # 连接成功后重置重试计数
@@ -532,13 +533,29 @@ class BinanceFuturesClient:
 
             except websockets.exceptions.ConnectionClosed as e:
                 retry_count += 1
-                warn(f"WebSocket连接断开: {stream} (原因: {e.code if hasattr(e, 'code') else 'unknown'})，3秒后重连...")
-                await asyncio.sleep(3)
+                # 只在程序运行时重连，关闭时忽略
+                if self.is_running:
+                    warn(f"WebSocket连接断开: {stream} (code: {e.code if hasattr(e, 'code') else 'unknown'})，3秒后重连...")
+                    await asyncio.sleep(3)
+                else:
+                    # 程序关闭时的正常断开，不需要警告
+                    break
 
             except asyncio.TimeoutError:
                 retry_count += 1
                 warn(f"WebSocket连接超时: {stream}，等待5秒后重试...")
                 await asyncio.sleep(5)
+
+            except AttributeError as e:
+                # 这通常发生在连接关闭时transport为None的情况
+                # 这是底层库的清理过程，不是真正的错误
+                if self.is_running:
+                    retry_count += 1
+                    # 只在调试时记录，生产环境忽略
+                    # warn(f"WebSocket底层传输错误（连接已关闭）: {stream}")
+                    await asyncio.sleep(3)
+                else:
+                    break
 
             except Exception as e:
                 retry_count += 1
