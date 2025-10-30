@@ -216,22 +216,53 @@ async def run_scanner():
             on_signal_found=on_signal
         )
 
-        # 5. 发送总结
+        # 5. 检查结果
         print()
-        print("【4】发送扫描总结...")
+        print("【4】检查扫描结果...")
 
-        prime_count = len(results.get('prime_signals', []))
+        # 修复：正确获取信号列表
+        all_signals = results.get('results', [])
+        signals_found = results.get('signals_found', 0)
         elapsed = results.get('elapsed_seconds', 0)
+
+        print(f"扫描统计:")
+        print(f"  总计发现: {signals_found} 个信号")
+        print(f"  通过回调发送: {len(signals_sent)} 个")
+        print()
+
+        # 6. 检查是否有未发送的信号（回调失败）
+        if signals_found > len(signals_sent):
+            print(f"⚠️  发现 {signals_found - len(signals_sent)} 个信号未通过回调发送")
+            print("尝试手动发送...")
+
+            for signal in all_signals:
+                symbol = signal.get('symbol', 'UNKNOWN')
+                if symbol not in signals_sent:
+                    print(f"\n补发信号: {symbol}")
+                    message = format_signal_message(signal)
+                    success = await send_telegram(message, bot_token, chat_id)
+                    if success:
+                        print(f"✅ {symbol} 补发成功")
+                        signals_sent.append(symbol)
+                    else:
+                        print(f"❌ {symbol} 补发失败")
+
+        # 7. 发送总结
+        print()
+        print("【5】发送扫描总结...")
+
+        cache_stats = results.get('cache_stats', {})
+        cache_hit_rate = cache_stats.get('hit_rate', 0)
 
         summary_msg = f"""
 📊 <b>扫描完成</b>
 
-🎯 发现信号: {prime_count} 个
+🎯 发现信号: {signals_found} 个
 📤 已发送: {len(signals_sent)} 个
 
 ⏱️ 扫描时间: {elapsed:.1f}秒
 🚀 API调用: {results.get('api_calls', 0)}次
-💾 缓存命中率: {results.get('cache_hit_rate', 0):.1%}
+💾 缓存命中率: {cache_hit_rate:.1%}
 
 ⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         """
@@ -239,12 +270,12 @@ async def run_scanner():
         await send_telegram(summary_msg, bot_token, chat_id)
         print("✅ 总结已发送")
 
-        # 6. 清理
+        # 8. 清理
         await scanner.close()
 
         print()
         print("=" * 70)
-        print(f"✅ 扫描完成！共发现 {prime_count} 个信号")
+        print(f"✅ 扫描完成！共发现 {signals_found} 个信号，已发送 {len(signals_sent)} 个")
         print("=" * 70)
 
         return 0
