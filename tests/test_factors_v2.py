@@ -203,14 +203,22 @@ def test_factor_config():
 # ========== 并行扫描测试 ==========
 
 def test_batch_scan_parallel_dry_run():
-    """测试并行扫描（dry run）"""
-    from ats_core.pipeline.batch_scan import batch_run_parallel
+    """
+    测试并行扫描（dry run）
+
+    ⚠️ DEPRECATED: 此测试依赖已废弃的batch_scan.py
+    使用新的batch_scan_optimized.py请参考:
+    - ats_core/pipeline/batch_scan_optimized.py (OptimizedBatchScanner类)
+    - scripts/realtime_signal_scanner.py (主文件示例)
+    """
+    # DEPRECATED: 旧的batch_scan.py已移至deprecated/pipeline/
+    # from ats_core.pipeline.batch_scan import batch_run_parallel
 
     # 注意：实际测试需要Binance API
     # 这里只测试接口存在性
 
-    assert callable(batch_run_parallel)
-    print("  并行扫描接口已实现")
+    # assert callable(batch_run_parallel)  # DEPRECATED
+    print("  ⚠️ 此测试已废弃 - 使用batch_scan_optimized.py替代")
 
 
 # ========== WebSocket框架测试 ==========
