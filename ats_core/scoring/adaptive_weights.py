@@ -171,10 +171,26 @@ def blend_weights(
     # 确保总权重=100% (10+1因子系统)
     total = sum(blended.values())
     target_weight = 100.0
+
     if abs(total - target_weight) > 0.1:
-        # 调整最大权重维度
-        max_dim = max(blended, key=blended.get)
-        blended[max_dim] = round(blended[max_dim] + (target_weight - total), 1)
+        # 按比例归一化所有维度（避免单个维度权重异常）
+        scale_factor = target_weight / total if total > 0 else 1.0
+        for dim in blended:
+            blended[dim] = round(blended[dim] * scale_factor, 1)
+
+        # 修正舍入误差：调整最大权重维度
+        actual_total = sum(blended.values())
+        if abs(actual_total - target_weight) > 0.1:
+            max_dim = max(blended, key=blended.get)
+            adjustment = target_weight - actual_total
+            blended[max_dim] = round(blended[max_dim] + adjustment, 1)
+
+            # 安全检查：确保权重合理（0-100范围）
+            if blended[max_dim] < 0 or blended[max_dim] > 100:
+                raise ValueError(
+                    f"权重归一化失败：{max_dim}={blended[max_dim]} 超出合理范围[0,100]。"
+                    f"blend_ratio={blend_ratio}, total={total}, target={target_weight}"
+                )
 
     return blended
 
@@ -222,9 +238,9 @@ if __name__ == "__main__":
             final = final_w.get(dim, 0)
             change = final - base
             marker = "↑" if change > 0 else "↓" if change < 0 else "-"
-            print(f"    {dim}: {base:2d} → {final:2d} ({change:+2d}) {marker}")
+            print(f"    {dim}: {base:4.1f} → {final:4.1f} ({change:+4.1f}) {marker}")
 
-        print(f"  总权重: {sum(final_w.values())}")
+        print(f"  总权重: {sum(final_w.values()):.1f}")
 
     print("\n" + "=" * 60)
     print("✅ 自适应权重模块测试完成")
