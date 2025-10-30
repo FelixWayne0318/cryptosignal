@@ -544,7 +544,8 @@ def _analyze_symbol_core(
     # - 概率加成（40分）= 基于P_chosen的额外奖励
     # - 总分 0-100，所有10维因子都参与
     #
-    # 目标：prime_strength >= 65 → is_prime
+    # 目标：prime_strength >= 35 → is_prime (v6.0权重百分比系统)
+    # 注：从65调整为35，因为权重从180-base改为100-base（65×100/180≈36）
 
     prime_strength = 0.0
 
@@ -605,8 +606,8 @@ def _analyze_symbol_core(
         from ats_core.logging import warn
         warn(f"[MTF-Cached] {symbol}: 多时间框架验证失败 - {e}")
 
-    # Prime判定：得分 >= 65分（放宽阈值以发现更多信号）
-    is_prime = (prime_strength >= 65)
+    # Prime判定：得分 >= 35分（v6.0权重百分比系统）
+    is_prime = (prime_strength >= 35)
     is_watch = False  # 不再发布Watch信号
 
     # 计算达标维度数（保留用于元数据）
@@ -660,7 +661,7 @@ def _analyze_symbol_core(
                 P_chosen = P_chosen_filtered
 
             prime_strength = prime_strength_filtered
-            is_prime = (prime_strength >= 65)  # 重新判定Prime
+            is_prime = (prime_strength >= 35)  # 重新判定Prime (v6.0)
 
         penalty_reason = market_adjustment_reason
 
