@@ -18,6 +18,18 @@ import time
 from typing import List, Dict, Optional
 from ats_core.execution.binance_futures_client import get_binance_client
 from ats_core.data.realtime_kline_cache import get_kline_cache
+
+# WebSocket连接黑名单（已知无法建立连接的币种）
+# 这些币种可能已从Binance下架或WebSocket流不可用
+WEBSOCKET_BLACKLIST = {
+    # 2025-10-30 测试发现的无法连接币种
+    'OGUSDT', 'USELESSUSDT', 'KERNELUSDT', 'DIAUSDT', 'ZORAUSDT',
+    'POPCATUSDT', 'METUSDT', 'EDENUSDT', 'FORMUSDT', 'JUPUSDT',
+    'PENDLEUSDT', 'SYRUPUSDT', 'RENDERUSDT', 'LUMIAUSDT', '0GUSDT',
+    'BLESSUSDT', 'FLOWUSDT', 'PIPPINUSDT', 'DOODUSDT', 'ICPUSDT',
+    'MEUSDT', 'OPENUSDT', 'RVVUSDT', 'AEROUSDT', 'KAITOUSDT',
+    'CELOUSDT', 'DEGOUSDT', '2ZUSDT'
+}
 from ats_core.pipeline.analyze_symbol import analyze_symbol_with_preloaded_klines
 from ats_core.logging import log, warn, error
 
@@ -117,6 +129,12 @@ class OptimizedBatchScanner:
         # 过滤掉流动性太低的（<3M USDT/24h）
         MIN_VOLUME = 3_000_000
         symbols = [s for s in symbols if volume_map.get(s, 0) >= MIN_VOLUME]
+
+        # 过滤掉WebSocket黑名单中的币种
+        blacklisted = [s for s in symbols if s in WEBSOCKET_BLACKLIST]
+        if blacklisted:
+            log(f"   ⚠️  跳过 {len(blacklisted)} 个WebSocket黑名单币种: {', '.join(blacklisted[:5])}{'...' if len(blacklisted) > 5 else ''}")
+            symbols = [s for s in symbols if s not in WEBSOCKET_BLACKLIST]
 
         log(f"   ✅ 筛选出 {len(symbols)} 个高流动性币种（24h成交额>3M USDT）")
         log(f"   TOP 5: {', '.join(symbols[:5])}")
