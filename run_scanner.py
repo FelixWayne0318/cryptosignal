@@ -51,75 +51,52 @@ async def send_telegram(message: str, token: str, chat_id: str) -> bool:
 
 
 def format_signal_message(signal: Dict[str, Any]) -> str:
-    """格式化信号消息"""
-    symbol = signal.get('symbol', 'UNKNOWN')
-    side = signal.get('side', 'unknown')
-    price = signal.get('price', 0)
+    """格式化信号消息（使用官方telegram_fmt模板）"""
+    try:
+        # 使用官方模板系统
+        from ats_core.outputs.telegram_fmt import render_signal
 
-    # 评分数据
-    scores = signal.get('scores', {})
-    weighted_score = signal.get('weighted_score', 0)
-    confidence = signal.get('confidence', 0)
-    edge = signal.get('edge', 0)
+        # 判断是否Prime信号
+        publish = signal.get('publish', {})
+        is_prime = publish.get('prime', False)
 
-    # 概率数据
-    prob = signal.get('probability', {})
-    side_long = signal.get('side_long', False)
-    P_long = prob.get('P_long', 0)
-    P_short = prob.get('P_short', 0)
-    P_chosen = P_long if side_long else P_short
+        # 使用官方模板渲染
+        # is_watch=False 表示这是交易信号（Prime），不是watch信号
+        message = render_signal(signal, is_watch=not is_prime)
 
-    # Prime判定
-    publish = signal.get('publish', {})
-    is_prime = publish.get('prime', False)
-    prime_strength = publish.get('prime_strength', 0)
+        # 添加v6.0系统标识
+        footer = f"""
 
-    # 方向表情
-    side_emoji = "📈" if side == "long" else "📉"
-    status_emoji = "✅" if is_prime else "⚠️"
+━━━━━━━━━━━━━━━━━━
+🎯 <b>系统版本: v6.0</b>
+📦 权重模式: 100%百分比
+⚡ F因子: 已启用 (10.0%)
 
-    # 因子名称
-    factor_names = {
-        'T': 'T趋势', 'M': 'M动量', 'C': 'C资金流',
-        'S': 'S结构', 'V': 'V量能', 'O': 'O持仓',
-        'L': 'L流动性', 'B': 'B基差', 'Q': 'Q清算',
-        'I': 'I独立性', 'F': 'F资金领先'
-    }
+⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        """
 
-    # 构造消息
-    lines = [
-        f"{status_emoji} <b>CryptoSignal Prime信号</b>",
-        "",
-        f"{side_emoji} <b>{symbol}</b> - {side.upper()}",
-        "",
-        "📊 <b>评分指标:</b>",
-        f"  Prime强度: {prime_strength}/100",
-        f"  置信度: {confidence}/100",
-        f"  加权评分: {weighted_score:+d}/100",
-        f"  优势度: {edge:+.2f}",
-        f"  胜率: {P_chosen:.1%}",
-        "",
-        f"💰 价格: ${price:.6f}",
-        "",
-        "📈 <b>因子评分 (v6.0):</b>",
-    ]
+        return message + footer
 
-    # 添加因子评分
-    for factor in ['T', 'M', 'C', 'S', 'V', 'O', 'L', 'B', 'Q', 'I', 'F']:
-        score = scores.get(factor, 0)
-        name = factor_names.get(factor, factor)
-        lines.append(f"  {name}: {score:+d}")
+    except Exception as e:
+        # 如果模板渲染失败，使用简化版本
+        print(f"⚠️  模板渲染失败: {e}，使用简化版本")
 
-    lines.extend([
-        "",
-        "🎯 系统版本: v6.0",
-        "📦 权重模式: 100%百分比",
-        "⚡ F因子: 已启用 (10.0%)",
-        "",
-        f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-    ])
+        symbol = signal.get('symbol', 'UNKNOWN')
+        side = signal.get('side', 'unknown')
+        price = signal.get('price', 0)
+        confidence = signal.get('confidence', 0)
+        prime_strength = signal.get('publish', {}).get('prime_strength', 0)
 
-    return "\n".join(lines)
+        return f"""
+🔔 <b>CryptoSignal 信号</b>
+
+<b>{symbol}</b> - {side.upper()}
+💰 价格: ${price:.6f}
+📊 置信度: {confidence}/100
+✅ Prime强度: {prime_strength}/100
+
+⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        """
 
 
 async def run_scanner():
