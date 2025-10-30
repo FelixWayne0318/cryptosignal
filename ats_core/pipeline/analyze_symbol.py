@@ -31,7 +31,7 @@ from statistics import median
 from ats_core.cfg import CFG
 from ats_core.sources.binance import get_klines, get_open_interest_hist, get_spot_klines
 from ats_core.features.cvd import cvd_from_klines, cvd_mix_with_oi_price
-from ats_core.scoring.scorecard import scorecard
+from ats_core.scoring.scorecard import scorecard, get_factor_contributions
 from ats_core.scoring.probability import map_probability
 
 # ========== 世界顶级优化模块 ==========
@@ -438,6 +438,9 @@ def _analyze_symbol_core(
     # 注意：scorecard函数通过 total/weight_sum 自动归一化，无需再除以1.6
     weighted_score, confidence, edge = scorecard(scores, weights)
 
+    # 计算每个因子对总分的贡献（用于电报消息显示）
+    factor_contributions = get_factor_contributions(scores, weights)
+
     # 方向判断（根据加权分数符号）
     side_long = (weighted_score > 0)
 
@@ -760,6 +763,9 @@ def _analyze_symbol_core(
             "mtf_coherence": mtf_coherence,
             "mtf_result": mtf_result,
         },
+
+        # 因子贡献详情（用于电报消息显示）
+        "factor_contributions": factor_contributions,
     }
 
     # 兼容旧版 telegram_fmt.py：将分数直接放在顶层
