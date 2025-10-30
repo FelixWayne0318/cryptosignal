@@ -57,6 +57,7 @@ class OptimizedBatchScanner:
         self.funding_rate_cache = {}   # {symbol: funding_rate}
         self.spot_price_cache = {}     # {symbol: spot_price}
         self.liquidation_cache = {}    # {symbol: agg_trades_list} - Q因子（使用aggTrades替代已废弃的清算API）
+        self.oi_cache = {}             # {symbol: oi_data_list} - O因子（持仓量历史）
         self.btc_klines = []           # BTC K线数据 - I因子
         self.eth_klines = []           # ETH K线数据 - I因子
 
@@ -330,8 +331,30 @@ class OptimizedBatchScanner:
 
         log(f"       ✅ 成功: {agg_trades_success}, 失败: {agg_trades_failed}")
 
-        # 5.5 获取BTC和ETH K线数据（I因子）
-        log("   5.5 获取BTC和ETH K线数据（I因子）...")
+        # 5.5 批量获取持仓量历史数据（O因子 - 最大性能瓶颈优化）
+        log("   5.5 批量获取持仓量历史数据（O因子）...")
+        log("       🚀 使用并发模式，预计60-80秒（原需700秒！）")
+        from ats_core.sources.binance_safe import batch_get_open_interest_hist
+
+        oi_start = time.time()
+        try:
+            # 批量异步获取所有币种的OI数据
+            self.oi_cache = await batch_get_open_interest_hist(
+                symbols=symbols,
+                period='1h',
+                limit=300,
+                batch_size=20
+            )
+            oi_elapsed = time.time() - oi_start
+            oi_success = sum(1 for oi_data in self.oi_cache.values() if oi_data)
+            log(f"       ✅ 成功: {oi_success}/{len(symbols)}, 耗时: {oi_elapsed:.1f}秒")
+            log(f"       🚀 性能提升: {700/oi_elapsed:.1f}x（从700秒降至{oi_elapsed:.0f}秒）")
+        except Exception as e:
+            warn(f"       ⚠️  批量获取OI失败: {e}")
+            self.oi_cache = {}
+
+        # 5.6 获取BTC和ETH K线数据（I因子）
+        log("   5.6 获取BTC和ETH K线数据（I因子）...")
         from ats_core.sources.binance import get_klines
 
         try:
@@ -473,6 +496,7 @@ class OptimizedBatchScanner:
                 funding_rate = self.funding_rate_cache.get(symbol)
                 spot_price = self.spot_price_cache.get(symbol)
                 liquidations = self.liquidation_cache.get(symbol)  # Q因子
+                oi_data = self.oi_cache.get(symbol, [])  # O因子（持仓量历史）
                 btc_klines = self.btc_klines  # I因子
                 eth_klines = self.eth_klines  # I因子
 
@@ -489,6 +513,7 @@ class OptimizedBatchScanner:
                     log(f"      funding_rate: {funding_rate}")
                     log(f"      spot_price: {spot_price}")
                     log(f"      agg_trades: {len(liquidations) if liquidations else 0}笔（Q因子）")
+                    log(f"      oi_data: {len(oi_data)}条（O因子）")
                     log(f"      btc_klines: {len(btc_klines)}根")
                     log(f"      eth_klines: {len(eth_klines)}根")
 
@@ -504,6 +529,7 @@ class OptimizedBatchScanner:
                     funding_rate=funding_rate, # B（基差+资金费）
                     spot_price=spot_price,     # B（基差+资金费）
                     agg_trades=liquidations,   # Q（清算密度 - 使用aggTrades）
+                    oi_data=oi_data,           # O（持仓量历史 - 预加载优化）
                     btc_klines=btc_klines,     # I（独立性）
                     eth_klines=eth_klines      # I（独立性）
                 )
