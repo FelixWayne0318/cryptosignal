@@ -63,20 +63,27 @@ class OptimizedBatchScanner:
 
         log("✅ 优化批量扫描器创建成功")
 
-    async def initialize(self, enable_websocket: bool = True):
+    async def initialize(self, enable_websocket: bool = False):
         """
-        初始化（仅一次，约2分钟）
+        初始化（仅一次，约1-2分钟）
 
         Args:
-            enable_websocket: 是否启用WebSocket实时更新（默认True）
-                - True: 生产模式，启用实时更新
-                - False: 测试模式，跳过WebSocket（避免连接数超限）
+            enable_websocket: 是否启用WebSocket实时更新（默认False，推荐禁用）
+                - False（推荐）: REST定时更新模式，稳定高效
+                  * 1h/4h K线每小时才更新一次，不需要实时订阅
+                  * 避免280个WebSocket连接和频繁重连问题
+                  * 性能更好，稳定性更高
+                - True: WebSocket实时模式（不推荐）
+                  * 280个连接，接近300上限
+                  * 网络波动时频繁重连
+                  * 实际收益很小（1h K线每小时才更新）
 
         步骤:
         1. 初始化Binance客户端
         2. 获取候选币种列表
         3. 批量初始化K线缓存（REST）
-        4. 启动WebSocket实时更新（可选）
+        4. 启动WebSocket实时更新（可选，默认禁用）
+        5. 预加载10维因子数据（订单簿、OI等）
         """
         if self.initialized:
             log("⚠️  已初始化，跳过")
@@ -152,11 +159,12 @@ class OptimizedBatchScanner:
             client=self.client
         )
 
-        # 4. 启动WebSocket实时更新（可选）
+        # 4. WebSocket实时更新（默认禁用，推荐使用REST定时更新）
         if enable_websocket:
             log(f"\n4️⃣  启动WebSocket实时更新...")
+            log(f"   ⚠️  注意：WebSocket模式不稳定，280个连接易出错")
             log(f"   策略: 仅订阅关键周期（1h, 4h）以避免连接数超限")
-            log(f"   连接数: 140币种 × 2周期 = 280 < 300限制 ✅")
+            log(f"   连接数: ~110币种 × 2周期 = ~220 < 300限制")
             await self.kline_cache.start_batch_realtime_update(
                 symbols=symbols,
                 intervals=['1h', '4h'],  # 只订阅主要周期（15m和1d使用REST数据即可）
@@ -164,7 +172,12 @@ class OptimizedBatchScanner:
             )
             log(f"   15m和1d周期: 使用REST API数据（更新频率低，无需实时订阅）")
         else:
-            log(f"\n4️⃣  跳过WebSocket实时更新（测试模式）")
+            log(f"\n4️⃣  ✅ WebSocket已禁用（推荐模式）")
+            log(f"   原因:")
+            log(f"   - 1h/4h K线每小时才更新一次，不需要实时订阅")
+            log(f"   - WebSocket连接不稳定，频繁重连影响性能")
+            log(f"   - REST批量获取更快更稳定（50秒 vs 5分钟）")
+            log(f"   后续: 使用REST批量获取，K线数据已在步骤3中初始化")
 
         # 5. 预加载10维因子系统所需的市场数据
         log(f"\n5️⃣  预加载10维因子系统数据（订单簿、资金费率、现货价格）...")
