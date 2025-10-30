@@ -12,6 +12,9 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, Tuple, List
 import math
 
+# Public API
+__all__ = ['render_signal', 'render_watch', 'render_trade']
+
 # ---------- small utils ----------
 
 def _clamp(x: float, lo: float = 0.0, hi: float = 100.0) -> float:
