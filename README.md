@@ -14,6 +14,7 @@
 |------|------|--------|
 | **[SYSTEM_OVERVIEW.md](./standards/SYSTEM_OVERVIEW.md)** | 系统总览：核心功能、主文件、10+1维因子 | ⭐⭐⭐⭐⭐ 必读 |
 | **[MODIFICATION_RULES.md](./standards/MODIFICATION_RULES.md)** | 修改规范：什么场景改什么文件 | ⭐⭐⭐⭐ 强烈推荐 |
+| **[DEVELOPMENT_WORKFLOW.md](./standards/DEVELOPMENT_WORKFLOW.md)** | 开发流程：提交规范、测试要求、完整流程示例 | ⭐⭐⭐⭐ 强烈推荐 |
 | **[CONFIGURATION_GUIDE.md](./standards/CONFIGURATION_GUIDE.md)** | 配置详解：所有参数的含义 | ⭐⭐⭐ 推荐 |
 | **[ARCHITECTURE.md](./standards/ARCHITECTURE.md)** | 技术架构：数据流和核心模块 | ⭐⭐⭐ 推荐 |
 
