@@ -98,10 +98,10 @@ def test_2_scorecard():
     }
 
     weights = {
-        "T": 25, "M": 15, "S": 10, "V": 15,
-        "C": 20, "O": 20, "F": 18,
-        "L": 20, "B": 15, "Q": 10,
-        "I": 12, "E": 0
+        "T": 13.9, "M": 8.3, "S": 5.6, "V": 8.3,
+        "C": 11.1, "O": 11.1, "F": 10.0,
+        "L": 11.1, "B": 8.3, "Q": 5.6,
+        "I": 6.7, "E": 0
     }
 
     weighted_score, confidence, edge = scorecard(scores, weights)
@@ -137,10 +137,10 @@ def test_3_contributions():
     }
 
     weights = {
-        "T": 25, "M": 15, "S": 10, "V": 15,
-        "C": 20, "O": 20, "F": 18,
-        "L": 20, "B": 15, "Q": 10,
-        "I": 12, "E": 0
+        "T": 13.9, "M": 8.3, "S": 5.6, "V": 8.3,
+        "C": 11.1, "O": 11.1, "F": 10.0,
+        "L": 11.1, "B": 8.3, "Q": 5.6,
+        "I": 6.7, "E": 0
     }
 
     contributions = get_factor_contributions(scores, weights)
@@ -164,7 +164,7 @@ def test_3_contributions():
 
     # 验证计算
     total_weight = contributions["total_weight"]
-    assert total_weight == 180, f"总权重错误: {total_weight}"
+    assert abs(total_weight - 100) < 0.1, f"总权重错误: {total_weight}"
 
     expected_t_pct = 25 / 180 * 100
     assert abs(t_info["weight_pct"] - expected_t_pct) < 0.1, "T权重百分比计算错误"
@@ -241,15 +241,15 @@ def test_5_adaptive_weights():
     trend_sum = sum(trend_weights.values())
     range_sum = sum(range_weights.values())
 
-    assert trend_sum == 180, f"趋势权重总和错误: {trend_sum}"
-    assert range_sum == 180, f"震荡权重总和错误: {range_sum}"
+    assert abs(trend_sum - 100) < 0.2, f"趋势权重总和错误: {trend_sum}"
+    assert abs(range_sum - 100) < 0.2, f"震荡权重总和错误: {range_sum}"
 
     # 测试权重混合
     base_weights = {
-        "T": 25, "M": 15, "S": 10, "V": 15,
-        "C": 20, "O": 20, "F": 18,
-        "L": 20, "B": 15, "Q": 10,
-        "I": 12, "E": 0
+        "T": 13.9, "M": 8.3, "S": 5.6, "V": 8.3,
+        "C": 11.1, "O": 11.1, "F": 10.0,
+        "L": 11.1, "B": 8.3, "Q": 5.6,
+        "I": 6.7, "E": 0
     }
 
     blended = blend_weights(trend_weights, base_weights, blend_ratio=0.7)
@@ -258,7 +258,7 @@ def test_5_adaptive_weights():
     print(f"  混合权重: T={blended['T']:.0f}, M={blended['M']:.0f}")
     print(f"  混合权重总和: {blended_sum:.0f}")
 
-    assert abs(blended_sum - 180) < 1, f"混合权重总和错误: {blended_sum}"
+    assert abs(blended_sum - 100) < 0.2, f"混合权重总和错误: {blended_sum}"
 
     print("\n  ✓ 自适应权重计算正确")
     print("  ✓ 权重混合正确")
@@ -412,10 +412,10 @@ def test_7_full_telegram_output():
     }
 
     weights = {
-        "T": 25, "M": 15, "S": 10, "V": 15,
-        "C": 20, "O": 20, "F": 18,
-        "L": 20, "B": 15, "Q": 10,
-        "I": 12, "E": 0
+        "T": 13.9, "M": 8.3, "S": 5.6, "V": 8.3,
+        "C": 11.1, "O": 11.1, "F": 10.0,
+        "L": 11.1, "B": 8.3, "Q": 5.6,
+        "I": 6.7, "E": 0
     }
 
     contributions = get_factor_contributions(scores, weights)
