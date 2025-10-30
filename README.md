@@ -10,26 +10,12 @@
 
 **请先阅读规范文档**（5-10分钟快速了解整个系统）：
 
-1. **[规范/SYSTEM_OVERVIEW.md](./规范/SYSTEM_OVERVIEW.md)** ⭐ 必读
-   - 系统总览和核心功能
-   - 主文件入口和运行方式
-   - 目录结构和关键文件
-   - 10+1维因子系统介绍
-
-2. **[规范/MODIFICATION_RULES.md](./规范/MODIFICATION_RULES.md)**
-   - 代码修改规范
-   - 什么场景修改哪个文件
-   - 禁止修改的文件列表
-
-3. **[规范/CONFIGURATION_GUIDE.md](./规范/CONFIGURATION_GUIDE.md)**
-   - 配置参数详解
-   - 所有参数的含义和调整建议
-
-4. **[规范/ARCHITECTURE.md](./规范/ARCHITECTURE.md)**
-   - 系统架构详解
-   - 数据流和核心模块
-
-**完整文档索引**: [规范/README.md](./规范/README.md)
+| 文档 | 说明 | 必读性 |
+|------|------|--------|
+| **[SYSTEM_OVERVIEW.md](./standards/SYSTEM_OVERVIEW.md)** | 系统总览：核心功能、主文件、10+1维因子 | ⭐⭐⭐⭐⭐ 必读 |
+| **[MODIFICATION_RULES.md](./standards/MODIFICATION_RULES.md)** | 修改规范：什么场景改什么文件 | ⭐⭐⭐⭐ 强烈推荐 |
+| **[CONFIGURATION_GUIDE.md](./standards/CONFIGURATION_GUIDE.md)** | 配置详解：所有参数的含义 | ⭐⭐⭐ 推荐 |
+| **[ARCHITECTURE.md](./standards/ARCHITECTURE.md)** | 技术架构：数据流和核心模块 | ⭐⭐⭐ 推荐 |
 
 ---
 
@@ -38,8 +24,7 @@
 ```
 cryptosignal/
 │
-├── 规范/                              # ⭐ 系统规范文档（新对话框必读）
-│   ├── README.md                      # 文档索引
+├── standards/                         # ⭐ 系统规范文档（新对话框必读）
 │   ├── SYSTEM_OVERVIEW.md             # 系统总览
 │   ├── MODIFICATION_RULES.md          # 修改规范
 │   ├── CONFIGURATION_GUIDE.md         # 配置参数详解
@@ -130,7 +115,7 @@ tail -f scanner.log
 }
 ```
 
-详见: [规范/CONFIGURATION_GUIDE.md](./规范/CONFIGURATION_GUIDE.md)
+详见: [CONFIGURATION_GUIDE.md](./standards/CONFIGURATION_GUIDE.md)
 
 ### 修改Prime阈值
 
@@ -146,7 +131,7 @@ tail -f scanner.log
 }
 ```
 
-详见: [规范/MODIFICATION_RULES.md § 2](./规范/MODIFICATION_RULES.md#2-调整prime阈值)
+详见: [MODIFICATION_RULES.md § 2](./standards/MODIFICATION_RULES.md#2-调整prime阈值)
 
 ---
 
@@ -163,7 +148,7 @@ tail -f scanner.log
 
 ## 🔗 重要链接
 
-- **规范文档**: [规范/README.md](./规范/README.md)
+- **规范文档**: [standards/](./standards/)
 - **主文件**: [scripts/realtime_signal_scanner.py](./scripts/realtime_signal_scanner.py)
 - **配置文件**: [config/params.json](./config/params.json)
 
@@ -173,8 +158,8 @@ tail -f scanner.log
 
 ### 修改代码前必读
 
-1. 查看 [规范/MODIFICATION_RULES.md](./规范/MODIFICATION_RULES.md) 确定修改哪个文件
-2. 查看 [规范/CONFIGURATION_GUIDE.md](./规范/CONFIGURATION_GUIDE.md) 了解参数含义
+1. 查看 [MODIFICATION_RULES.md](./standards/MODIFICATION_RULES.md) 确定修改哪个文件
+2. 查看 [CONFIGURATION_GUIDE.md](./standards/CONFIGURATION_GUIDE.md) 了解参数含义
 3. 修改后清除缓存并测试
 
 ### 禁止修改的文件
@@ -185,24 +170,24 @@ tail -f scanner.log
 - `ats_core/sources/binance.py`
 - `ats_core/cfg.py`
 
-详见: [规范/MODIFICATION_RULES.md § 禁止修改的文件](./规范/MODIFICATION_RULES.md#-禁止修改的文件)
+详见: [MODIFICATION_RULES.md § 禁止修改的文件](./standards/MODIFICATION_RULES.md#-禁止修改的文件)
 
 ---
 
 ## 🎓 学习路径
 
 ### 初级用户（使用系统）
-1. 阅读 [规范/SYSTEM_OVERVIEW.md](./规范/SYSTEM_OVERVIEW.md)
+1. 阅读 [SYSTEM_OVERVIEW.md](./standards/SYSTEM_OVERVIEW.md)
 2. 运行测试
 3. 调整Telegram配置
 
 ### 中级用户（调整参数）
-1. 阅读 [规范/CONFIGURATION_GUIDE.md](./规范/CONFIGURATION_GUIDE.md)
+1. 阅读 [CONFIGURATION_GUIDE.md](./standards/CONFIGURATION_GUIDE.md)
 2. 调整权重或阈值
 3. 观察效果
 
 ### 高级用户（修改代码）
-1. 阅读 [规范/ARCHITECTURE.md](./规范/ARCHITECTURE.md)
+1. 阅读 [ARCHITECTURE.md](./standards/ARCHITECTURE.md)
 2. 理解核心模块
 3. 按规范修改
 
@@ -210,7 +195,7 @@ tail -f scanner.log
 
 ## ⚠️ 注意事项
 
-1. **所有修改必须符合规范**（参考 `规范/` 文件夹）
+1. **所有修改必须符合规范**（参考 `standards/` 文件夹）
 2. **主文件**: 只有 `scripts/realtime_signal_scanner.py`
 3. **权重总和**: 必须=100%
 4. **修改后**: 清除缓存并测试
@@ -219,8 +204,8 @@ tail -f scanner.log
 
 ## 📞 支持
 
-- 遇到问题: 先查看 [规范/README.md § 常见问题速查](./规范/README.md#-常见问题速查)
-- 新对话框: 先阅读 [规范/SYSTEM_OVERVIEW.md](./规范/SYSTEM_OVERVIEW.md)
+- 遇到问题: 先查看规范文档 [standards/](./standards/)
+- 新对话框: 先阅读 [SYSTEM_OVERVIEW.md](./standards/SYSTEM_OVERVIEW.md)
 
 ---
 
