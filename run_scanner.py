@@ -252,7 +252,13 @@ async def run_scanner():
         print("【5】发送扫描总结...")
 
         cache_stats = results.get('cache_stats', {})
-        cache_hit_rate = cache_stats.get('hit_rate', 0)
+        cache_hit_rate = cache_stats.get('hit_rate', '100.0%')
+
+        # 如果是字符串格式（如"100.0%"），直接使用；如果是float，格式化
+        if isinstance(cache_hit_rate, (int, float)):
+            cache_hit_rate_str = f"{cache_hit_rate * 100:.1f}%"
+        else:
+            cache_hit_rate_str = str(cache_hit_rate)
 
         summary_msg = f"""
 📊 <b>扫描完成</b>
@@ -262,7 +268,7 @@ async def run_scanner():
 
 ⏱️ 扫描时间: {elapsed:.1f}秒
 🚀 API调用: {results.get('api_calls', 0)}次
-💾 缓存命中率: {cache_hit_rate:.1%}
+💾 缓存命中率: {cache_hit_rate_str}
 
 ⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         """
