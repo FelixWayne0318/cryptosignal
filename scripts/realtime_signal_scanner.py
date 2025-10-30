@@ -24,9 +24,9 @@ WebSocket实时信号扫描器（仅发送信号，不执行交易）
     # 测试（只扫描20个币种）
     python scripts/realtime_signal_scanner.py --max-symbols 20
 
-环境变量:
-    TELEGRAM_BOT_TOKEN  - Telegram Bot Token
-    TELEGRAM_CHAT_ID    - Telegram Chat ID
+配置方式:
+    1. config/telegram.json (优先)
+    2. 环境变量: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 """
 
 import os
@@ -34,6 +34,7 @@ import sys
 import asyncio
 import argparse
 import signal
+import json
 from pathlib import Path
 from datetime import datetime
 
@@ -43,8 +44,82 @@ sys.path.insert(0, str(project_root))
 
 from ats_core.pipeline.batch_scan_optimized import OptimizedBatchScanner
 from ats_core.outputs.telegram_fmt import render_trade
-from ats_core.outputs.publisher import telegram_send
 from ats_core.logging import log, warn, error
+
+
+def load_telegram_config():
+    """
+    加载Telegram配置
+
+    优先级:
+    1. config/telegram.json
+    2. 环境变量
+
+    Returns:
+        (bot_token, chat_id) 或抛出异常
+    """
+    # 1. 尝试从config文件读取
+    config_file = project_root / 'config' / 'telegram.json'
+    if config_file.exists():
+        try:
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+
+            bot_token = config.get('bot_token', '').strip()
+            chat_id = config.get('chat_id', '').strip()
+
+            if bot_token and chat_id:
+                log(f"✅ 从config/telegram.json加载配置")
+                return bot_token, chat_id
+        except Exception as e:
+            warn(f"读取config/telegram.json失败: {e}")
+
+    # 2. 从环境变量读取
+    bot_token = (os.getenv('TELEGRAM_BOT_TOKEN') or os.getenv('ATS_TELEGRAM_BOT_TOKEN') or '').strip()
+    chat_id = (os.getenv('TELEGRAM_CHAT_ID') or os.getenv('ATS_TELEGRAM_CHAT_ID') or '').strip()
+
+    if bot_token and chat_id:
+        log(f"✅ 从环境变量加载配置")
+        return bot_token, chat_id
+
+    # 3. 配置缺失
+    raise RuntimeError(
+        "Telegram配置未找到！\n"
+        "请配置以下任一方式:\n"
+        "1. config/telegram.json\n"
+        "2. 环境变量: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID"
+    )
+
+
+def telegram_send_wrapper(text: str, bot_token: str, chat_id: str, parse_mode: str = "HTML") -> None:
+    """
+    发送Telegram消息（封装，支持config文件配置）
+
+    Args:
+        text: 消息文本
+        bot_token: Bot Token
+        chat_id: Chat ID
+        parse_mode: 解析模式（默认HTML）
+    """
+    import urllib.request
+
+    api = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": parse_mode,
+        "disable_web_page_preview": True,
+    }
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json; charset=utf-8",
+        "Accept": "application/json",
+    }
+
+    req = urllib.request.Request(api, data=data, headers=headers, method="POST")
+    with urllib.request.urlopen(req, timeout=15) as r:
+        _ = r.read()
 
 
 class SignalScanner:
@@ -64,6 +139,18 @@ class SignalScanner:
         self.initialized = False
         self.scan_count = 0
 
+        # 加载Telegram配置
+        if send_telegram:
+            try:
+                self.bot_token, self.chat_id = load_telegram_config()
+                log(f"✅ Telegram配置加载成功 (Chat ID: {self.chat_id})")
+            except Exception as e:
+                error(f"❌ Telegram配置加载失败: {e}")
+                self.send_telegram = False
+        else:
+            self.bot_token = None
+            self.chat_id = None
+
         log("✅ 信号扫描器创建成功")
 
     async def initialize(self):
@@ -79,11 +166,16 @@ class SignalScanner:
         # 发送启动通知
         if self.send_telegram:
             try:
-                telegram_send(
-                    "🤖 <b>CryptoSignal 实时扫描器启动中...</b>\n\n"
+                telegram_send_wrapper(
+                    "🤖 <b>CryptoSignal v6.0 实时扫描器启动中...</b>\n\n"
                     "⏳ 正在初始化WebSocket缓存（约3-4分钟）\n"
                     "📊 目标: 200个高流动性币种\n"
-                    "⚡ 后续扫描: 12-15秒/次"
+                    "⚡ 后续扫描: 12-15秒/次\n\n"
+                    "🎯 系统版本: v6.0\n"
+                    "📦 权重模式: 100%百分比\n"
+                    "⚡ F因子: 已启用 (10.0%)",
+                    self.bot_token,
+                    self.chat_id
                 )
             except Exception as e:
                 warn(f"发送启动通知失败: {e}")
@@ -96,11 +188,13 @@ class SignalScanner:
         # 发送就绪通知
         if self.send_telegram:
             try:
-                telegram_send(
+                telegram_send_wrapper(
                     "✅ <b>实时扫描器已就绪！</b>\n\n"
                     "🚀 WebSocket缓存已激活\n"
                     "📡 K线数据实时更新中\n"
-                    "🔍 开始扫描交易信号..."
+                    "🔍 开始扫描交易信号...",
+                    self.bot_token,
+                    self.chat_id
                 )
             except Exception as e:
                 warn(f"发送就绪通知失败: {e}")
@@ -165,8 +259,20 @@ class SignalScanner:
                 # 渲染信号
                 message = render_trade(signal)
 
+                # 添加v6.0系统标识
+                footer = f"""
+
+━━━━━━━━━━━━━━━━━━
+🎯 <b>系统版本: v6.0</b>
+📦 权重模式: 100%百分比
+⚡ F因子: 已启用 (10.0%)
+
+⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+                """
+                message = message + footer
+
                 # 发送
-                telegram_send(message)
+                telegram_send_wrapper(message, self.bot_token, self.chat_id)
 
                 log(f"   ✅ {i}/{len(signals)}: {signal.get('symbol')}")
 
