@@ -232,7 +232,7 @@ class SignalScanner:
         signals = scan_result.get('results', [])
         prime_signals = [
             s for s in signals
-            if s.get('tier') == 'prime'
+            if s.get('publish', {}).get('prime', False)
         ]
 
         log("\n" + "=" * 60)
