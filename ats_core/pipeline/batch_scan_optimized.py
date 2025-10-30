@@ -145,6 +145,17 @@ class OptimizedBatchScanner:
             symbols = [s for s in symbols if s not in WEBSOCKET_BLACKLIST]
 
         log(f"   ✅ 筛选出 {len(symbols)} 个高流动性币种（24h成交额>3M USDT）")
+
+        # 验证是否成功获取到币种
+        if not symbols:
+            raise RuntimeError(
+                "❌ 无法获取交易币种列表！可能原因：\n"
+                "   1. 网络连接问题（DNS解析失败、防火墙阻止等）\n"
+                "   2. Binance API服务异常\n"
+                "   3. 所有币种流动性不足（<3M USDT/24h）\n"
+                "   请检查网络连接并重试。"
+            )
+
         log(f"   TOP 5: {', '.join(symbols[:5])}")
         log(f"   成交额范围: {volume_map.get(symbols[0], 0)/1e6:.1f}M ~ {volume_map.get(symbols[-1], 0)/1e6:.1f}M USDT")
 
