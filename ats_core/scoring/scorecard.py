@@ -61,19 +61,19 @@ def get_factor_contributions(scores, weights):
 
     Args:
         scores: dict，因子分数 {"T": -100, "M": -80, ...}
-        weights: dict，权重配置 {"T": 25, "M": 15, ...}
+        weights: dict，权重配置 {"T": 13.9, "M": 8.3, ...} (v6.0: 100%系统)
 
     Returns:
         dict: {
             "T": {
                 "score": -100,
-                "weight": 25,
+                "weight": 13.9,
                 "weight_pct": 13.9,  # 权重百分比
                 "contribution": -13.9  # 对总分的贡献
             },
             ...
-            "total_weight": 180,
-            "weighted_score": -13
+            "total_weight": 100.0,
+            "weighted_score": -13.9
         }
 
     示例输出用于电报：

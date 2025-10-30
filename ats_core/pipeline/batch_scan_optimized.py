@@ -282,27 +282,6 @@ class OptimizedBatchScanner:
 
         log(f"       ✅ 成功: {orderbook_success}, 失败: {orderbook_failed}")
 
-        # DEBUG: 验证缓存内容
-        log(f"\n   [DEBUG] 缓存验证:")
-        log(f"       - orderbook_cache: {len(self.orderbook_cache)} 条目")
-        log(f"       - mark_price_cache: {len(self.mark_price_cache)} 条目")
-        log(f"       - funding_rate_cache: {len(self.funding_rate_cache)} 条目")
-        log(f"       - spot_price_cache: {len(self.spot_price_cache)} 条目")
-
-        # 检查BTCUSDT样本数据
-        if 'BTCUSDT' in self.orderbook_cache:
-            sample_ob = self.orderbook_cache['BTCUSDT']
-            if sample_ob:
-                log(f"       - BTCUSDT订单簿样本: bids={len(sample_ob.get('bids', []))}, asks={len(sample_ob.get('asks', []))}")
-            else:
-                log(f"       - BTCUSDT订单簿样本: None或空")
-        if 'BTCUSDT' in self.mark_price_cache:
-            log(f"       - BTCUSDT标记价格: {self.mark_price_cache['BTCUSDT']}")
-        if 'BTCUSDT' in self.funding_rate_cache:
-            log(f"       - BTCUSDT资金费率: {self.funding_rate_cache['BTCUSDT']}")
-        if 'BTCUSDT' in self.spot_price_cache:
-            log(f"       - BTCUSDT现货价格: {self.spot_price_cache['BTCUSDT']}")
-
         # 5.4 批量获取聚合成交数据（Q因子 - 使用aggTrades替代已废弃的清算API）
         log("   5.4 批量获取聚合成交数据（Q因子）...")
         log("       🚀 使用并发模式，预计10-15秒")
@@ -523,23 +502,6 @@ class OptimizedBatchScanner:
                 oi_data = self.oi_cache.get(symbol, [])  # O因子（持仓量历史）
                 btc_klines = self.btc_klines  # I因子
                 eth_klines = self.eth_klines  # I因子
-
-                # DEBUG: 打印前3个币种的数据传递情况
-                if i < 3:
-                    log(f"  [DEBUG] {symbol} 数据传递:")
-                    if orderbook:
-                        bids_count = len(orderbook.get('bids', []))
-                        asks_count = len(orderbook.get('asks', []))
-                        log(f"      orderbook: 存在 (bids={bids_count} asks={asks_count})")
-                    else:
-                        log(f"      orderbook: None")
-                    log(f"      mark_price: {mark_price}")
-                    log(f"      funding_rate: {funding_rate}")
-                    log(f"      spot_price: {spot_price}")
-                    log(f"      agg_trades: {len(liquidations) if liquidations else 0}笔（Q因子）")
-                    log(f"      oi_data: {len(oi_data)}条（O因子）")
-                    log(f"      btc_klines: {len(btc_klines)}根")
-                    log(f"      eth_klines: {len(eth_klines)}根")
 
                 # 因子分析（使用预加载的K线和市场数据，支持完整10维因子系统）
                 result = analyze_symbol_with_preloaded_klines(

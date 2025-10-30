@@ -138,23 +138,6 @@ def _analyze_symbol_core(
     Returns:
         分析结果字典
     """
-    # DEBUG: 打印前3个币种的数据接收情况
-    if symbol in ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']:
-        from ats_core.logging import log
-        log(f"  [DEBUG] _analyze_symbol_core收到 {symbol}:")
-        if orderbook:
-            bids_count = len(orderbook.get('bids', []))
-            asks_count = len(orderbook.get('asks', []))
-            log(f"      orderbook: 存在 (bids={bids_count} asks={asks_count})")
-        else:
-            log(f"      orderbook: None")
-        log(f"      mark_price: {mark_price}")
-        log(f"      funding_rate: {funding_rate}")
-        log(f"      spot_price: {spot_price}")
-        log(f"      liquidations: {len(liquidations) if liquidations else 0}条")
-        log(f"      btc_klines: {len(btc_klines) if btc_klines else 0}根")
-        log(f"      eth_klines: {len(eth_klines) if eth_klines else 0}根")
-
     params = CFG.params or {}
 
     # 移除候选池先验逻辑（已废弃）
