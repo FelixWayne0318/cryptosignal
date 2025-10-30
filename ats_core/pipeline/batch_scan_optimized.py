@@ -579,6 +579,18 @@ class OptimizedBatchScanner:
                 prime_strength = result.get('publish', {}).get('prime_strength', 0)
                 confidence = result.get('confidence', 0)
 
+                # 🔍 调试日志：显示前10个币种的详细评分（帮助诊断为什么没有Prime信号）
+                if i < 10:
+                    scores = result.get('scores', {})
+                    prime_breakdown = result.get('publish', {}).get('prime_breakdown', {})
+                    log(f"  └─ [评分] confidence={confidence}, prime_strength={prime_strength}")
+                    log(f"      因子分数: T={scores.get('T',0)}, M={scores.get('M',0)}, C={scores.get('C',0)}, "
+                        f"S={scores.get('S',0)}, V={scores.get('V',0)}, O={scores.get('O',0)}")
+                    log(f"      新因子: L={scores.get('L',0)}, B={scores.get('B',0)}, Q={scores.get('Q',0)}, I={scores.get('I',0)}")
+                    log(f"      Prime分解: base={prime_breakdown.get('base_strength',0):.1f}, "
+                        f"prob_bonus={prime_breakdown.get('prob_bonus',0):.1f}, "
+                        f"P_chosen={prime_breakdown.get('P_chosen',0):.3f}")
+
                 if is_prime:
                     results.append(result)
                     log(f"✅ {symbol}: Prime强度={prime_strength}, 置信度={confidence:.0f}")
