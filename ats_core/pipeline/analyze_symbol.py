@@ -249,7 +249,7 @@ def _analyze_symbol_core(
     # 持仓（O）：-100（减少）到 +100（增加）
     t0 = time.time()
     cvd6 = (cvd_series[-1] - cvd_series[-7]) / max(1e-12, abs(close_now)) if len(cvd_series) >= 7 else 0.0
-    O, O_meta = _calc_oi(symbol, c, params.get("open_interest", {}), cvd6)
+    O, O_meta = _calc_oi(symbol, c, params.get("open_interest", {}), cvd6, oi_data=oi_data)
     perf['O持仓'] = time.time() - t0
 
     # 环境（E）：-100（差）到 +100（好）
@@ -950,11 +950,11 @@ def _calc_volume(vol):
     except Exception:
         return 0, {"v5v20": 1.0, "vroc_abs": 0.0}
 
-def _calc_oi(symbol, closes, cfg, cvd6_fallback):
+def _calc_oi(symbol, closes, cfg, cvd6_fallback, oi_data=None):
     """持仓打分（±100系统）"""
     try:
         from ats_core.features.open_interest import score_open_interest
-        O, meta = score_open_interest(symbol, closes, cfg, cvd6_fallback)
+        O, meta = score_open_interest(symbol, closes, cfg, cvd6_fallback, oi_data=oi_data)
         return int(O), meta
     except Exception:
         return 0, {"oi1h_pct": None, "oi24h_pct": None}
