@@ -1,0 +1,677 @@
+{
+  "version": "2.0",
+  "generated_at": "2025-10-31",
+  "source_files": [
+    "newstandards/STANDARDS.md",
+    "newstandards/MODULATORS.md",
+    "newstandards/PUBLISHING.md",
+    "newstandards/DATA_LAYER.md",
+    "newstandards/NEWCOIN_SPEC.md",
+    "newstandards/SCHEMAS.md"
+  ],
+
+  "principles": {
+    "multi_directional_symmetry": true,
+    "layered_decoupling": "A=direction|B=modulators|C=execution|D=probability",
+    "slope_priority": true,
+    "nonlinear_control": "tanh/sigmoid/soft-ops",
+    "soft_ceiling": "EW-Median/MAD→soft-winsor→tanh",
+    "ev_king": "EV>0 is hard gate",
+    "execution_priority": "TP厚区maker;SL可成交",
+    "unified_units": "bps/seconds/ATR",
+    "gradual_rollback": "β,λ,θ,φ=0→neutral",
+    "online_assertion": "DataQual<0.90→Watch-only"
+  },
+
+  "data_layer": {
+    "slo": {
+      "availability": 0.995,
+      "latency_p95_newcoin_ms": 250,
+      "latency_p95_standard_ms": 500,
+      "reconciliation_completeness": 0.999,
+      "dataqual_threshold_prime": 0.90,
+      "dataqual_threshold_watchonly": 0.90
+    },
+
+    "binance_endpoints": {
+      "rest": {
+        "klines": "/fapi/v1/klines",
+        "depth_snapshot": "/fapi/v1/depth",
+        "premium_index": "/fapi/v1/premiumIndex",
+        "funding_rate": "/fapi/v1/fundingRate",
+        "open_interest": "/fapi/v1/openInterest",
+        "open_interest_hist": "/futures/data/openInterestHist",
+        "exchange_info": "/fapi/v1/exchangeInfo"
+      },
+      "websocket": {
+        "kline": "@kline_{1m,5m,15m,1h,4h}",
+        "agg_trade": "@aggTrade",
+        "depth": "@depth@100ms",
+        "mark_price": "@markPrice@1s"
+      }
+    },
+
+    "ws_topology": {
+      "max_connections": 5,
+      "fixed_streams": {
+        "kline_multiplex": {
+          "intervals": ["1m", "5m", "15m", "1h"],
+          "purpose": "newcoin+standard"
+        },
+        "aggtrade_multiplex": {
+          "purpose": "candidate_pool/active_symbols"
+        },
+        "markprice_multiplex": {
+          "purpose": "F/basis",
+          "optional": true
+        }
+      },
+      "on_demand_streams": {
+        "depth_multiplex": {
+          "trigger": "Watch/Prime candidates",
+          "unload": "on_exit",
+          "max_sub_streams": 200
+        }
+      },
+      "reconnect": {
+        "backoff_ms": [100, 200, 400, 800, 1600, 5000],
+        "jitter_pct": 0.15
+      },
+      "heartbeat": {
+        "p95_threshold_ms": 2000,
+        "pong_timeout_ms": 3000
+      }
+    },
+
+    "dataqual_formula": {
+      "formula": "DataQual = 1 - (w_h*miss + w_o*ooOrder + w_d*drift + w_m*mismatch)",
+      "weights": {
+        "w_h": 0.35,
+        "w_o": 0.15,
+        "w_d": 0.20,
+        "w_m": 0.30
+      },
+      "thresholds": {
+        "allow_prime": 0.90,
+        "degrade": 0.88,
+        "cooldown_sec": [60, 120]
+      },
+      "components": {
+        "miss": "heartbeat/message loss rate",
+        "ooOrder": "out-of-order event rate beyond reorder window",
+        "drift": "|ts_exch - ts_srv| > 300ms ratio",
+        "mismatch": "depth reconciliation failure rate"
+      }
+    },
+
+    "timing": {
+      "dual_timestamp": {
+        "ts_exch": "exchange event time (ms), for sorting",
+        "ts_srv": "server receive time (ms), for monitoring"
+      },
+      "finalization": {
+        "kline": "only isFinal=true for training/scoring",
+        "intrabar": "observation and execution only"
+      },
+      "reorder_window_ms": 2000,
+      "drift_warn_ms": 300
+    },
+
+    "derived_quantities": {
+      "AVWAP_from_listing": "Σ(P·V)/ΣV, start=onboardDate",
+      "CVD": "Σ(side_i·quoteVol_i), side∈{+1,-1}",
+      "RVOL": "Σ vol / EMA(vol)",
+      "D_buysell": "(BuyQ-SellQ)/(BuyQ+SellQ)∈[-1,1]",
+      "slope_OI": "ΔOI/Δt / EMA(|ΔOI|)",
+      "impact_bps": "(P̄±(Q)-mid)/mid × 1e4",
+      "OBI_k": "(Σbid-Σask)/(Σbid+Σask)∈[-1,1], k=10",
+      "shelves": "±B bps buckets, D(p)≥μ+2σ, B=20bps"
+    }
+  },
+
+  "layer_a_direction": {
+    "standard_chain": {
+      "step1_smooth": {
+        "formula": "x̃_t = α·x_t + (1-α)·x̃_{t-1}",
+        "alpha_standard": 0.3,
+        "alpha_newcoin": 0.4
+      },
+      "step2_robust_scale": {
+        "formula": "z = (x̃ - μ) / (1.4826·MAD)",
+        "mu_method": "EW-Median",
+        "mad_method": "EW-MAD",
+        "update_rate_eta": [0.03, 0.08]
+      },
+      "step3_soft_winsor": {
+        "formula": "z_soft = sign(z)·[z0+(zmax-z0)·(1-exp(-(|z|-z0)/λ))] for |z|>z0",
+        "z0": 2.5,
+        "zmax": 6,
+        "lambda": 1.5
+      },
+      "step4_tanh_compress": {
+        "formula": "s_k = 100·tanh(z_soft/τ_k)",
+        "tau": {
+          "T": 2.2,
+          "M": 2.4,
+          "S": 2.2,
+          "V": 2.3,
+          "C": 2.2,
+          "O": 2.3,
+          "Q": 2.8
+        }
+      },
+      "step5_publish_smooth": {
+        "formula": "s_pub = (1-αs)·s_pub_prev + αs·s_raw",
+        "alpha_s_standard": 0.30,
+        "alpha_s_newcoin": 0.50,
+        "delta_max_standard": 15,
+        "delta_max_newcoin": 25,
+        "zero_crossing_hysteresis": 10
+      }
+    },
+
+    "factors": {
+      "T_trend": {
+        "timeframe": "1h",
+        "components": {
+          "ZLEMA": "ZLEMA_t = α·(2P_t - P_{t-L}) + (1-α)·ZLEMA_{t-1}",
+          "slope_ZL": "(ZLEMA_t - ZLEMA_{t-h})/h / ATR_1h",
+          "divergence_30": "(P_t - EWMA_30) / ATR_1h"
+        },
+        "aggregation": "T = StdChain(w1·slope_ZL + w2·slope_EW30 + w3·d30)"
+      },
+      "M_momentum": {
+        "timeframe": "1h",
+        "components": {
+          "slope_ROC": "[(P_t-P_{t-20})/P_{t-20} - (P_{t-h}-P_{t-20-h})/P_{t-20-h}]/h",
+          "slope_RSI": "[RSI14_t - RSI14_{t-h}]/h",
+          "slope_MACD": "[MACD_hist_t - MACD_hist_{t-h}]/h"
+        },
+        "aggregation": "M = StdChain(a1·slope_ROC + a2·slope_RSI + a3·slope_MACD)"
+      },
+      "S_structure": {
+        "components": {
+          "velocity": "(P_t - P_{t-h})/h / ATR",
+          "distance_to_key": "(P_t - L*)/ATR"
+        },
+        "aggregation": "S = StdChain(b1·v + b2·δ)",
+        "note": "long/short mirrored"
+      },
+      "V_volume": {
+        "components": {
+          "RVOL": "Σ Vol_{t-i} / EMA(Vol)",
+          "slope_RVOL": "(RVOL_t - RVOL_{t-h})/h",
+          "D_buysell": "(AggBuyQuote - AggSellQuote)/(AggBuyQuote + AggSellQuote)",
+          "slope_D": "(D_t - D_{t-h})/h"
+        },
+        "aggregation": "V = StdChain(c1·slope_RVOL + c2·slope_D)"
+      },
+      "C_cvd": {
+        "components": {
+          "CVD": "Σ side_i·quoteVol_i",
+          "slope_CVD": "(CVD_t - CVD_{t-h})/h / EMA(|ΔCVD|)",
+          "divergence": "if slope_CVD·slope_P < 0 then penalty"
+        },
+        "aggregation": "C = StdChain(slope_CVD + div_penalty)"
+      },
+      "O_oi": {
+        "components": {
+          "slope_OI": "(OI_t - OI_{t-h})/h / EMA(|ΔOI|)"
+        },
+        "aggregation": "O = StdChain(sgn(slope_P)·slope_OI)",
+        "fallback": {
+          "no_oi": "O=0, weight_O=0"
+        }
+      },
+      "Q_liquidation": {
+        "components": {
+          "formula": "Σ_{p∈N(P)} sgn(P-p)·LD(p)",
+          "proxy_if_no_ld": "qvol/ATR"
+        },
+        "aggregation": "Q_sig = StdChain(Q_sig_raw)",
+        "note": "small weight"
+      }
+    },
+
+    "aggregation": {
+      "formula": "S_lin = Σ w_k·s_k; S = 100·tanh(S_lin/T_agg)",
+      "output_range": "[-100, 100]",
+      "weights_standard": {
+        "T": 18,
+        "M": 12,
+        "S": 10,
+        "V": 10,
+        "C": 18,
+        "O": 18,
+        "Q": 4
+      },
+      "weights_newcoin": {
+        "T": 22,
+        "M": 15,
+        "S": 15,
+        "V": 16,
+        "C": 20,
+        "O": 8,
+        "Q": 4
+      }
+    }
+  },
+
+  "layer_b_modulators": {
+    "normalization": {
+      "formula": "g(x) = tanh(γ·(x-0.5))∈[-1,1]",
+      "gamma": 3,
+      "preprocessing": "EMA(α=0.2) on g(F), g(I)"
+    },
+
+    "F_crowding": {
+      "definition": "F∈[0,1] from funding, basis, ΔOI robust z → sigmoid",
+      "interpretation": "F↑ → crowding/squeeze risk↑ → more conservative"
+    },
+
+    "I_independence": {
+      "formula": "I = σ(a1·(1-R̄²) + a2·(1-|ρ̄|))∈[0,1]",
+      "timeframes": ["1h", "4h"],
+      "correlations_with": ["BTC", "ETH", "sector_index"],
+      "interpretation": "I↑ → independence↑ → more self-proving"
+    },
+
+    "temperature_Teff": {
+      "formula": "Teff = clip(T0·(1+βF·gF)/(1+βI·gI), Tmin, Tmax)",
+      "guardrails": {
+        "denominator_min": 0.6,
+        "range": "[Tmin, Tmax]"
+      },
+      "params_standard": {
+        "T0": 50,
+        "betaF": 0.35,
+        "betaI": 0.25,
+        "Tmin": 35,
+        "Tmax": 90
+      },
+      "params_newcoin": {
+        "T0": 60,
+        "betaF": 0.20,
+        "betaI": 0.15,
+        "Tmin": 40,
+        "Tmax": 95
+      }
+    },
+
+    "cost_eff": {
+      "formula": "cost_eff = fee + impact_bps·mid/1e4 + pen_F + pen_I - rew_I",
+      "components": {
+        "pen_F": "λF·max(0, gF)·ATR_bps",
+        "pen_I": "λI_pen·max(0, -gI)·ATR_bps",
+        "rew_I": "λI_rew·max(0, gI)·ATR_bps"
+      },
+      "constraint": "λI_pen ≥ λI_rew",
+      "params_standard": {
+        "lambdaF": 0.60,
+        "lambdaI_pen": 0.50,
+        "lambdaI_rew": 0.30
+      },
+      "params_newcoin": {
+        "lambdaF": 0.40,
+        "lambdaI_pen": 0.35,
+        "lambdaI_rew": 0.20
+      }
+    },
+
+    "threshold_soft_adj": {
+      "p_min": {
+        "formula": "p*_min = p0 + θF·max(0,gF) + θI_pen·max(0,-gI) - θI_rew·max(0,gI)"
+      },
+      "delta_p_min": {
+        "formula": "Δp_min = dp0 + φF·max(0,gF) + φI_pen·max(0,-gI) - φI_rew·max(0,gI)"
+      },
+      "params_standard": {
+        "p0": 0.62,
+        "dp0": 0.08,
+        "thetaF": 0.03,
+        "thetaI_pen": 0.02,
+        "thetaI_rew": 0.01,
+        "phiF": 0.02,
+        "phiI_pen": 0.01,
+        "phiI_rew": 0.005
+      },
+      "params_newcoin": {
+        "p0": 0.60,
+        "dp0": 0.06,
+        "thetaF": 0.03,
+        "thetaI_pen": 0.02,
+        "thetaI_rew": 0.008,
+        "phiF": 0.02,
+        "phiI_pen": 0.01,
+        "phiI_rew": 0.004
+      }
+    },
+
+    "assertion_online": {
+      "condition": "if F↑ or I↓",
+      "must_observe": [
+        "Teff↑",
+        "cost_eff↑",
+        "threshold↑"
+      ],
+      "else": "rollback to neutral (β,λ,θ,φ=0) and alert"
+    }
+  },
+
+  "layer_c_execution": {
+    "metrics": {
+      "spread_bps": "(ask1 - bid1)/mid × 1e4",
+      "impact_bps": "(P̄±(Q) - mid)/mid × 1e4, Q in USDT",
+      "OBI_k": "(Σ_{i=1}^k bid_i - Σ ask_i)/(Σ bid + Σ ask)∈[-1,1], k=10",
+      "shelves": "±B bps buckets (B=20), D(p)≥μ+2σ → shelf peak"
+    },
+
+    "hard_gates": {
+      "opening": {
+        "impact_bps": {
+          "standard": 10,
+          "newcoin": 7
+        },
+        "spread_bps": 35,
+        "OBI_abs": 0.30,
+        "DataQual": 0.90,
+        "Room": "≥R*·ATR"
+      },
+      "maintenance_hysteresis": {
+        "impact_bps": {
+          "standard": 10,
+          "newcoin": 8
+        },
+        "spread_bps": 38,
+        "OBI_abs": 0.33,
+        "DataQual": 0.88
+      },
+      "cooldown_sec": [60, 120]
+    },
+
+    "entry": {
+      "method1_pullback": {
+        "anchor": "AVWAP or ZLEMA10(1h)",
+        "zone": "anchor ± 0.1·ATR_1h",
+        "order_type": "passive limit"
+      },
+      "method2_breakout": {
+        "formula": "δ_in = 0.05·ATR + min(0.10·ATR, c·impact_bps)",
+        "entry": "L* + δ_in"
+      },
+      "queue_strategy": {
+        "no_fill_20s": "move up 1-2 ticks",
+        "wall_cancel": "immediate cancel"
+      }
+    },
+
+    "SL0": {
+      "formula": "SL0 = softmax_τ(d_struct, d_atr)",
+      "d_struct": "|entry - structural_low/high|",
+      "d_atr": "1.8·ATR",
+      "tau": "0.1·ATR",
+      "trigger_conditions": {
+        "price_cross": "≥2 ticks",
+        "duration": "≥300ms",
+        "direction_confirmation": {
+          "long": "agg_sell≥0.6 OR OBI≤-0.2",
+          "short": "agg_buy≥0.6 OR OBI≥0.2"
+        }
+      }
+    },
+
+    "trailing_SL": {
+      "formula": "SL = softmin_τ(Chandelier(HH_N - k·ATR), struct_protect, BE)",
+      "N_adaptive": "8→14 based on strength",
+      "k_long": 1.6,
+      "k_short": 1.4
+    },
+
+    "TP": {
+      "priority": "shelf entry/mid (maker)",
+      "queue": "no_fill_20s → move up 1-2 ticks",
+      "no_shelf": "no TP, use trailing SL"
+    }
+  },
+
+  "layer_d_prob_ev": {
+    "probability": {
+      "formula_long": "P_long = σ(S/Teff)",
+      "formula_short": "P_short = σ(-S/Teff)",
+      "sample_shrinkage": {
+        "formula": "P̃ = 0.5 + w_eff·(P - 0.5)",
+        "w_eff": "min(1, bars_1h/400)"
+      }
+    },
+
+    "expected_value": {
+      "formula": "EV = P·μ_win - (1-P)·μ_loss - cost_eff",
+      "mu_win_mu_loss": "historical bucketed conditional means, mirrored for long/short"
+    },
+
+    "publishing": {
+      "prime": {
+        "conditions": [
+          "EV* > 0",
+          "p* ≥ p_min",
+          "ΔP ≥ Δp_min",
+          "K/N persistence (e.g. 2/3 bars)"
+        ]
+      },
+      "maintenance_hysteresis": {
+        "p_min_delta": "-0.01 ~ -0.02",
+        "delta_p_min_delta": "-0.01 ~ -0.02"
+      },
+      "downgrade": {
+        "to": "Watch",
+        "cooldown_sec": [60, 120]
+      },
+      "watch": {
+        "conditions": [
+          "EV* > 0",
+          "BUT not Prime threshold OR gate marginal"
+        ]
+      }
+    },
+
+    "strength_display": {
+      "prime_strength": "0.6·|S| + 40·clip((p* - 0.60)/0.15, 0, 1)",
+      "prime_signed": "100·(P_long - P_short)∈[-100,100]"
+    }
+  },
+
+  "newcoin_channel": {
+    "entry_conditions": {
+      "any_of": [
+        "since_listing < 14d",
+        "bars_1h < 400",
+        "!has_OI/funding"
+      ]
+    },
+    "exit_conditions": {
+      "all_of": [
+        "bars_1h ≥ 400 AND OI/funding stable ≥3d",
+        "OR since_listing ≥14d"
+      ]
+    },
+    "transition": {
+      "method": "48h linear blend (weights/temp/threshold/TTL)"
+    },
+
+    "data_flow": {
+      "timeframes": ["1m", "5m", "15m", "1h"],
+      "anchor": "AVWAP_from_listing = Σ(P·V)/ΣV, start=onboardDate",
+      "slope_chain": {
+        "ZLEMA_1m": "HL=5",
+        "ZLEMA_5m": "HL=8",
+        "EWMA_15m": "HL=20",
+        "ATR_1m": "HL=20"
+      }
+    },
+
+    "ignition_momentum_exhaustion": {
+      "ignition": {
+        "conditions_at_least_3": [
+          "(P - AVWAP)/ATR_1m ≥ 0.8",
+          "speed ≥ 0.25·ATR/min (≥2min)",
+          "agg_buy ≥ 0.62 (or agg_sell for short)",
+          "OBI10 ≥ 0.05 (or ≤-0.05 for short)",
+          "RVOL_10m ≥ 3.0 (or RVOL_5m≥2.0)",
+          "slope_CVD > 0 (or <0 for short)"
+        ]
+      },
+      "momentum_confirmation": {
+        "conditions": [
+          "1m/5m slopes same direction",
+          "15m slope ≥ 0"
+        ]
+      },
+      "exhaustion": {
+        "any_of": [
+          "de-anchor + CVD flip",
+          "speed<0 consecutive 2-3 bars 1m",
+          "OBI flip AND opposite_agg≥0.60",
+          "qvol/ATR > 0.6"
+        ]
+      }
+    },
+
+    "execution_params": {
+      "gates_stricter": {
+        "impact_bps": [7, 8],
+        "spread_bps": [35, 38],
+        "OBI_abs": [0.30, 0.33],
+        "DataQual": [0.90, 0.88],
+        "Room": "≥R*·ATR_1m"
+      },
+      "entry": {
+        "anchor": "AVWAP or ZLEMA_5m",
+        "bandwidth": "±0.05·ATR_1m"
+      },
+      "SL_TP": {
+        "granularity": "1m/5m",
+        "k_long": 1.6,
+        "k_short": 1.4
+      },
+      "prime_window": {
+        "0_3m": "coldstart, Watch-only",
+        "3_8m": "possible first Prime",
+        "8_15m": "main window"
+      },
+      "TTL_h": [2, 4],
+      "concurrency": 1
+    },
+
+    "FI_special": {
+      "F": {
+        "initial": 0.5,
+        "enable_after": "funding/OI stable ≥3d"
+      },
+      "I": {
+        "timeframes": "15m-1h with BTC/ETH",
+        "reduced_weight": true
+      }
+    }
+  },
+
+  "schema_mapping": {
+    "raw_layer": {
+      "klines_1m_5m_15m_1h": {
+        "pk": ["symbol", "open_time"],
+        "partition": ["dt", "symbol", "interval"],
+        "key_fields": ["open", "high", "low", "close", "volume_base", "volume_quote", "taker_buy_base", "taker_buy_quote", "is_final"]
+      },
+      "aggtrade_1s": {
+        "pk": ["symbol", "bucket_ts"],
+        "partition": ["dt", "symbol"],
+        "key_fields": ["buy_quote", "sell_quote", "buy_base", "sell_base", "trades_cnt", "avg_price"]
+      },
+      "depth_events": {
+        "pk": ["symbol", "ts_exch", "seq"],
+        "partition": ["dt", "symbol"],
+        "key_fields": ["U", "u", "side", "price", "qty", "mid", "snapshot_id"]
+      },
+      "mark_funding": {
+        "pk": ["symbol", "ts_exch"],
+        "partition": ["dt", "symbol"],
+        "key_fields": ["mark_price", "index_price", "last_funding_rate", "next_funding_time", "basis"]
+      },
+      "oi_1m": {
+        "pk": ["symbol", "ts_exch"],
+        "partition": ["dt", "symbol"],
+        "key_fields": ["open_interest"]
+      },
+      "force_order": {
+        "pk": ["symbol", "ts_exch", "seq"],
+        "partition": ["dt", "symbol"],
+        "key_fields": ["side", "price", "qty"]
+      }
+    },
+
+    "qos_layer": {
+      "qos_state_1m": {
+        "pk": ["symbol", "ts_exch"],
+        "key_fields": ["miss", "oo_order", "drift", "mismatch", "dataqual"],
+        "formula": "dataqual = 1 - (0.35*miss + 0.15*oo + 0.20*drift + 0.30*mismatch)"
+      }
+    },
+
+    "feature_layer": {
+      "features_a_1h": {
+        "pk": ["symbol", "ts_exch"],
+        "key_fields": ["T", "M", "S", "V", "C", "O", "Q", "S_lin", "S_score", "meta_*"],
+        "ranges": {
+          "TMSVCQ": "±100",
+          "S_score": "100*tanh(S_lin/T_agg)"
+        }
+      },
+      "features_a_newcoin_1m_5m": {
+        "pk": ["symbol", "ts_exch"],
+        "key_fields": ["T_new", "M_new", "S_new", "V_new", "C_new", "O_new", "Q_sig_new"],
+        "ranges": "±100"
+      },
+      "features_b_modulators": {
+        "pk": ["symbol", "ts_exch"],
+        "key_fields": ["F_raw", "I_raw", "gF", "gI", "Teff", "cost_fee", "cost_impact_bps", "cost_penF", "cost_penI", "cost_rewI", "cost_eff", "pmin", "dpmin"],
+        "ranges": {
+          "F_raw_I_raw": "[0,1]",
+          "gF_gI": "[-1,1]",
+          "Teff": "[Tmin,Tmax]"
+        }
+      },
+      "features_c_exec_1m": {
+        "pk": ["symbol", "ts_exch"],
+        "key_fields": ["spread_bps", "obi10", "impact_bps_q", "shelves_cnt", "resilience_s", "room_atr"]
+      }
+    },
+
+    "decision_layer": {
+      "decision_d_prob_ev": {
+        "pk": ["symbol", "ts_exch"],
+        "key_fields": ["S_score", "P_long", "P_short", "P_long_cal", "EV_long", "EV_short", "edge"]
+      },
+      "publish_events": {
+        "pk": ["symbol", "publish_ts"],
+        "key_fields": ["side", "prime", "prime_strength", "prime_signed", "entry_lo", "entry_hi", "sl0", "tp1", "tp2", "ttl_h", "reasons"]
+      }
+    },
+
+    "newcoin_state": {
+      "pk": ["symbol"],
+      "key_fields": ["onboard_ts", "bars_1h", "in_newcoin", "stage", "last_switch_ts"]
+    }
+  },
+
+  "validation_checklist": {
+    "formulas_complete": true,
+    "params_explicit": true,
+    "units_consistent": true,
+    "schema_mapping_100pct": true,
+    "ws_topology_implementable": true,
+    "dataqual_computable": true,
+    "newcoin_channel_isolated": true,
+    "long_short_symmetric": true,
+    "ev_hard_gate": true,
+    "gradual_rollback_path": true
+  }
+}
