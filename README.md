@@ -210,8 +210,8 @@ tail -f scanner.log
 
 ## 📞 支持
 
-- 遇到问题: 先查看规范文档 [standards/](./standards/)
-- 新对话框: 先阅读 [SYSTEM_OVERVIEW.md](./standards/SYSTEM_OVERVIEW.md)
+- 遇到问题: 先查看文档 [docs/](./docs/) 和 [standards/](./standards/)
+- 新对话框: 先阅读 [SYSTEM_OVERVIEW.md](./docs/SYSTEM_OVERVIEW.md)
 
 ---
 
