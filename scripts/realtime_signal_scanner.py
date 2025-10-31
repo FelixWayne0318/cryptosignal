@@ -46,6 +46,11 @@ from ats_core.pipeline.batch_scan_optimized import OptimizedBatchScanner
 from ats_core.outputs.telegram_fmt import render_trade
 from ats_core.logging import log, warn, error
 
+# 四门系统导入
+from ats_core.gates.integrated_gates import IntegratedGatesChecker
+from ats_core.execution.metrics_estimator import ExecutionMetricsEstimator
+from ats_core.shadow.quality import DataQualityMonitor
+
 
 def load_telegram_config():
     """
@@ -139,6 +144,13 @@ class SignalScanner:
         self.initialized = False
         self.scan_count = 0
 
+        # 初始化四门系统组件
+        self.gates_checker = IntegratedGatesChecker()
+        self.exec_estimator = ExecutionMetricsEstimator()
+        self.quality_monitor = DataQualityMonitor()
+
+        log("✅ 四门系统组件初始化完成")
+
         # 加载Telegram配置
         if send_telegram:
             try:
@@ -171,9 +183,10 @@ class SignalScanner:
                     "⏳ 正在初始化WebSocket缓存（约3-4分钟）\n"
                     "📊 目标: 200个高流动性币种\n"
                     "⚡ 后续扫描: 12-15秒/次\n\n"
-                    "🎯 系统版本: v6.0\n"
-                    "📦 权重模式: 100%百分比\n"
-                    "⚡ F因子: 已启用 (10.0%)",
+                    "🎯 系统版本: v6.0 newstandards整合版\n"
+                    "📦 9因子方向评分 (A层)\n"
+                    "🚪 四门验证系统: DataQual/EV/执行/概率\n"
+                    "🔧 F/I调制器 (B层): 不参与评分",
                     self.bot_token,
                     self.chat_id
                 )
@@ -228,12 +241,78 @@ class SignalScanner:
             max_symbols=max_symbols
         )
 
-        # 提取Prime信号
+        # 提取Prime信号 - 使用四门系统验证
         signals = scan_result.get('results', [])
-        prime_signals = [
-            s for s in signals
-            if s.get('publish', {}).get('prime', False)
-        ]
+        prime_signals = []
+
+        for s in signals:
+            try:
+                # 获取信号基础数据
+                symbol = s.get('symbol', '')
+                probability = s.get('probability', 0.5)
+
+                # 获取 F 和 I 原始值（归一化到 0-1）
+                # F 和 I 分数范围是 -100 到 +100，归一化到 0-1
+                F_score = s.get('scores', {}).get('F', 0)
+                I_score = s.get('scores', {}).get('I', 0)
+                F_raw = (F_score + 100) / 200  # -100~+100 → 0~1
+                I_raw = (I_score + 100) / 200  # -100~+100 → 0~1
+
+                # 计算概率变化（简化：使用 P - 0.5 作为 delta_p）
+                delta_p = abs(probability - 0.5)
+
+                # 获取最新 K 线数据用于执行指标估算
+                # 注意：这里使用信号中的价格数据作为代理
+                pricing = s.get('pricing', {})
+                if pricing:
+                    entry_price = pricing.get('entry', 0)
+                    # 使用简化的估算（假设 spread 为 entry 的 0.1%）
+                    high = entry_price * 1.001
+                    low = entry_price * 0.999
+                    close = entry_price
+                    volume = 1000000  # 默认值
+                else:
+                    # 如果没有定价信息，跳过
+                    log(f"  ⚠️  {symbol}: 缺少定价信息，跳过四门检查")
+                    continue
+
+                # 计算执行指标
+                exec_metrics = self.exec_estimator.calculate(
+                    high=high,
+                    low=low,
+                    close=close,
+                    volume=volume,
+                    taker_buy_volume=volume * 0.5
+                )
+
+                # 检查四门
+                all_gates_passed, gate_results = self.gates_checker.check_all_gates(
+                    symbol=symbol,
+                    probability=probability,
+                    execution_metrics=exec_metrics,
+                    F_raw=F_raw,
+                    I_raw=I_raw,
+                    delta_p=delta_p,
+                    is_newcoin=s.get('new_coin', {}).get('is_new', False)
+                )
+
+                # 只添加通过所有四门的信号
+                if all_gates_passed:
+                    # 添加四门结果到信号中（用于调试）
+                    s['four_gates'] = {
+                        'all_passed': True,
+                        'results': {k: {'passed': v.passed, 'reason': v.reason}
+                                   for k, v in gate_results.items()}
+                    }
+                    prime_signals.append(s)
+                    log(f"  ✅ {symbol}: 通过四门验证 (P={probability:.3f})")
+                else:
+                    # 记录失败原因
+                    failed_gates = [k for k, v in gate_results.items() if not v.passed]
+                    log(f"  ❌ {symbol}: 未通过四门 - {', '.join(failed_gates)}")
+
+            except Exception as e:
+                warn(f"  ⚠️  {symbol}: 四门检查失败 - {e}")
 
         log("\n" + "=" * 60)
         log("📊 扫描结果")
@@ -260,12 +339,16 @@ class SignalScanner:
                 message = render_trade(signal)
 
                 # 添加v6.0系统标识
+                gate_info = signal.get('four_gates', {})
+                gate_emoji = "✅" if gate_info.get('all_passed', False) else "❌"
+
                 footer = f"""
 
 ━━━━━━━━━━━━━━━━━━
-🎯 <b>系统版本: v6.0</b>
-📦 权重模式: 100%百分比
-⚡ F因子: 已启用 (10.0%)
+🎯 <b>系统版本: v6.0 newstandards整合版</b>
+📦 9因子方向评分 (A层)
+🔧 F/I调制器 (B层)
+{gate_emoji} 四门验证: 已通过
 
 ⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                 """
