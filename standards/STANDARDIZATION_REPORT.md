@@ -87,10 +87,10 @@
 - ~43个工具函数缺少文档
 - **建议**: 渐进式添加，优先核心类
 
-**未使用配置验证（2个）**:
-- blacklist.json（空文件）
+**未使用配置验证（1个）**:
+- ~~blacklist.json（空文件）~~ - **已删除** (2025-10-31)
 - factors_unified.json（可能未使用）
-- **建议**: 验证后决定保留或删除
+- **建议**: 验证 factors_unified.json 使用情况
 
 **其他（10个）**:
 - 命名规范不一致
@@ -211,9 +211,10 @@ Commit 3: refactor: 全面规范化修复 - 第3批（API和文档）
 ## 🔄 持续改进建议
 
 ### 短期（1周内）
-1. 验证blacklist.json和factors_unified.json使用情况
-2. 为WebSocketClient等5个核心类添加文档字符串
-3. 清理analyze_symbol.py中的过时注释
+1. ~~验证blacklist.json使用情况~~ - **已完成并删除** (2025-10-31)
+2. 验证 factors_unified.json 使用情况
+3. 为WebSocketClient等5个核心类添加文档字符串
+4. 清理analyze_symbol.py中的过时注释
 
 ### 中期（1个月内）
 1. 将market_regime.py硬编码值移至配置

@@ -5,7 +5,7 @@
 架构优势：
 - WebSocket实时K线缓存（0次API调用）
 - 全市场扫描（不依赖候选池）
-- 智能过滤（流动性+黑名单）
+- 智能流动性过滤
 - 17倍性能提升
 
 使用：
@@ -61,9 +61,6 @@ class MarketWideScanner:
         # WebSocket K线缓存
         self.kline_cache = get_kline_cache() if use_websocket_cache else None
 
-        # 黑名单
-        self.blacklist = getattr(CFG, 'blacklist', []) or []
-
         # 状态
         self.is_initialized = False
         self.all_symbols = []
@@ -106,10 +103,6 @@ class MarketWideScanner:
 
                 # 只要USDT永续合约
                 if not sym.endswith('USDT'):
-                    continue
-
-                # 黑名单
-                if sym in self.blacklist:
                     continue
 
                 # 流动性检查

@@ -24,7 +24,6 @@
 ```
 config/params.json           # 权重、阈值、参数
 config/telegram.json         # Telegram配置
-config/blacklist.json        # 黑名单
 ```
 
 ### 主文件（中等修改）
