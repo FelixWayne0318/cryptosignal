@@ -12,12 +12,12 @@
 
 | 文档 | 说明 | 必读性 |
 |------|------|--------|
-| **[SYSTEM_OVERVIEW.md](./standards/SYSTEM_OVERVIEW.md)** | 系统总览：核心功能、主文件、10+1维因子 | ⭐⭐⭐⭐⭐ 必读 |
+| **[SYSTEM_OVERVIEW.md](./docs/SYSTEM_OVERVIEW.md)** | 系统总览：核心功能、主文件、10+1维因子 | ⭐⭐⭐⭐⭐ 必读 |
 | **[MODIFICATION_RULES.md](./standards/MODIFICATION_RULES.md)** | 修改规范：什么场景改什么文件 | ⭐⭐⭐⭐ 强烈推荐 |
-| **[QUICK_REFERENCE.md](./standards/QUICK_REFERENCE.md)** | 快速参考：常用命令、文件路径、常见场景（1分钟速查） | ⭐⭐⭐⭐ 强烈推荐 |
-| **[DEVELOPMENT_WORKFLOW.md](./standards/DEVELOPMENT_WORKFLOW.md)** | 开发流程：提交规范、测试要求、完整流程示例 | ⭐⭐⭐⭐ 强烈推荐 |
-| **[CONFIGURATION_GUIDE.md](./standards/CONFIGURATION_GUIDE.md)** | 配置详解：所有参数的含义 | ⭐⭐⭐ 推荐 |
-| **[ARCHITECTURE.md](./standards/ARCHITECTURE.md)** | 技术架构：数据流和核心模块 | ⭐⭐⭐ 推荐 |
+| **[QUICK_REFERENCE.md](./docs/QUICK_REFERENCE.md)** | 快速参考：常用命令、文件路径、常见场景（1分钟速查） | ⭐⭐⭐⭐ 强烈推荐 |
+| **[DEVELOPMENT_WORKFLOW.md](./docs/DEVELOPMENT_WORKFLOW.md)** | 开发流程：提交规范、测试要求、完整流程示例 | ⭐⭐⭐⭐ 强烈推荐 |
+| **[CONFIGURATION_GUIDE.md](./docs/CONFIGURATION_GUIDE.md)** | 配置详解：所有参数的含义 | ⭐⭐⭐ 推荐 |
+| **[ARCHITECTURE.md](./docs/ARCHITECTURE.md)** | 技术架构：数据流和核心模块 | ⭐⭐⭐ 推荐 |
 
 ---
 
@@ -26,10 +26,15 @@
 ```
 cryptosignal/
 │
-├── standards/                         # ⭐ 系统规范文档（新对话框必读）
-│   ├── SYSTEM_OVERVIEW.md             # 系统总览
+├── standards/                         # ⭐ 规范文档（规则性质）
 │   ├── MODIFICATION_RULES.md          # 修改规范
-│   ├── CONFIGURATION_GUIDE.md         # 配置参数详解
+│   └── STANDARDIZATION_REPORT.md      # 标准化报告
+│
+├── docs/                              # 📚 说明文档（指南性质）
+│   ├── SYSTEM_OVERVIEW.md             # 系统总览
+│   ├── QUICK_REFERENCE.md             # 快速参考
+│   ├── DEVELOPMENT_WORKFLOW.md        # 开发流程
+│   ├── CONFIGURATION_GUIDE.md         # 配置详解
 │   └── ARCHITECTURE.md                # 技术架构
 │
 ├── scripts/
@@ -48,7 +53,6 @@ cryptosignal/
 │   ├── outputs/                       # 输出模块
 │   └── ...
 │
-├── docs/                              # 历史文档
 ├── tests/                             # 单元测试
 └── tools/                             # 辅助工具
 ```
@@ -117,7 +121,7 @@ tail -f scanner.log
 }
 ```
 
-详见: [CONFIGURATION_GUIDE.md](./standards/CONFIGURATION_GUIDE.md)
+详见: [CONFIGURATION_GUIDE.md](./docs/CONFIGURATION_GUIDE.md)
 
 ### 修改Prime阈值
 
@@ -206,8 +210,8 @@ tail -f scanner.log
 
 ## 📞 支持
 
-- 遇到问题: 先查看规范文档 [standards/](./standards/)
-- 新对话框: 先阅读 [SYSTEM_OVERVIEW.md](./standards/SYSTEM_OVERVIEW.md)
+- 遇到问题: 先查看文档 [docs/](./docs/) 和 [standards/](./standards/)
+- 新对话框: 先阅读 [SYSTEM_OVERVIEW.md](./docs/SYSTEM_OVERVIEW.md)
 
 ---
 
