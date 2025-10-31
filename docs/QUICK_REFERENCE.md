@@ -231,7 +231,7 @@ find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
 # 症状：KeyError或None错误
 # 原因：使用了不存在的字段
 
-# 解决：查阅 standards/ARCHITECTURE.md 确认数据结构
+# 解决：查阅 docs/ARCHITECTURE.md 确认数据结构
 # batch_scan返回格式:
 {
   'symbol': 'BTCUSDT',
@@ -261,10 +261,13 @@ find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
 
 ### 文档位置
 ```
-standards/
+standards/                         # 规范文档（规则性质）
+  ├── MODIFICATION_RULES.md        # 修改规范
+  └── STANDARDIZATION_REPORT.md    # 标准化报告
+
+docs/                              # 说明文档（指南性质）
   ├── QUICK_REFERENCE.md           # 本文档（1分钟速查）
   ├── SYSTEM_OVERVIEW.md           # 系统总览
-  ├── MODIFICATION_RULES.md        # 修改规范
   ├── DEVELOPMENT_WORKFLOW.md      # 开发流程
   ├── CONFIGURATION_GUIDE.md       # 配置详解
   └── ARCHITECTURE.md              # 技术架构
@@ -293,7 +296,7 @@ find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
 python3 scripts/realtime_signal_scanner.py --max-symbols 20 --once
 
 # 6. 更新文档（如有重大权重调整）
-# vim standards/CONFIGURATION_GUIDE.md  # 如有必要
+# vim docs/CONFIGURATION_GUIDE.md  # 如有必要
 
 # 7. 提交并推送
 git add config/params.json
@@ -309,7 +312,7 @@ git push
 ### 场景2: 修复Bug（5分钟）
 ```bash
 # 1. 查阅文档（理解数据结构）
-cat standards/ARCHITECTURE.md  # 查看batch_scan返回格式
+cat docs/ARCHITECTURE.md  # 查看batch_scan返回格式
 
 # 2. 定位并修复Bug
 vim scripts/realtime_signal_scanner.py
@@ -353,7 +356,7 @@ python3 scripts/realtime_signal_scanner.py --max-symbols 1 --once
 # 检查Telegram消息格式是否正确
 
 # 5. 更新文档（如有格式规范变更）
-# vim standards/ARCHITECTURE.md  # 如果改变了消息格式规范
+# vim docs/ARCHITECTURE.md  # 如果改变了消息格式规范
 
 # 6. 提交并推送
 git add ats_core/outputs/telegram_fmt.py
@@ -384,20 +387,20 @@ git push
 
 **方法1: 直接引用（推荐）**
 ```
-请读取 standards/QUICK_REFERENCE.md 和 standards/MODIFICATION_RULES.md
+请读取 docs/QUICK_REFERENCE.md 和 standards/MODIFICATION_RULES.md
 ```
 
 **方法2: 按场景引用**
 ```
-我要调整因子权重，请读取 standards/QUICK_REFERENCE.md 场景1
+我要调整因子权重，请读取 docs/QUICK_REFERENCE.md 场景1
 ```
 
 **方法3: 完整理解系统**
 ```
 请按顺序读取：
-1. standards/SYSTEM_OVERVIEW.md
+1. docs/SYSTEM_OVERVIEW.md
 2. standards/MODIFICATION_RULES.md
-3. standards/QUICK_REFERENCE.md
+3. docs/QUICK_REFERENCE.md
 ```
 
 ---
