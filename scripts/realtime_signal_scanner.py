@@ -47,9 +47,9 @@ from ats_core.outputs.telegram_fmt import render_trade
 from ats_core.logging import log, warn, error
 
 # 四门系统导入
-from ats_core.gates.integrated_gates import IntegratedGatesChecker
+from ats_core.gates.integrated_gates import FourGatesChecker
 from ats_core.execution.metrics_estimator import ExecutionMetricsEstimator
-from ats_core.shadow.quality import DataQualityMonitor
+from ats_core.data.quality import DataQualMonitor
 
 
 def load_telegram_config():
@@ -145,9 +145,9 @@ class SignalScanner:
         self.scan_count = 0
 
         # 初始化四门系统组件
-        self.gates_checker = IntegratedGatesChecker()
+        self.gates_checker = FourGatesChecker()
         self.exec_estimator = ExecutionMetricsEstimator()
-        self.quality_monitor = DataQualityMonitor()
+        self.quality_monitor = DataQualMonitor()
 
         log("✅ 四门系统组件初始化完成")
 
