@@ -15,6 +15,54 @@ def _read_json(path: str) -> Dict[str, Any]:
     except Exception:
         return {}
 
+def _validate_weights(params: Dict[str, Any]) -> None:
+    """
+    验证权重配置（v6.0: 100%系统）
+
+    Raises:
+        ValueError: 如果权重配置无效
+    """
+    weights = params.get("weights")
+    if not weights:
+        raise ValueError(
+            "配置错误: 缺少'weights'配置项\n"
+            "请检查 config/params.json 是否包含 'weights' 字段"
+        )
+
+    if not isinstance(weights, dict):
+        raise ValueError(
+            f"配置错误: 'weights'必须是字典类型，当前类型: {type(weights).__name__}"
+        )
+
+    # 计算权重总和
+    try:
+        total = sum(weights.values())
+    except (TypeError, AttributeError) as e:
+        raise ValueError(
+            f"配置错误: 权重值必须是数字类型\n"
+            f"错误详情: {e}"
+        )
+
+    # v6.0系统要求权重总和=100%
+    if abs(total - 100.0) > 0.01:
+        raise ValueError(
+            f"配置错误: 权重总和必须=100.0% (v6.0系统)\n"
+            f"当前总和: {total}%\n"
+            f"权重明细: {weights}\n\n"
+            f"修复方法: 调整 config/params.json 中的权重值，确保总和=100.0\n"
+            f"验证命令: python3 -c \"import json; w=json.load(open('config/params.json'))['weights']; print(f'总和={{sum(w.values())}}')\""
+        )
+
+    # 检查必需的因子（v6.0: 10+1维）
+    required_factors = ['T', 'M', 'C', 'S', 'V', 'O', 'L', 'B', 'Q', 'I', 'F']
+    missing_factors = [f for f in required_factors if f not in weights]
+    if missing_factors:
+        raise ValueError(
+            f"配置错误: 缺少必需的因子权重\n"
+            f"缺失因子: {', '.join(missing_factors)}\n"
+            f"v6.0系统要求: T/M/C/S/V/O/L/B/Q/I + F (10+1维)"
+        )
+
 class _Cfg:
     def __init__(self) -> None:
         self._params: Optional[Dict[str, Any]] = None
@@ -41,6 +89,14 @@ class _Cfg:
         raw = _read_json(self._params_file)
         if not isinstance(raw, dict):
             raw = {}
+
+        # 验证配置（v6.0: 权重总和必须=100%）
+        try:
+            _validate_weights(raw)
+        except ValueError as e:
+            print(f"\n❌ {e}\n")
+            raise
+
         self._params = self._ensure_defaults(raw)
 
     @property

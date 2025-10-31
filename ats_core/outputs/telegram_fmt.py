@@ -1,16 +1,19 @@
 # coding: utf-8
 """
-Telegram message formatting (unified 10-dimension template v4.0)
+Telegram message formatting (unified 10-dimension template v6.0)
 - Both watch and trade use the same professional & readable template.
 - Shows 10 dimensions: T/M/C/S/V/O/L/B/Q/I + F regulator
 - Robust to missing fields: falls back to neutral 0 with explanation.
 - Header order: line1 = symbol & price, line2 = status (watch/trade + side + conviction + ttl).
-- v4.0 upgrade: Added L(Liquidity), B(Basis+Funding), Q(Liquidation), I(Independence)
+- v6.0 upgrade: Added L(Liquidity), B(Basis+Funding), Q(Liquidation), I(Independence)
 """
 
 from __future__ import annotations
 from typing import Any, Dict, Optional, Tuple, List
 import math
+
+# Public API
+__all__ = ['render_signal', 'render_watch', 'render_trade']
 
 # ---------- small utils ----------
 
@@ -387,7 +390,7 @@ def _desc_fund_leading(s: int, leading_raw: float = None) -> str:
 
 def _desc_liquidity(s: int, spread_bps: float = None, obi: float = None) -> str:
     """
-    描述流动性（v4.0新增，统一±100系统）
+    描述流动性（v6.0新增，统一±100系统）
 
     Args:
         s: L 分数 (-100到+100，正数=高流动性，负数=低流动性）
@@ -416,7 +419,7 @@ def _desc_liquidity(s: int, spread_bps: float = None, obi: float = None) -> str:
 
 def _desc_basis_funding(s: int, basis_bps: float = None, funding_rate: float = None) -> str:
     """
-    描述基差+资金费（v4.0新增，统一±100系统）
+    描述基差+资金费（v6.0新增，统一±100系统）
 
     Args:
         s: B 分数 (-100到+100，正数=看涨情绪，负数=看跌情绪）
@@ -455,7 +458,7 @@ def _desc_basis_funding(s: int, basis_bps: float = None, funding_rate: float = N
 
 def _desc_liquidation(s: int, lti: float = None) -> str:
     """
-    描述清算密度（v4.0新增，统一±100系统）
+    描述清算密度（v6.0新增，统一±100系统）
 
     Args:
         s: Q 分数 (-100到+100，正数=空单密集，负数=多单密集）
@@ -479,7 +482,7 @@ def _desc_liquidation(s: int, lti: float = None) -> str:
 
 def _desc_independence(s: int, beta_sum: float = None) -> str:
     """
-    描述独立性（v4.0新增，统一±100系统）
+    描述独立性（v6.0新增，统一±100系统）
 
     Args:
         s: I 分数 (-100到+100，正数=独立，负数=跟随）
@@ -633,22 +636,22 @@ def _score_fund_leading(r: Dict[str, Any]) -> int:
     return _as_int_score(v, default=0, allow_negative=True)
 
 def _score_liquidity(r: Dict[str, Any]) -> int:
-    # L因子（v4.0新增，±100系统）
+    # L因子（v6.0新增，±100系统）
     v = _get(r, "L")
     return _as_int_score(v, default=0, allow_negative=True)
 
 def _score_basis_funding(r: Dict[str, Any]) -> int:
-    # B因子（v4.0新增，±100系统）
+    # B因子（v6.0新增，±100系统）
     v = _get(r, "B")
     return _as_int_score(v, default=0, allow_negative=True)
 
 def _score_liquidation(r: Dict[str, Any]) -> int:
-    # Q因子（v4.0新增，±100系统）
+    # Q因子（v6.0新增，±100系统）
     v = _get(r, "Q")
     return _as_int_score(v, default=0, allow_negative=True)
 
 def _score_independence(r: Dict[str, Any]) -> int:
-    # I因子（v4.0新增，±100系统）
+    # I因子（v6.0新增，±100系统）
     v = _get(r, "I")
     return _as_int_score(v, default=0, allow_negative=True)
 
@@ -665,7 +668,7 @@ def _six_scores(r: Dict[str, Any]) -> Tuple[int,int,int,int,int,int,int]:
     return T, S, V, M, OI, E, F  # 返回7维+F（去掉C保持兼容）
 
 def _ten_scores(r: Dict[str, Any]) -> Tuple[int,int,int,int,int,int,int,int,int,int,int]:
-    """v4.0：返回T/M/C/S/V/O/L/B/Q/I/F（10维+调节器）"""
+    """v6.0：返回T/M/C/S/V/O/L/B/Q/I/F（10维+调节器）"""
     T  = _score_trend(r)
     M  = _score_momentum(r)
     C  = _score_cvd_flow(r)
@@ -721,7 +724,7 @@ def _header_lines(r: Dict[str, Any], is_watch: bool) -> Tuple[str, str]:
     return line1, line2
 
 def _six_block(r: Dict[str, Any]) -> str:
-    """生成10维因子显示块（v4.0升级）"""
+    """生成10维因子显示块（v6.0升级）"""
     T, M, C, S, V, OI, L, B, Q, I, F = _ten_scores(r)
 
     # 获取方向
@@ -754,7 +757,7 @@ def _six_block(r: Dict[str, Any]) -> str:
     chop = E_meta.get("chop")
     leading_raw = F_meta.get("leading_raw")
 
-    # v4.0新因子元数据
+    # v6.0新因子元数据
     spread_bps = L_meta.get("spread_bps")
     obi = L_meta.get("obi")
     basis_bps = B_meta.get("basis_bps")
@@ -773,13 +776,13 @@ def _six_block(r: Dict[str, Any]) -> str:
     lines.append(f"• 资金 {_emoji_by_score(C)} {C:+4d} —— {_desc_cvd_flow(C, is_long, cvd6, cvd_consistency, cvd_is_consistent)}")
     lines.append(f"• 持仓 {_emoji_by_score(OI)} {OI:+4d} —— {_desc_positions(OI, oi24h_pct)}")
 
-    # Layer 3: 微观结构层（45分） - v4.0新增
+    # Layer 3: 微观结构层（45分） - v6.0新增
     lines.append(f"• 流动 {_emoji_by_score(L)} {L:+4d} —— {_desc_liquidity(L, spread_bps, obi)}")
     lines.append(f"• 情绪 {_emoji_by_score(B)} {B:+4d} —— {_desc_basis_funding(B, basis_bps, funding_rate)}")
     if Q != 0:  # 只在有数据时显示
         lines.append(f"• 清算 {_emoji_by_score(Q)} {Q:+4d} —— {_desc_liquidation(Q, lti)}")
 
-    # Layer 4: 市场环境层（10分） - v4.0新增
+    # Layer 4: 市场环境层（10分） - v6.0新增
     if I != 0:  # 只在有数据时显示
         lines.append(f"• 独立 {_emoji_by_score(I)} {I:+4d} —— {_desc_independence(I, beta_sum)}")
 
@@ -867,7 +870,7 @@ def _note_and_tags(r: Dict[str, Any], is_watch: bool) -> str:
     return tail
 
 def render_signal(r: Dict[str, Any], is_watch: bool = False) -> str:
-    """Unified template for both watch and trade (v4.0: 10-dimension system)."""
+    """Unified template for both watch and trade (v6.0: 10-dimension system)."""
     l1, l2 = _header_lines(r, is_watch)
     ten = _six_block(r)  # 虽然叫six_block，但已升级为10维
     pricing = _pricing_block(r)

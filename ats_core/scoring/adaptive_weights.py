@@ -39,7 +39,7 @@ def get_regime_weights(market_regime: int, volatility: float) -> Dict[str, float
         # 策略: 趋势为王，跟随主趋势
         return {
             # Layer 1: 价格行为 (趋势主导)
-            "T": 19.4,  # 趋势 ↑ (13.9→19.4)
+            "T": 19.5,  # 趋势 ↑ (13.9→19.5)
             "M": 11.1,  # 动量 ↑ (8.3→11.1)
             "S": 2.8,   # 结构 ↓ (5.6→2.8, 趋势市结构不重要)
             "V": 5.6,   # 量能 ↓ (8.3→5.6)
@@ -53,7 +53,7 @@ def get_regime_weights(market_regime: int, volatility: float) -> Dict[str, float
             "Q": 8.3,   # 清算
             # Layer 4: 市场环境
             "I": 6.7,   # 独立性
-        }  # 总计: 99.9% ≈ 100%
+        }  # 总计: 100.0%
 
     elif abs(market_regime) < 30:
         # 震荡市场 (横盘)
@@ -95,15 +95,15 @@ def get_regime_weights(market_regime: int, volatility: float) -> Dict[str, float
             "B": 6.7,   # 基差 (高波动基差不稳定)
             "Q": 8.3,   # 清算 (清算风险高)
             # Layer 4: 市场环境
-            "I": 7.8,   # 独立性
-        }  # 总计: 100.1% ≈ 100%
+            "I": 7.7,   # 独立性
+        }  # 总计: 100.0%
 
     elif volatility < 0.01:
         # 低波动市场
         # 策略: 微观结构细节，捕捉小波动
         return {
             # Layer 1: 价格行为
-            "T": 16.7,  # 趋势 ↑ (13.9→16.7, 低波动时趋势稳定)
+            "T": 16.8,  # 趋势 ↑ (13.9→16.8, 低波动时趋势稳定)
             "M": 6.7,   # 动量 ↓ (8.3→6.7)
             "S": 4.4,   # 结构 ↓ (5.6→4.4)
             "V": 8.3,   # 量能 = (8.3→8.3)
@@ -117,7 +117,7 @@ def get_regime_weights(market_regime: int, volatility: float) -> Dict[str, float
             "Q": 4.4,   # 清算
             # Layer 4: 市场环境
             "I": 8.3,   # 独立性
-        }  # 总计: 99.9% ≈ 100%
+        }  # 总计: 100.0%
 
     else:
         # 正常市场 (默认权重，匹配base_weights + F)
@@ -171,10 +171,26 @@ def blend_weights(
     # 确保总权重=100% (10+1因子系统)
     total = sum(blended.values())
     target_weight = 100.0
+
     if abs(total - target_weight) > 0.1:
-        # 调整最大权重维度
-        max_dim = max(blended, key=blended.get)
-        blended[max_dim] = round(blended[max_dim] + (target_weight - total), 1)
+        # 按比例归一化所有维度（避免单个维度权重异常）
+        scale_factor = target_weight / total if total > 0 else 1.0
+        for dim in blended:
+            blended[dim] = round(blended[dim] * scale_factor, 1)
+
+        # 修正舍入误差：调整最大权重维度
+        actual_total = sum(blended.values())
+        if abs(actual_total - target_weight) > 0.1:
+            max_dim = max(blended, key=blended.get)
+            adjustment = target_weight - actual_total
+            blended[max_dim] = round(blended[max_dim] + adjustment, 1)
+
+            # 安全检查：确保权重合理（0-100范围）
+            if blended[max_dim] < 0 or blended[max_dim] > 100:
+                raise ValueError(
+                    f"权重归一化失败：{max_dim}={blended[max_dim]} 超出合理范围[0,100]。"
+                    f"blend_ratio={blend_ratio}, total={total}, target={target_weight}"
+                )
 
     return blended
 
@@ -222,9 +238,9 @@ if __name__ == "__main__":
             final = final_w.get(dim, 0)
             change = final - base
             marker = "↑" if change > 0 else "↓" if change < 0 else "-"
-            print(f"    {dim}: {base:2d} → {final:2d} ({change:+2d}) {marker}")
+            print(f"    {dim}: {base:4.1f} → {final:4.1f} ({change:+4.1f}) {marker}")
 
-        print(f"  总权重: {sum(final_w.values())}")
+        print(f"  总权重: {sum(final_w.values()):.1f}")
 
     print("\n" + "=" * 60)
     print("✅ 自适应权重模块测试完成")

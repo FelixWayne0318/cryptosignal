@@ -126,29 +126,30 @@
   },
 
   "weights": {
-    "T": 25,
-    "M": 15,
-    "C": 20,
-    "S": 10,
-    "V": 15,
-    "O": 20,
-    "L": 20,
-    "B": 15,
-    "Q": 10,
-    "I": 10,
+    "T": 13.9,
+    "M": 8.3,
+    "C": 11.1,
+    "S": 5.6,
+    "V": 8.3,
+    "O": 11.1,
+    "L": 11.1,
+    "B": 8.3,
+    "Q": 5.6,
+    "I": 6.7,
     "E": 0,
-    "F": 0
+    "F": 10.0
   },
   "weights_comment": {
-    "_version": "v4.0 - 10维因子系统",
-    "_total_weight": "160分（自动归一化到±100）",
-    "_layer1_price_action": "T(25) + M(15) + S(10) + V(15) = 65分 - 价格行为层",
-    "_layer2_money_flow": "C(20) + O(20) = 40分 - 资金流层",
-    "_layer3_microstructure": "L(20) + B(15) + Q(10) = 45分 - 微观结构层",
-    "_layer4_market_context": "I(10) = 10分 - 市场环境层",
-    "_regulator": "F(0) - 调节器，不参与权重，仅调整概率",
+    "_version": "v6.0 - 10+1维因子系统（权重百分比模式）",
+    "_total_weight": "100%（权重百分比系统，总和=100）",
+    "_layer1_price_action": "T(13.9%) + M(8.3%) + S(5.6%) + V(8.3%) = 36.1% - 价格行为层",
+    "_layer2_money_flow": "C(11.1%) + O(11.1%) + F(10.0%) = 32.2% - 资金流层",
+    "_layer3_microstructure": "L(11.1%) + B(8.3%) + Q(5.6%) = 25.0% - 微观结构层",
+    "_layer4_market_context": "I(6.7%) = 6.7% - 市场环境层",
+    "_f_factor_upgrade": "F(10.0%) - v6.0升级为评分因子，参与加权平均，保留极端否决功能（F<-70时×0.7惩罚）",
     "_deprecated": "E(0) - 环境因子已废弃，D因子已整合到L",
-    "_new_factors": "L（流动性）、B（基差+资金费）、Q（清算密度）、I（独立性）"
+    "_new_factors": "L（流动性）、B（基差+资金费）、Q（清算密度）、I（独立性）",
+    "_prime_threshold_update": "Prime阈值从65分调整为35分（适配100-base系统：65×100/180≈36）"
   },
 
   "fund_leading": {
@@ -168,7 +169,7 @@
   "publish": {
     "prime_prob_min": 0.62,
     "prime_dims_ok_min": 4,
-    "prime_dim_threshold": 65,
+    "prime_dim_threshold": 35,
     "watch_prob_min": 0.58,
     "watch_prob_max": 0.61
   },

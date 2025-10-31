@@ -276,7 +276,7 @@ class FactorConfig:
         归一化加权分数到±100
 
         Args:
-            weighted_sum: 加权总分 (-160 到 +160)
+            weighted_sum: 加权总分 (-100 到 +100) (v6.0: 100%系统)
 
         Returns:
             归一化分数 (-100 到 +100)

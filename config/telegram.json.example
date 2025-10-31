@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "bot_token": "YOUR_BOT_TOKEN_HERE",
+  "chat_id": "YOUR_CHAT_ID_HERE",
+  "_comment": "How to get these values:",
+  "_comment_bot_token": "1. Talk to @BotFather on Telegram",
+  "_comment_bot_token_2": "2. Create a new bot or use existing one",
+  "_comment_bot_token_3": "3. Copy the bot token",
+  "_comment_chat_id": "1. Add your bot to a channel/group",
+  "_comment_chat_id_2": "2. Send a message to the channel",
+  "_comment_chat_id_3": "3. Visit https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates",
+  "_comment_chat_id_4": "4. Find 'chat':{'id': YOUR_CHAT_ID} in the response",
+  "_setup": "After filling in values, rename this file to telegram.json"
+}

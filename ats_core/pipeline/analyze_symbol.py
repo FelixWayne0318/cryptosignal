@@ -2,27 +2,27 @@
 from __future__ import annotations
 
 """
-完整的单币种分析管道（统一±100系统 v5.0 - 10+1维因子）：
+完整的单币种分析管道（统一±100系统 v6.0 - 10+1维因子）：
 1. 获取市场数据（K线、OI、订单簿、资金费率）
 2. 计算10+1维特征（T/M/C/S/V/O/L/B/Q/I/F）
 3. 统一±100评分（正数=看多/好，负数=看空/差）
-4. 计算加权分数和置信度（总权重180分，自动归一化到±100）
+4. 计算加权分数和置信度（权重百分比系统，总和100%）
 5. F极端值否决机制（安全阀）
 6. 判定发布条件
 
-核心改进（v5.0 - 10+1维因子系统）：
-- 新增4个因子：L（流动性）、B（基差+资金费）、Q（清算）、I（独立性）
-- 权重体系升级：100分 → 160分 → 180分（4层架构）
-- F因子升级：从调节器升级为评分因子（权重18）⭐
+核心改进（v6.0 - 10+1维因子系统）：
+- 10维因子：T/M/C/S/V/O/L/B/Q/I + F调节器
+- 权重百分比系统：总权重100%（从180分制升级）
+- F因子双重作用：参与评分（权重10.0%）+ 极端值否决（<-70时×0.7惩罚）⭐
+- Prime阈值调整：从65分→35分（适配100-base系统：65×100/180≈36）
 - L/I因子自动归一化：0-100 → ±100（消除系统偏差）
 - 所有因子均为方向因子：T/M/C/V/O/B/Q/F（±100）
-- F保留极端值否决：F_aligned < -70时触发安全阀（×0.7惩罚）
 
-架构分层（180分总权重）：
-- Layer 1（价格行为）：T(25) + M(15) + S(10) + V(15) = 65分
-- Layer 2（资金流）：C(20) + O(20) + F(18) = 58分 ⭐
-- Layer 3（微观结构）：L(20) + B(15) + Q(10) = 45分
-- Layer 4（市场环境）：I(12) = 12分
+架构分层（100%权重百分比系统）：
+- Layer 1（价格行为36.1%）：T(13.9%) + M(8.3%) + S(5.6%) + V(8.3%)
+- Layer 2（资金流32.2%）：C(11.1%) + O(11.1%) + F(10.0%) ⭐
+- Layer 3（微观结构25.0%）：L(11.1%) + B(8.3%) + Q(5.6%)
+- Layer 4（市场环境6.7%）：I(6.7%)
 """
 
 from typing import Dict, Any, Tuple, List
@@ -138,23 +138,6 @@ def _analyze_symbol_core(
     Returns:
         分析结果字典
     """
-    # DEBUG: 打印前3个币种的数据接收情况
-    if symbol in ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']:
-        from ats_core.logging import log
-        log(f"  [DEBUG] _analyze_symbol_core收到 {symbol}:")
-        if orderbook:
-            bids_count = len(orderbook.get('bids', []))
-            asks_count = len(orderbook.get('asks', []))
-            log(f"      orderbook: 存在 (bids={bids_count} asks={asks_count})")
-        else:
-            log(f"      orderbook: None")
-        log(f"      mark_price: {mark_price}")
-        log(f"      funding_rate: {funding_rate}")
-        log(f"      spot_price: {spot_price}")
-        log(f"      liquidations: {len(liquidations) if liquidations else 0}条")
-        log(f"      btc_klines: {len(btc_klines) if btc_klines else 0}根")
-        log(f"      eth_klines: {len(eth_klines) if eth_klines else 0}根")
-
     params = CFG.params or {}
 
     # 移除候选池先验逻辑（已废弃）
@@ -477,9 +460,9 @@ def _analyze_symbol_core(
     # 移除贝叶斯先验调整（已废弃候选池机制）
 
     # ---- 5. F极端值否决机制（F现在主要通过评分影响，仅保留极端否决）----
-    # ⚠️ 重要改进：F现在参与评分（权重18/180=10%），避免双重计数
+    # ⚠️ 重要改进：F现在参与评分（权重10.0/100=10%），避免双重计数
     # - F正常范围（≥-70）：仅通过评分影响，不再调整概率
-    # - F极端反对（<-70）：保留安全阀机制，严厉惩罚概率
+    # - F极端反对（<-70）：保留安全阀机制，严厉惩罚概率（×0.7）
     #
     # 对齐F到交易方向：
     # - 做多时：F > 0好（资金领先），F < 0差（价格领先）
