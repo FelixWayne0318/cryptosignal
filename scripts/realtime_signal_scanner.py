@@ -54,6 +54,9 @@ from ats_core.gates.integrated_gates import FourGatesChecker
 from ats_core.execution.metrics_estimator import ExecutionMetricsEstimator
 from ats_core.data.quality import DataQualMonitor
 
+# v2.0合规：发布防抖动系统
+from ats_core.publishing.anti_jitter import AntiJitter
+
 
 def load_telegram_config():
     """
@@ -154,7 +157,19 @@ class SignalScanner:
         self.exec_estimator = ExecutionMetricsEstimator()
         self.quality_monitor = DataQualMonitor()
 
+        # v2.0合规：初始化防抖动系统
+        self.anti_jitter = AntiJitter(
+            prime_entry_threshold=0.80,
+            prime_maintain_threshold=0.70,
+            watch_entry_threshold=0.50,
+            watch_maintain_threshold=0.40,
+            confirmation_bars=2,
+            total_bars=3,
+            cooldown_seconds=90
+        )
+
         log("✅ 四门系统组件初始化完成")
+        log("✅ 防抖动系统初始化完成 (K/N=2/3, cooldown=90s)")
 
         # 加载Telegram配置
         if send_telegram:
@@ -257,10 +272,10 @@ class SignalScanner:
                 symbol = s.get('symbol', '')
                 probability = s.get('probability', 0.5)
 
-                # 获取 F 和 I 原始值（归一化到 0-1）
+                # v2.0合规：F从modulation获取，I从scores获取
                 # F 和 I 分数范围是 -100 到 +100，归一化到 0-1
-                F_score = s.get('scores', {}).get('F', 0)
-                I_score = s.get('scores', {}).get('I', 0)
+                F_score = s.get('modulation', {}).get('F', 0)  # v2.0: F moved to modulation
+                I_score = s.get('scores', {}).get('I', 0)      # I still in scores
                 F_raw = (F_score + 100) / 200  # -100~+100 → 0~1
                 I_raw = (I_score + 100) / 200  # -100~+100 → 0~1
 
@@ -302,16 +317,42 @@ class SignalScanner:
                     is_newcoin=s.get('new_coin', {}).get('is_new', False)
                 )
 
-                # 只添加通过所有四门的信号
-                if all_gates_passed:
+                # v2.0合规：应用防抖动机制
+                # 获取EV值（如果没有则估算为0）
+                ev = s.get('publish', {}).get('ev', 0.0)
+
+                # 调用防抖动系统
+                new_level, should_publish = self.anti_jitter.update(
+                    symbol=symbol,
+                    probability=probability,
+                    ev=ev,
+                    gates_passed=all_gates_passed
+                )
+
+                # 只在满足以下条件时发布信号：
+                # 1. 通过所有四门
+                # 2. 防抖动系统确认（2/3棒确认 + 90秒冷却）
+                if all_gates_passed and should_publish and new_level == 'PRIME':
                     # 添加四门结果到信号中（用于调试）
                     s['four_gates'] = {
                         'all_passed': True,
                         'results': {k: {'passed': v.passed, 'reason': v.reason}
                                    for k, v in gate_results.items()}
                     }
+                    # 添加防抖动信息
+                    s['anti_jitter'] = {
+                        'level': new_level,
+                        'confirmed': True,
+                        'bars_in_state': self.anti_jitter.states[symbol].bars_in_state if symbol in self.anti_jitter.states else 0
+                    }
                     prime_signals.append(s)
-                    log(f"  ✅ {symbol}: 通过四门验证 (P={probability:.3f})")
+                    log(f"  ✅ {symbol}: 通过四门验证 + 防抖动确认 (P={probability:.3f}, EV={ev:.4f})")
+                elif all_gates_passed and not should_publish:
+                    # 通过四门但防抖动未确认
+                    log(f"  ⏸️  {symbol}: 通过四门但等待防抖动确认 (P={probability:.3f}, level={new_level})")
+                elif all_gates_passed:
+                    # 通过四门但级别不是PRIME（可能是WATCH）
+                    log(f"  🔍 {symbol}: 通过四门但级别={new_level} (P={probability:.3f})")
                 else:
                     # 记录失败原因
                     failed_gates = [k for k, v in gate_results.items() if not v.passed]
