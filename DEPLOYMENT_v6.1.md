@@ -1,5 +1,9 @@
 # CryptoSignal v6.1 部署指南
 
+> ⚠️ **重要**：本文档已纳入标准化部署规范体系
+> 标准规范：[docs/DEPLOYMENT_STANDARD.md](docs/DEPLOYMENT_STANDARD.md)
+> 快速参考：[QUICK_DEPLOY.md](QUICK_DEPLOY.md)
+
 ## 📋 版本更新 (v6.0 → v6.1)
 
 ### 🔧 关键修复
@@ -37,22 +41,32 @@
 
 ---
 
-## 🚀 快速部署
+## 🚀 快速部署（标准流程）
 
-### 方式 1: 一键部署（推荐）
+### 方式 1: 标准部署流程（推荐）
 
 在服务器上执行以下命令：
 
 ```bash
-cd ~/cryptosignal
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 标准部署流程（遵循 docs/DEPLOYMENT_STANDARD.md）
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-# 拉取最新代码
+# 第 1 步：拉取最新代码
+cd ~/cryptosignal
 git fetch origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 git checkout claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 
-# 运行部署脚本（包含完整验证）
+# 第 2 步：配置 Binance API（首次部署必需）
+# 见下文 "Binance API 凭证配置"
+
+# 第 3 步：运行部署脚本（自动验证 + 可选启动）
 ./deploy_v6.1.sh
+
+# 脚本会自动完成 8 步验证，最后询问是否立即启动（每5分钟扫描）
+# 选择 y：自动启动生产环境 ⬅️ 推荐
+# 选择 N：稍后手动启动
 ```
 
 部署脚本会自动完成：

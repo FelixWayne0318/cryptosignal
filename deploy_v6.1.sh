@@ -374,3 +374,60 @@ echo "  3. 观察各门失败分布"
 echo "  4. 根据实际表现微调阈值"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+# ==========================================
+# 第 9 步：询问是否立即启动
+# ==========================================
+
+echo ""
+echo "📍 第 9 步：启动生产环境"
+echo "=============================================="
+echo ""
+read -p "是否立即启动生产环境？(每5分钟扫描一次) [y/N]: " START_NOW
+
+if [[ "$START_NOW" =~ ^[Yy]$ ]]; then
+    echo ""
+    echo "正在启动生产环境..."
+    echo ""
+
+    # 检查是否有 screen
+    if command -v screen &> /dev/null; then
+        echo "使用 Screen 会话启动（推荐）"
+        echo "提示：初始化完成后按 Ctrl+A 然后 D 分离会话"
+        echo "重连命令: screen -r cryptosignal"
+        echo ""
+        sleep 2
+
+        # 启动 screen 会话
+        screen -S cryptosignal python3 scripts/realtime_signal_scanner.py --interval 300
+    else
+        echo "Screen 未安装，使用 nohup 后台启动"
+        mkdir -p logs
+        LOG_FILE="logs/scanner_$(date +%Y%m%d_%H%M%S).log"
+
+        nohup python3 scripts/realtime_signal_scanner.py --interval 300 > "$LOG_FILE" 2>&1 &
+        PID=$!
+
+        echo ""
+        echo "✅ 已启动，PID: $PID"
+        echo "日志文件: $LOG_FILE"
+        echo ""
+        echo "查看日志: tail -f $LOG_FILE"
+        echo "停止进程: kill $PID"
+        echo ""
+    fi
+else
+    echo ""
+    echo "跳过启动，稍后可手动启动："
+    echo "  ./start_production.sh"
+    echo "  或"
+    echo "  screen -S cryptosignal"
+    echo "  python3 scripts/realtime_signal_scanner.py --interval 300"
+    echo ""
+fi
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "✅ 部署完成！"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
