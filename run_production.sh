@@ -124,7 +124,29 @@ echo "   - 信号数量: 10-30个/天（估计）"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# 6. 最后确认
+# 6. 询问是否启用详细输出
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🔍 输出模式选择"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "是否启用详细输出模式（verbose）？"
+echo ""
+echo "普通模式: 只显示前10个币种的详细因子评分"
+echo "详细模式: 显示所有币种的详细因子评分和四门调节器值"
+echo ""
+read -p "启用详细输出？(y/N): " VERBOSE_CHOICE
+
+VERBOSE_FLAG=""
+if [[ "$VERBOSE_CHOICE" == "y" || "$VERBOSE_CHOICE" == "Y" ]]; then
+    VERBOSE_FLAG="--verbose"
+    echo "   ✅ 将使用详细输出模式"
+else
+    echo "   ✅ 将使用普通输出模式"
+fi
+
+echo ""
+
+# 7. 最后确认
 echo "⚠️  准备启动生产环境扫描器..."
 echo ""
 echo "按 Ctrl+C 可以随时停止"
@@ -137,10 +159,11 @@ echo "🚀 启动实时信号扫描器"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# 7. 启动扫描器
+# 8. 启动扫描器
 python3 scripts/realtime_signal_scanner.py \
     --interval 300 \
-    --min-score 70
+    --min-score 70 \
+    $VERBOSE_FLAG
 
 # 脚本结束
 echo ""

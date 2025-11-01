@@ -130,17 +130,19 @@ def telegram_send_wrapper(text: str, bot_token: str, chat_id: str, parse_mode: s
 class SignalScanner:
     """WebSocket实时信号扫描器"""
 
-    def __init__(self, min_score: int = 50, send_telegram: bool = True):
+    def __init__(self, min_score: int = 50, send_telegram: bool = True, verbose: bool = False):
         """
         初始化扫描器
 
         Args:
             min_score: 最低信号分数（默认50，可调整：40-70）
             send_telegram: 是否发送Telegram通知
+            verbose: 是否显示所有币种的详细因子评分（默认False）
         """
         self.scanner = OptimizedBatchScanner()
         self.min_score = min_score
         self.send_telegram = send_telegram
+        self.verbose = verbose
         self.initialized = False
         self.scan_count = 0
 
@@ -238,7 +240,8 @@ class SignalScanner:
         # 执行扫描
         scan_result = await self.scanner.scan(
             min_score=self.min_score,
-            max_symbols=max_symbols
+            max_symbols=max_symbols,
+            verbose=self.verbose
         )
 
         # 提取Prime信号 - 使用四门系统验证
@@ -445,13 +448,19 @@ async def main():
         action='store_true',
         help='不发送Telegram通知'
     )
+    parser.add_argument(
+        '--verbose',
+        action='store_true',
+        help='显示所有币种的详细因子评分（默认只显示前10个）'
+    )
 
     args = parser.parse_args()
 
     # 创建扫描器
     scanner = SignalScanner(
         min_score=args.min_score,
-        send_telegram=not args.no_telegram
+        send_telegram=not args.no_telegram,
+        verbose=args.verbose
     )
 
     # 设置信号处理（优雅退出）
