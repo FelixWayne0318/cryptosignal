@@ -154,18 +154,18 @@ class OptimizedBatchScanner:
 
         # 4. WebSocket实时更新（默认禁用，推荐使用REST定时更新）
         if enable_websocket:
-            log(f"\n4️⃣  启动WebSocket实时更新...")
-            log(f"   ⚠️  注意：WebSocket模式不稳定，280个连接易出错")
-            log(f"   策略: 仅订阅关键周期（1h, 4h）以避免连接数超限")
-            log(f"   连接数: ~110币种 × 2周期 = ~220 < 300限制")
-            await self.kline_cache.start_batch_realtime_update(
-                symbols=symbols,
-                intervals=['1h', '4h'],  # 只订阅主要周期（15m和1d使用REST数据即可）
-                client=self.client
+            # v2.0合规：WebSocket模式违反DATA_LAYER.md § 2规范（连接数≤5）
+            # 当前实现会创建 ~140币种 × 2周期 = ~280个连接，严重超限
+            # 必须先实现组合流架构（Combined Stream）才能启用WebSocket
+            raise NotImplementedError(
+                "❌ WebSocket模式需修复为组合流架构（≤5连接）\n"
+                "   当前实现: 280个独立连接（违反规范）\n"
+                "   规范要求: ≤5个组合流连接（DATA_LAYER.md § 2）\n"
+                "   解决方案: 实现Binance Combined Stream架构\n"
+                "   推荐模式: 使用enable_websocket=False（REST定时更新）"
             )
-            log(f"   15m和1d周期: 使用REST API数据（更新频率低，无需实时订阅）")
         else:
-            log(f"\n4️⃣  ✅ WebSocket已禁用（推荐模式）")
+            log(f"\n4️⃣  ✅ WebSocket已禁用（推荐模式，v2.0合规）")
             log(f"   原因:")
             log(f"   - 1h/4h K线每小时才更新一次，不需要实时订阅")
             log(f"   - WebSocket连接不稳定，频繁重连影响性能")

@@ -419,6 +419,14 @@ def _analyze_symbol_core(
         # F removed from scorecard (was 10.0%, redistributed to above 9 factors)
     }
 
+    # v2.0合规：因子范围验证（HIGH #2）
+    # 所有因子必须在±100范围内（SPEC_DIGEST.md § 1）
+    for factor_name, factor_value in scores.items():
+        if not (-100 <= factor_value <= 100):
+            from ats_core.logging import warn
+            warn(f"⚠️  因子{factor_name}超出范围: {factor_value}, 裁剪到±100")
+            scores[factor_name] = max(-100, min(100, factor_value))
+
     # B-layer modulation factors (F affects Teff/cost/thresholds ONLY, NOT S_score)
     # Per MODULATORS.md § 2.1: "F 仅调节 Teff/cost/thresholds，绝不修改方向分数"
     modulation = {
@@ -467,30 +475,12 @@ def _analyze_symbol_core(
 
     # 移除贝叶斯先验调整（已废弃候选池机制）
 
-    # ---- 5. F极端值否决机制（F现在主要通过评分影响，仅保留极端否决）----
-    # ⚠️ 重要改进：F现在参与评分（权重10.0/100=10%），避免双重计数
-    # - F正常范围（≥-70）：仅通过评分影响，不再调整概率
-    # - F极端反对（<-70）：保留安全阀机制，严厉惩罚概率（×0.7）
-    #
-    # 对齐F到交易方向：
-    # - 做多时：F > 0好（资金领先），F < 0差（价格领先）
-    # - 做空时：F < 0好（资金领先空），F > 0差（价格领先多）
-    import math
-    F_aligned = F if side_long else -F
-
-    # F极端值否决机制（安全阀）
-    f_veto_warning = None
-    if F_aligned < -70:
-        # F强烈反对当前方向（资金/价格严重背离）
-        adjustment = 0.70  # 安全阀惩罚（从0.6调整为0.7，因为F已参与评分）
-        f_veto_warning = "⚠️ F极端反对（资金/价格严重背离）"
-    else:
-        # 正常范围：不再调整概率（F已通过评分影响）
-        adjustment = 1.0
-
-    # 最终概率
-    P_long = min(0.95, P_long_base * adjustment if side_long else P_long_base)
-    P_short = min(0.95, P_short_base * adjustment if not side_long else P_short_base)
+    # ---- 5. 最终概率（v2.0合规：移除F直接调整）----
+    # F调制器仅通过Teff/cost调整（在integrated_gates中实现）
+    # 不应直接修改概率，避免双重惩罚
+    # 符合MODULATORS.md § 2.1规范："F仅调节Teff/cost/thresholds，绝不修改方向分数或概率"
+    P_long = min(0.95, P_long_base)
+    P_short = min(0.95, P_short_base)
     P_chosen = P_long if side_long else P_short
 
     # ---- 6. 发布判定（4级分级标准）----
