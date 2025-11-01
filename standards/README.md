@@ -44,12 +44,19 @@
    - Git 提交规范
    - 测试验证要求
 
-7. **[TELEGRAM_SETUP.md](./TELEGRAM_SETUP.md)** - Telegram 设置
+7. **[DEPLOYMENT.md](./DEPLOYMENT.md)** - 部署规范 ⬅️ 新增
+   - 标准部署流程（4步）
+   - 凭证配置规范
+   - Screen 启动说明
+   - 分支管理规范
+   - 回滚与监控规范
+
+8. **[TELEGRAM_SETUP.md](./TELEGRAM_SETUP.md)** - Telegram 设置
    - Bot 配置方法
    - 消息模板规范
    - 故障排查指南
 
-8. **[STANDARDIZATION_REPORT.md](./STANDARDIZATION_REPORT.md)** - 标准化报告
+9. **[STANDARDIZATION_REPORT.md](./STANDARDIZATION_REPORT.md)** - 标准化报告
    - newstandards 整合历史
    - 规范演进记录
 
@@ -68,6 +75,7 @@ standards/
 ├── ARCHITECTURE.md                # 架构说明
 ├── CONFIGURATION_GUIDE.md         # 配置指南
 ├── DEVELOPMENT_WORKFLOW.md        # 开发工作流
+├── DEPLOYMENT.md                  # 部署规范 ⬅️ 新增
 ├── TELEGRAM_SETUP.md              # Telegram 设置
 │
 └── STANDARDIZATION_REPORT.md      # 标准化报告
@@ -101,6 +109,9 @@ standards/
 
 **了解系统**
 → 读 [SYSTEM_OVERVIEW.md](./SYSTEM_OVERVIEW.md)
+
+**部署到服务器** ⬅️ 新增
+→ 读 [DEPLOYMENT.md](./DEPLOYMENT.md) + [QUICK_REFERENCE.md](./QUICK_REFERENCE.md)
 
 **修改权重配置**
 → 读 [CONFIGURATION_GUIDE.md](./CONFIGURATION_GUIDE.md) + [QUICK_REFERENCE.md](./QUICK_REFERENCE.md) 场景1

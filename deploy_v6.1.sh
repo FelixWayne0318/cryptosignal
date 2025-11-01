@@ -393,11 +393,24 @@ if [[ "$START_NOW" =~ ^[Yy]$ ]]; then
 
     # 检查是否有 screen
     if command -v screen &> /dev/null; then
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo "使用 Screen 会话启动（推荐）"
-        echo "提示：初始化完成后按 Ctrl+A 然后 D 分离会话"
-        echo "重连命令: screen -r cryptosignal"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo ""
-        sleep 2
+        echo "📋 Screen 工作原理："
+        echo "  1. 启动后您会看到实时日志（类似前台运行）"
+        echo "  2. 按 Ctrl+A 然后按 D 键分离会话"
+        echo "  3. 分离后程序继续在后台运行"
+        echo "  4. ✅ 退出 Termius 不影响程序运行"
+        echo "  5. 随时可以重连查看日志"
+        echo ""
+        echo "🔧 常用命令："
+        echo "  重连会话: screen -r cryptosignal"
+        echo "  查看所有: screen -ls"
+        echo "  停止程序: 在会话中按 Ctrl+C"
+        echo ""
+        echo "⏳ 3秒后启动..."
+        sleep 3
 
         # 启动 screen 会话
         screen -S cryptosignal python3 scripts/realtime_signal_scanner.py --interval 300
