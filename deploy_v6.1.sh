@@ -228,11 +228,43 @@ with open('config/binance_credentials.json') as f:
     if bn.get('api_key') and bn['api_key'] != 'YOUR_BINANCE_API_KEY_HERE':
         print('✅ Binance API配置存在')
     else:
-        print('❌ Binance API配置未填写，无法运行')
+        print('❌ Binance API配置未填写')
+        print()
+        print('请执行以下命令配置API凭证：')
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+        print('cat > config/binance_credentials.json <<\\'EOF\\'')
+        print('{')
+        print('  \"_comment\": \"Binance Futures API凭证配置\",')
+        print('  \"binance\": {')
+        print('    \"api_key\": \"您的API_KEY\",')
+        print('    \"api_secret\": \"您的SECRET_KEY\",')
+        print('    \"testnet\": false,')
+        print('    \"_security\": \"只读权限API Key\"')
+        print('  }')
+        print('}')
+        print('EOF')
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
         exit(1)
 "
 else
-    echo "❌ config/binance_credentials.json 不存在，无法运行"
+    echo "❌ config/binance_credentials.json 不存在"
+    echo ""
+    echo "请先创建 Binance API 配置文件："
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "cat > config/binance_credentials.json <<'EOF'"
+    echo '{'
+    echo '  "_comment": "Binance Futures API凭证配置",'
+    echo '  "binance": {'
+    echo '    "api_key": "您的API_KEY",'
+    echo '    "api_secret": "您的SECRET_KEY",'
+    echo '    "testnet": false,'
+    echo '    "_security": "只读权限API Key"'
+    echo '  }'
+    echo '}'
+    echo "EOF"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "配置完成后重新运行: ./deploy_v6.1.sh"
     exit 1
 fi
 

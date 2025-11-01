@@ -16,8 +16,39 @@ git fetch origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 git checkout claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 
-# 验证：应该看到最新提交 ecd96ae
+# 验证：应该看到最新提交
 git log --oneline -3
+
+# ============================================================================
+# 第 2.5 步：配置 Binance API 凭证（重要！）
+# ============================================================================
+
+# 创建 Binance API 配置文件
+cat > config/binance_credentials.json <<'EOF'
+{
+  "_comment": "Binance Futures API凭证配置",
+  "binance": {
+    "api_key": "您的API_KEY",
+    "api_secret": "您的SECRET_KEY",
+    "testnet": false,
+    "_security": "只读权限API Key，不具备交易功能"
+  }
+}
+EOF
+
+# ⚠️ 重要：请将上面的 "您的API_KEY" 和 "您的SECRET_KEY" 替换为真实凭证
+# 然后重新运行上面的 cat 命令
+
+# 验证配置
+python3 -c "
+import json
+with open('config/binance_credentials.json') as f:
+    bn = json.load(f)['binance']
+    if bn['api_key'] != '您的API_KEY':
+        print('✅ Binance API配置已填写')
+    else:
+        print('❌ 请先填写API凭证')
+"
 
 # ============================================================================
 # 第 3 步：运行完整部署脚本（包含所有验证）
