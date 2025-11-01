@@ -124,24 +124,22 @@ echo "   - 信号数量: 10-30个/天（估计）"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# 6. 询问是否启用详细输出
+# 6. 询问是否简化输出
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🔍 输出模式选择"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "是否启用详细输出模式（verbose）？"
+echo "默认模式: 显示所有140个币种的详细因子评分和四门调节器值"
+echo "简化模式: 只显示前10个币种的详细评分（减少日志输出）"
 echo ""
-echo "普通模式: 只显示前10个币种的详细因子评分"
-echo "详细模式: 显示所有币种的详细因子评分和四门调节器值"
-echo ""
-read -p "启用详细输出？(y/N): " VERBOSE_CHOICE
+read -p "使用简化输出模式？(y/N): " SIMPLE_CHOICE
 
 VERBOSE_FLAG=""
-if [[ "$VERBOSE_CHOICE" == "y" || "$VERBOSE_CHOICE" == "Y" ]]; then
-    VERBOSE_FLAG="--verbose"
-    echo "   ✅ 将使用详细输出模式"
+if [[ "$SIMPLE_CHOICE" == "y" || "$SIMPLE_CHOICE" == "Y" ]]; then
+    VERBOSE_FLAG="--no-verbose"
+    echo "   ✅ 将使用简化输出模式（只显示前10个币种）"
 else
-    echo "   ✅ 将使用普通输出模式"
+    echo "   ✅ 将使用默认输出模式（显示所有140个币种）"
 fi
 
 echo ""

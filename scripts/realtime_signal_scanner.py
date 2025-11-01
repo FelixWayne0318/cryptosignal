@@ -15,11 +15,14 @@ WebSocket实时信号扫描器（仅发送信号，不执行交易）
 - API调用：0次/扫描
 
 使用方法:
-    # 单次扫描
+    # 单次扫描（默认显示所有币种详细评分）
     python scripts/realtime_signal_scanner.py
 
     # 定期扫描（每5分钟）
     python scripts/realtime_signal_scanner.py --interval 300
+
+    # 简化输出（只显示前10个币种详细评分）
+    python scripts/realtime_signal_scanner.py --interval 300 --no-verbose
 
     # 测试（只扫描20个币种）
     python scripts/realtime_signal_scanner.py --max-symbols 20
@@ -130,14 +133,14 @@ def telegram_send_wrapper(text: str, bot_token: str, chat_id: str, parse_mode: s
 class SignalScanner:
     """WebSocket实时信号扫描器"""
 
-    def __init__(self, min_score: int = 50, send_telegram: bool = True, verbose: bool = False):
+    def __init__(self, min_score: int = 50, send_telegram: bool = True, verbose: bool = True):
         """
         初始化扫描器
 
         Args:
             min_score: 最低信号分数（默认50，可调整：40-70）
             send_telegram: 是否发送Telegram通知
-            verbose: 是否显示所有币种的详细因子评分（默认False）
+            verbose: 是否显示所有币种的详细因子评分（默认True，可用--no-verbose关闭）
         """
         self.scanner = OptimizedBatchScanner()
         self.min_score = min_score
@@ -449,9 +452,9 @@ async def main():
         help='不发送Telegram通知'
     )
     parser.add_argument(
-        '--verbose',
+        '--no-verbose',
         action='store_true',
-        help='显示所有币种的详细因子评分（默认只显示前10个）'
+        help='只显示前10个币种的详细评分（默认显示所有140个币种）'
     )
 
     args = parser.parse_args()
@@ -460,7 +463,7 @@ async def main():
     scanner = SignalScanner(
         min_score=args.min_score,
         send_telegram=not args.no_telegram,
-        verbose=args.verbose
+        verbose=not args.no_verbose  # 默认True，除非指定--no-verbose
     )
 
     # 设置信号处理（优雅退出）
