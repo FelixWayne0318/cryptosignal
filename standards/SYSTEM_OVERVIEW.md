@@ -52,6 +52,7 @@ python3 scripts/realtime_signal_scanner.py --max-symbols 20 --once
 - `--min-score N`: 最低信号分数（默认70）
 - `--max-symbols N`: 最大扫描币种数（测试用）
 - `--no-telegram`: 不发送Telegram通知
+- `--no-verbose`: 简化输出（只显示前10个币种详细评分，默认显示所有140个币种）
 
 ---
 
@@ -506,13 +507,22 @@ python3 scripts/realtime_signal_scanner.py --max-symbols 10 --once
 ## 🔖 版本历史
 
 - **v6.0 newstandards整合版** (2025-10): A/B/C/D分层架构，F/I改为调制器，四门验证系统
+- **v6.0 v2.0多空对称修复版** (2025-11-01): V和O因子多空对称性修复，verbose详细输出功能
 - **v6.0** (2025-10): 权重百分比系统，F因子参与评分，Prime阈值调整
 - **v5.0** (2025-09): 10+1维因子系统，新增L/B/Q/I四维
 - **v4.0** (2025-08): WebSocket优化，0 API调用
 - **v3.0** (2025-07): 自适应权重系统
 
+### v6.0 v2.0 详细更新 (2025-11-01)
+- ✅ **多空对称性修复**: V和O因子修复价格方向考虑，消除做多偏向
+- ✅ **Verbose详细输出**: 默认显示所有140个币种的11维因子评分和四门调节器值
+- ✅ **数据层文档**: 完整的数据层架构文档（三层设计、性能优化、质量监控）
+- 📄 修改文件: `volume.py`, `open_interest.py`, `analyze_symbol.py`
+- 📄 新增文档: `docs/DATA_LAYER_ARCHITECTURE.md`
+
 ---
 
-**最后更新**: 2025-10-31
+**最后更新**: 2025-11-01
 **维护者**: CryptoSignal Team
 **对称性审计**: 2025-10-31 - 发现V和O因子存在系统性做多偏向
+**对称性修复**: 2025-11-01 - V和O因子v2.0完全修复，测试验证通过
