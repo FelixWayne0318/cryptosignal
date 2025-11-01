@@ -19,6 +19,7 @@ class ExecutionMetrics:
     impact_bps: float  # Estimated impact in basis points
     OBI: float  # Order book imbalance (estimated, [-1, 1])
     liquidity_score: float  # Liquidity estimate [0, 1]
+    room_atr_ratio: Optional[float] = None  # 订单簿容纳度（订单簿深度/ATR）
 
 
 class ExecutionMetricsEstimator:
@@ -186,6 +187,78 @@ class ExecutionMetricsEstimator:
 
         return liquidity_score
 
+    def estimate_orderbook_depth(
+        self,
+        volume: float,
+        close: float,
+        spread_bps: float
+    ) -> float:
+        """
+        Estimate orderbook depth from volume (proxy).
+
+        Since we don't have real depth data, we use volume as a proxy:
+        depth_usdt ≈ volume * close * depth_factor
+
+        where depth_factor is inversely related to spread
+        (tighter spread → more depth)
+
+        Args:
+            volume: Trading volume (in base asset)
+            close: Close price
+            spread_bps: Spread in bps
+
+        Returns:
+            Estimated orderbook depth in USDT
+        """
+        if volume <= 0 or close <= 0:
+            return 0.0
+
+        # Base depth from volume
+        # Assumption: Orderbook depth ≈ 5-10% of hourly volume
+        volume_usdt = volume * close
+        depth_factor = 0.08  # 8% of volume as base
+
+        # Adjust for spread (tighter spread = more depth)
+        # Typical spread: 5-50 bps
+        # spread_adj: 1.5 at 5bps, 0.5 at 50bps
+        spread_adj = max(0.5, min(1.5, 1.5 - (spread_bps - 5) / 50))
+
+        depth_usdt = volume_usdt * depth_factor * spread_adj
+
+        return depth_usdt
+
+    def calculate_room_atr_ratio(
+        self,
+        orderbook_depth_usdt: float,
+        atr: float,
+        position_size_usdt: float
+    ) -> float:
+        """
+        Calculate room_atr_ratio (订单簿容纳度).
+
+        Formula:
+            room_atr_ratio = orderbook_depth / (ATR * position_size)
+
+        This measures how well the orderbook can accommodate the position
+        relative to typical volatility.
+
+        Args:
+            orderbook_depth_usdt: Orderbook depth in USDT
+            atr: Average True Range (in price units)
+            position_size_usdt: Position size in USDT
+
+        Returns:
+            room_atr_ratio (≥0.6 is considered good)
+        """
+        if atr <= 0 or position_size_usdt <= 0:
+            return 0.0
+
+        # room = depth / (atr * size)
+        # Higher is better (more room to execute)
+        room_ratio = orderbook_depth_usdt / (atr * position_size_usdt)
+
+        return room_ratio
+
     def calculate(
         self,
         high: float,
@@ -193,7 +266,9 @@ class ExecutionMetricsEstimator:
         close: float,
         volume: float,
         taker_buy_volume: float,
-        avg_volume: Optional[float] = None
+        avg_volume: Optional[float] = None,
+        atr: Optional[float] = None,
+        position_size_usdt: Optional[float] = None
     ) -> ExecutionMetrics:
         """
         Calculate all execution metrics.
@@ -205,6 +280,8 @@ class ExecutionMetricsEstimator:
             volume: Total volume
             taker_buy_volume: Taker buy volume
             avg_volume: Average volume (optional)
+            atr: Average True Range (optional, for room_atr_ratio)
+            position_size_usdt: Position size in USDT (optional, for room_atr_ratio)
 
         Returns:
             ExecutionMetrics object
@@ -218,11 +295,20 @@ class ExecutionMetricsEstimator:
             spread_bps
         )
 
+        # Calculate room_atr_ratio if ATR and position size are provided
+        room_atr_ratio = None
+        if atr is not None and position_size_usdt is not None:
+            depth_usdt = self.estimate_orderbook_depth(volume, close, spread_bps)
+            room_atr_ratio = self.calculate_room_atr_ratio(
+                depth_usdt, atr, position_size_usdt
+            )
+
         return ExecutionMetrics(
             spread_bps=spread_bps,
             impact_bps=impact_bps,
             OBI=obi,
-            liquidity_score=liquidity_score
+            liquidity_score=liquidity_score,
+            room_atr_ratio=room_atr_ratio
         )
 
 

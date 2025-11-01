@@ -22,7 +22,8 @@ __all__ = [
     'render_weights_summary',
     'render_prime_breakdown',
     'render_four_gates',
-    'render_modulators'
+    'render_modulators',
+    'render_five_piece_report'
 ]
 
 # ---------- small utils ----------
@@ -1218,3 +1219,170 @@ def render_watch(r: Dict[str, Any]) -> str:
 
 def render_trade(r: Dict[str, Any]) -> str:
     return render_signal(r, is_watch=False)
+
+
+def render_five_piece_report(r: Dict[str, Any], is_watch: bool = False) -> str:
+    """
+    渲染五段式报告（完整监控格式）
+
+    五段结构：
+    1. 基础信息：Symbol, Side, Probability, EV, Prime
+    2. 分数明细：All factor scores with weights and contributions
+    3. 调制器：F/I adjustments, cost_eff, thresholds
+    4. 四门验证：DataQual, EV, Execution, Probability
+    5. 风险参数：Position size, R-value, Stop-loss/Take-profit
+
+    适用场景：监控报告、交易复盘、完整审计
+    """
+    # ========== 第一段：基础信息 ==========
+    sym = _get(r, "symbol") or _get(r, "ticker") or "—"
+    price = _get(r, "price") or _get(r, "last") or _get(r, "one_24h.lastPrice")
+    price_s = _fmt_price(price)
+
+    side = (_get(r, "side") or "").lower()
+    if side in ("long", "buy", "bull", "多", "做多"):
+        side_lbl = "🟩 做多"
+    elif side in ("short", "sell", "bear", "空", "做空"):
+        side_lbl = "🟥 做空"
+    else:
+        side_lbl = "🟦 中性"
+
+    probability = _get(r, "probability") or 0.5
+    ev = _get(r, "expected_value") or _get(r, "EV") or 0
+    prime = _get(r, "prime_strength") or _get(r, "prime") or 0
+    ttl_h = int(_ttl_hours(r))
+
+    piece1 = []
+    piece1.append("━━━━━ ① 基础信息 ━━━━━")
+    piece1.append(f"交易对: {sym}")
+    piece1.append(f"现价: {price_s}")
+    piece1.append(f"方向: {side_lbl}")
+    piece1.append(f"胜率: {probability:.1%}")
+    piece1.append(f"期望值: {ev:+.2%}")
+    piece1.append(f"Prime强度: {prime:.0f}/100")
+    piece1.append(f"有效期: {ttl_h}小时")
+
+    # ========== 第二段：分数明细 ==========
+    piece2 = []
+    piece2.append("\n━━━━━ ② 分数明细 ━━━━━")
+    piece2.append(render_weights_summary(r))
+
+    # ========== 第三段：调制器 ==========
+    piece3 = []
+    piece3.append("\n━━━━━ ③ 调制器 ━━━━━")
+
+    # F 资金领先
+    F_score = _get(r, "F_score") or _get(r, "F") or 0
+    F_adj = _get(r, "F_adjustment") or 1.0
+    cost_eff = _get(r, "cost_eff") or 0.0
+    f_desc = _desc_fund_leading(F_score)
+    f_emoji = _emoji_by_fund_leading(F_score)
+
+    piece3.append(f"{f_emoji} F资金领先 {F_score:+d}: {f_desc}")
+    piece3.append(f"   └─ 概率调整: ×{F_adj:.2f}")
+    piece3.append(f"   └─ 有效成本: {cost_eff:.4f} (交易费+滑点)")
+
+    # F否决警告
+    f_veto_warning = _get(r, "f_veto_warning")
+    if f_veto_warning:
+        piece3.append(f"   └─ ⚠️ {f_veto_warning}")
+
+    # I 独立性
+    I_score = _get(r, "I") or 0
+    if I_score != 0:
+        i_desc = _desc_independence(I_score, _get(r, "scores_meta.I.beta_sum"))
+        i_emoji = _emoji_by_score(I_score)
+        p_min = _get(r, "p_min") or 0.62
+        delta_p_min = _get(r, "delta_p_min") or 0.12
+
+        piece3.append(f"\n{i_emoji} I独立性 {I_score:+d}: {i_desc}")
+        piece3.append(f"   └─ p_min阈值: {p_min:.1%}")
+        piece3.append(f"   └─ Δp_min阈值: {delta_p_min:.1%}")
+
+    # ========== 第四段：四门验证 ==========
+    piece4 = []
+    piece4.append("\n" + render_four_gates(r))
+
+    # ========== 第五段：风险参数 ==========
+    piece5 = []
+    piece5.append("\n━━━━━ ⑤ 风险参数 ━━━━━")
+
+    # 仓位与风险
+    position_size = _get(r, "position_size") or _get(r, "qty")
+    account_equity = _get(r, "account_equity") or 10000
+    risk_pct = _get(r, "risk_pct") or 0.005
+    atr = _get(r, "atr") or _get(r, "vol.atr_pct")
+
+    if position_size is not None:
+        piece5.append(f"建议仓位: {position_size:.4f} (合约)")
+
+    piece5.append(f"账户权益: ${account_equity:,.0f}")
+    piece5.append(f"风险比例: {risk_pct:.2%} (每笔交易)")
+
+    if atr is not None:
+        if isinstance(atr, float) and atr < 1:
+            # ATR是百分比形式
+            piece5.append(f"ATR: {atr:.2%}")
+        else:
+            # ATR是绝对值
+            piece5.append(f"ATR: {atr:.2f}")
+
+    # 止损止盈
+    pricing = _get(r, "pricing") or {}
+    entry_lo = pricing.get("entry_lo")
+    entry_hi = pricing.get("entry_hi")
+    sl = pricing.get("sl")
+    tp1 = pricing.get("tp1")
+    tp2 = pricing.get("tp2")
+
+    if entry_lo is not None and entry_hi is not None:
+        if abs(entry_lo - entry_hi) < 0.0001:
+            piece5.append(f"入场价: {_fmt_price(entry_lo)}")
+        else:
+            piece5.append(f"入场区间: {_fmt_price(entry_lo)} - {_fmt_price(entry_hi)}")
+
+    if sl is not None:
+        piece5.append(f"止损: {_fmt_price(sl)}")
+        if price:
+            sl_dist_pct = abs(sl - price) / price * 100
+            piece5.append(f"   └─ 止损距离: {sl_dist_pct:.2f}%")
+
+    if tp1 is not None:
+        piece5.append(f"止盈1: {_fmt_price(tp1)}")
+        if price:
+            tp1_dist_pct = abs(tp1 - price) / price * 100
+            piece5.append(f"   └─ 盈利空间: {tp1_dist_pct:.2f}%")
+
+    if tp2 is not None:
+        piece5.append(f"止盈2: {_fmt_price(tp2)}")
+        if price:
+            tp2_dist_pct = abs(tp2 - price) / price * 100
+            piece5.append(f"   └─ 盈利空间: {tp2_dist_pct:.2f}%")
+
+    # 风险回报比
+    if sl is not None and tp1 is not None and price is not None:
+        risk = abs(price - sl)
+        reward = abs(tp1 - price)
+        if risk > 0:
+            rr_ratio = reward / risk
+            piece5.append(f"风险回报比: 1:{rr_ratio:.2f}")
+
+    # ========== 组装消息 ==========
+    note = _get(r, "note") or _get(r, "publish.note") or ""
+    tag = "#watch" if is_watch else "#trade"
+    symtag = f" #{sym}"
+
+    footer = ""
+    if note:
+        footer += f"\n━━━━━━━━━━━━━━━\n备注：{note}\n"
+    footer += f"\n{tag}{symtag}"
+
+    # 合并所有段落
+    report = "\n".join(piece1)
+    report += "\n".join(piece2)
+    report += "\n".join(piece3)
+    report += "\n".join(piece4)
+    report += "\n".join(piece5)
+    report += footer
+
+    return report

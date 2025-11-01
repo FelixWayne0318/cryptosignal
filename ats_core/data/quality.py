@@ -32,6 +32,7 @@ class QualityMetrics:
     oo_order_rate: float = 0.0
     drift_rate: float = 0.0
     mismatch_rate: float = 0.0
+    bad_wick_ratio: float = 0.0  # 异常蜡烛线比例
 
     # Final score
     dataqual: float = 1.0
@@ -267,3 +268,106 @@ class DataQualMonitor:
             del self.metrics[symbol]
         if symbol in self.event_windows:
             del self.event_windows[symbol]
+
+
+# ==================== Bad Wick Detection ====================
+
+def calculate_bad_wick_ratio(
+    candles: list,
+    atr: Optional[float] = None,
+    wick_threshold_multiplier: float = 2.0
+) -> float:
+    """
+    Calculate the ratio of candles with abnormal wicks.
+
+    A "bad wick" indicates potential data quality issues:
+    - Flash crashes
+    - Fat finger trades
+    - Exchange glitches
+    - Low liquidity spikes
+
+    Criteria for bad wick:
+    1. Upper wick > wick_threshold_multiplier × body_size, OR
+    2. Lower wick > wick_threshold_multiplier × body_size, OR
+    3. If ATR provided: upper/lower wick > 3 × ATR
+
+    Args:
+        candles: List of candle dicts with keys: 'open', 'high', 'low', 'close'
+        atr: Average True Range (optional, for ATR-based detection)
+        wick_threshold_multiplier: Multiplier for body-based detection (default 2.0)
+
+    Returns:
+        bad_wick_ratio: Ratio of bad wicks in [0, 1]
+            - 0.0: No bad wicks (good)
+            - 0.1: 10% bad wicks (acceptable)
+            - >0.2: High bad wick ratio (poor data quality)
+
+    Example:
+        >>> candles = [
+        ...     {'open': 100, 'high': 105, 'low': 99, 'close': 102},  # Normal
+        ...     {'open': 102, 'high': 120, 'low': 101, 'close': 103}, # Bad upper wick
+        ... ]
+        >>> calculate_bad_wick_ratio(candles)
+        0.5  # 50% bad wicks
+    """
+    if not candles:
+        return 0.0
+
+    bad_count = 0
+
+    for candle in candles:
+        o = float(candle.get('open', 0))
+        h = float(candle.get('high', 0))
+        l = float(candle.get('low', 0))
+        c = float(candle.get('close', 0))
+
+        # Skip invalid candles
+        if h < l or h == 0 or l == 0:
+            continue
+
+        # Body size (absolute)
+        body_size = abs(c - o)
+        if body_size < 1e-9:
+            body_size = 0.01 * c  # Doji: use 1% of price as proxy
+
+        # Wick sizes
+        upper_wick = h - max(o, c)
+        lower_wick = min(o, c) - l
+
+        is_bad = False
+
+        # Check 1: Body-based detection
+        if upper_wick > wick_threshold_multiplier * body_size:
+            is_bad = True
+        if lower_wick > wick_threshold_multiplier * body_size:
+            is_bad = True
+
+        # Check 2: ATR-based detection (if ATR provided)
+        if atr is not None and atr > 0:
+            atr_threshold = 3.0 * atr
+            if upper_wick > atr_threshold or lower_wick > atr_threshold:
+                is_bad = True
+
+        if is_bad:
+            bad_count += 1
+
+    bad_ratio = bad_count / len(candles) if candles else 0.0
+
+    return bad_ratio
+
+
+def is_bad_wick_acceptable(bad_wick_ratio: float, threshold: float = 0.15) -> Tuple[bool, str]:
+    """
+    Check if bad wick ratio is acceptable for trading.
+
+    Args:
+        bad_wick_ratio: Bad wick ratio from calculate_bad_wick_ratio()
+        threshold: Maximum acceptable ratio (default 0.15 = 15%)
+
+    Returns:
+        Tuple of (acceptable, reason)
+    """
+    if bad_wick_ratio <= threshold:
+        return True, f"Bad wick ratio acceptable: {bad_wick_ratio:.1%} ≤ {threshold:.1%}"
+    else:
+        return False, f"Bad wick ratio too high: {bad_wick_ratio:.1%} > {threshold:.1%} (data quality concern)"

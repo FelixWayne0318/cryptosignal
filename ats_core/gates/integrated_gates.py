@@ -135,7 +135,9 @@ class FourGatesChecker:
     def check_gate3_execution(
         self,
         metrics: ExecutionMetrics,
-        is_newcoin: bool = False
+        is_newcoin: bool = False,
+        room_atr_ratio: Optional[float] = None,
+        newcoin_phase: str = 'mature'
     ) -> GateResult:
         """
         Gate 3: Execution metrics within limits.
@@ -144,15 +146,28 @@ class FourGatesChecker:
         - impact_bps ≤ threshold
         - spread_bps ≤ threshold
         - |OBI| ≤ threshold
+        - room_atr_ratio ≥ 0.6 (新增：订单簿容纳度)
 
         Args:
             metrics: Execution metrics
             is_newcoin: Use newcoin thresholds
+            room_atr_ratio: 订单簿容纳度（订单簿深度/ATR），≥0.6为达标
+            newcoin_phase: 新币阶段（用于未来phase-dependent gates）
 
         Returns:
             GateResult
         """
         passes, details = self.execution_gates.check_gates(metrics, is_newcoin)
+
+        # 新增：订单簿容纳度检查
+        room_check_passed = True
+        room_threshold = self.thresholds.get('room_atr_ratio_min', 0.6)
+
+        if room_atr_ratio is not None:
+            room_check_passed = room_atr_ratio >= room_threshold
+            if not room_check_passed:
+                passes = False
+                details['room_failure'] = f"订单簿容纳度不足: {room_atr_ratio:.2f} < {room_threshold}"
 
         return GateResult(
             passed=passes,
@@ -160,10 +175,17 @@ class FourGatesChecker:
             value={
                 "impact_bps": metrics.impact_bps,
                 "spread_bps": metrics.spread_bps,
-                "OBI": metrics.OBI
+                "OBI": metrics.OBI,
+                "room_atr_ratio": room_atr_ratio
             },
-            threshold=details["thresholds"],
-            details=details
+            threshold={
+                **details["thresholds"],
+                "room_atr_ratio_min": room_threshold
+            },
+            details={
+                **details,
+                "room_check_passed": room_check_passed
+            }
         )
 
     def check_gate4_probability(
@@ -219,7 +241,9 @@ class FourGatesChecker:
         F_raw: float = 0.5,
         I_raw: float = 0.5,
         delta_p: float = 0.0,
-        is_newcoin: bool = False
+        is_newcoin: bool = False,
+        room_atr_ratio: Optional[float] = None,
+        newcoin_phase: str = 'mature'
     ) -> Tuple[bool, Dict[str, GateResult]]:
         """
         Check all four gates.
@@ -232,6 +256,8 @@ class FourGatesChecker:
             I_raw: I factor value [0, 1]
             delta_p: Probability change from previous
             is_newcoin: Use newcoin thresholds
+            room_atr_ratio: 订单簿容纳度（订单簿深度/ATR）
+            newcoin_phase: 新币阶段（用于未来phase-dependent gates）
 
         Returns:
             Tuple of (all_passed, gate_results_dict)
@@ -246,7 +272,9 @@ class FourGatesChecker:
         results = {
             "gate1_dataqual": self.check_gate1_dataqual(symbol),
             "gate2_ev": self.check_gate2_ev(symbol, probability, cost_eff),
-            "gate3_execution": self.check_gate3_execution(execution_metrics, is_newcoin),
+            "gate3_execution": self.check_gate3_execution(
+                execution_metrics, is_newcoin, room_atr_ratio, newcoin_phase
+            ),
             "gate4_probability": self.check_gate4_probability(probability, p_min, delta_p, delta_p_min)
         }
 
