@@ -21,6 +21,10 @@ Range: 0 到 100（质量维度，非方向）
 from __future__ import annotations
 from typing import Tuple, List, Dict, Any
 import numpy as np
+from ats_core.scoring.scoring_utils import StandardizationChain
+
+# 模块级StandardizationChain实例
+_independence_chain = StandardizationChain(alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5)
 
 
 def _to_f(x) -> float:
@@ -174,10 +178,14 @@ def calculate_independence(
     # beta_sum = 0.0 → score = 100（完全独立）
     # beta_sum = 1.5 → score = 0（完全相关）
     if beta_sum >= beta_high:
-        independence_score = 0.0
+        raw_score = 0.0
     else:
         # 线性映射：beta_sum从0到1.5，score从100到0
-        independence_score = 100.0 * (1.0 - min(1.0, beta_sum / beta_high))
+        raw_score = 100.0 * (1.0 - min(1.0, beta_sum / beta_high))
+
+    # v2.0合规：应用StandardizationChain
+    score_pub, diagnostics = _independence_chain.standardize(raw_score)
+    independence_score = int(round(score_pub))
 
     # === 6. 独立性等级 ===
     if beta_sum < beta_low:

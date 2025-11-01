@@ -30,6 +30,10 @@ Range: -100 到 +100
 from __future__ import annotations
 from typing import Tuple, Dict, Any, List, Optional
 import numpy as np
+from ats_core.scoring.scoring_utils import StandardizationChain
+
+# 模块级StandardizationChain实例
+_liquidation_chain = StandardizationChain(alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5)
 
 
 def _to_f(x) -> float:
@@ -200,10 +204,7 @@ def calculate_liquidation(
     # === 3. Z-score归一化（如果有历史数据）===
     # 简化版：直接使用LTI * 乘数
     # 在实际应用中，应该使用历史LTI序列计算z-score
-    liquidation_score = lti * lti_multiplier
-
-    # 限制到±100
-    liquidation_score = max(-100, min(100, liquidation_score))
+    raw_score = lti * lti_multiplier
 
     # === 4. 清算墙检测（可选）===
     long_wall = None
@@ -223,16 +224,17 @@ def calculate_liquidation(
             # 下方有多头墙 → 下跌风险增加
             distance_pct = (current_price - long_wall) / current_price
             wall_bonus = min(20, 20 * (1.0 - distance_pct / wall_cluster_pct))
-            liquidation_score += wall_bonus
+            raw_score += wall_bonus
 
         if short_wall:
             # 上方有空头墙 → 上涨风险增加
             distance_pct = (short_wall - current_price) / current_price
             wall_penalty = min(20, 20 * (1.0 - distance_pct / wall_cluster_pct))
-            liquidation_score -= wall_penalty
+            raw_score -= wall_penalty
 
-        # 再次限制到±100
-        liquidation_score = max(-100, min(100, liquidation_score))
+    # v2.0合规：应用StandardizationChain
+    score_pub, diagnostics = _liquidation_chain.standardize(raw_score)
+    liquidation_score = int(round(score_pub))
 
     # === 5. 风险等级 ===
     if liquidation_score > 50:

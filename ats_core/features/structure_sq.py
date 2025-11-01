@@ -1,5 +1,10 @@
 from ats_core.features.ta_core import ema
+from ats_core.scoring.scoring_utils import StandardizationChain
 import math
+
+# 模块级StandardizationChain实例（持久化EW状态）
+# 参数: alpha=0.15, tau=2.0 (wider range for structure scores)
+_structure_chain = StandardizationChain(alpha=0.15, tau=2.0, z0=2.5, zmax=6.0, lam=1.5)
 
 def _theta(base_big, base_small, overlay_add, phaseA_add, strong_sub, is_big, is_overlay, is_phaseA, strong_regime):
     th = (base_big if is_big else base_small)
@@ -78,12 +83,15 @@ def score_structure(h,l,c, ema30_last, atr_now, params, ctx):
     # 聚合得分（0-1）
     score_raw = max(0.0, min(1.0, 0.22*cons + 0.18*icr + 0.18*retr + 0.14*timing + 0.20*not_over + 0.08*m15_ok - penalty))
 
-    # 映射到 -100 到 +100
-    # score_raw = 0.5 → S = 0（中性）
-    # score_raw = 1.0 → S = +100（完美）
-    # score_raw = 0.0 → S = -100（极差）
-    S = int(round((score_raw - 0.5) * 200))
-    S = max(-100, min(100, S))
+    # 转换为中心化值（0.5=中性 → 0，1.0=完美 → +100，0.0=极差 → -100）
+    S_raw = (score_raw - 0.5) * 200
+
+    # v2.0合规：应用StandardizationChain（5步稳健化）
+    # 输入S_raw，输出标准化后的S_pub（稳健压缩到±100）
+    S_pub, diagnostics = _structure_chain.standardize(S_raw)
+
+    # 转换为整数
+    S = int(round(S_pub))
 
     # 解释
     if S >= 40:

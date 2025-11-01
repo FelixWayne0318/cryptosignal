@@ -23,6 +23,10 @@
 from typing import Dict, Tuple
 import math
 import time
+from ats_core.scoring.scoring_utils import StandardizationChain
+
+# 模块级StandardizationChain实例
+_funding_chain = StandardizationChain(alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5)
 
 
 def directional_score(
@@ -117,8 +121,9 @@ def score_funding_rate(
     # 3. 综合评分（50% 基差 + 50% 资金费）
     F_raw = 0.5 * basis_score + 0.5 * funding_score
 
-    # 限制到[-100, +100]
-    F = int(round(max(-100, min(100, F_raw))))
+    # v2.0合规：应用StandardizationChain
+    F_pub, diagnostics = _funding_chain.standardize(F_raw)
+    F = int(round(F_pub))
 
     # 4. 元数据
     meta = {

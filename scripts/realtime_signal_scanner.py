@@ -15,11 +15,14 @@ WebSocket实时信号扫描器（仅发送信号，不执行交易）
 - API调用：0次/扫描
 
 使用方法:
-    # 单次扫描
+    # 单次扫描（默认显示所有币种详细评分）
     python scripts/realtime_signal_scanner.py
 
     # 定期扫描（每5分钟）
     python scripts/realtime_signal_scanner.py --interval 300
+
+    # 简化输出（只显示前10个币种详细评分）
+    python scripts/realtime_signal_scanner.py --interval 300 --no-verbose
 
     # 测试（只扫描20个币种）
     python scripts/realtime_signal_scanner.py --max-symbols 20
@@ -45,6 +48,14 @@ sys.path.insert(0, str(project_root))
 from ats_core.pipeline.batch_scan_optimized import OptimizedBatchScanner
 from ats_core.outputs.telegram_fmt import render_trade
 from ats_core.logging import log, warn, error
+
+# 四门系统导入
+from ats_core.gates.integrated_gates import FourGatesChecker
+from ats_core.execution.metrics_estimator import ExecutionMetricsEstimator
+from ats_core.data.quality import DataQualMonitor
+
+# v2.0合规：发布防抖动系统
+from ats_core.publishing.anti_jitter import AntiJitter
 
 
 def load_telegram_config():
@@ -125,19 +136,40 @@ def telegram_send_wrapper(text: str, bot_token: str, chat_id: str, parse_mode: s
 class SignalScanner:
     """WebSocket实时信号扫描器"""
 
-    def __init__(self, min_score: int = 50, send_telegram: bool = True):
+    def __init__(self, min_score: int = 50, send_telegram: bool = True, verbose: bool = True):
         """
         初始化扫描器
 
         Args:
             min_score: 最低信号分数（默认50，可调整：40-70）
             send_telegram: 是否发送Telegram通知
+            verbose: 是否显示所有币种的详细因子评分（默认True，可用--no-verbose关闭）
         """
         self.scanner = OptimizedBatchScanner()
         self.min_score = min_score
         self.send_telegram = send_telegram
+        self.verbose = verbose
         self.initialized = False
         self.scan_count = 0
+
+        # 初始化四门系统组件
+        self.gates_checker = FourGatesChecker()
+        self.exec_estimator = ExecutionMetricsEstimator()
+        self.quality_monitor = DataQualMonitor()
+
+        # v2.0合规：初始化防抖动系统
+        self.anti_jitter = AntiJitter(
+            prime_entry_threshold=0.80,
+            prime_maintain_threshold=0.70,
+            watch_entry_threshold=0.50,
+            watch_maintain_threshold=0.40,
+            confirmation_bars=2,
+            total_bars=3,
+            cooldown_seconds=90
+        )
+
+        log("✅ 四门系统组件初始化完成")
+        log("✅ 防抖动系统初始化完成 (K/N=2/3, cooldown=90s)")
 
         # 加载Telegram配置
         if send_telegram:
@@ -171,9 +203,10 @@ class SignalScanner:
                     "⏳ 正在初始化WebSocket缓存（约3-4分钟）\n"
                     "📊 目标: 200个高流动性币种\n"
                     "⚡ 后续扫描: 12-15秒/次\n\n"
-                    "🎯 系统版本: v6.0\n"
-                    "📦 权重模式: 100%百分比\n"
-                    "⚡ F因子: 已启用 (10.0%)",
+                    "🎯 系统版本: v6.0 newstandards整合版\n"
+                    "📦 9因子方向评分 (A层)\n"
+                    "🚪 四门验证系统: DataQual/EV/执行/概率\n"
+                    "🔧 F/I调制器 (B层): 不参与评分",
                     self.bot_token,
                     self.chat_id
                 )
@@ -225,15 +258,108 @@ class SignalScanner:
         # 执行扫描
         scan_result = await self.scanner.scan(
             min_score=self.min_score,
-            max_symbols=max_symbols
+            max_symbols=max_symbols,
+            verbose=self.verbose
         )
 
-        # 提取Prime信号
+        # 提取Prime信号 - 使用四门系统验证
         signals = scan_result.get('results', [])
-        prime_signals = [
-            s for s in signals
-            if s.get('publish', {}).get('prime', False)
-        ]
+        prime_signals = []
+
+        for s in signals:
+            try:
+                # 获取信号基础数据
+                symbol = s.get('symbol', '')
+                probability = s.get('probability', 0.5)
+
+                # v2.0合规：F从modulation获取，I从scores获取
+                # F 和 I 分数范围是 -100 到 +100，归一化到 0-1
+                F_score = s.get('modulation', {}).get('F', 0)  # v2.0: F moved to modulation
+                I_score = s.get('scores', {}).get('I', 0)      # I still in scores
+                F_raw = (F_score + 100) / 200  # -100~+100 → 0~1
+                I_raw = (I_score + 100) / 200  # -100~+100 → 0~1
+
+                # 计算概率变化（简化：使用 P - 0.5 作为 delta_p）
+                delta_p = abs(probability - 0.5)
+
+                # 获取最新 K 线数据用于执行指标估算
+                # 注意：这里使用信号中的价格数据作为代理
+                pricing = s.get('pricing', {})
+                if pricing:
+                    entry_price = pricing.get('entry', 0)
+                    # 使用简化的估算（假设 spread 为 entry 的 0.1%）
+                    high = entry_price * 1.001
+                    low = entry_price * 0.999
+                    close = entry_price
+                    volume = 1000000  # 默认值
+                else:
+                    # 如果没有定价信息，跳过
+                    log(f"  ⚠️  {symbol}: 缺少定价信息，跳过四门检查")
+                    continue
+
+                # 计算执行指标
+                exec_metrics = self.exec_estimator.calculate(
+                    high=high,
+                    low=low,
+                    close=close,
+                    volume=volume,
+                    taker_buy_volume=volume * 0.5
+                )
+
+                # 检查四门
+                all_gates_passed, gate_results = self.gates_checker.check_all_gates(
+                    symbol=symbol,
+                    probability=probability,
+                    execution_metrics=exec_metrics,
+                    F_raw=F_raw,
+                    I_raw=I_raw,
+                    delta_p=delta_p,
+                    is_newcoin=s.get('new_coin', {}).get('is_new', False)
+                )
+
+                # v2.0合规：应用防抖动机制
+                # 获取EV值（如果没有则估算为0）
+                ev = s.get('publish', {}).get('ev', 0.0)
+
+                # 调用防抖动系统
+                new_level, should_publish = self.anti_jitter.update(
+                    symbol=symbol,
+                    probability=probability,
+                    ev=ev,
+                    gates_passed=all_gates_passed
+                )
+
+                # 只在满足以下条件时发布信号：
+                # 1. 通过所有四门
+                # 2. 防抖动系统确认（2/3棒确认 + 90秒冷却）
+                if all_gates_passed and should_publish and new_level == 'PRIME':
+                    # 添加四门结果到信号中（用于调试）
+                    s['four_gates'] = {
+                        'all_passed': True,
+                        'results': {k: {'passed': v.passed, 'reason': v.reason}
+                                   for k, v in gate_results.items()}
+                    }
+                    # 添加防抖动信息
+                    s['anti_jitter'] = {
+                        'level': new_level,
+                        'confirmed': True,
+                        'bars_in_state': self.anti_jitter.states[symbol].bars_in_state if symbol in self.anti_jitter.states else 0
+                    }
+                    prime_signals.append(s)
+                    log(f"  ✅ {symbol}: 通过四门验证 + 防抖动确认 (P={probability:.3f}, EV={ev:.4f})")
+                elif all_gates_passed and not should_publish:
+                    # 通过四门但防抖动未确认
+                    log(f"  ⏸️  {symbol}: 通过四门但等待防抖动确认 (P={probability:.3f}, level={new_level})")
+                elif all_gates_passed:
+                    # 通过四门但级别不是PRIME（可能是WATCH）
+                    log(f"  🔍 {symbol}: 通过四门但级别={new_level} (P={probability:.3f})")
+                else:
+                    # 记录失败原因
+                    failed_gates = [k for k, v in gate_results.items() if not v.passed]
+                    log(f"  ❌ {symbol}: 未通过四门 - {', '.join(failed_gates)}")
+
+            except Exception as e:
+                warn(f"  ⚠️  {symbol}: 四门检查失败 - {e}")
 
         log("\n" + "=" * 60)
         log("📊 扫描结果")
@@ -260,12 +386,16 @@ class SignalScanner:
                 message = render_trade(signal)
 
                 # 添加v6.0系统标识
+                gate_info = signal.get('four_gates', {})
+                gate_emoji = "✅" if gate_info.get('all_passed', False) else "❌"
+
                 footer = f"""
 
 ━━━━━━━━━━━━━━━━━━
-🎯 <b>系统版本: v6.0</b>
-📦 权重模式: 100%百分比
-⚡ F因子: 已启用 (10.0%)
+🎯 <b>系统版本: v6.0 newstandards整合版</b>
+📦 9因子方向评分 (A层)
+🔧 F/I调制器 (B层)
+{gate_emoji} 四门验证: 已通过
 
 ⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                 """
@@ -362,13 +492,19 @@ async def main():
         action='store_true',
         help='不发送Telegram通知'
     )
+    parser.add_argument(
+        '--no-verbose',
+        action='store_true',
+        help='只显示前10个币种的详细评分（默认显示所有140个币种）'
+    )
 
     args = parser.parse_args()
 
     # 创建扫描器
     scanner = SignalScanner(
         min_score=args.min_score,
-        send_telegram=not args.no_telegram
+        send_telegram=not args.no_telegram,
+        verbose=not args.no_verbose  # 默认True，除非指定--no-verbose
     )
 
     # 设置信号处理（优雅退出）

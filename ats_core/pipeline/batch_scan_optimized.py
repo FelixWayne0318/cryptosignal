@@ -18,18 +18,6 @@ import time
 from typing import List, Dict, Optional
 from ats_core.execution.binance_futures_client import get_binance_client
 from ats_core.data.realtime_kline_cache import get_kline_cache
-
-# WebSocket连接黑名单（已知无法建立连接的币种）
-# 这些币种可能已从Binance下架或WebSocket流不可用
-WEBSOCKET_BLACKLIST = {
-    # 2025-10-30 测试发现的无法连接币种
-    'OGUSDT', 'USELESSUSDT', 'KERNELUSDT', 'DIAUSDT', 'ZORAUSDT',
-    'POPCATUSDT', 'METUSDT', 'EDENUSDT', 'FORMUSDT', 'JUPUSDT',
-    'PENDLEUSDT', 'SYRUPUSDT', 'RENDERUSDT', 'LUMIAUSDT', '0GUSDT',
-    'BLESSUSDT', 'FLOWUSDT', 'PIPPINUSDT', 'DOODUSDT', 'ICPUSDT',
-    'MEUSDT', 'OPENUSDT', 'RVVUSDT', 'AEROUSDT', 'KAITOUSDT',
-    'CELOUSDT', 'DEGOUSDT', '2ZUSDT'
-}
 from ats_core.pipeline.analyze_symbol import analyze_symbol_with_preloaded_klines
 from ats_core.logging import log, warn, error
 
@@ -138,12 +126,6 @@ class OptimizedBatchScanner:
         MIN_VOLUME = 3_000_000
         symbols = [s for s in symbols if volume_map.get(s, 0) >= MIN_VOLUME]
 
-        # 过滤掉WebSocket黑名单中的币种
-        blacklisted = [s for s in symbols if s in WEBSOCKET_BLACKLIST]
-        if blacklisted:
-            log(f"   ⚠️  跳过 {len(blacklisted)} 个WebSocket黑名单币种: {', '.join(blacklisted[:5])}{'...' if len(blacklisted) > 5 else ''}")
-            symbols = [s for s in symbols if s not in WEBSOCKET_BLACKLIST]
-
         log(f"   ✅ 筛选出 {len(symbols)} 个高流动性币种（24h成交额>3M USDT）")
 
         # 验证是否成功获取到币种
@@ -172,18 +154,18 @@ class OptimizedBatchScanner:
 
         # 4. WebSocket实时更新（默认禁用，推荐使用REST定时更新）
         if enable_websocket:
-            log(f"\n4️⃣  启动WebSocket实时更新...")
-            log(f"   ⚠️  注意：WebSocket模式不稳定，280个连接易出错")
-            log(f"   策略: 仅订阅关键周期（1h, 4h）以避免连接数超限")
-            log(f"   连接数: ~110币种 × 2周期 = ~220 < 300限制")
-            await self.kline_cache.start_batch_realtime_update(
-                symbols=symbols,
-                intervals=['1h', '4h'],  # 只订阅主要周期（15m和1d使用REST数据即可）
-                client=self.client
+            # v2.0合规：WebSocket模式违反DATA_LAYER.md § 2规范（连接数≤5）
+            # 当前实现会创建 ~140币种 × 2周期 = ~280个连接，严重超限
+            # 必须先实现组合流架构（Combined Stream）才能启用WebSocket
+            raise NotImplementedError(
+                "❌ WebSocket模式需修复为组合流架构（≤5连接）\n"
+                "   当前实现: 280个独立连接（违反规范）\n"
+                "   规范要求: ≤5个组合流连接（DATA_LAYER.md § 2）\n"
+                "   解决方案: 实现Binance Combined Stream架构\n"
+                "   推荐模式: 使用enable_websocket=False（REST定时更新）"
             )
-            log(f"   15m和1d周期: 使用REST API数据（更新频率低，无需实时订阅）")
         else:
-            log(f"\n4️⃣  ✅ WebSocket已禁用（推荐模式）")
+            log(f"\n4️⃣  ✅ WebSocket已禁用（推荐模式，v2.0合规）")
             log(f"   原因:")
             log(f"   - 1h/4h K线每小时才更新一次，不需要实时订阅")
             log(f"   - WebSocket连接不稳定，频繁重连影响性能")
@@ -394,16 +376,18 @@ class OptimizedBatchScanner:
         self,
         min_score: int = 70,
         max_symbols: Optional[int] = None,
-        on_signal_found: Optional[callable] = None
+        on_signal_found: Optional[callable] = None,
+        verbose: bool = False
     ) -> Dict:
         """
         批量扫描（超快速，约5秒）
 
         Args:
             min_score: 最低信号分数
-            max_symbols: 最大扫描数量（用于测试）
+            max_symbols: 最大扫描币种数（None=全部，用于测试）
             on_signal_found: 发现信号时的回调函数（实时处理信号）
                             async def callback(signal_dict) -> None
+            verbose: 是否显示所有币种的详细因子评分（默认False，只显示前10个）
 
         Returns:
             扫描结果字典
@@ -541,14 +525,23 @@ class OptimizedBatchScanner:
                 prime_strength = result.get('publish', {}).get('prime_strength', 0)
                 confidence = result.get('confidence', 0)
 
-                # 🔍 调试日志：显示前10个币种的详细评分（帮助诊断为什么没有Prime信号）
-                if i < 10:
+                # 🔍 调试日志：显示详细评分（verbose模式显示所有，默认只显示前10个）
+                if verbose or i < 10:
                     scores = result.get('scores', {})
+                    modulation = result.get('modulation', {})  # v2.0: F moved to modulation
                     prime_breakdown = result.get('publish', {}).get('prime_breakdown', {})
+                    gates_info = result.get('gates', {})
+
                     log(f"  └─ [评分] confidence={confidence}, prime_strength={prime_strength}")
-                    log(f"      因子分数: T={scores.get('T',0)}, M={scores.get('M',0)}, C={scores.get('C',0)}, "
+                    # v2.0: F is NO longer in scores (moved to modulation per MODULATORS.md § 2.1)
+                    log(f"      A-层因子: T={scores.get('T',0)}, M={scores.get('M',0)}, C={scores.get('C',0)}, "
                         f"S={scores.get('S',0)}, V={scores.get('V',0)}, O={scores.get('O',0)}")
-                    log(f"      新因子: L={scores.get('L',0)}, B={scores.get('B',0)}, Q={scores.get('Q',0)}, I={scores.get('I',0)}")
+                    log(f"      A-层因子: L={scores.get('L',0)}, B={scores.get('B',0)}, Q={scores.get('Q',0)}, I={scores.get('I',0)}")
+                    log(f"      B-层调节器: F={modulation.get('F',0)}")
+                    log(f"      四门调节: DataQual={gates_info.get('data_qual',0):.2f}, "
+                        f"EV={gates_info.get('ev_gate',0):.2f}, "
+                        f"Execution={gates_info.get('execution',0):.2f}, "
+                        f"Probability={gates_info.get('probability',0):.2f}")
                     log(f"      Prime分解: base={prime_breakdown.get('base_strength',0):.1f}, "
                         f"prob_bonus={prime_breakdown.get('prob_bonus',0):.1f}, "
                         f"P_chosen={prime_breakdown.get('P_chosen',0):.3f}")

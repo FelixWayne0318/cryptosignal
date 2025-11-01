@@ -24,7 +24,6 @@
 ```
 config/params.json           # 权重、阈值、参数
 config/telegram.json         # Telegram配置
-config/blacklist.json        # 黑名单
 ```
 
 ### 主文件（中等修改）
@@ -151,20 +150,21 @@ git commit -m "fix: 修复Prime信号过滤逻辑
 // config/params.json
 {
   "weights": {
-    "T": 13.9,  // 趋势
-    "M": 8.3,   // 动量
-    "C": 11.1,  // CVD
-    "S": 5.6,   // 结构
-    "V": 8.3,   // 成交量
-    "O": 11.1,  // 持仓量
-    "L": 11.1,  // 流动性
-    "B": 8.3,   // 基差
-    "Q": 5.6,   // 增强CVD
-    "I": 6.7,   // 独立性
-    "E": 0,     // （保留）
-    "F": 10.0   // 资金费率
+    "T": 18.0,  // 趋势 (A层)
+    "M": 12.0,  // 动量 (A层)
+    "C": 18.0,  // CVD (A层)
+    "S": 10.0,  // 结构 (A层)
+    "V": 10.0,  // 成交量 (A层)
+    "O": 18.0,  // 持仓量 (A层)
+    "L": 8.0,   // 流动性 (A层)
+    "B": 2.0,   // 基差 (A层)
+    "Q": 4.0,   // 清算密度 (A层)
+    "I": 0,     // 独立性 (B层调制器，不参与评分)
+    "E": 0,     // （废弃）
+    "F": 0      // 资金领先 (B层调制器，不参与评分)
   }
-  // 总和必须=100.0
+  // A层9因子总和必须=100.0
+  // F/I作为B层调制器，权重为0
 }
 ```
 
@@ -284,27 +284,28 @@ cat standards/MODIFICATION_RULES.md  # 确认修改 config/params.json
 
 # 2. 修改配置
 vim config/params.json
-# T: 13.9 → 15.0, F: 10.0 → 8.9
+# 示例：T: 18.0 → 20.0, C: 18.0 → 16.0
 
-# 3. 验证权重总和=100%
-python3 -c "import json; w=json.load(open('config/params.json'))['weights']; assert abs(sum(w.values())-100)<0.01; print('✓ 权重总和正确')"
+# 3. 验证权重总和=100%（仅计算A层9因子，F/I应为0）
+python3 -c "import json; w=json.load(open('config/params.json'))['weights']; a_layer=['T','M','C','S','V','O','L','B','Q']; assert abs(sum(w[k] for k in a_layer)-100)<0.01; assert w['F']==0 and w['I']==0; print('✓ 权重配置正确')"
 
 # 4. 清除缓存
 find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
 
 # 5. 测试
-python3 scripts/realtime_signal_scanner.py --max-symbols 20 --once
+python3 scripts/realtime_signal_scanner.py --max-symbols 20
 
 # 6. 更新文档（如有重大权重调整）
 # vim docs/CONFIGURATION_GUIDE.md  # 如有必要
 
 # 7. 提交并推送
 git add config/params.json
-git commit -m "config: 调整T和F因子权重
+git commit -m "config: 调整A层因子权重
 
-- T: 13.9% → 15.0%（增强趋势权重）
-- F: 10.0% → 8.9%（平衡整体权重）
-- 总权重: 100.0% ✓
+- T: 18.0% → 20.0%（增强趋势权重）
+- C: 18.0% → 16.0%（平衡整体权重）
+- A层9因子总权重: 100.0% ✓
+- F/I保持为0（B层调制器）
 "
 git push
 ```

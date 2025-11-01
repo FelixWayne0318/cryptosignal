@@ -24,6 +24,10 @@ Range: -100 到 +100
 from __future__ import annotations
 from typing import Tuple, Dict, Any, Optional
 import numpy as np
+from ats_core.scoring.scoring_utils import StandardizationChain
+
+# 模块级StandardizationChain实例
+_basis_chain = StandardizationChain(alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5)
 
 
 def _to_f(x) -> float:
@@ -196,14 +200,15 @@ def calculate_basis_funding(
                     fwi_boost = -abs(fwi_boost)
 
     # === 4. 融合评分 ===
-    final_score = basis_score * basis_weight + funding_score * funding_weight
+    raw_score = basis_score * basis_weight + funding_score * funding_weight
 
     # 应用FWI增强
     if fwi_active:
-        final_score += fwi_boost
+        raw_score += fwi_boost
 
-    # 限制到±100
-    final_score = max(-100, min(100, final_score))
+    # v2.0合规：应用StandardizationChain
+    score_pub, diagnostics = _basis_chain.standardize(raw_score)
+    final_score = int(round(score_pub))
 
     # === 5. 情绪等级 ===
     if final_score > 66:

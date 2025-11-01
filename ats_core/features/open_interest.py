@@ -14,8 +14,12 @@ O（持仓）评分 - 统一±100系统
 from statistics import median
 from typing import Dict, Tuple, Any, List
 from ats_core.sources.oi import fetch_oi_hourly, pct, pct_series
-from ats_core.features.scoring_utils import directional_score
+from ats_core.features.scoring_utils import directional_score  # 保留用于内部计算
 from ats_core.utils.outlier_detection import detect_outliers_iqr, apply_outlier_weights
+from ats_core.scoring.scoring_utils import StandardizationChain
+
+# 模块级StandardizationChain实例
+_oi_chain = StandardizationChain(alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5)
 
 
 def _linreg_r2(y: List[float]) -> Tuple[float, float]:
@@ -195,20 +199,49 @@ def score_open_interest(symbol: str,
         p95 = s[int(0.95 * (len(s) - 1))]
         crowding_warn = (oi24 >= p95)
 
-    # —— 打分：OI变化的软映射（±100）——
-    # OI上升 = 正分，OI下降 = 负分
-    oi_score_raw = directional_score(oi24, neutral=0.0, scale=par["oi24_scale"])
-    oi_score = (oi_score_raw - 50) * 2  # 映射到 -100 到 +100
+    # —— 打分：OI变化的软映射（±100）—— v2.0修复多空对称性
 
-    # 同向得分：价格和OI同步变化次数
+    # 计算价格趋势（最近12根K线，与up_up/dn_up同周期）
+    price_trend_pct = 0.0
+    price_direction = 0  # -1=下跌, 0=中性, +1=上涨
+
+    if len(closes) >= k + 1:
+        price_start = closes[-(k + 1)]
+        price_end = closes[-1]
+        price_trend_pct = (price_end - price_start) / max(1e-12, abs(price_start))
+
+        # 判断价格方向（阈值：±1%）
+        if price_trend_pct > 0.01:
+            price_direction = 1   # 上涨
+        elif price_trend_pct < -0.01:
+            price_direction = -1  # 下跌
+        else:
+            price_direction = 0   # 中性
+
+    # 1. OI变化强度（绝对值，未考虑方向）
+    oi_score_raw = directional_score(oi24, neutral=0.0, scale=par["oi24_scale"])
+    oi_strength = (oi_score_raw - 50) * 2  # 映射到 -100 到 +100
+
+    # v2.0 修复：根据价格方向调整OI分数
+    # - 价格上涨 + OI上升 → 正分（多头建仓）
+    # - 价格下跌 + OI上升 → 负分（空头建仓）⭐ 修复重点
+    # - 价格上涨 + OI下降 → 负分（多头离场）
+    # - 价格下跌 + OI下降 → 正分（空头离场）
+    if price_direction == -1:
+        # 价格下跌：反转OI分数的符号
+        oi_score = -oi_strength
+    else:
+        # 价格上涨或中性：保持OI分数的符号
+        oi_score = oi_strength
+
+    # 2. 同向得分：价格和OI同步变化次数（保留原逻辑，作为辅助）
     # up_up多 → 多头共振（正分）
     # dn_up多 → 空头共振（负分）
-    # 简化：用 up_up - dn_up 表示方向
     align_diff = up_up - dn_up
     align_score_raw = directional_score(align_diff, neutral=0.0, scale=par["align_scale"])
     align_score = (align_score_raw - 50) * 2
 
-    # 加权平均
+    # 加权平均（v2.0：oi_score已考虑价格方向）
     O_raw = par["oi_weight"] * oi_score + par["align_weight"] * align_score
 
     # 拥挤度惩罚（降低分数的绝对值）
@@ -216,19 +249,41 @@ def score_open_interest(symbol: str,
         penalty_factor = (100 - par["crowding_p95_penalty"]) / 100.0
         O_raw = O_raw * penalty_factor
 
-    O = int(round(max(-100, min(100, O_raw))))
+    # v2.0合规：应用StandardizationChain
+    O_pub, diagnostics = _oi_chain.standardize(O_raw)
+    O = int(round(O_pub))
 
-    # 解释
+    # 解释（v2.0：考虑价格方向）
     if O >= 40:
-        interpretation = "多头持仓增加"
+        if price_direction == 1:
+            interpretation = "多头持仓增加（价格上涨+OI上升）"
+        elif price_direction == -1:
+            interpretation = "空头持仓增加（价格下跌+OI上升）"
+        else:
+            interpretation = "持仓显著增长"
     elif O >= 10:
-        interpretation = "持仓温和增加"
+        if price_direction == 1:
+            interpretation = "多头持仓温和增加"
+        elif price_direction == -1:
+            interpretation = "空头持仓温和增加"
+        else:
+            interpretation = "持仓温和增加"
     elif O >= -10:
         interpretation = "持仓平稳"
     elif O >= -40:
-        interpretation = "持仓温和减少"
+        if price_direction == 1:
+            interpretation = "多头离场（价格上涨+OI减少）"
+        elif price_direction == -1:
+            interpretation = "空头离场（价格下跌+OI减少，可能见底）"
+        else:
+            interpretation = "持仓温和减少"
     else:
-        interpretation = "持仓大幅减少"
+        if price_direction == 1:
+            interpretation = "多头大幅离场（警告）"
+        elif price_direction == -1:
+            interpretation = "空头大幅离场（可能见底）"
+        else:
+            interpretation = "持仓大幅减少"
 
     return O, {
         "oi1h_pct": round(oi1h, 2) if oi1h is not None else None,
@@ -239,12 +294,16 @@ def score_open_interest(symbol: str,
         "p95_oi24": round(p95, 2) if p95 is not None else None,
         "oi_score": int(oi_score),
         "align_score": int(align_score),
+        "oi_strength_raw": int(oi_strength),  # v2.0: 原始OI强度（未考虑方向）
+        "price_trend_pct": round(price_trend_pct * 100, 2),  # v2.0: 价格涨跌幅（%）
+        "price_direction": price_direction,  # v2.0: 价格方向（-1/0/+1）
         "interpretation": interpretation,
         "data_source": "oi",
         # v2.1: 线性回归指标（与CVD一致）
         "r_squared": round(r_squared, 3),
         "is_consistent": is_consistent,
-        "method": "linear_regression+outlier_filter",  # 标记使用了线性回归+异常值过滤
+        "method": "linear_regression+outlier_filter+price_direction",  # v2.0: 标记已修复对称性
         # v2.1: 异常值过滤统计
-        "outliers_filtered": outliers_filtered
+        "outliers_filtered": outliers_filtered,
+        "symmetry_fixed": True,  # v2.0: 标记已修复多空对称性
     }

@@ -4,11 +4,23 @@
 - 使用软映射替代硬阈值
 - 返回带符号的分数：+表示上涨趋势，-表示下跌趋势
 - 返回 (T分数, Tm方向)
+- v2.0合规：应用StandardizationChain（5步稳健化）
 """
 from __future__ import annotations
 
-from typing import List, Tuple, Iterable, Any
-from .scoring_utils import directional_score
+from typing import List, Tuple, Iterable, Any, Dict
+from .scoring_utils import directional_score  # 保留用于内部计算
+from ats_core.scoring.scoring_utils import StandardizationChain
+
+# 模块级StandardizationChain实例（持久化EW状态）
+# 参数per STANDARDS.md: alpha=0.15 (1h), tau=3.0 (compression)
+_trend_chain = StandardizationChain(
+    alpha=0.15,      # Pre-smoothing for 1h interval
+    tau=3.0,         # Tanh compression temperature
+    z0=2.5,          # Soft winsor start
+    zmax=6.0,        # Soft winsor max
+    lam=1.5          # Winsor exponential decay
+)
 
 # -------------- 小工具：把"可能是列表"的值收敛成标量 ----------------
 
@@ -167,24 +179,29 @@ def score_trend(
     r2_val = _scalar(r2, 0.0)
     confidence = r2_val  # 0-1之间
 
-    # 基础分数
-    T = slope_score + ema_score
+    # 基础分数（原始值，未经标准化）
+    T_raw = slope_score + ema_score
 
     # R²加权：趋势明确时增强信号
     if dir_flag == 1 and ema_up:
         # 多头趋势且EMA排列 → 强化正分
-        T += r2_weight * 100 * confidence
+        T_raw += r2_weight * 100 * confidence
     elif dir_flag == -1 and ema_dn:
         # 空头趋势且EMA排列 → 强化负分
-        T -= r2_weight * 100 * confidence
+        T_raw -= r2_weight * 100 * confidence
     elif dir_flag == 1:
         # 多头趋势但EMA未排列 → 适度加分
-        T += r2_weight * 50 * confidence
+        T_raw += r2_weight * 50 * confidence
     elif dir_flag == -1:
         # 空头趋势但EMA未排列 → 适度减分
-        T -= r2_weight * 50 * confidence
+        T_raw -= r2_weight * 50 * confidence
 
-    T = int(round(max(-100, min(100, T))))
+    # v2.0合规：应用StandardizationChain（5步稳健化）
+    # 输入T_raw（可能超出±100），输出标准化后的T_pub（稳健压缩到±100）
+    T_pub, diagnostics = _trend_chain.standardize(T_raw)
+
+    # 转换为整数
+    T = int(round(T_pub))
     Tm = int(dir_flag)
 
     return T, Tm

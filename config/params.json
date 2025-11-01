@@ -126,30 +126,29 @@
   },
 
   "weights": {
-    "T": 13.9,
-    "M": 8.3,
-    "C": 11.1,
-    "S": 5.6,
-    "V": 8.3,
-    "O": 11.1,
-    "L": 11.1,
-    "B": 8.3,
-    "Q": 5.6,
-    "I": 6.7,
+    "T": 18.0,
+    "M": 12.0,
+    "C": 18.0,
+    "S": 10.0,
+    "V": 10.0,
+    "O": 18.0,
+    "L": 8.0,
+    "B": 2.0,
+    "Q": 4.0,
+    "I": 0,
     "E": 0,
-    "F": 10.0
+    "F": 0
   },
   "weights_comment": {
-    "_version": "v6.0 - 10+1维因子系统（权重百分比模式）",
+    "_version": "v6.0 - newstandards整合版（9因子评分系统）",
     "_total_weight": "100%（权重百分比系统，总和=100）",
-    "_layer1_price_action": "T(13.9%) + M(8.3%) + S(5.6%) + V(8.3%) = 36.1% - 价格行为层",
-    "_layer2_money_flow": "C(11.1%) + O(11.1%) + F(10.0%) = 32.2% - 资金流层",
-    "_layer3_microstructure": "L(11.1%) + B(8.3%) + Q(5.6%) = 25.0% - 微观结构层",
-    "_layer4_market_context": "I(6.7%) = 6.7% - 市场环境层",
-    "_f_factor_upgrade": "F(10.0%) - v6.0升级为评分因子，参与加权平均，保留极端否决功能（F<-70时×0.7惩罚）",
-    "_deprecated": "E(0) - 环境因子已废弃，D因子已整合到L",
-    "_new_factors": "L（流动性）、B（基差+资金费）、Q（清算密度）、I（独立性）",
-    "_prime_threshold_update": "Prime阈值从65分调整为35分（适配100-base系统：65×100/180≈36）"
+    "_layer1_direction": "T(18.0%) + M(12.0%) + S(10.0%) + V(10.0%) + C(18.0%) + O(18.0%) + Q(4.0%) + L(8.0%) + B(2.0%) = 100% - 方向评分层（A层）",
+    "_layer2_modulator": "F/I不参与评分，作为B层调制器：调整Teff/cost_eff/阈值",
+    "_removed_from_scoring": "F(0%) - 不再参与评分，仅作为调制器影响Teff和成本",
+    "_removed_from_scoring_2": "I(0%) - 不再参与评分，仅作为调制器影响Teff和阈值",
+    "_deprecated": "E(0) - 环境因子已废弃",
+    "_four_gates": "信号发布需通过四门：1)DataQual≥0.90, 2)EV>0, 3)执行指标达标, 4)概率阈值",
+    "_prime_threshold_update": "Prime阈值从35分调整为通过四门系统验证"
   },
 
   "fund_leading": {

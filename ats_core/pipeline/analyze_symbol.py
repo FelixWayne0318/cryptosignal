@@ -225,8 +225,9 @@ def _analyze_symbol_core(
     perf['S结构'] = time.time() - t0
 
     # 量能（V）：-100（缩量）到 +100（放量）
+    # v2.0: 传入closes以修复多空对称性
     t0 = time.time()
-    V, V_meta = _calc_volume(q)
+    V, V_meta = _calc_volume(q, closes=c)
     perf['V量能'] = time.time() - t0
 
     # 持仓（O）：-100（减少）到 +100（增加）
@@ -365,28 +366,31 @@ def _analyze_symbol_core(
         oi_change_pct, vol_ratio, cvd6, price_change_24h, price_slope, params.get("fund_leading", {})
     )
 
-    # ---- 3. Scorecard（10+1维统一±100系统）----
-    # 🚀 世界顶级优化：10+1维因子系统（F现在参与评分）
-    # 基础权重（从配置读取，10+1维系统：总权重100%）
+    # ---- 3. Scorecard（10维统一±100系统，v2.0合规版）----
+    # 🔧 v2.0合规修复：F移除出评分卡，仅用于调节Teff/cost/thresholds
+    # 符合MODULATORS.md § 2.1规范：F不参与方向评分
+
+    # 基础权重（从配置读取，10维系统：总权重100%）
+    # F的10.0%权重按比例重新分配到剩余9个因子（比例因子：100/90=1.111）
     base_weights = params.get("weights", {
-        # Layer 1: 价格行为层（36.1%）
-        "T": 13.9,  # 趋势
-        "M": 8.3,   # 动量
-        "S": 5.6,   # 结构
-        "V": 8.3,   # 量能（已包含触发K）
-        # Layer 2: 资金流层（32.2%，F现在参与评分）
-        "C": 11.1,  # CVD
-        "O": 11.1,  # OI持仓
-        "F": 10.0,  # 资金领先（原调节器，现参与评分）⭐
-        # Layer 3: 微观结构层（25.0%）
-        "L": 11.1,  # 流动性
-        "B": 8.3,   # 基差+资金费
-        "Q": 5.6,   # 清算密度
-        # Layer 4: 市场环境层（6.7%）
-        "I": 6.7,   # 独立性
+        # Layer 1: 价格行为层（40%）
+        "T": 16.0,  # 趋势 (was 13.9, +2.1)
+        "M": 9.0,   # 动量 (was 8.3, +0.7)
+        "S": 6.0,   # 结构 (was 5.6, +0.4)
+        "V": 9.0,   # 量能 (was 8.3, +0.7)
+        # Layer 2: 资金流层（24%）
+        "C": 12.0,  # CVD (was 11.1, +0.9)
+        "O": 12.0,  # OI持仓 (was 11.1, +0.9)
+        # NO F - removed from scorecard (was 10.0%, redistributed above)
+        # Layer 3: 微观结构层（28%）
+        "L": 12.0,  # 流动性 (was 11.1, +0.9)
+        "B": 9.0,   # 基差+资金费 (was 8.3, +0.7)
+        "Q": 7.0,   # 清算密度 (was 5.6, +1.4)
+        # Layer 4: 市场环境层（8%）
+        "I": 8.0,   # 独立性 (was 6.7, +1.3)
         # 废弃因子
         "E": 0,     # 环境（已废弃，权重0）
-    })  # 总计: 100.0%
+    })  # 总计: 16+9+6+9+12+12+12+9+7+8 = 100.0 ✓
 
     # 尝试提前获取市场状态（用于自适应权重）
     try:
@@ -407,14 +411,26 @@ def _analyze_symbol_core(
     # 平滑混合（70%自适应 + 30%基础）
     weights = blend_weights(regime_weights, base_weights, blend_ratio=0.7)
 
-    # 10维分数（统一±100）+ F调节器
+    # 10维方向分数（统一±100，v2.0合规版：F已移除）
     scores = {
-        # 8个旧因子
+        # A-layer direction factors (10 factors, NO F)
         "T": T, "M": M, "C": C, "S": S, "V": V, "O": O, "E": E,
-        # 4个新因子
         "L": L, "B": B, "Q": Q, "I": I,
-        # F调节器
-        "F": F
+        # F removed from scorecard (was 10.0%, redistributed to above 9 factors)
+    }
+
+    # v2.0合规：因子范围验证（HIGH #2）
+    # 所有因子必须在±100范围内（SPEC_DIGEST.md § 1）
+    for factor_name, factor_value in scores.items():
+        if not (-100 <= factor_value <= 100):
+            from ats_core.logging import warn
+            warn(f"⚠️  因子{factor_name}超出范围: {factor_value}, 裁剪到±100")
+            scores[factor_name] = max(-100, min(100, factor_value))
+
+    # B-layer modulation factors (F affects Teff/cost/thresholds ONLY, NOT S_score)
+    # Per MODULATORS.md § 2.1: "F 仅调节 Teff/cost/thresholds，绝不修改方向分数"
+    modulation = {
+        "F": F,  # Funding rate factor (for Teff/cost adjustment)
     }
 
     # 计算加权分数（scorecard内部已归一化到±100）
@@ -459,30 +475,12 @@ def _analyze_symbol_core(
 
     # 移除贝叶斯先验调整（已废弃候选池机制）
 
-    # ---- 5. F极端值否决机制（F现在主要通过评分影响，仅保留极端否决）----
-    # ⚠️ 重要改进：F现在参与评分（权重10.0/100=10%），避免双重计数
-    # - F正常范围（≥-70）：仅通过评分影响，不再调整概率
-    # - F极端反对（<-70）：保留安全阀机制，严厉惩罚概率（×0.7）
-    #
-    # 对齐F到交易方向：
-    # - 做多时：F > 0好（资金领先），F < 0差（价格领先）
-    # - 做空时：F < 0好（资金领先空），F > 0差（价格领先多）
-    import math
-    F_aligned = F if side_long else -F
-
-    # F极端值否决机制（安全阀）
-    f_veto_warning = None
-    if F_aligned < -70:
-        # F强烈反对当前方向（资金/价格严重背离）
-        adjustment = 0.70  # 安全阀惩罚（从0.6调整为0.7，因为F已参与评分）
-        f_veto_warning = "⚠️ F极端反对（资金/价格严重背离）"
-    else:
-        # 正常范围：不再调整概率（F已通过评分影响）
-        adjustment = 1.0
-
-    # 最终概率
-    P_long = min(0.95, P_long_base * adjustment if side_long else P_long_base)
-    P_short = min(0.95, P_short_base * adjustment if not side_long else P_short_base)
+    # ---- 5. 最终概率（v2.0合规：移除F直接调整）----
+    # F调制器仅通过Teff/cost调整（在integrated_gates中实现）
+    # 不应直接修改概率，避免双重惩罚
+    # 符合MODULATORS.md § 2.1规范："F仅调节Teff/cost/thresholds，绝不修改方向分数或概率"
+    P_long = min(0.95, P_long_base)
+    P_short = min(0.95, P_short_base)
     P_chosen = P_long if side_long else P_short
 
     # ---- 6. 发布判定（4级分级标准）----
@@ -673,9 +671,12 @@ def _analyze_symbol_core(
         # 性能分析（用于调试）
         "perf": perf,
 
-        # 7维分数（统一±100）
+        # 10维分数（统一±100，v2.0合规版：F已移除）
         "scores": scores,
         "scores_meta": scores_meta,
+
+        # B-layer调节因子（v2.0新增：F不参与评分，仅用于Teff/cost调节）
+        "modulation": modulation,
 
         # Scorecard结果
         "weighted_score": weighted_score,  # -100 到 +100
@@ -706,7 +707,13 @@ def _analyze_symbol_core(
             "ttl_h": 8
         },
 
-        # 新币信息
+        # 新币信息（嵌套格式，匹配scanner读取）
+        "new_coin": {
+            "is_new": is_new_coin,
+            "phase": coin_phase,
+            "age_days": round(coin_age_days, 1)
+        },
+        # 向后兼容（保留旧键名）
         "coin_age_days": round(coin_age_days, 1),
         "coin_phase": coin_phase,
         "is_new_coin": is_new_coin,
@@ -928,11 +935,11 @@ def _calc_structure(h, l, c, ema30_last, atr_now, cfg, ctx):
     except Exception:
         return 50, {"theta": 0.4, "icr": 0.5, "retr": 0.5}
 
-def _calc_volume(vol):
-    """量能打分（±100系统）"""
+def _calc_volume(vol, closes=None):
+    """量能打分（±100系统，v2.0修复多空对称性）"""
     try:
         from ats_core.features.volume import score_volume
-        V, meta = score_volume(vol)
+        V, meta = score_volume(vol, closes=closes)
         return int(V), meta
     except Exception:
         return 0, {"v5v20": 1.0, "vroc_abs": 0.0}

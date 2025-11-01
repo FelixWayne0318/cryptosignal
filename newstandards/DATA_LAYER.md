@@ -81,12 +81,102 @@
 \mathrm{DataQual}=1-\big(w_h\cdot\mathrm{miss}+w_o\cdot\mathrm{ooOrder}+w_d\cdot\mathrm{drift}+w_m\cdot\mathrm{mismatch}\big)
 \]
 
-- **miss**：心跳/消息缺失率（按流/按符号）  
-- **ooOrder**：乱序事件率（重排窗口外）  
-- **drift**：\(|ts_{exch}-ts_{srv}|>T_d\) 比率（如 \(T_d=300ms\)）  
-- **mismatch**：簿面对账失败/重建事件率  
-- **推荐权重**：`w_h=0.35, w_o=0.15, w_d=0.20, w_m=0.30`  
+- **miss**：心跳/消息缺失率（按流/按符号）
+- **ooOrder**：乱序事件率（重排窗口外）
+- **drift**：\(|ts_{exch}-ts_{srv}|>T_d\) 比率（如 \(T_d=300ms\)）
+- **mismatch**：簿面对账失败/重建事件率
+- **推荐权重**：`w_h=0.35, w_o=0.15, w_d=0.20, w_m=0.30`
 - **阈值**：`DataQual ≥ 0.90` 才允许 Prime；`<0.88` 立即降级并**冷却 60–120s**
+
+### 5.1 异常蜡烛线检测（Bad Wick Ratio，v2.1新增）
+**目的**：识别数据质量问题（闪崩、乌龙单、低流动性脉冲）
+
+**定义**：
+\[
+\mathrm{bad\_wick\_ratio}=\frac{\text{异常蜡烛数}}{\text{总蜡烛数}}\in[0,1]
+\]
+
+**异常蜡烛判定条件（任一满足即为异常）**：
+1. **上影线异常**：`upper_wick > threshold × body_size`
+2. **下影线异常**：`lower_wick > threshold × body_size`
+3. **ATR异常**（如有）：`upper_wick > 3.0 × ATR` 或 `lower_wick > 3.0 × ATR`
+
+其中：
+```python
+body_size = |close - open|
+upper_wick = high - max(open, close)
+lower_wick = min(open, close) - low
+threshold = 2.0  # 影线超过实体2倍视为异常
+```
+
+**Doji蜡烛特殊处理**（实体极小）：
+```python
+if body_size < 1e-9:
+    body_size = 0.01 * close  # 用收盘价的1%作为实体代理
+```
+
+**阈值与行为**：
+```python
+# 标准币种
+bad_wick_ratio <= 0.15  # 15%以下可接受
+
+# 新币（更宽松）
+bad_wick_ratio <= 0.25  # 25%以下可接受（波动大，容忍度高）
+```
+
+**失败时行为**：
+- 不阻断交易（仅警告）
+- 记录到 `QualityMetrics.bad_wick_ratio` 字段
+- 触发告警：DataQual 降级（可选）
+
+**实现示例**：
+```python
+def calculate_bad_wick_ratio(candles, atr=None, threshold=2.0):
+    """
+    计算异常蜡烛线比例
+
+    Args:
+        candles: List of dicts with 'open', 'high', 'low', 'close'
+        atr: Average True Range (optional)
+        threshold: 影线/实体比例阈值
+
+    Returns:
+        bad_ratio ∈ [0, 1]
+    """
+    if not candles:
+        return 0.0
+
+    bad_count = 0
+    for c in candles:
+        o, h, l, c_close = c['open'], c['high'], c['low'], c['close']
+
+        # 计算影线和实体
+        body = abs(c_close - o)
+        if body < 1e-9:
+            body = 0.01 * c_close  # Doji处理
+
+        upper_wick = h - max(o, c_close)
+        lower_wick = min(o, c_close) - l
+
+        # 检查异常条件
+        is_bad = False
+        if upper_wick > threshold * body:
+            is_bad = True
+        if lower_wick > threshold * body:
+            is_bad = True
+        if atr and (upper_wick > 3.0 * atr or lower_wick > 3.0 * atr):
+            is_bad = True
+
+        if is_bad:
+            bad_count += 1
+
+    return bad_count / len(candles)
+```
+
+**应用场景**：
+1. **新币冷启动**：前20根K线 bad_wick_ratio > 0.3 → 延长观察期
+2. **闪崩检测**：单根K线影线 > 5×ATR → 标记为异常，忽略该K线
+3. **交易所故障**：连续5根K线 bad_wick_ratio > 0.4 → 暂停交易，等待恢复
 
 ---
 

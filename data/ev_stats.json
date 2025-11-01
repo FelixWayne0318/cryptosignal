@@ -1,0 +1,38 @@
+{
+  "BTCUSDT": [
+    {"p_min": 0.50, "p_max": 0.55, "mu_win": 0.018, "mu_loss": -0.020, "samples": 143},
+    {"p_min": 0.55, "p_max": 0.60, "mu_win": 0.022, "mu_loss": -0.018, "samples": 127},
+    {"p_min": 0.60, "p_max": 0.65, "mu_win": 0.028, "mu_loss": -0.016, "samples": 98},
+    {"p_min": 0.65, "p_max": 0.70, "mu_win": 0.034, "mu_loss": -0.014, "samples": 76},
+    {"p_min": 0.70, "p_max": 0.75, "mu_win": 0.042, "mu_loss": -0.012, "samples": 54},
+    {"p_min": 0.75, "p_max": 0.80, "mu_win": 0.052, "mu_loss": -0.010, "samples": 38},
+    {"p_min": 0.80, "p_max": 0.85, "mu_win": 0.065, "mu_loss": -0.008, "samples": 24},
+    {"p_min": 0.85, "p_max": 0.90, "mu_win": 0.082, "mu_loss": -0.006, "samples": 15},
+    {"p_min": 0.90, "p_max": 0.95, "mu_win": 0.105, "mu_loss": -0.004, "samples": 8},
+    {"p_min": 0.95, "p_max": 1.00, "mu_win": 0.135, "mu_loss": -0.002, "samples": 3}
+  ],
+  "ETHUSDT": [
+    {"p_min": 0.50, "p_max": 0.55, "mu_win": 0.020, "mu_loss": -0.022, "samples": 138},
+    {"p_min": 0.55, "p_max": 0.60, "mu_win": 0.024, "mu_loss": -0.020, "samples": 119},
+    {"p_min": 0.60, "p_max": 0.65, "mu_win": 0.030, "mu_loss": -0.018, "samples": 92},
+    {"p_min": 0.65, "p_max": 0.70, "mu_win": 0.037, "mu_loss": -0.015, "samples": 71},
+    {"p_min": 0.70, "p_max": 0.75, "mu_win": 0.046, "mu_loss": -0.013, "samples": 49},
+    {"p_min": 0.75, "p_max": 0.80, "mu_win": 0.058, "mu_loss": -0.011, "samples": 34},
+    {"p_min": 0.80, "p_max": 0.85, "mu_win": 0.073, "mu_loss": -0.009, "samples": 21},
+    {"p_min": 0.85, "p_max": 0.90, "mu_win": 0.092, "mu_loss": -0.007, "samples": 12},
+    {"p_min": 0.90, "p_max": 0.95, "mu_win": 0.118, "mu_loss": -0.005, "samples": 6},
+    {"p_min": 0.95, "p_max": 1.00, "mu_win": 0.152, "mu_loss": -0.003, "samples": 2}
+  ],
+  "default": [
+    {"p_min": 0.50, "p_max": 0.55, "mu_win": 0.018, "mu_loss": -0.020, "samples": 0},
+    {"p_min": 0.55, "p_max": 0.60, "mu_win": 0.022, "mu_loss": -0.018, "samples": 0},
+    {"p_min": 0.60, "p_max": 0.65, "mu_win": 0.028, "mu_loss": -0.016, "samples": 0},
+    {"p_min": 0.65, "p_max": 0.70, "mu_win": 0.034, "mu_loss": -0.014, "samples": 0},
+    {"p_min": 0.70, "p_max": 0.75, "mu_win": 0.042, "mu_loss": -0.012, "samples": 0},
+    {"p_min": 0.75, "p_max": 0.80, "mu_win": 0.052, "mu_loss": -0.010, "samples": 0},
+    {"p_min": 0.80, "p_max": 0.85, "mu_win": 0.065, "mu_loss": -0.008, "samples": 0},
+    {"p_min": 0.85, "p_max": 0.90, "mu_win": 0.082, "mu_loss": -0.006, "samples": 0},
+    {"p_min": 0.90, "p_max": 0.95, "mu_win": 0.105, "mu_loss": -0.004, "samples": 0},
+    {"p_min": 0.95, "p_max": 1.00, "mu_win": 0.135, "mu_loss": -0.002, "samples": 0}
+  ]
+}
