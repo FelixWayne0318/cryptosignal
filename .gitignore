@@ -39,3 +39,4 @@ data/reports/
 .idea/
 .DS_Store
 Thumbs.db
+config/binance_credentials.json
