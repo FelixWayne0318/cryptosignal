@@ -1,218 +1,777 @@
 {
-  "metadata": {
+  "meta": {
+    "source": "newstandards/ v2.0",
     "generated": "2025-11-01",
-    "version": "v2.0",
-    "source_files": [
-      "newstandards/STANDARDS.md",
-      "newstandards/MODULATORS.md",
-      "newstandards/PUBLISHING.md",
-      "newstandards/DATA_LAYER.md",
-      "newstandards/NEWCOIN_SPEC.md",
-      "newstandards/SCHEMAS.md"
+    "files": [
+      "STANDARDS.md",
+      "MODULATORS.md",
+      "PUBLISHING.md",
+      "DATA_LAYER.md",
+      "NEWCOIN_SPEC.md",
+      "SCHEMAS.md",
+      "PROJECT_INDEX.md"
     ],
-    "compliance_target": "8/8 requirements"
+    "version": "2.0",
+    "purpose": "Machine-readable specification for compliance validation"
   },
-  "hard_constraints": {
-    "multi_directional_symmetry": true,
-    "dataqual_threshold": 0.9,
-    "dataqual_critical": 0.88,
-    "ws_connections_max": 5,
-    "ws_connections_recommended": 3,
-    "fi_modulator_isolation": true,
-    "ev_positive_gate": true,
-    "shadow_run_only": true
-  },
-  "standardization_chain": {
-    "steps": [
-      {
-        "step": 1,
-        "name": "pre_smoothing",
+
+  "principles": [
+    {"id": 1, "name": "多空对称", "description": "无方向性偏好，long/short 对称设计"},
+    {"id": 2, "name": "层级解耦", "description": "A→B→C→D 单向依赖，F/I 不回传修改方向分"},
+    {"id": 3, "name": "斜率优先", "description": "趋势/动量优先用斜率，禁用裸价格"},
+    {"id": 4, "name": "稳健统计", "description": "EW-中位数/MAD 抗肥尾"},
+    {"id": 5, "name": "软温莎", "description": "soft_winsor 替代硬截断"},
+    {"id": 6, "name": "统一压缩", "description": "tanh 统一映射到 ±100"},
+    {"id": 7, "name": "发布平滑", "description": "含滞后的发布滤波器"},
+    {"id": 8, "name": "EV硬闸", "description": "EV > 0 是 Prime 发布的必要条件"},
+    {"id": 9, "name": "四道闸门", "description": "DataQual ≥ 0.90, impact ≤ 7bps, spread ≤ 35bps, |OBI| ≤ 0.30"},
+    {"id": 10, "name": "防抖动", "description": "滞回 + K/N持久 + 冷却期三重防护"}
+  ],
+
+  "hard_constraints": [
+    {
+      "id": "HC1",
+      "name": "无实际交易",
+      "rule": "shadow_run模式，仅读取公开行情数据，禁止调用下单API"
+    },
+    {
+      "id": "HC2",
+      "name": "WS连接数限制",
+      "rule": "总连接数 ≤ 5，推荐3条固定 + 1条按需 + 1条备用"
+    },
+    {
+      "id": "HC3",
+      "name": "DataQual闸门",
+      "rule": "DataQual < 0.90 禁止Prime, < 0.88 立即降级"
+    },
+    {
+      "id": "HC4",
+      "name": "F/I三通道隔离",
+      "rule": "F/I仅影响Teff/cost/thresholds，严禁修改S_score或任何A层因子"
+    }
+  ],
+
+  "layer_a_factors": {
+    "standardization_chain": {
+      "step1_presmooth": {
         "formula": "x̃_t = α·x_t + (1-α)·x̃_{t-1}",
-        "alpha": 0.15
+        "params": {
+          "alpha_standard": 0.3,
+          "alpha_newcoin": 0.4
+        }
       },
-      {
-        "step": 2,
-        "name": "robust_scaling",
-        "formula": "z = (x̃ - μ_ew) / (1.4826 * MAD_ew)",
-        "scale_factor": 1.4826
+      "step2_robust_scale": {
+        "formula": "z = (x̃ - μ_ew) / (1.4826 · MAD_ew)",
+        "params": {
+          "span": 168,
+          "method": "EWMedian/EW_MAD"
+        }
       },
-      {
-        "step": 3,
-        "name": "soft_winsor",
-        "formula": "z_soft = soft_winsor(z, z0, zmax, λ)",
-        "z0": 2.5,
-        "zmax": 6.0,
-        "lambda": 1.5
+      "step3_soft_winsor": {
+        "formula": "sign(z) · (z0 + λ·log(1 + min(|z|, zmax) - z0)) if |z| > z0 else z",
+        "params": {
+          "z0": 2.5,
+          "zmax": 6,
+          "lambda": 1.5
+        }
       },
-      {
-        "step": 4,
-        "name": "compression",
-        "formula": "s_k = 100 · tanh(z_soft / τ)",
-        "tau": 3.0
+      "step4_tanh_compress": {
+        "formula": "s_k = 100 · tanh(z_soft / τ_k)",
+        "params": {
+          "tau_T": 1.8,
+          "tau_M": 1.8,
+          "tau_S": 2.0,
+          "tau_V": 2.2,
+          "tau_C": 1.6,
+          "tau_O": 1.6,
+          "tau_Q": 2.5
+        }
       },
-      {
-        "step": 5,
-        "name": "publish_filter",
-        "formula": "s_pub = smooth_with_hysteresis(s_k, αs, Δmax)",
-        "alpha_s": 0.15
+      "step5_publish_filter": {
+        "formula": "s_ema = α_s·s_k + (1-α_s)·s_prev, clipped by Δmax",
+        "params": {
+          "alpha_s": 0.4,
+          "delta_max": 15
+        }
       }
-    ],
-    "required_for": "ALL A-layer factors (T, M, C, S, V, O, L, B, Q, I, F)"
-  },
-  "fi_modulation": {
-    "F_factor": {
-      "affects": [
-        "Teff",
-        "cost",
-        "thresholds"
-      ],
-      "forbidden": [
-        "S_score",
-        "direction",
-        "scorecard_weights"
-      ],
-      "formula": "Teff = clip(T0 * (1 + βF·gF) / (1 + βI·gI), Tmin, Tmax)",
-      "beta_F": 0.3,
-      "beta_I": 0.2
     },
-    "I_factor": {
-      "affects": [
-        "Teff",
-        "cost",
-        "thresholds"
-      ],
-      "penalty_formula": "pen_I = θI · |gI|",
-      "theta_I": 0.05
+
+    "factors": {
+      "T": {
+        "name": "趋势",
+        "weight_standard": 18,
+        "weight_newcoin": 22,
+        "components": {
+          "T1": {
+            "name": "ZLEMA多周期斜率",
+            "formula": "0.4·slope(ZLEMA_20) + 0.3·slope(ZLEMA_50) + 0.3·slope(ZLEMA_100)",
+            "zlema_formula": "EMA(price + (price - price.shift(lag)), span), lag=(span-1)/2"
+          },
+          "T2": {
+            "name": "距30日高低点位置",
+            "formula": "((price-low30)/(high30-low30) - 0.5 - ((high30-price)/(high30-low30) - 0.5)) / 2"
+          }
+        },
+        "aggregation": "T_raw = 0.6·T1 + 0.4·T2, then standardization_chain"
+      },
+      "M": {
+        "name": "动量",
+        "weight_standard": 12,
+        "weight_newcoin": 15,
+        "components": {
+          "M1": {
+            "name": "ROC多周期斜率",
+            "formula": "0.5·slope(ROC_14) + 0.3·slope(ROC_28) + 0.2·slope(ROC_50)",
+            "roc_formula": "(price / price.shift(n) - 1) · 100"
+          },
+          "M2": {
+            "name": "RSI斜率",
+            "formula": "slope(RSI_14, lookback=5)"
+          },
+          "M3": {
+            "name": "MACD斜率",
+            "formula": "slope(MACD - signal, lookback=5)"
+          }
+        },
+        "aggregation": "M_raw = 0.5·M1 + 0.25·M2 + 0.25·M3, then standardization_chain"
+      },
+      "S": {
+        "name": "结构",
+        "weight_standard": 10,
+        "weight_newcoin": 15,
+        "components": {
+          "S1": {
+            "name": "高低点序列",
+            "formula": "frac(higher_high) - frac(lower_low) in 20 bar window"
+          },
+          "S2": {
+            "name": "布林带位置",
+            "formula": "(close - BB_mid) / (2 · BB_std)"
+          }
+        },
+        "aggregation": "S_raw = 0.6·S1 + 0.4·S2, then standardization_chain"
+      },
+      "V": {
+        "name": "成交量",
+        "weight_standard": 10,
+        "weight_newcoin": 16,
+        "components": {
+          "V1": {
+            "name": "RVOL",
+            "formula": "(volume / SMA(volume, 20) - 1) · 100"
+          },
+          "V2": {
+            "name": "OBV斜率",
+            "formula": "slope(OBV, lookback=10) / ATR"
+          }
+        },
+        "aggregation": "V_raw = 0.5·V1 + 0.5·V2, then standardization_chain"
+      },
+      "C": {
+        "name": "CVD",
+        "weight_standard": 18,
+        "weight_newcoin": 20,
+        "components": {
+          "C1": {
+            "name": "CVD斜率多周期",
+            "formula": "(0.5·slope(CVD_1m, 10) + 0.3·slope(CVD_5m, 6) + 0.2·slope(CVD_15m, 4)) / ATR"
+          },
+          "C2": {
+            "name": "买卖压比例",
+            "formula": "(aggBuy_ratio - 0.5) · 200"
+          }
+        },
+        "aggregation": "C_raw = 0.7·C1 + 0.3·C2, then standardization_chain"
+      },
+      "O": {
+        "name": "持仓量",
+        "weight_standard": 18,
+        "weight_newcoin": 8,
+        "components": {
+          "O1": {
+            "name": "ΔOI归一化",
+            "formula": "(ΔOI / rolling_std(ΔOI, 20))"
+          },
+          "O2": {
+            "name": "OI与价格背离",
+            "formula": "-rolling_corr(OI, close, window=20)"
+          }
+        },
+        "aggregation": "O_raw = 0.7·O1 + 0.3·O2, then standardization_chain"
+      },
+      "Q": {
+        "name": "强平",
+        "weight_standard": 4,
+        "weight_newcoin": 4,
+        "formula": "(Q_long - Q_short) · 100, where Q_long = Σ(liq_qty where side=SELL)/total",
+        "window_standard": "1h",
+        "window_newcoin": "15m"
+      }
+    },
+
+    "aggregation": {
+      "linear": "S_lin = Σ w_k · s_k",
+      "weights_standard": {
+        "T": 18, "M": 12, "S": 10, "V": 10, "C": 18, "O": 18, "Q": 4,
+        "total": 90
+      },
+      "weights_newcoin": {
+        "T": 22, "M": 15, "S": 15, "V": 16, "C": 20, "O": 8, "Q": 4,
+        "total": 100
+      },
+      "final_compress": {
+        "formula": "S_score = 100 · tanh(S_lin / T_agg)",
+        "T_agg_standard": 50,
+        "T_agg_newcoin": 60,
+        "output_range": [-100, 100]
+      }
     }
   },
-  "four_gates": {
-    "impact": {
-      "standard_threshold_bps": 7.0,
-      "newcoin_threshold_bps": 15.0,
-      "formula": "impact_bps ≤ threshold"
+
+  "layer_b_modulators": {
+    "normalization": {
+      "formula": "g(x) = tanh(γ · (x - 0.5))",
+      "gamma": 3,
+      "input_range": [0, 1],
+      "output_range": [-0.46, 0.46]
     },
-    "spread": {
-      "threshold_bps": 35.0,
-      "formula": "spread_bps ≤ 35"
+
+    "F_crowding": {
+      "components": {
+        "F_funding": "clip(|funding_rate| / 0.0005, 0, 1)",
+        "F_basis": "clip(|basis_bps| / 30, 0, 1)",
+        "F_oi": "clip(ΔOI_normalized, 0, 1)"
+      },
+      "aggregation": "F_raw = 0.5·F_funding + 0.3·F_basis + 0.2·F_oi",
+      "normalized": "gF = tanh(3 · (F_raw - 0.5))",
+      "channels": {
+        "temperature": "影响Teff分子",
+        "cost_penalty": "pen_F = λF·max(0, gF)",
+        "threshold_raise": "p*_min += θF·max(0, gF)"
+      },
+      "params": {
+        "beta_F_standard": 0.35,
+        "beta_F_newcoin": 0.20,
+        "lambda_F": 0.0002,
+        "theta_F": 0.03
+      }
     },
-    "obi": {
-      "threshold": 0.3,
-      "formula": "|OBI| ≤ 0.30"
+
+    "I_independence": {
+      "formula": "I_raw = max(|corr_BTC|, |corr_ETH|)",
+      "window": 24,
+      "normalized": "gI = tanh(3 · (I_raw - 0.5))",
+      "channels": {
+        "temperature": "影响Teff分母",
+        "cost_penalty": "pen_I = λI·max(0, gI)",
+        "cost_reward": "rew_I = λI_rew·max(0, -gI)",
+        "threshold_raise": "Δp_min += φI·max(0, gI)"
+      },
+      "params": {
+        "beta_I_standard": 0.25,
+        "beta_I_newcoin": 0.15,
+        "lambda_I": 0.0001,
+        "lambda_I_rew": 0.00005,
+        "phi_I": 0.01
+      }
     },
-    "dataqual": {
-      "prime_threshold": 0.9,
-      "critical_threshold": 0.88,
-      "formula": "DataQual = 1 - (0.35·miss + 0.15·ooOrder + 0.20·drift + 0.30·mismatch)"
+
+    "Teff": {
+      "formula": "clip(T0 · (1 + βF·gF) / (1 + βI·gI), Tmin, Tmax)",
+      "params_standard": {
+        "T0": 50,
+        "Tmin": 35,
+        "Tmax": 80,
+        "beta_F": 0.35,
+        "beta_I": 0.25
+      },
+      "params_newcoin": {
+        "T0": 60,
+        "Tmin": 40,
+        "Tmax": 95,
+        "beta_F": 0.20,
+        "beta_I": 0.15
+      },
+      "assertions": [
+        "高拥挤/高相关 → Teff ↑ → 概率 ↓",
+        "低拥挤/高独立 → Teff ↓ → 概率 ↑"
+      ]
+    },
+
+    "cost_eff": {
+      "formula": "fee + impact_bps/1e4 + pen_F + pen_I - rew_I",
+      "components": {
+        "fee_maker": 0.0004,
+        "fee_taker": 0.0006,
+        "impact_bps": "from C layer",
+        "pen_F": "λF · max(0, gF)",
+        "pen_I": "λI · max(0, gI)",
+        "rew_I": "λI_rew · max(0, -gI)"
+      }
+    },
+
+    "thresholds": {
+      "p_min": {
+        "formula": "p0 + θF·max(0, gF) + θI·max(0, gI)",
+        "p0_standard": 0.55,
+        "p0_newcoin": 0.58,
+        "theta_F": 0.03,
+        "theta_I": 0.02
+      },
+      "delta_p_min": {
+        "formula": "Δp0 + φF·max(0, gF) + φI·max(0, gI)",
+        "delta_p0_standard": 0.02,
+        "delta_p0_newcoin": 0.03,
+        "phi_F": 0.01,
+        "phi_I": 0.01
+      }
     }
   },
-  "publishing_rules": {
+
+  "layer_c_execution": {
+    "liquidity_metrics": {
+      "spread_bps": {
+        "formula": "(ask1 - bid1) / mid · 1e4",
+        "mid": "(ask1 + bid1) / 2"
+      },
+      "impact_bps": {
+        "description": "冲击成本计算，Q为目标仓位USDT价值",
+        "algorithm": "遍历shelves累积成交，计算平均价格与mid的偏离",
+        "insufficient_liquidity": 999
+      },
+      "OBI10": {
+        "formula": "(Σ bid_qty_top10 - Σ ask_qty_top10) / (Σ bid_qty_top10 + Σ ask_qty_top10)",
+        "range": [-1, 1]
+      }
+    },
+
+    "four_gates": {
+      "gate1_impact": {
+        "threshold_standard": 7,
+        "threshold_newcoin_strict": 7,
+        "threshold_newcoin_relaxed": 8,
+        "unit": "bps"
+      },
+      "gate2_spread": {
+        "threshold_standard": 35,
+        "threshold_newcoin_strict": 35,
+        "threshold_newcoin_relaxed": 38,
+        "unit": "bps"
+      },
+      "gate3_obi": {
+        "threshold": 0.30,
+        "formula": "|OBI10| <= 0.30"
+      },
+      "gate4_dataqual": {
+        "threshold_prime": 0.90,
+        "threshold_downgrade": 0.88,
+        "description": "DataQual < 0.90 禁止Prime, < 0.88 立即降级"
+      }
+    },
+
+    "sl_tp": {
+      "ATR": {
+        "formula": "EMA(TrueRange, span=14)",
+        "TrueRange": "max(high-low, |high-close_prev|, |low-close_prev|)"
+      },
+      "SL0": {
+        "formula": "entry ± 1.2·ATR",
+        "direction": "± 取决于方向"
+      },
+      "TP1": {
+        "formula": "entry ± 1.8·ATR",
+        "allocation": "50%仓位"
+      },
+      "TP2": {
+        "formula": "entry ± 3.0·ATR",
+        "allocation": "剩余50%仓位"
+      },
+      "concurrency": {
+        "standard": "1-2",
+        "newcoin": "1"
+      }
+    }
+  },
+
+  "layer_d_publishing": {
     "probability": {
-      "prime_entry": 0.8,
-      "prime_maintain": 0.7,
-      "watch_entry": 0.5,
-      "watch_maintain": 0.4
+      "logistic": {
+        "P_long": "1 / (1 + exp(-S_score / Teff))",
+        "P_short": "1 / (1 + exp(S_score / Teff))"
+      },
+      "short_sample_shrinkage": {
+        "formula": "P̃ = 0.5 + w_eff · (P - 0.5)",
+        "w_eff": "min(1, bars_1h / 400)",
+        "applies_to": "新币通道"
+      }
     },
+
+    "expected_value": {
+      "mu_win": "TP1 / entry - 1",
+      "mu_loss": "|SL0 / entry - 1|",
+      "EV_long": "P_long · μ_win - (1 - P_long) · μ_loss - cost_eff",
+      "EV_short": "P_short · μ_win - (1 - P_short) · μ_loss - cost_eff",
+      "hard_gate": "EV <= 0 → WATCH only"
+    },
+
     "anti_jitter": {
-      "hysteresis": true,
-      "persistence_K": 2,
-      "persistence_N": 3,
-      "cooldown_seconds": 90
+      "hysteresis": {
+        "p_entry": "p*_min",
+        "p_maintain": "p_entry - Δhys",
+        "delta_hys": [0.01, 0.02]
+      },
+      "kn_persistence": {
+        "K": 2,
+        "N": 3,
+        "description": "3个bar中至少2个满足条件"
+      },
+      "cooldown": {
+        "tau_cool": [60, 120],
+        "unit": "seconds",
+        "trigger": "降级后等待才能重新评估"
+      }
     },
-    "ev_gate": {
-      "formula": "EV = P_long · payoff_win + P_short · payoff_loss",
-      "threshold": 0.0,
-      "enforcement": "EV > 0 required for PRIME"
+
+    "prime_strength": {
+      "formula": "0.6·|S_score| + 40·clip((p* - 0.60)/0.15, 0, 1)",
+      "range": [0, 100],
+      "purpose": "前端展示"
+    },
+
+    "TTL": {
+      "standard": 8,
+      "newcoin": [2, 4],
+      "unit": "hours",
+      "note": "新币TTL根据波动率动态调整"
     }
   },
+
   "data_layer": {
+    "SLO": {
+      "availability": 0.995,
+      "latency_p95_newcoin_ms": 250,
+      "latency_p95_standard_ms": 500
+    },
+
+    "binance_sources": {
+      "rest": {
+        "klines": "/fapi/v1/klines",
+        "depth": "/fapi/v1/depth",
+        "openInterest": "/fapi/v1/openInterest",
+        "fundingRate": "/fapi/v1/fundingRate",
+        "forceOrders": "/fapi/v1/allForceOrders",
+        "exchangeInfo": "/fapi/v1/exchangeInfo"
+      },
+      "websocket": {
+        "base_url": "wss://fstream.binance.com/stream",
+        "streams": [
+          "{symbol}@kline_{interval}",
+          "{symbol}@aggTrade",
+          "{symbol}@depth@100ms",
+          "{symbol}@markPrice@1s"
+        ]
+      }
+    },
+
     "ws_topology": {
       "max_connections": 5,
-      "recommended": 3,
-      "streams": [
-        "kline_1h",
-        "kline_4h",
-        "aggTrade",
-        "depth@100ms",
-        "markPrice"
-      ]
+      "fixed_connections": {
+        "count": [2, 3],
+        "streams": ["kline", "aggTrade", "markPrice (optional)"]
+      },
+      "on_demand_connections": {
+        "count": [1, 2],
+        "streams": ["depth@100ms (Watch/Prime only)"]
+      },
+      "reconnection": {
+        "backoff_formula": "min(100ms * 2^retry, 5s)",
+        "jitter": "backoff * (1 ± 0.15)"
+      }
     },
-    "dataqual_components": {
-      "miss_weight": 0.35,
-      "ooOrder_weight": 0.15,
-      "drift_weight": 0.2,
-      "mismatch_weight": 0.3
+
+    "orderbook_reconciliation": {
+      "snapshot": {
+        "endpoint": "/fapi/v1/depth?symbol={}&limit=1000",
+        "returns": ["lastUpdateId", "bids[]", "asks[]"]
+      },
+      "incremental": {
+        "ws_event_fields": ["U", "u", "b[]", "a[]"],
+        "U_description": "first_update_id",
+        "u_description": "final_update_id"
+      },
+      "logic": [
+        "if u <= lastUpdateId: discard",
+        "elif U <= lastUpdateId + 1 <= u: apply_update, lastUpdateId = u",
+        "else: fetch_new_snapshot (gap detected)"
+      ],
+      "success_rate_target": 0.99
+    },
+
+    "DataQual": {
+      "formula": "1 - (0.35·miss + 0.15·ooOrder + 0.20·drift + 0.30·mismatch)",
+      "components": {
+        "miss": {
+          "description": "缺失率",
+          "formula": "(expected_events - received_events) / expected_events"
+        },
+        "ooOrder": {
+          "description": "乱序率",
+          "formula": "count(ts_exch[i] < ts_exch[i-1]) / total_events"
+        },
+        "drift": {
+          "description": "时钟漂移",
+          "formula": "|ts_srv - ts_exch - offset| / threshold",
+          "threshold_standard_ms": 500,
+          "threshold_newcoin_ms": 250
+        },
+        "mismatch": {
+          "description": "快照不一致",
+          "formula": "reconcile_fail_count / reconcile_total"
+        }
+      },
+      "gates": {
+        "prime_threshold": 0.90,
+        "downgrade_threshold": 0.88,
+        "cooldown_s": [60, 120]
+      },
+      "recording_frequency": "每分钟"
+    },
+
+    "timestamps": {
+      "ts_exch": {
+        "description": "交易所时间戳",
+        "unit": "ms",
+        "priority": "用于排序和逻辑"
+      },
+      "ts_srv": {
+        "description": "服务器接收时间戳",
+        "unit": "ms",
+        "priority": "用于诊断"
+      }
+    },
+
+    "derived_quantities": {
+      "AVWAP": "Σ(price · qty) / Σ(qty)",
+      "CVD": "CVD_t = CVD_{t-1} + (buy_qty - sell_qty)",
+      "RVOL": "volume_current / SMA(volume, 20)",
+      "OBI": "(bid_qty_sum - ask_qty_sum) / (bid_qty_sum + ask_qty_sum)"
+    },
+
+    "cache_tiers": {
+      "hot": {
+        "retention": "48-72h",
+        "storage": "内存",
+        "data": ["kline", "aggTrade", "depth", "features"]
+      },
+      "warm": {
+        "retention": "90d",
+        "storage": "Parquet",
+        "partition": "dt/symbol"
+      },
+      "cold": {
+        "retention": "长期",
+        "storage": "S3/OSS",
+        "compression": ["gzip", "snappy"]
+      }
+    },
+
+    "subscription_tiers": {
+      "cold": {
+        "symbols": "长期不活跃",
+        "connections": 1,
+        "streams": ["kline_1h"]
+      },
+      "warm": {
+        "level": "WATCH",
+        "connections": [2, 3],
+        "streams": ["kline", "aggTrade", "markPrice"]
+      },
+      "hot": {
+        "level": "PRIME",
+        "connections": [4, 5],
+        "streams": ["kline", "aggTrade", "markPrice", "depth@100ms"]
+      }
     }
   },
-  "newcoin_spec": {
-    "classification": {
-      "newcoin_threshold_days": 14,
-      "newcoin_threshold_bars": 400,
-      "tiers": [
-        "Ignition",
-        "Momentum",
-        "Exhaustion",
-        "Standard"
+
+  "newcoin_channel": {
+    "entry_conditions": {
+      "any_of": [
+        "since_listing < 14d",
+        "bars_1h < 400",
+        "!has_OI OR !has_funding (数据不足3天)"
       ]
     },
-    "special_handling": {
+    "exit_conditions": {
+      "all_of": [
+        "bars_1h >= 400",
+        "has_OI AND has_funding >= 3d",
+        "since_listing >= 14d"
+      ]
+    },
+    "transition": {
+      "duration_hours": 48,
+      "blending": "w = hours_in_transition / 48, final_score = (1-w)·newcoin + w·standard"
+    },
+
+    "factor_weights": {
+      "T": 22, "M": 15, "S": 15, "V": 16, "C": 20, "O": 8, "Q": 4,
+      "rationale": "T/M/S/V/C提升(快速动量优先), O降低(OI不稳定)"
+    },
+
+    "ignition": {
+      "threshold": "≥3/6 conditions",
+      "conditions": [
+        "(P - AVWAP) / ATR >= 0.8",
+        "speed >= 0.25 * ATR / min",
+        "agg_buy_ratio >= 0.62",
+        "OBI10 >= 0.05",
+        "RVOL >= 3.0",
+        "slope_CVD > 0"
+      ]
+    },
+
+    "momentum_confirmation": {
+      "rule": "1m/5m斜率同向 AND 15m斜率 >= 0"
+    },
+
+    "exhaustion": {
+      "any_of": [
+        "失去锚点 + CVD翻转: |P - AVWAP| > 1.5·ATR AND CVD slope反向",
+        "速度归零: speed < 0 持续 2-3 bar",
+        "OBI反转: OBI10从正转负(多头)或从负转正(空头)",
+        "强平放量: qvol / ATR > 0.6"
+      ]
+    },
+
+    "temperature_params": {
       "T0": 60,
-      "TTL_hours": 3,
-      "concurrency": 1,
-      "intervals": [
-        "1m",
-        "5m",
-        "15m"
-      ]
+      "Tmin": 40,
+      "Tmax": 95,
+      "beta_F": 0.20,
+      "beta_I": 0.15,
+      "note": "vs 标准(T0=50, Tmin=35, Tmax=80, βF=0.35, βI=0.25)"
+    },
+
+    "gates_phased": {
+      "0_3min": {
+        "level": "WATCH only (冷启动)",
+        "impact_bps": null,
+        "spread_bps": null
+      },
+      "3_8min": {
+        "level": "可发Prime",
+        "impact_bps": 7,
+        "spread_bps": 35,
+        "note": "严格"
+      },
+      "8_15min": {
+        "level": "主窗口",
+        "impact_bps": 8,
+        "spread_bps": 38,
+        "note": "稍宽松"
+      }
+    },
+
+    "prime_window": {
+      "0_3min": "WATCH only",
+      "3_8min": "可发Prime但条件严格",
+      "8_15min": "主窗口条件稍宽松",
+      "15min_plus": "衰竭期谨慎发布"
+    },
+
+    "TTL": {
+      "range_hours": [2, 4],
+      "adjustment": "根据波动率动态"
+    },
+
+    "concurrency": {
+      "limit": 1,
+      "note": "vs 标准通道1-2"
     }
   },
-  "compliance_checkpoints": [
-    {
-      "id": "CP1",
-      "name": "Standardization Chain",
-      "critical": true,
-      "file_scope": "ats_core/factors_v2/*.py, ats_core/features/*.py"
+
+  "schemas_field_mapping": {
+    "features_a_1h": {
+      "table": "features_a_1h",
+      "fields": [
+        {"name": "T_score", "type": "float32", "unit": "dimensionless", "range": "±100"},
+        {"name": "M_score", "type": "float32", "unit": "dimensionless", "range": "±100"},
+        {"name": "S_score", "type": "float32", "unit": "dimensionless", "range": "±100"},
+        {"name": "V_score", "type": "float32", "unit": "dimensionless", "range": "±100"},
+        {"name": "C_score", "type": "float32", "unit": "dimensionless", "range": "±100"},
+        {"name": "O_score", "type": "float32", "unit": "dimensionless", "range": "±100"},
+        {"name": "Q_score", "type": "float32", "unit": "dimensionless", "range": "±100"},
+        {"name": "S_lin", "type": "float32", "unit": "dimensionless", "range": "-"},
+        {"name": "S_score", "type": "float32", "unit": "dimensionless", "range": "±100"}
+      ]
     },
-    {
-      "id": "CP2",
-      "name": "F/I Modulator Isolation",
-      "critical": true,
-      "file_scope": "ats_core/pipeline/analyze_symbol.py"
+    "features_b_modulators": {
+      "table": "features_b_modulators",
+      "fields": [
+        {"name": "F_raw", "type": "float32", "unit": "dimensionless", "range": "[0,1]"},
+        {"name": "I_raw", "type": "float32", "unit": "dimensionless", "range": "[0,1]"},
+        {"name": "gF", "type": "float32", "unit": "dimensionless", "range": "[-0.46,+0.46]"},
+        {"name": "gI", "type": "float32", "unit": "dimensionless", "range": "[-0.46,+0.46]"},
+        {"name": "Teff", "type": "float32", "unit": "dimensionless", "range": "[Tmin,Tmax]"},
+        {"name": "cost_eff", "type": "float32", "unit": "fraction", "range": "[0,0.01+]"},
+        {"name": "pmin", "type": "float32", "unit": "probability", "range": "[0.5,1.0]"},
+        {"name": "dpmin", "type": "float32", "unit": "probability", "range": "[0,0.1]"}
+      ]
     },
-    {
-      "id": "CP3",
-      "name": "Four Hard Gates",
-      "critical": true,
-      "file_scope": "ats_core/gates/integrated_gates.py"
+    "features_c_exec_1m": {
+      "table": "features_c_exec_1m",
+      "fields": [
+        {"name": "spread_bps", "type": "float32", "unit": "bps", "range": "[0,500+]"},
+        {"name": "obi10", "type": "float32", "unit": "dimensionless", "range": "[-1,+1]"},
+        {"name": "impact_bps_q", "type": "float32", "unit": "bps", "range": "[0,999]"},
+        {"name": "shelves_cnt", "type": "int16", "unit": "count", "range": "[0,100]"},
+        {"name": "resilience_s", "type": "float32", "unit": "seconds", "range": "[0,300+]"},
+        {"name": "room_atr", "type": "float32", "unit": "ATR", "range": "[0,10+]"}
+      ]
     },
-    {
-      "id": "CP4",
-      "name": "Publishing Anti-Jitter",
-      "critical": true,
-      "file_scope": "scripts/realtime_signal_scanner.py"
+    "decision_d_prob_ev": {
+      "table": "decision_d_prob_ev",
+      "fields": [
+        {"name": "S_score", "type": "float32", "unit": "dimensionless", "range": "±100"},
+        {"name": "P_long", "type": "float32", "unit": "probability", "range": "[0,1]"},
+        {"name": "P_short", "type": "float32", "unit": "probability", "range": "[0,1]"},
+        {"name": "EV_long", "type": "float32", "unit": "fraction", "range": "[-0.1,0.5]"},
+        {"name": "EV_short", "type": "float32", "unit": "fraction", "range": "[-0.1,0.5]"}
+      ]
     },
-    {
-      "id": "CP5",
-      "name": "WS Connection Limit",
-      "critical": false,
-      "file_scope": "ats_core/data/realtime_kline.py"
+    "publish_events": {
+      "table": "publish_events",
+      "fields": [
+        {"name": "side", "type": "string", "unit": "-", "values": ["LONG", "SHORT"]},
+        {"name": "prime", "type": "bool", "unit": "-", "description": "True=Prime, False=Watch"},
+        {"name": "prime_strength", "type": "float32", "unit": "[0,100]", "description": "信号强度"},
+        {"name": "entry_lo", "type": "float64", "unit": "USDT", "description": "入场价下限"},
+        {"name": "entry_hi", "type": "float64", "unit": "USDT", "description": "入场价上限"},
+        {"name": "sl0", "type": "float64", "unit": "USDT", "description": "止损价"},
+        {"name": "tp1", "type": "float64", "unit": "USDT", "description": "首目标"},
+        {"name": "tp2", "type": "float64", "unit": "USDT", "description": "次目标"},
+        {"name": "ttl_h", "type": "float32", "unit": "hours", "description": "信号有效期"}
+      ]
     },
-    {
-      "id": "CP6",
-      "name": "DataQual Calculation",
-      "critical": true,
-      "file_scope": "ats_core/data/quality.py"
+    "qos_state_1m": {
+      "table": "qos_state_1m",
+      "fields": [
+        {"name": "miss", "type": "float32", "unit": "fraction", "range": "[0,1]"},
+        {"name": "oo_order", "type": "float32", "unit": "fraction", "range": "[0,1]"},
+        {"name": "drift", "type": "float32", "unit": "fraction", "range": "[0,1]"},
+        {"name": "mismatch", "type": "float32", "unit": "fraction", "range": "[0,1]"},
+        {"name": "dataqual", "type": "float32", "unit": "dimensionless", "range": "[0,1]"}
+      ]
     },
-    {
-      "id": "CP7",
-      "name": "Newcoin Special Handling",
-      "critical": false,
-      "file_scope": "ats_core/pipeline/analyze_symbol.py"
-    },
-    {
-      "id": "CP8",
-      "name": "EV > 0 Gate",
-      "critical": true,
-      "file_scope": "ats_core/gates/integrated_gates.py"
+    "newcoin_state": {
+      "table": "newcoin_state",
+      "fields": [
+        {"name": "onboard_ts", "type": "int64", "unit": "ms", "description": "首次发现时间"},
+        {"name": "bars_1h", "type": "int32", "unit": "count", "description": "累积1h K线数"},
+        {"name": "in_newcoin", "type": "bool", "unit": "-", "description": "是否在新币通道"},
+        {"name": "stage", "type": "string", "unit": "-", "values": ["ignition", "momentum", "exhaustion"]}
+      ]
     }
-  ]
+  }
 }
