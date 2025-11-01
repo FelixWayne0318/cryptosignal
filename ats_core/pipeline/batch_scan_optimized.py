@@ -528,13 +528,16 @@ class OptimizedBatchScanner:
                 # 🔍 调试日志：显示详细评分（verbose模式显示所有，默认只显示前10个）
                 if verbose or i < 10:
                     scores = result.get('scores', {})
+                    modulation = result.get('modulation', {})  # v2.0: F moved to modulation
                     prime_breakdown = result.get('publish', {}).get('prime_breakdown', {})
                     gates_info = result.get('gates', {})
 
                     log(f"  └─ [评分] confidence={confidence}, prime_strength={prime_strength}")
-                    log(f"      因子分数: T={scores.get('T',0)}, M={scores.get('M',0)}, C={scores.get('C',0)}, "
-                        f"S={scores.get('S',0)}, V={scores.get('V',0)}, O={scores.get('O',0)}, F={scores.get('F',0)}")
-                    log(f"      新因子: L={scores.get('L',0)}, B={scores.get('B',0)}, Q={scores.get('Q',0)}, I={scores.get('I',0)}")
+                    # v2.0: F is NO longer in scores (moved to modulation per MODULATORS.md § 2.1)
+                    log(f"      A-层因子: T={scores.get('T',0)}, M={scores.get('M',0)}, C={scores.get('C',0)}, "
+                        f"S={scores.get('S',0)}, V={scores.get('V',0)}, O={scores.get('O',0)}")
+                    log(f"      A-层因子: L={scores.get('L',0)}, B={scores.get('B',0)}, Q={scores.get('Q',0)}, I={scores.get('I',0)}")
+                    log(f"      B-层调节器: F={modulation.get('F',0)}")
                     log(f"      四门调节: DataQual={gates_info.get('data_qual',0):.2f}, "
                         f"EV={gates_info.get('ev_gate',0):.2f}, "
                         f"Execution={gates_info.get('execution',0):.2f}, "
