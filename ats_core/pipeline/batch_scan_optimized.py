@@ -88,7 +88,7 @@ class OptimizedBatchScanner:
         self.client = get_binance_client()
         await self.client.initialize()
 
-        # 2. 获取高流动性USDT合约币种（TOP 140）
+        # 2. 获取高流动性USDT合约币种（TOP 200，v6.1优化）
         log("\n2️⃣  获取高流动性USDT合约币种...")
 
         # 获取交易所信息
@@ -115,12 +115,12 @@ class OptimizedBatchScanner:
                 # quoteVolume = USDT成交额
                 volume_map[symbol] = float(ticker.get('quoteVolume', 0))
 
-        # 按流动性排序，取TOP 140（WebSocket连接数：140币种×2周期=280<300限制）
+        # 按流动性排序，取TOP 200（速度限制已解决，v6.1优化）
         symbols = sorted(
             all_symbols,
             key=lambda s: volume_map.get(s, 0),
             reverse=True
-        )[:140]
+        )[:200]
 
         # 过滤掉流动性太低的（<3M USDT/24h）
         MIN_VOLUME = 3_000_000
@@ -155,11 +155,11 @@ class OptimizedBatchScanner:
         # 4. WebSocket实时更新（默认禁用，推荐使用REST定时更新）
         if enable_websocket:
             # v2.0合规：WebSocket模式违反DATA_LAYER.md § 2规范（连接数≤5）
-            # 当前实现会创建 ~140币种 × 2周期 = ~280个连接，严重超限
+            # 当前实现会创建 ~200币种 × 4周期 = ~800个连接，严重超限
             # 必须先实现组合流架构（Combined Stream）才能启用WebSocket
             raise NotImplementedError(
                 "❌ WebSocket模式需修复为组合流架构（≤5连接）\n"
-                "   当前实现: 280个独立连接（违反规范）\n"
+                "   当前实现: 800个独立连接（违反规范）\n"
                 "   规范要求: ≤5个组合流连接（DATA_LAYER.md § 2）\n"
                 "   解决方案: 实现Binance Combined Stream架构\n"
                 "   推荐模式: 使用enable_websocket=False（REST定时更新）"
@@ -533,11 +533,11 @@ class OptimizedBatchScanner:
                     gates_info = result.get('gates', {})
 
                     log(f"  └─ [评分] confidence={confidence}, prime_strength={prime_strength}")
-                    # v2.0: F is NO longer in scores (moved to modulation per MODULATORS.md § 2.1)
-                    log(f"      A-层因子: T={scores.get('T',0)}, M={scores.get('M',0)}, C={scores.get('C',0)}, "
-                        f"S={scores.get('S',0)}, V={scores.get('V',0)}, O={scores.get('O',0)}")
-                    log(f"      A-层因子: L={scores.get('L',0)}, B={scores.get('B',0)}, Q={scores.get('Q',0)}, I={scores.get('I',0)}")
-                    log(f"      B-层调节器: F={modulation.get('F',0)}")
+                    # v6.1: F and I are B-layer modulators (per MODULATORS.md § 2.1)
+                    log(f"      A-层因子: T={scores.get('T',0):.1f}, M={scores.get('M',0):.1f}, C={scores.get('C',0):.1f}, "
+                        f"S={scores.get('S',0):.1f}, V={scores.get('V',0):.1f}, O={scores.get('O',0):.1f}")
+                    log(f"      A-层因子: L={scores.get('L',0):.1f}, B={scores.get('B',0):.1f}, Q={scores.get('Q',0):.1f}")
+                    log(f"      B-层调制器: F={modulation.get('F',0):.1f}, I={modulation.get('I',0):.1f}")
                     log(f"      四门调节: DataQual={gates_info.get('data_qual',0):.2f}, "
                         f"EV={gates_info.get('ev_gate',0):.2f}, "
                         f"Execution={gates_info.get('execution',0):.2f}, "
@@ -555,7 +555,6 @@ class OptimizedBatchScanner:
                         try:
                             await on_signal_found(result)
                         except Exception as e:
-                            from ats_core.logging import warn
                             warn(f"⚠️  信号回调失败: {e}")
 
                 # 进度显示（每20个）

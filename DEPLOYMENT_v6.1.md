@@ -1,7 +1,7 @@
 # CryptoSignal v6.1 部署指南
 
 > ⚠️ **重要**：本文档已纳入标准化部署规范体系
-> 标准规范：[docs/DEPLOYMENT_STANDARD.md](docs/DEPLOYMENT_STANDARD.md)
+> 标准规范：[standards/DEPLOYMENT_STANDARD.md](standards/DEPLOYMENT_STANDARD.md)
 > 快速参考：[QUICK_DEPLOY.md](QUICK_DEPLOY.md)
 
 ## 📋 版本更新 (v6.0 → v6.1)
@@ -49,7 +49,7 @@
 
 ```bash
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 标准部署流程（遵循 docs/DEPLOYMENT_STANDARD.md）
+# 标准部署流程（遵循 standards/DEPLOYMENT_STANDARD.md）
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # 第 1 步：拉取最新代码

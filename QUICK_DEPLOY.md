@@ -1,6 +1,6 @@
 # 🚀 CryptoSignal 快速部署参考卡
 
-> 一页纸快速参考 | 详细文档见 `docs/DEPLOYMENT_STANDARD.md`
+> 一页纸快速参考 | 详细文档见 `standards/DEPLOYMENT_STANDARD.md`
 
 ---
 
@@ -158,7 +158,7 @@ nohup python3 scripts/realtime_signal_scanner.py --interval 300 \
 
 | 文档 | 内容 |
 |------|------|
-| `docs/DEPLOYMENT_STANDARD.md` | 完整部署规范 |
+| `standards/DEPLOYMENT_STANDARD.md` | 完整部署规范 |
 | `DEPLOYMENT_v6.1.md` | v6.1 详细指南 |
 | `SERVER_DEPLOY.txt` | 命令清单 |
 

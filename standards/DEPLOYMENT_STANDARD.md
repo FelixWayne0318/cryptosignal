@@ -470,7 +470,7 @@ with open('config/params.json') as f:
 
 | 文档 | 路径 | 用途 |
 |------|------|------|
-| **部署规范** | `docs/DEPLOYMENT_STANDARD.md` | 标准部署流程（本文档） |
+| **部署规范** | `standards/DEPLOYMENT_STANDARD.md` | 标准部署流程（本文档） |
 | **快速部署** | `QUICK_DEPLOY.md` | 一页纸快速参考 |
 | **详细指南** | `DEPLOYMENT_v6.1.md` | 完整部署文档 |
 | **服务器命令** | `SERVER_DEPLOY.txt` | 可复制的命令清单 |
