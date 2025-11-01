@@ -255,6 +255,35 @@ VOLATILITY_WEIGHT = 0.6   # 0.7 → 0.6
 
 ---
 
+## 🚀 部署方法（推荐）⭐
+
+### 标准部署流程
+
+```bash
+# 在服务器上执行（推荐方式）
+cd ~/cryptosignal
+
+# 拉取v6.2选币优化
+git fetch origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
+git checkout claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
+git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
+
+# 一键部署+启动
+./deploy_v6.1.sh
+# 脚本会自动完成验证、测试，并询问是否启动
+# 输入 y 即可完成部署 ✅
+```
+
+**优点**：
+- ✅ 自动停止旧进程
+- ✅ 自动备份配置
+- ✅ 8步验证确保代码正确
+- ✅ 清理缓存避免旧代码干扰
+- ✅ 快速测试验证运行
+- ✅ 交互式启动选择
+
+---
+
 ## ✅ 验证方法
 
 ### 部署后检查
