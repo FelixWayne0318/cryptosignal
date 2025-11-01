@@ -103,30 +103,47 @@ class OptimizedBatchScanner:
         ]
         log(f"   总计: {len(all_symbols)} 个USDT永续合约")
 
-        # 获取24h行情数据（用于流动性过滤）
+        # 获取24h行情数据（用于波动率+流动性综合筛选）
         log("   获取24h行情数据...")
         ticker_24h = await self.client.get_ticker_24h()
 
-        # 构建成交额字典
-        volume_map = {}
+        # 构建行情字典（成交额 + 波动率）
+        ticker_map = {}
         for ticker in ticker_24h:
             symbol = ticker.get('symbol', '')
             if symbol in all_symbols:
-                # quoteVolume = USDT成交额
-                volume_map[symbol] = float(ticker.get('quoteVolume', 0))
-
-        # 按流动性排序，取TOP 200（速度限制已解决，v6.1优化）
-        symbols = sorted(
-            all_symbols,
-            key=lambda s: volume_map.get(s, 0),
-            reverse=True
-        )[:200]
+                ticker_map[symbol] = {
+                    'volume': float(ticker.get('quoteVolume', 0)),  # USDT成交额
+                    'change_pct': float(ticker.get('priceChangePercent', 0))  # 24h涨跌幅
+                }
 
         # 过滤掉流动性太低的（<3M USDT/24h）
         MIN_VOLUME = 3_000_000
-        symbols = [s for s in symbols if volume_map.get(s, 0) >= MIN_VOLUME]
+        filtered_symbols = [
+            s for s in all_symbols
+            if ticker_map.get(s, {}).get('volume', 0) >= MIN_VOLUME
+        ]
+        log(f"   流动性过滤后: {len(filtered_symbols)} 个币种（24h成交额>3M USDT）")
 
-        log(f"   ✅ 筛选出 {len(symbols)} 个高流动性币种（24h成交额>3M USDT）")
+        # 多空对称选币：波动率优先 + 流动性保障
+        # 设计原理：abs(涨跌幅)确保多空对称，避免只选上涨币
+        max_volume = max(ticker_map.get(s, {}).get('volume', 1) for s in filtered_symbols)
+
+        def calc_score(symbol):
+            """综合评分：波动率70% + 流动性30%"""
+            data = ticker_map.get(symbol, {})
+            volatility = abs(data.get('change_pct', 0))  # 多空对称（绝对值）
+            liquidity = data.get('volume', 0) / max_volume  # 归一化到[0,1]
+            return volatility * 0.7 + liquidity * 0.3 * 100  # 波动率占主导
+
+        # 按综合评分排序，取TOP 200
+        symbols = sorted(
+            filtered_symbols,
+            key=calc_score,
+            reverse=True
+        )[:200]
+
+        log(f"   ✅ 筛选出 {len(symbols)} 个高波动币种（多空对称选币）")
 
         # 验证是否成功获取到币种
         if not symbols:
@@ -138,8 +155,19 @@ class OptimizedBatchScanner:
                 "   请检查网络连接并重试。"
             )
 
+        # 显示选中的币种信息
         log(f"   TOP 5: {', '.join(symbols[:5])}")
-        log(f"   成交额范围: {volume_map.get(symbols[0], 0)/1e6:.1f}M ~ {volume_map.get(symbols[-1], 0)/1e6:.1f}M USDT")
+
+        # 统计多空分布
+        up_count = sum(1 for s in symbols if ticker_map.get(s, {}).get('change_pct', 0) > 0)
+        down_count = len(symbols) - up_count
+        log(f"   多空分布: 上涨{up_count}个 / 下跌{down_count}个（做多做空机会均衡）")
+
+        # 显示波动率和成交额范围
+        top_data = ticker_map.get(symbols[0], {})
+        last_data = ticker_map.get(symbols[-1], {})
+        log(f"   波动率范围: {abs(top_data.get('change_pct', 0)):.1f}% ~ {abs(last_data.get('change_pct', 0)):.1f}%")
+        log(f"   成交额范围: {top_data.get('volume', 0)/1e6:.1f}M ~ {last_data.get('volume', 0)/1e6:.1f}M USDT")
 
         # 保存初始化的币种列表
         self.symbols = symbols
