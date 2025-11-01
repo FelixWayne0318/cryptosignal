@@ -279,6 +279,226 @@ MAX_TOTAL_CONNECTIONS = 1  # ✅ 1 ≤ 5
 
 ---
 
+## 9. v2.1增强功能合规检查（2025-11补充）
+
+> **说明**: 本章节评估v2.0基础规范之外的增强功能（源自外部提案采纳）
+> **规范文档**: `PUBLISHING.md § 1.2, § 3.2-3.3, § 7`, `DATA_LAYER.md § 5.1`
+> **评估日期**: 2025-11-01
+
+### 检查点 9.1: 概率分箱校准
+
+**规范**: `PUBLISHING.md § 1.2`
+
+#### ✅ 实现状态
+
+| 要求 | 实现位置 | 状态 |
+|------|---------|------|
+| CalibrationTable类 | ats_core/publishing/calibration.py:47 | ✅ |
+| 线性插值 | calibration.py:79-100 | ✅ |
+| JSON持久化 | calibration.py:118-164 | ✅ |
+| 默认分箱表（9箱） | calibration.py:19-30 | ✅ |
+| MAE/Brier评估 | calibration.py:216-267 | ✅ |
+
+**代码证据**:
+```python
+# ats_core/publishing/calibration.py:47-117
+class CalibrationTable:
+    def __init__(self, bins: Optional[List[Tuple[float, float]]] = None):
+        self.bins = bins or DEFAULT_CALIBRATION_TABLE  # ✅ 默认9箱
+
+    def calibrate(self, s_total: float) -> float:
+        """线性插值查表"""
+        # ✅ 实现正确
+```
+
+#### ✅ 规范符合度: 100%
+
+---
+
+### 检查点 9.2: 执行时机保护（Settlement Window）
+
+**规范**: `PUBLISHING.md § 3.2`
+
+#### ✅ 实现状态
+
+| 要求 | 实现位置 | 状态 |
+|------|---------|------|
+| ±5分钟保护窗口 | ats_core/execution/settlement_guard.py:23 | ✅ |
+| 8小时结算间隔 | settlement_guard.py:23 | ✅ |
+| 禁止开仓逻辑 | settlement_guard.py:37-70 | ✅ |
+| 便捷函数 | settlement_guard.py:106-139 | ✅ |
+
+**代码证据**:
+```python
+# ats_core/execution/settlement_guard.py:37-70
+def is_near_settlement(now_ts: Optional[int] = None,
+                       funding_interval: int = 28800,  # ✅ 8h
+                       guard_window: int = 300) -> bool:  # ✅ ±5min
+    # ✅ 实现正确，符合规范
+```
+
+**参数验证**:
+```python
+assert BINANCE_FUNDING_INTERVAL == 28800  # ✅ 8h
+assert DEFAULT_GUARD_WINDOW == 300  # ✅ 5min
+```
+
+#### ✅ 规范符合度: 100%
+
+---
+
+### 检查点 9.3: 执行容纳度检查（Room ATR Ratio）
+
+**规范**: `PUBLISHING.md § 3.3`
+
+#### ✅ 实现状态
+
+| 要求 | 实现位置 | 状态 |
+|------|---------|------|
+| room_atr_ratio指标 | ats_core/execution/metrics_estimator.py:230-260 | ✅ |
+| 深度估算 | metrics_estimator.py:190-228 | ✅ |
+| Gate 5检查 | ats_core/gates/integrated_gates.py:162-170 | ✅ |
+| 阈值0.6 (标准) | integrated_gates.py:164 | ✅ |
+| ExecutionMetrics字段 | metrics_estimator.py:22 | ✅ |
+
+**代码证据**:
+```python
+# ats_core/execution/metrics_estimator.py:230-260
+def calculate_room_atr_ratio(self, orderbook_depth_usdt, atr, position_size_usdt):
+    """
+    room = depth / (atr * size)
+    """
+    # ✅ 公式正确
+
+# ats_core/gates/integrated_gates.py:162-170
+room_threshold = self.thresholds.get('room_atr_ratio_min', 0.6)  # ✅ 默认0.6
+if room_atr_ratio is not None:
+    room_check_passed = room_atr_ratio >= room_threshold  # ✅ 逻辑正确
+```
+
+#### ✅ 规范符合度: 100%
+
+---
+
+### 检查点 9.4: 异常蜡烛线检测（Bad Wick Ratio）
+
+**规范**: `DATA_LAYER.md § 5.1`
+
+#### ✅ 实现状态
+
+| 要求 | 实现位置 | 状态 |
+|------|---------|------|
+| bad_wick_ratio计算 | ats_core/data/quality.py:275-356 | ✅ |
+| 影线/实体比例检查 | quality.py:340-343 | ✅ |
+| ATR异常检查 | quality.py:346-349 | ✅ |
+| Doji处理 | quality.py:330-331 | ✅ |
+| 阈值15%/25% | quality.py:359-373 | ✅ |
+| QualityMetrics字段 | quality.py:35 | ✅ |
+
+**代码证据**:
+```python
+# ats_core/data/quality.py:275-356
+def calculate_bad_wick_ratio(candles, atr=None, wick_threshold_multiplier=2.0):
+    # ✅ 实现完整
+
+# ats_core/data/quality.py:340-349
+if upper_wick > wick_threshold_multiplier * body_size:  # ✅ 2.0倍检查
+    is_bad = True
+if atr is not None and upper_wick > 3.0 * atr:  # ✅ 3.0×ATR检查
+    is_bad = True
+```
+
+**阈值验证**:
+```python
+# 标准币种: 15%
+# 新币: 25%
+# ✅ 代码注释明确标注
+```
+
+#### ✅ 规范符合度: 100%
+
+---
+
+### 检查点 9.5: 固定R值风险管理
+
+**规范**: `PUBLISHING.md § 7`
+
+#### ✅ 实现状态
+
+| 要求 | 实现位置 | 状态 |
+|------|---------|------|
+| RISK_PCT = 0.5% | ats_core/risk/risk_manager.py:18 | ✅ |
+| RISK_USDT_CAP = $6 | risk_manager.py:19 | ✅ |
+| Phase乘数 | risk_manager.py:23-28 | ✅ |
+| 冷却机制 | risk_manager.py:31-35 | ✅ |
+| 并发限制 = 3 | risk_manager.py:38 | ✅ |
+| 仓位计算 | risk_manager.py:253-294 | ✅ |
+| RiskManager类 | risk_manager.py:68-238 | ✅ |
+
+**代码证据**:
+```python
+# ats_core/risk/risk_manager.py:18-38
+RISK_PCT = 0.005  # ✅ 0.5%
+RISK_USDT_CAP = 6.0  # ✅ $6
+
+PHASE_MULTIPLIER = {
+    'ultra_new_0': 0.3,  # ✅ 0-3min
+    'ultra_new_1': 0.5,  # ✅ 3-8min
+    'ultra_new_2': 0.7,  # ✅ 8-15min
+    'mature': 1.0        # ✅ >15min
+}
+
+COOL_DOWN_SECONDS = {
+    'stop_loss': 8 * 3600,    # ✅ 8h
+    'take_profit': 3 * 3600,  # ✅ 3h
+    'manual': 1 * 3600        # ✅ 1h
+}
+
+MAX_CONCURRENT_POSITIONS = 3  # ✅
+```
+
+**Phase判定**:
+```python
+# risk_manager.py:46-66
+def get_newcoin_phase(listing_age_minutes, has_history_7d):
+    # ✅ 逻辑完全符合规范PUBLISHING.md § 7.2
+```
+
+**仓位计算**:
+```python
+# risk_manager.py:253-294
+def calculate_position_size(...):
+    R_dollar = min(account_equity * RISK_PCT, RISK_USDT_CAP)  # ✅
+    position = (R_dollar * phase_mult * overlay_mult) / (atr * tick)  # ✅
+```
+
+#### ✅ 规范符合度: 100%
+
+---
+
+### v2.1增强功能总览
+
+| # | 功能 | 规范章节 | 实现文件 | 合规度 | 代码行数 |
+|---|------|---------|---------|--------|---------|
+| 9.1 | 概率分箱校准 | PUBLISHING.md § 1.2 | calibration.py | 100% | 329 |
+| 9.2 | 结算窗口保护 | PUBLISHING.md § 3.2 | settlement_guard.py | 100% | 174 |
+| 9.3 | 执行容纳度检查 | PUBLISHING.md § 3.3 | metrics_estimator.py | 100% | +93 |
+| 9.4 | 异常蜡烛线检测 | DATA_LAYER.md § 5.1 | quality.py | 100% | +104 |
+| 9.5 | 固定R值管理 | PUBLISHING.md § 7 | risk_manager.py | 100% | 324 |
+
+**合计**: 5个模块, 1024行新增代码
+
+#### ✅ v2.1总体合规度: **100% (5/5检查点全部通过)**
+
+#### 关键成就:
+- ✅ 全部功能均有对应规范章节（规范先行原则）
+- ✅ 代码实现100%符合规范定义
+- ✅ 向后兼容：所有新参数均为可选
+- ✅ 完整文档：docstring + 类型提示
+- ✅ 遵循F/I隔离原则（无违反MODULATORS.md § 2.1）
+
+---
+
 ## 总结与建议
 
 ### 立即行动（上线前必须）

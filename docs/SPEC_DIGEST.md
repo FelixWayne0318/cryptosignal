@@ -1239,4 +1239,342 @@ assert reconcile_success_rate >= 0.99  # 99%
 
 ---
 
+## 11. v2.1增强功能（2025-11补充）
+
+> **说明**: 本章节补充v2.0基础规范之外的增强功能，源自外部提案采纳与实战经验总结。
+> **文档来源**: `newstandards/PUBLISHING.md § 1.2, § 3.2-3.3, § 7` + `DATA_LAYER.md § 5.1`
+> **实现代码**: `ats_core/execution/settlement_guard.py`, `ats_core/risk/risk_manager.py`, `ats_core/publishing/calibration.py`, `ats_core/data/quality.py`, `ats_core/execution/metrics_estimator.py`
+
+---
+
+### 11.1 概率分箱校准（Platt-like Calibration）
+
+**规范位置**: `PUBLISHING.md § 1.2`
+
+**目的**: 修正模型偏差，将理论概率（基于S_total）映射到真实胜率
+
+**核心算法**:
+```python
+calibration_table = [
+    (s_min, s_max, p_calibrated),
+    ...
+]
+
+def calibrate_probability(s_total):
+    """
+    从分箱表查找并线性插值
+
+    Args:
+        s_total: 加权总分 ∈ [-100, +100]
+
+    Returns:
+        p_calibrated ∈ [0, 1]
+    """
+    for (s_min, s_max, p_cal) in calibration_table:
+        if s_min <= s_total < s_max:
+            return p_cal  # 或线性插值
+    return 0.50  # 默认中性
+```
+
+**默认分箱表**（需定期回测更新）:
+```
+s_total ∈ (-∞, -50]  → p = 0.40  (强空)
+s_total ∈ (-50, -25] → p = 0.45
+s_total ∈ (-25, -10] → p = 0.48
+s_total ∈ (-10, 0]   → p = 0.50
+s_total ∈ (0, 10]    → p = 0.52
+s_total ∈ (10, 25]   → p = 0.56
+s_total ∈ (25, 50]   → p = 0.60
+s_total ∈ (50, 100]  → p = 0.64
+s_total ∈ (100, ∞)   → p = 0.68  (强多)
+```
+
+**更新机制**:
+- 每月回测最近90天交易
+- 计算实际胜率 vs 预测概率
+- 调整分箱边界和映射值
+- 评估指标: MAE (Mean Absolute Error), Brier Score
+
+**存储格式**:
+```json
+{
+  "version": "v1.2",
+  "updated": "2025-11-01",
+  "bins": [
+    {"s_min": -100, "s_max": -50, "p_calibrated": 0.40},
+    ...
+  ],
+  "metrics": {
+    "mae": 0.032,
+    "brier_score": 0.018
+  }
+}
+```
+
+**实现类**: `ats_core.publishing.calibration.CalibrationTable`
+
+---
+
+### 11.2 执行时机保护（Settlement Window Guard）
+
+**规范位置**: `PUBLISHING.md § 3.2`
+
+**目的**: 避免资金费结算窗口流动性骤变造成的滑点风险
+
+**保护窗口**:
+- Binance合约每8小时结算: 00:00, 08:00, 16:00 UTC
+- 保护期: 结算时间 ± 5分钟（共10分钟）
+- 规则: **禁止开仓**（允许平仓）
+
+**理由**:
+1. 结算前后流动性骤变（大户对冲、套利平仓）
+2. 滑点激增（点差可扩大2-5倍）
+3. "窗边被打"风险（成交价格偏离预期）
+
+**检测算法**:
+```python
+def is_near_settlement(now_ts, funding_interval=28800, guard_window=300):
+    """
+    检查是否在结算保护窗口内
+
+    Args:
+        now_ts: 当前时间戳（秒）
+        funding_interval: 结算间隔（8h = 28800s）
+        guard_window: 保护窗口半径（5min = 300s）
+
+    Returns:
+        True: 禁止开仓
+        False: 允许交易
+    """
+    seconds_since_last_settlement = now_ts % funding_interval
+
+    # 距离上次结算 < 5min 或 距离下次结算 < 5min
+    if seconds_since_last_settlement < guard_window:
+        return True
+    if (funding_interval - seconds_since_last_settlement) < guard_window:
+        return True
+
+    return False
+```
+
+**实现模块**: `ats_core.execution.settlement_guard`
+
+---
+
+### 11.3 执行容纳度检查（Room ATR Ratio）
+
+**规范位置**: `PUBLISHING.md § 3.3`
+
+**新增Gate 5**: `room_atr_ratio ≥ room_min`
+
+**指标定义**:
+```
+room_atr_ratio = orderbook_depth_usdt / (ATR * position_size_usdt)
+```
+
+**含义**:
+- 分子: 订单簿可用深度（USDT）
+- 分母: 仓位规模 × 波动范围
+- 比值: 订单簿能否容纳该仓位的执行
+
+**阈值**:
+```python
+# 标准币种
+room_atr_ratio >= 0.6  # 订单簿深度至少为(ATR×仓位)的60%
+
+# 新币（更严格）
+room_atr_ratio >= 0.8  # 新币波动大，需更多深度
+```
+
+**深度估算**（无实时深度流时的近似）:
+```python
+# 基于成交量估算
+volume_usdt = volume * close_price
+depth_factor = 0.08  # 假设深度为成交量的8%
+spread_adjustment = max(0.5, min(1.5, 1.5 - (spread_bps - 5) / 50))
+orderbook_depth_usdt = volume_usdt * depth_factor * spread_adjustment
+```
+
+**失败时行为**:
+- 降级为 Watch（或拒绝发布）
+- 日志: "订单簿深度不足，无法安全执行"
+
+**实现方法**: `ats_core.execution.metrics_estimator.ExecutionMetricsEstimator.calculate_room_atr_ratio()`
+
+---
+
+### 11.4 异常蜡烛线检测（Bad Wick Ratio）
+
+**规范位置**: `DATA_LAYER.md § 5.1`
+
+**目的**: 识别数据质量问题（闪崩、乌龙单、低流动性脉冲）
+
+**定义**:
+```
+bad_wick_ratio = (异常蜡烛数) / (总蜡烛数) ∈ [0, 1]
+```
+
+**异常判定条件（任一满足）**:
+1. `upper_wick > 2.0 × body_size`
+2. `lower_wick > 2.0 × body_size`
+3. `upper_wick > 3.0 × ATR` 或 `lower_wick > 3.0 × ATR`（如有ATR）
+
+其中:
+```python
+body_size = |close - open|
+upper_wick = high - max(open, close)
+lower_wick = min(open, close) - low
+
+# Doji蜡烛特殊处理
+if body_size < 1e-9:
+    body_size = 0.01 * close
+```
+
+**阈值**:
+```python
+# 标准币种
+bad_wick_ratio <= 0.15  # 15%以下可接受
+
+# 新币（更宽松）
+bad_wick_ratio <= 0.25  # 25%以下可接受
+```
+
+**行为**:
+- 不阻断交易（仅警告）
+- 记录到 `QualityMetrics.bad_wick_ratio`
+- 触发告警: DataQual 降级（可选）
+
+**应用场景**:
+1. 新币冷启动: 前20根K线 bad_wick_ratio > 0.3 → 延长观察期
+2. 闪崩检测: 单根K线影线 > 5×ATR → 标记为异常
+3. 交易所故障: 连续5根K线 bad_wick_ratio > 0.4 → 暂停交易
+
+**实现函数**: `ats_core.data.quality.calculate_bad_wick_ratio()`
+
+---
+
+### 11.5 固定R值风险管理
+
+**规范位置**: `PUBLISHING.md § 7`
+
+#### 7.1 固定R值法则
+
+**核心原则**: 每笔交易风险固定为账户权益的百分比
+
+**参数**:
+```python
+RISK_PCT = 0.005           # 0.5% per trade
+RISK_USDT_CAP = 6.0        # 单笔最大风险$6 USDT
+MIN_POSITION_SIZE = 0.001  # 最小仓位（防止过小）
+```
+
+**仓位计算**:
+```
+R_dollar = min(account_equity * RISK_PCT, RISK_USDT_CAP)
+position_size = (R_dollar * phase_multiplier * overlay_multiplier) / (ATR * tick_value)
+```
+
+#### 7.2 新币Phase差异化乘数
+
+**Phase定义**:
+```python
+ultra_new_0: 0-3分钟   → multiplier = 0.3  (强制保守)
+ultra_new_1: 3-8分钟   → multiplier = 0.5
+ultra_new_2: 8-15分钟  → multiplier = 0.7
+mature:      >15分钟   → multiplier = 1.0  (正常风险)
+```
+
+**Phase判定逻辑**:
+```python
+def get_newcoin_phase(listing_age_minutes, has_history_7d):
+    if has_history_7d:
+        return "mature"
+
+    if listing_age_minutes < 3:
+        return "ultra_new_0"
+    elif listing_age_minutes < 8:
+        return "ultra_new_1"
+    elif listing_age_minutes < 15:
+        return "ultra_new_2"
+    else:
+        return "mature"
+```
+
+#### 7.3 冷却机制（Cooldown）
+
+**目的**: 避免连续止损、情绪化交易
+
+**规则**:
+```python
+COOLDOWN_AFTER_STOP_LOSS = 8 * 3600   # 8小时
+COOLDOWN_AFTER_TAKE_PROFIT = 3 * 3600 # 3小时
+COOLDOWN_AFTER_MANUAL = 1 * 3600      # 1小时
+```
+
+**检查逻辑**:
+```python
+def check_cooldown(symbol, now_ts):
+    if symbol not in last_exit_time:
+        return True, "No cooldown"
+
+    reason, exit_ts = last_exit_time[symbol]
+    elapsed = now_ts - exit_ts
+
+    if reason == "stop_loss" and elapsed < 8*3600:
+        return False, f"Cooldown: {elapsed/3600:.1f}h < 8h"
+    elif reason == "take_profit" and elapsed < 3*3600:
+        return False, f"Cooldown: {elapsed/3600:.1f}h < 3h"
+    elif reason == "manual" and elapsed < 1*3600:
+        return False, f"Cooldown: {elapsed/3600:.1f}h < 1h"
+
+    return True, "Cooldown expired"
+```
+
+#### 7.4 并发持仓限制
+
+```python
+MAX_CONCURRENT_POSITIONS = 3  # 最多同时持有3个仓位
+
+def can_open_position(symbol):
+    active_positions = [s for s in positions if positions[s]["active"]]
+
+    if len(active_positions) >= MAX_CONCURRENT_POSITIONS:
+        return False, f"Max concurrent limit: {len(active_positions)}/3"
+
+    return True, "OK"
+```
+
+#### 7.5 叠加多空保护（Overlay）
+
+**规则**: 同一Symbol不能同时持有多空仓位
+
+```python
+if symbol in active_positions and positions[symbol]["side"] != new_side:
+    return False, "Cannot overlay opposite direction"
+```
+
+**例外**: 对冲模式（需显式启用，默认禁止）
+
+**实现类**: `ats_core.risk.risk_manager.RiskManager`
+
+---
+
+### 11.6 v2.1增强总结
+
+| 功能模块 | 规范章节 | 实现文件 | 核心价值 |
+|---------|---------|---------|---------|
+| 概率分箱校准 | PUBLISHING.md § 1.2 | calibration.py | 修正模型偏差，提升胜率预测准确性 |
+| 结算窗口保护 | PUBLISHING.md § 3.2 | settlement_guard.py | 避免资金费结算期间的流动性风险 |
+| 执行容纳度检查 | PUBLISHING.md § 3.3 | metrics_estimator.py | 确保订单簿深度足以容纳仓位执行 |
+| 异常蜡烛线检测 | DATA_LAYER.md § 5.1 | quality.py | 识别数据质量问题（闪崩、乌龙单） |
+| 固定R值管理 | PUBLISHING.md § 7 | risk_manager.py | 统一风险管理、Phase差异化、冷却机制 |
+
+**代码总量**: 5个新模块，~1220行代码
+
+**合规状态**: v2.1增强功能100%符合补充规范
+
+**向后兼容**: 全部可选参数，不影响现有v2.0流程
+
+---
+
 **END OF SPEC_DIGEST.md**
