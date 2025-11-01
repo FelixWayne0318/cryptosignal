@@ -15,7 +15,11 @@ V（量能）评分 - 统一±100系统（多空对称修复版 v2.0）
 - 上涨放量（追涨盘、突破盘、FOMO盘）= 做多信号
 """
 import math
-from ats_core.features.scoring_utils import directional_score
+from ats_core.features.scoring_utils import directional_score  # 保留用于内部计算
+from ats_core.scoring.scoring_utils import StandardizationChain
+
+# 模块级StandardizationChain实例
+_volume_chain = StandardizationChain(alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5)
 
 def score_volume(vol, closes=None, params=None):
     """
@@ -111,15 +115,17 @@ def score_volume(vol, closes=None, params=None):
 
         if price_direction == -1:
             # 价格下跌：反转V的符号
-            V = -V_strength
+            V_raw = -V_strength
         else:
             # 价格上涨：保持V的符号
-            V = V_strength
+            V_raw = V_strength
     else:
         # 价格中性（横盘）：使用原始量能分数（放量=正，缩量=负）
-        V = V_strength
+        V_raw = V_strength
 
-    V = int(round(max(-100, min(100, V))))
+    # v2.0合规：应用StandardizationChain
+    V_pub, diagnostics = _volume_chain.standardize(V_raw)
+    V = int(round(V_pub))
 
     # ========== 解释文本（考虑价格方向）==========
 

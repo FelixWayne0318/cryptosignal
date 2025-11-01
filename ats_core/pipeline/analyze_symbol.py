@@ -717,7 +717,13 @@ def _analyze_symbol_core(
             "ttl_h": 8
         },
 
-        # 新币信息
+        # 新币信息（嵌套格式，匹配scanner读取）
+        "new_coin": {
+            "is_new": is_new_coin,
+            "phase": coin_phase,
+            "age_days": round(coin_age_days, 1)
+        },
+        # 向后兼容（保留旧键名）
         "coin_age_days": round(coin_age_days, 1),
         "coin_phase": coin_phase,
         "is_new_coin": is_new_coin,

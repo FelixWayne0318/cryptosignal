@@ -7,7 +7,11 @@ A（加速）评分 - 使用方向性软映射
 - 新版：cvd6 = 0.005 → 约 42 分（软映射）
 """
 from ats_core.features.ta_core import ema
-from ats_core.features.scoring_utils import directional_score
+from ats_core.features.scoring_utils import directional_score  # 保留用于内部计算
+from ats_core.scoring.scoring_utils import StandardizationChain
+
+# 模块级StandardizationChain实例
+_accel_chain = StandardizationChain(alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5)
 
 def score_accel(c, cvd_series, params=None):
     """
@@ -64,8 +68,11 @@ def score_accel(c, cvd_series, params=None):
     )
 
     # 加权平均
-    A = p["slope_weight"] * slope_score + p["cvd_weight"] * cvd_score
-    A = int(round(max(0, min(100, A))))
+    A_raw = p["slope_weight"] * slope_score + p["cvd_weight"] * cvd_score
+
+    # v2.0合规：应用StandardizationChain
+    A_pub, diagnostics = _accel_chain.standardize(A_raw)
+    A = int(round(max(0, min(100, A_pub))))
 
     # weak_gate: 保留原有逻辑（用于其他地方判断）
     weak_gate = (ds >= 0.02) or (cvd6 >= 0.02)

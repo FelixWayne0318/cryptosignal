@@ -7,10 +7,15 @@ M（动量）维度 - 价格动量/加速度（±100系统）
 - EMA30斜率
 
 返回范围：-100（强烈看空）~ 0（中性）~ +100（强烈看多）
+v2.0合规：应用StandardizationChain（5步稳健化）
 """
 from typing import List, Tuple, Dict, Any
 from .ta_core import ema, atr
-from .scoring_utils import directional_score
+from .scoring_utils import directional_score  # 保留用于内部计算
+from ats_core.scoring.scoring_utils import StandardizationChain
+
+# 模块级StandardizationChain实例（持久化EW状态）
+_momentum_chain = StandardizationChain(alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5)
 
 def score_momentum(
     h: List[float],
@@ -89,9 +94,12 @@ def score_momentum(
     slope_score = (slope_score_raw - 50) * 2
     accel_score = (accel_score_raw - 50) * 2
 
-    # ========== 4. 加权平均 ==========
-    M = p["slope_weight"] * slope_score + p["accel_weight"] * accel_score
-    M = int(round(max(-100, min(100, M))))
+    # ========== 4. 加权平均（原始值）==========
+    M_raw = p["slope_weight"] * slope_score + p["accel_weight"] * accel_score
+
+    # v2.0合规：应用StandardizationChain
+    M_pub, diagnostics = _momentum_chain.standardize(M_raw)
+    M = int(round(M_pub))
 
     # ========== 5. 解释 ==========
     if M >= 60:

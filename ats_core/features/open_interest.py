@@ -14,8 +14,12 @@ O（持仓）评分 - 统一±100系统
 from statistics import median
 from typing import Dict, Tuple, Any, List
 from ats_core.sources.oi import fetch_oi_hourly, pct, pct_series
-from ats_core.features.scoring_utils import directional_score
+from ats_core.features.scoring_utils import directional_score  # 保留用于内部计算
 from ats_core.utils.outlier_detection import detect_outliers_iqr, apply_outlier_weights
+from ats_core.scoring.scoring_utils import StandardizationChain
+
+# 模块级StandardizationChain实例
+_oi_chain = StandardizationChain(alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5)
 
 
 def _linreg_r2(y: List[float]) -> Tuple[float, float]:
@@ -245,7 +249,9 @@ def score_open_interest(symbol: str,
         penalty_factor = (100 - par["crowding_p95_penalty"]) / 100.0
         O_raw = O_raw * penalty_factor
 
-    O = int(round(max(-100, min(100, O_raw))))
+    # v2.0合规：应用StandardizationChain
+    O_pub, diagnostics = _oi_chain.standardize(O_raw)
+    O = int(round(O_pub))
 
     # 解释（v2.0：考虑价格方向）
     if O >= 40:

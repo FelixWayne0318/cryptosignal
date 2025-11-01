@@ -33,6 +33,10 @@ Range: 0 到 100（质量维度，非方向）
 from __future__ import annotations
 from typing import Tuple, Dict, Any, Optional, List
 import numpy as np
+from ats_core.scoring.scoring_utils import StandardizationChain
+
+# 模块级StandardizationChain实例
+_liquidity_chain = StandardizationChain(alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5)
 
 
 def _to_f(x) -> float:
@@ -337,15 +341,16 @@ def calculate_liquidity(
     obi_score, obi_value = _calculate_obi_score(bids, asks)
 
     # === 3. 加权融合 ===
-    liquidity_score = (
+    raw_score = (
         spread_score * w_spread +
         depth_score * w_depth +
         impact_score * w_impact +
         obi_score * w_obi
     )
 
-    # 限制到0-100
-    liquidity_score = max(0, min(100, liquidity_score))
+    # v2.0合规：应用StandardizationChain
+    score_pub, diagnostics = _liquidity_chain.standardize(raw_score)
+    liquidity_score = int(round(score_pub))
 
     # === 4. 流动性等级 ===
     if liquidity_score >= 80:

@@ -9,7 +9,11 @@ C（CVD资金流）维度 - 买卖压力分析
 """
 import math
 from typing import List, Tuple, Dict, Any
-from .scoring_utils import directional_score
+from .scoring_utils import directional_score  # 保留用于内部计算
+from ats_core.scoring.scoring_utils import StandardizationChain
+
+# 模块级StandardizationChain实例
+_cvd_chain = StandardizationChain(alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5)
 
 def score_cvd_flow(
     cvd_series: List[float],
@@ -127,7 +131,10 @@ def score_cvd_flow(
         cvd_score = cvd_score * penalty_factor
 
     # ========== 5. 最终分数（保留符号） ==========
-    C = int(round(max(-100, min(100, cvd_score))))
+    # v2.0合规：应用StandardizationChain
+    C_raw = cvd_score  # 保存原始值
+    C_pub, diagnostics = _cvd_chain.standardize(C_raw)
+    C = int(round(C_pub))
 
     # 计算cvd6用于显示（实际的起点终点变化）
     cvd6 = (cvd_window[-1] - cvd_window[0]) / price
