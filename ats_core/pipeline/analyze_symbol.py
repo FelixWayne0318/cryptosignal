@@ -367,30 +367,29 @@ def _analyze_symbol_core(
     )
 
     # ---- 3. Scorecard（10维统一±100系统，v2.0合规版）----
-    # 🔧 v2.0合规修复：F移除出评分卡，仅用于调节Teff/cost/thresholds
-    # 符合MODULATORS.md § 2.1规范：F不参与方向评分
+    # 🔧 v2.0合规修复：F/I移至B层调制器，不参与方向评分
+    # 符合MODULATORS.md § 2.1规范：F/I只调制Teff/cost/thresholds
 
-    # 基础权重（从配置读取，10维系统：总权重100%）
-    # F的10.0%权重按比例重新分配到剩余9个因子（比例因子：100/90=1.111）
+    # 基础权重（从配置读取，9维A层系统：总权重100%）
+    # I的8.0%权重重新分配到其他因子
     base_weights = params.get("weights", {
-        # Layer 1: 价格行为层（40%）
-        "T": 16.0,  # 趋势 (was 13.9, +2.1)
-        "M": 9.0,   # 动量 (was 8.3, +0.7)
-        "S": 6.0,   # 结构 (was 5.6, +0.4)
-        "V": 9.0,   # 量能 (was 8.3, +0.7)
-        # Layer 2: 资金流层（24%）
-        "C": 12.0,  # CVD (was 11.1, +0.9)
-        "O": 12.0,  # OI持仓 (was 11.1, +0.9)
-        # NO F - removed from scorecard (was 10.0%, redistributed above)
-        # Layer 3: 微观结构层（28%）
-        "L": 12.0,  # 流动性 (was 11.1, +0.9)
-        "B": 9.0,   # 基差+资金费 (was 8.3, +0.7)
-        "Q": 7.0,   # 清算密度 (was 5.6, +1.4)
-        # Layer 4: 市场环境层（8%）
-        "I": 8.0,   # 独立性 (was 6.7, +1.3)
-        # 废弃因子
-        "E": 0,     # 环境（已废弃，权重0）
-    })  # 总计: 16+9+6+9+12+12+12+9+7+8 = 100.0 ✓
+        # Layer 1: 价格行为层（50%）
+        "T": 18.0,  # 趋势 (was 16.0, +2.0 from I)
+        "M": 12.0,  # 动量 (was 9.0, +3.0 from I)
+        "S": 10.0,  # 结构 (was 6.0, +4.0 from I+rebalance)
+        "V": 10.0,  # 量能 (was 9.0, +1.0 from rebalance)
+        # Layer 2: 资金流层（30%）
+        "C": 18.0,  # CVD资金流 (was 12.0, +6.0 redistributed)
+        "O": 12.0,  # OI持仓
+        # Layer 3: 微观结构层（20%）
+        "L": 12.0,  # 流动性
+        "B": 4.0,   # 基差+资金费 (was 9.0, -5.0 rebalance)
+        "Q": 4.0,   # 清算密度 (was 7.0, -3.0 rebalance)
+        # 废弃因子和B层调制器（不参与评分）
+        "E": 0,     # 环境（已废弃）
+        "I": 0,     # 独立性（B层调制器，不参与评分）
+        "F": 0,     # 资金领先（B层调制器，不参与评分）
+    })  # A层9因子总计: 18+12+10+10+18+12+12+4+4 = 100.0 ✓
 
     # 尝试提前获取市场状态（用于自适应权重）
     try:
@@ -411,12 +410,12 @@ def _analyze_symbol_core(
     # 平滑混合（70%自适应 + 30%基础）
     weights = blend_weights(regime_weights, base_weights, blend_ratio=0.7)
 
-    # 10维方向分数（统一±100，v2.0合规版：F已移除）
+    # 9维方向分数（统一±100，v2.0合规版：F和I移至B层）
     scores = {
-        # A-layer direction factors (10 factors, NO F)
-        "T": T, "M": M, "C": C, "S": S, "V": V, "O": O, "E": E,
-        "L": L, "B": B, "Q": Q, "I": I,
-        # F removed from scorecard (was 10.0%, redistributed to above 9 factors)
+        # A-layer direction factors (9 factors ONLY)
+        "T": T, "M": M, "C": C, "S": S, "V": V, "O": O,
+        "L": L, "B": B, "Q": Q,
+        # E废弃，F和I移至B层调制器
     }
 
     # v2.0合规：因子范围验证（HIGH #2）
@@ -427,10 +426,11 @@ def _analyze_symbol_core(
             warn(f"⚠️  因子{factor_name}超出范围: {factor_value}, 裁剪到±100")
             scores[factor_name] = max(-100, min(100, factor_value))
 
-    # B-layer modulation factors (F affects Teff/cost/thresholds ONLY, NOT S_score)
-    # Per MODULATORS.md § 2.1: "F 仅调节 Teff/cost/thresholds，绝不修改方向分数"
+    # B-layer modulation factors (F/I affect Teff/cost/thresholds ONLY, NOT S_score)
+    # Per MODULATORS.md § 2.1: "F/I 仅调节 Teff/cost/thresholds，绝不修改方向分数"
     modulation = {
-        "F": F,  # Funding rate factor (for Teff/cost adjustment)
+        "F": F,  # Funding leading factor (拥挤度调制器)
+        "I": I,  # Independence factor (独立性调制器)
     }
 
     # 计算加权分数（scorecard内部已归一化到±100）
@@ -587,8 +587,8 @@ def _analyze_symbol_core(
         from ats_core.logging import warn
         warn(f"[MTF-Cached] {symbol}: 多时间框架验证失败 - {e}")
 
-    # Prime判定：得分 >= 35分（v6.0权重百分比系统）
-    is_prime = (prime_strength >= 35)
+    # Prime判定：得分 >= 25分（v6.1调整：降低阈值以增加信号量）
+    is_prime = (prime_strength >= 25)
     is_watch = False  # 不再发布Watch信号
 
     # 计算达标维度数（保留用于元数据）
@@ -642,7 +642,7 @@ def _analyze_symbol_core(
                 P_chosen = P_chosen_filtered
 
             prime_strength = prime_strength_filtered
-            is_prime = (prime_strength >= 35)  # 重新判定Prime (v6.0)
+            is_prime = (prime_strength >= 25)  # 重新判定Prime (v6.1: 降低阈值)
 
         penalty_reason = market_adjustment_reason
 

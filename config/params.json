@@ -126,29 +126,32 @@
   },
 
   "weights": {
+    "_comment": "v6.0 - A层9因子权重（总和必须=100.0%），F/I为B层调制器（权重=0）",
     "T": 18.0,
     "M": 12.0,
     "C": 18.0,
     "S": 10.0,
     "V": 10.0,
-    "O": 18.0,
-    "L": 8.0,
-    "B": 2.0,
+    "O": 12.0,
+    "L": 12.0,
+    "B": 4.0,
     "Q": 4.0,
+    "_b_layer": "以下为B层调制器，不参与评分",
     "I": 0,
     "E": 0,
     "F": 0
   },
   "weights_comment": {
-    "_version": "v6.0 - newstandards整合版（9因子评分系统）",
-    "_total_weight": "100%（权重百分比系统，总和=100）",
-    "_layer1_direction": "T(18.0%) + M(12.0%) + S(10.0%) + V(10.0%) + C(18.0%) + O(18.0%) + Q(4.0%) + L(8.0%) + B(2.0%) = 100% - 方向评分层（A层）",
-    "_layer2_modulator": "F/I不参与评分，作为B层调制器：调整Teff/cost_eff/阈值",
-    "_removed_from_scoring": "F(0%) - 不再参与评分，仅作为调制器影响Teff和成本",
-    "_removed_from_scoring_2": "I(0%) - 不再参与评分，仅作为调制器影响Teff和阈值",
+    "_version": "v6.1 - I因子架构修复版（9因子A层系统）",
+    "_total_weight": "100%（A层9因子权重百分比系统）",
+    "_layer1_price_action": "Layer 1 价格行为层（50%）: T(18%) + M(12%) + S(10%) + V(10%)",
+    "_layer2_capital_flow": "Layer 2 资金流层（30%）: C(18%) + O(12%)",
+    "_layer3_microstructure": "Layer 3 微观结构层（20%）: L(12%) + B(4%) + Q(4%)",
+    "_layer_b_modulators": "B层调制器（不评分）: F(拥挤度) + I(独立性)",
+    "_modulator_role": "F/I仅调制Teff/cost/thresholds，不修改方向分数",
     "_deprecated": "E(0) - 环境因子已废弃",
-    "_four_gates": "信号发布需通过四门：1)DataQual≥0.90, 2)EV>0, 3)执行指标达标, 4)概率阈值",
-    "_prime_threshold_update": "Prime阈值从35分调整为通过四门系统验证"
+    "_change_log": "I因子8%权重重新分配：T+2%, M+3%, S+4%, C+6%, L+4%, 其他rebalance",
+    "_four_gates": "信号发布需通过四门：1)DataQual≥0.90, 2)EV>0, 3)执行指标达标, 4)概率阈值"
   },
 
   "fund_leading": {
@@ -166,11 +169,12 @@
   },
 
   "publish": {
-    "prime_prob_min": 0.62,
-    "prime_dims_ok_min": 4,
-    "prime_dim_threshold": 35,
-    "watch_prob_min": 0.58,
-    "watch_prob_max": 0.61
+    "prime_prob_min": 0.58,
+    "prime_dims_ok_min": 3,
+    "prime_dim_threshold": 30,
+    "watch_prob_min": 0.52,
+    "watch_prob_max": 0.57,
+    "_comment": "v6.1调整: 降低阈值以增加信号量（保守方案A）"
   },
 
   "base": {

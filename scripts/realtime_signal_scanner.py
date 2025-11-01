@@ -157,19 +157,19 @@ class SignalScanner:
         self.exec_estimator = ExecutionMetricsEstimator()
         self.quality_monitor = DataQualMonitor()
 
-        # v2.0合规：初始化防抖动系统
+        # v2.0合规：初始化防抖动系统（v6.1调整：放宽阈值以增加信号响应速度）
         self.anti_jitter = AntiJitter(
-            prime_entry_threshold=0.80,
-            prime_maintain_threshold=0.70,
+            prime_entry_threshold=0.65,      # v6.1: 0.80→0.65（更现实的阈值）
+            prime_maintain_threshold=0.58,   # v6.1: 0.70→0.58（维持阈值）
             watch_entry_threshold=0.50,
             watch_maintain_threshold=0.40,
-            confirmation_bars=2,
-            total_bars=3,
-            cooldown_seconds=90
+            confirmation_bars=1,             # v6.1: 2→1（1/2确认即可，更快响应）
+            total_bars=2,                    # v6.1: 3→2
+            cooldown_seconds=60              # v6.1: 90→60（更快恢复）
         )
 
         log("✅ 四门系统组件初始化完成")
-        log("✅ 防抖动系统初始化完成 (K/N=2/3, cooldown=90s)")
+        log("✅ 防抖动系统初始化完成 (K/N=1/2, cooldown=60s, threshold=0.65)")
 
         # 加载Telegram配置
         if send_telegram:
