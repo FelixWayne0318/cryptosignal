@@ -233,17 +233,20 @@ class ExecutionGates:
     Gates check if execution conditions are favorable for opening position.
     """
 
-    # Default thresholds
+    # Default thresholds (v2.0合规修正)
+    # Per PUBLISHING.md § 3.2.1 Table 3-1:
+    # - Standard coins: stricter thresholds (higher liquidity)
+    # - Newcoins: looser thresholds (lower liquidity, higher volatility)
     DEFAULT_THRESHOLDS = {
         "standard": {
-            "impact_bps": 10.0,
+            "impact_bps": 7.0,   # ✅ v2.0: 10.0 → 7.0 (stricter, per spec)
             "spread_bps": 35.0,
             "obi_abs": 0.30,
         },
         "newcoin": {
-            "impact_bps": 7.0,
-            "spread_bps": 30.0,
-            "obi_abs": 0.25,
+            "impact_bps": 15.0,  # ✅ v2.0: 7.0 → 15.0 (looser, per spec)
+            "spread_bps": 50.0,  # ✅ v2.0: 30.0 → 50.0 (looser, per spec)
+            "obi_abs": 0.40,     # ✅ v2.0: 0.25 → 0.40 (looser, per spec)
         }
     }
 
