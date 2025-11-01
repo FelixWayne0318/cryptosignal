@@ -34,13 +34,16 @@ def _validate_weights(params: Dict[str, Any]) -> None:
             f"配置错误: 'weights'必须是字典类型，当前类型: {type(weights).__name__}"
         )
 
-    # 计算权重总和
+    # 计算权重总和（跳过以_开头的注释字段）
     try:
-        total = sum(weights.values())
+        # 只对因子权重求和，跳过 _comment, _b_layer 等注释字段
+        factor_weights = {k: v for k, v in weights.items() if not k.startswith('_')}
+        total = sum(factor_weights.values())
     except (TypeError, AttributeError) as e:
         raise ValueError(
             f"配置错误: 权重值必须是数字类型\n"
-            f"错误详情: {e}"
+            f"错误详情: {e}\n"
+            f"提示: 权重值应为数字（如 18.0），不能是字符串"
         )
 
     # v6.0系统要求权重总和=100%
@@ -48,9 +51,10 @@ def _validate_weights(params: Dict[str, Any]) -> None:
         raise ValueError(
             f"配置错误: 权重总和必须=100.0% (v6.0系统)\n"
             f"当前总和: {total}%\n"
-            f"权重明细: {weights}\n\n"
+            f"因子权重: {factor_weights}\n\n"
             f"修复方法: 调整 config/params.json 中的权重值，确保总和=100.0\n"
-            f"验证命令: python3 -c \"import json; w=json.load(open('config/params.json'))['weights']; print(f'总和={{sum(w.values())}}')\""
+            f"验证命令: python3 -c \"import json; w=json.load(open('config/params.json'))['weights']; "
+            f"fw={{k:v for k,v in w.items() if not k.startswith('_')}}; print(f'总和={{sum(fw.values())}}')\""
         )
 
     # 检查必需的因子（v6.0: 10+1维）
