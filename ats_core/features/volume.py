@@ -1,27 +1,40 @@
 # coding: utf-8
 """
-V（量能）评分 - 统一±100系统
+V（量能）评分 - 统一±100系统（多空对称修复版 v2.0）
 
-改进：
-- 放量 = 正分（好）
-- 缩量 = 负分（差）
-- 0 = 中性
+改进v2.0（修复多空对称性）：
+- 上涨+放量 = 正分（做多信号）
+- 下跌+放量 = 负分（做空信号） ⭐ 修复重点
+- 上涨+缩量 = 负分（做多信号弱）
+- 下跌+缩量 = 正分（做空信号弱，可能见底）
+
+核心思想：
+量能配合价格方向才有意义！
+- 放量本身不代表方向，需要结合价格
+- 下跌放量（恐慌盘、止损盘、抄底盘）= 做空信号
+- 上涨放量（追涨盘、突破盘、FOMO盘）= 做多信号
 """
 import math
 from ats_core.features.scoring_utils import directional_score
 
-def score_volume(vol, params=None):
+def score_volume(vol, closes=None, params=None):
     """
-    V（量能）评分 - 统一±100系统
+    V（量能）评分 - 统一±100系统（多空对称修复版）
 
     核心逻辑：
-    - vlevel = v5/v20，衡量近期量能相对均值
-    - 1.0 = 中性（v5 = v20）→ 0分
-    - > 1.0 = 放量 → 正分
-    - < 1.0 = 缩量 → 负分
+    1. 计算量能强度（绝对值）：vlevel = v5/v20
+    2. 计算价格方向：最近5根K线的涨跌幅
+    3. 量能强度 × 价格方向 = 最终分数
+
+    示例：
+    - 上涨5% + 放量30%（v5/v20=1.3） → V = +60（做多信号）
+    - 下跌5% + 放量30%（v5/v20=1.3） → V = -60（做空信号） ⭐ 修复
+    - 上涨5% + 缩量20%（v5/v20=0.8） → V = -40（做多信号弱）
+    - 下跌5% + 缩量20%（v5/v20=0.8） → V = +40（做空信号弱）
 
     Args:
         vol: 量能列表
+        closes: 收盘价列表（用于判断价格方向）
         params: 参数配置
 
     Returns:
@@ -33,6 +46,7 @@ def score_volume(vol, params=None):
         "vroc_scale": 0.3,        # vroc = 0.3 给约 69 分
         "vlevel_weight": 0.6,     # vlevel 权重
         "vroc_weight": 0.4,       # vroc 权重
+        "price_lookback": 5,      # 价格方向回溯周期
     }
 
     p = dict(default_params)
@@ -40,7 +54,7 @@ def score_volume(vol, params=None):
         p.update(params)
 
     if len(vol) < 25:
-        return 0, {"v5v20": 1.0, "vroc": 0.0}
+        return 0, {"v5v20": 1.0, "vroc": 0.0, "price_trend_pct": 0.0}
 
     v5 = sum(vol[-5:]) / 5.0
     v20 = sum(vol[-20:]) / 20.0
@@ -50,7 +64,7 @@ def score_volume(vol, params=None):
     # 正值 = 量能加速，负值 = 量能减速
     cur = math.log(max(1e-9, vol[-1] / max(1e-9, v20)))
     prv = math.log(max(1e-9, vol[-2] / max(1e-9, sum(vol[-21:-1]) / 20.0)))
-    vroc = cur - prv  # 修复：不再使用abs()，保留方向
+    vroc = cur - prv
 
     # 软映射评分（0-100）
     vlevel_score_raw = directional_score(vlevel, neutral=1.0, scale=p["vlevel_scale"])
@@ -60,26 +74,108 @@ def score_volume(vol, params=None):
     vlevel_score = (vlevel_score_raw - 50) * 2
     vroc_score = (vroc_score_raw - 50) * 2
 
-    # 加权平均
-    V = p["vlevel_weight"] * vlevel_score + p["vroc_weight"] * vroc_score
+    # 加权平均（量能强度，未考虑方向）
+    V_strength = p["vlevel_weight"] * vlevel_score + p["vroc_weight"] * vroc_score
+    V_strength = max(-100, min(100, V_strength))
+
+    # ========== v2.0 修复：考虑价格方向 ==========
+
+    # 计算价格趋势（最近N根K线的涨跌幅）
+    price_trend_pct = 0.0
+    price_direction = 0  # -1=下跌, 0=中性, +1=上涨
+
+    if closes is not None and len(closes) >= p["price_lookback"] + 1:
+        # 使用最近5根K线（或配置的回溯周期）
+        lookback = p["price_lookback"]
+        price_start = closes[-(lookback + 1)]
+        price_end = closes[-1]
+
+        # 计算涨跌幅
+        price_trend_pct = (price_end - price_start) / max(1e-12, abs(price_start))
+
+        # 判断价格方向（阈值：±0.5%）
+        if price_trend_pct > 0.005:
+            price_direction = 1   # 上涨
+        elif price_trend_pct < -0.005:
+            price_direction = -1  # 下跌
+        else:
+            price_direction = 0   # 中性（小幅波动）
+
+    # ========== 应用价格方向修正 ==========
+
+    if price_direction != 0:
+        # 情况1：价格上涨 + 放量（V_strength > 0） → 保持正分（做多信号）
+        # 情况2：价格上涨 + 缩量（V_strength < 0） → 保持负分（做多信号弱）
+        # 情况3：价格下跌 + 放量（V_strength > 0） → 反转为负分（做空信号）⭐ 修复
+        # 情况4：价格下跌 + 缩量（V_strength < 0） → 反转为正分（做空信号弱）
+
+        if price_direction == -1:
+            # 价格下跌：反转V的符号
+            V = -V_strength
+        else:
+            # 价格上涨：保持V的符号
+            V = V_strength
+    else:
+        # 价格中性（横盘）：使用原始量能分数（放量=正，缩量=负）
+        V = V_strength
+
     V = int(round(max(-100, min(100, V))))
 
-    # 解释
-    if V >= 40:
-        interpretation = "强势放量"
-    elif V >= 10:
-        interpretation = "温和放量"
-    elif V >= -10:
-        interpretation = "量能平稳"
-    elif V >= -40:
-        interpretation = "温和缩量"
+    # ========== 解释文本（考虑价格方向）==========
+
+    if closes is not None and len(closes) >= 6:
+        # 有价格数据：使用方向性描述
+        if V >= 40:
+            if price_direction == 1:
+                interpretation = "上涨放量（做多信号）"
+            elif price_direction == -1:
+                interpretation = "下跌放量（做空信号）"
+            else:
+                interpretation = "横盘放量"
+        elif V >= 10:
+            if price_direction == 1:
+                interpretation = "上涨温和放量"
+            elif price_direction == -1:
+                interpretation = "下跌温和放量"
+            else:
+                interpretation = "温和放量"
+        elif V >= -10:
+            interpretation = "量能平稳"
+        elif V >= -40:
+            if price_direction == 1:
+                interpretation = "上涨缩量（信号弱）"
+            elif price_direction == -1:
+                interpretation = "下跌缩量（可能见底）"
+            else:
+                interpretation = "温和缩量"
+        else:
+            if price_direction == 1:
+                interpretation = "上涨大幅缩量（警告）"
+            elif price_direction == -1:
+                interpretation = "下跌大幅缩量（可能见底）"
+            else:
+                interpretation = "大幅缩量"
     else:
-        interpretation = "大幅缩量"
+        # 无价格数据：使用传统描述（向后兼容）
+        if V >= 40:
+            interpretation = "强势放量"
+        elif V >= 10:
+            interpretation = "温和放量"
+        elif V >= -10:
+            interpretation = "量能平稳"
+        elif V >= -40:
+            interpretation = "温和缩量"
+        else:
+            interpretation = "大幅缩量"
 
     return V, {
         "v5v20": round(vlevel, 2),
         "vroc": round(vroc, 4),
         "vlevel_score": int(vlevel_score),
         "vroc_score": int(vroc_score),
-        "interpretation": interpretation
+        "V_strength_raw": int(V_strength),  # v2.0: 原始量能强度（未考虑方向）
+        "price_trend_pct": round(price_trend_pct * 100, 2),  # v2.0: 价格涨跌幅（%）
+        "price_direction": price_direction,  # v2.0: 价格方向（-1/0/+1）
+        "interpretation": interpretation,
+        "symmetry_fixed": True,  # v2.0: 标记已修复多空对称性
     }

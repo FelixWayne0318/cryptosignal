@@ -225,8 +225,9 @@ def _analyze_symbol_core(
     perf['S结构'] = time.time() - t0
 
     # 量能（V）：-100（缩量）到 +100（放量）
+    # v2.0: 传入closes以修复多空对称性
     t0 = time.time()
-    V, V_meta = _calc_volume(q)
+    V, V_meta = _calc_volume(q, closes=c)
     perf['V量能'] = time.time() - t0
 
     # 持仓（O）：-100（减少）到 +100（增加）
@@ -928,11 +929,11 @@ def _calc_structure(h, l, c, ema30_last, atr_now, cfg, ctx):
     except Exception:
         return 50, {"theta": 0.4, "icr": 0.5, "retr": 0.5}
 
-def _calc_volume(vol):
-    """量能打分（±100系统）"""
+def _calc_volume(vol, closes=None):
+    """量能打分（±100系统，v2.0修复多空对称性）"""
     try:
         from ats_core.features.volume import score_volume
-        V, meta = score_volume(vol)
+        V, meta = score_volume(vol, closes=closes)
         return int(V), meta
     except Exception:
         return 0, {"v5v20": 1.0, "vroc_abs": 0.0}
