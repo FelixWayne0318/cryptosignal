@@ -13,7 +13,7 @@ import json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from ats_core.pipeline.analyze_symbol import analyze_symbol
-from ats_core.api.binance_client import BinanceClient
+from ats_core.execution.binance_futures_client import get_binance_client
 from ats_core.logging import log, warn, error
 
 
@@ -45,8 +45,7 @@ async def test_5_coins():
 
     # 初始化客户端
     log("\n初始化Binance客户端...")
-    client = BinanceClient()
-    await client.initialize()
+    client = get_binance_client()
     log("✅ 客户端初始化完成")
 
     log(f"\n测试币种: {', '.join(test_symbols)}")
@@ -158,7 +157,6 @@ async def test_5_coins():
         else:
             log(f"  {r['symbol']}: 无结果")
 
-    await client.close()
     log("\n✅ 测试完成")
 
 
