@@ -10,7 +10,7 @@
 
 ### 🎯 审查目的
 
-对比当前v6.3.2实现与 `newstandards/NEWCOIN_SPEC.md` 规范要求，识别合规差距，制定实施路线图。
+对比当前v6.3.2实现与 `standards/specifications/NEWCOIN.md` 规范要求，识别合规差距，制定实施路线图。
 
 ### 📊 合规性矩阵
 
@@ -626,7 +626,7 @@ if is_new_coin and len(k1) < 100:
 
 ### 🎯 核心改进：新币判断规范符合性修改
 
-**问题**: v6.3之前的新币判断逻辑不符合 `newstandards/NEWCOIN_SPEC.md` 规范标准
+**问题**: v6.3之前的新币判断逻辑不符合 `standards/specifications/NEWCOIN.md` 规范标准
 
 ### 🔧 规范符合性修改
 
@@ -1318,9 +1318,9 @@ python3 --version
 - **修复方案**: `SYSTEM_FIX_PLAN.md`
 - **系统概览**: `docs/SYSTEM_REVIEW_2025-11.md`
 - **规范文档**:
-  - `newstandards/STANDARDS.md` - 总规范
-  - `newstandards/MODULATORS.md` - B层调制器规范
-  - `newstandards/PUBLISHING.md` - 发布规范
+  - `standards/CORE_STANDARDS.md` - 总规范
+  - `standards/specifications/MODULATORS.md` - B层调制器规范
+  - `standards/specifications/PUBLISHING.md` - 发布规范
 - **快速参考**: `standards/QUICK_REFERENCE.md`
 
 ---

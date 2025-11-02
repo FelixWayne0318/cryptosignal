@@ -1,7 +1,7 @@
 # CryptoSignal v6.4 Phase 2 规范文档地图
 
 > **快速回答**:
-> - 📍 **所有规范文档位置**: `standards/` + `newstandards/`
+> - 📍 **所有规范文档位置**: `standards/` (已完成整合)
 > - ✅ **能否重建系统**: 核心算法可以（90%完整），完整生产系统需补充工程细节
 > - 📖 **详细分析**: 见 `docs/SPEC_COMPLETENESS_ANALYSIS.md`
 
@@ -14,11 +14,11 @@
 
 ### 我想重建系统
 👉 按此顺序阅读:
-1. **`newstandards/STANDARDS.md`** - 完整技术规范（核心算法）⭐⭐⭐
+1. **`standards/CORE_STANDARDS.md`** - 完整技术规范（核心算法）⭐⭐⭐
 2. **`standards/specifications/FACTOR_SYSTEM.md`** - 9+2因子系统 ⭐⭐⭐
 3. **`standards/specifications/NEWCOIN.md`** - 新币通道规范 ⭐⭐⭐
-4. **`newstandards/DATA_LAYER.md`** - 数据层架构 ⭐⭐
-5. **`newstandards/PUBLISHING.md`** - 四门系统 ⭐⭐
+4. **`standards/specifications/DATA_LAYER.md`** - 数据层架构 ⭐⭐
+5. **`standards/specifications/PUBLISHING.md`** - 四门系统 ⭐⭐
 6. **`config/params.json`** - 实际参数配置 ⭐⭐⭐
 
 ---
@@ -34,20 +34,20 @@ standards/00_INDEX.md          # 🎯 从这里开始
 
 #### A. 算法与模型（最重要，90%完整）
 ```
-newstandards/STANDARDS.md                    # ⭐⭐⭐ 完整技术规范（A/B/C层）
-standards/specifications/FACTOR_SYSTEM.md    # ⭐⭐⭐ 9+2因子系统
-standards/specifications/NEWCOIN.md          # ⭐⭐⭐ 新币通道（22KB详细）
-newstandards/MODULATORS.md                   # ⭐⭐  F/I调制器
+standards/CORE_STANDARDS.md                     # ⭐⭐⭐ 完整技术规范（A/B/C层）
+standards/specifications/FACTOR_SYSTEM.md       # ⭐⭐⭐ 9+2因子系统
+standards/specifications/NEWCOIN.md             # ⭐⭐⭐ 新币通道（22KB详细）
+standards/specifications/MODULATORS.md          # ⭐⭐  F/I调制器
 ```
 
 **包含**: 所有因子计算公式、标准化链、评分系统、权重配置
 
 #### B. 数据与发布（80%完整）
 ```
-newstandards/DATA_LAYER.md      # ⭐⭐  数据源、API、WebSocket
-newstandards/PUBLISHING.md      # ⭐⭐  四门系统、防抖动
-newstandards/SCHEMAS.md         # ⭐⭐  数据结构定义
-standards/specifications/GATES.md # ⭐⭐ 四门规范
+standards/specifications/DATA_LAYER.md      # ⭐⭐  数据源、API、WebSocket
+standards/specifications/PUBLISHING.md      # ⭐⭐  四门系统、防抖动
+standards/specifications/SCHEMAS.md         # ⭐⭐  数据结构定义
+standards/specifications/GATES.md           # ⭐⭐  四门规范
 ```
 
 **包含**: 数据获取、质量监控、发布条件、信号格式
@@ -81,7 +81,7 @@ standards/MODIFICATION_RULES.md    # 修改规则
 ## 🎯 按需求查找规范
 
 ### 我想实现因子计算
-1. **`newstandards/STANDARDS.md § 2`** - 查看完整公式
+1. **`standards/CORE_STANDARDS.md § 2`** - 查看完整公式
 2. **`standards/specifications/FACTOR_SYSTEM.md`** - 查看因子定义
 3. **`config/params.json`** - 查看权重配置
 
@@ -98,7 +98,7 @@ standards/MODIFICATION_RULES.md    # 修改规则
 ---
 
 ### 我想实现四门系统
-1. **`newstandards/PUBLISHING.md § 四门系统`**
+1. **`standards/specifications/PUBLISHING.md § 四门系统`**
 2. **`standards/specifications/GATES.md`**
 3. **代码参考**: `ats_core/gates/integrated_gates.py`
 
@@ -143,7 +143,7 @@ standards/MODIFICATION_RULES.md    # 修改规则
 ## 🔑 关键规范文档（必读）
 
 ### Top 5 核心规范 ⭐⭐⭐
-1. **`newstandards/STANDARDS.md`** (5.4KB)
+1. **`standards/CORE_STANDARDS.md`** (5.4KB)
    - A层9因子完整公式
    - 统一标准化链
    - 执行系统基础规范
@@ -158,7 +158,7 @@ standards/MODIFICATION_RULES.md    # 修改规则
    - Phase 2-4实施路线图
    - AVWAP/ZLEMA计算公式
 
-4. **`newstandards/PUBLISHING.md`** (8.3KB)
+4. **`standards/specifications/PUBLISHING.md`** (8.3KB)
    - 四门系统完整规范
    - 防抖动机制
    - 信号发布条件
@@ -223,10 +223,10 @@ standards/MODIFICATION_RULES.md    # 修改规则
 4. `README.md` - 项目说明
 
 ### 开发者（重建系统）
-1. `newstandards/STANDARDS.md` - 完整技术规范 ⭐
+1. `standards/CORE_STANDARDS.md` - 完整技术规范 ⭐
 2. `standards/specifications/NEWCOIN.md` - 新币通道 ⭐
-3. `newstandards/PUBLISHING.md` - 四门系统 ⭐
-4. `newstandards/DATA_LAYER.md` - 数据层
+3. `standards/specifications/PUBLISHING.md` - 四门系统 ⭐
+4. `standards/specifications/DATA_LAYER.md` - 数据层
 5. `config/params.json` - 参数配置 ⭐
 
 ### 运维人员（部署系统）
@@ -251,7 +251,7 @@ cat standards/specifications/INDEX.md
 ### 方法2: 关键词搜索
 ```bash
 # 搜索"权重"相关规范
-grep -r "权重" standards/ newstandards/
+grep -r "权重" standards/
 
 # 搜索"AVWAP"计算公式
 grep -r "AVWAP" standards/specifications/
@@ -261,10 +261,10 @@ grep -r "T趋势" standards/
 ```
 
 ### 方法3: 按模块查找
-- **因子计算**: `newstandards/STANDARDS.md § 2`
+- **因子计算**: `standards/CORE_STANDARDS.md § 2`
 - **新币通道**: `standards/specifications/NEWCOIN.md`
-- **四门系统**: `newstandards/PUBLISHING.md`
-- **数据层**: `newstandards/DATA_LAYER.md`
+- **四门系统**: `standards/specifications/PUBLISHING.md`
+- **数据层**: `standards/specifications/DATA_LAYER.md`
 - **配置**: `config/params.json`
 
 ---
@@ -275,13 +275,13 @@ grep -r "T趋势" standards/
 - ✅ 权重配置已统一（T18/M12/C18/S10/V10/O12/L12/B4/Q4）
 - ✅ 版本号已统一（v6.4 Phase 2）
 - ✅ 因子系统命名已统一（9+2因子体系）
-- ⚠️ FACTOR_SYSTEM.md待完善（需合并newstandards详细内容）
+- ⚠️ FACTOR_SYSTEM.md待完善（需合并CORE_STANDARDS.md详细内容）
 
 ### 待办事项
 - [ ] 补充DataQual计算细节
 - [ ] 补充执行系统实现规范
 - [ ] 补充WebSocket管理规范
-- [ ] 合并newstandards到standards（Issue #5）
+- [x] ~~合并newstandards到standards~~（已完成 2025-11-02）
 
 ---
 
