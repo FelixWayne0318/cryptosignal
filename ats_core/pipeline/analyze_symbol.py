@@ -616,33 +616,16 @@ def _analyze_symbol_core(
             market_regime
         )
 
-        # 改进：避免双重惩罚（F调节器 + 市场过滤器）
-        # 策略：只应用更严格的一个惩罚
+        # v6.2：直接应用市场过滤器结果
+        # F调节器已移除（v2.0合规），无需担心双重惩罚
         if market_adjustment_reason:
-            # 计算市场过滤器的乘数
-            market_multiplier = P_chosen_filtered / P_chosen if P_chosen > 0 else 1.0
-
-            # 比较F调节器和市场过滤器的惩罚
-            # adjustment来自F调节器，market_multiplier来自市场过滤器
-            # 取两者中更小的（更严格的惩罚）
-            if adjustment < 1.0 and market_multiplier < 1.0:
-                # 两个都是惩罚，取更严格的
-                combined_multiplier = min(adjustment, market_multiplier)
-                # 重新计算概率（避免叠加惩罚）
-                P_chosen = P_base * combined_multiplier
-                # 更新对应方向的概率
-                if side_long:
-                    P_long = P_chosen
-                else:
-                    P_short = P_chosen
-                # 添加合并惩罚的说明
-                if combined_multiplier == adjustment:
-                    market_adjustment_reason = f"（F调节器惩罚更严：×{adjustment:.2f}）"
-                else:
-                    market_adjustment_reason = market_adjustment_reason + f"（已合并F惩罚）"
+            # 应用市场过滤（奖励或惩罚）
+            P_chosen = P_chosen_filtered
+            # 更新对应方向的概率
+            if side_long:
+                P_long = P_chosen
             else:
-                # 正常应用市场过滤（奖励或单一惩罚）
-                P_chosen = P_chosen_filtered
+                P_short = P_chosen
 
             prime_strength = prime_strength_filtered
             is_prime = (prime_strength >= 25)  # 重新判定Prime (v6.1: 降低阈值)
@@ -696,7 +679,7 @@ def _analyze_symbol_core(
         "probability": P_chosen,
         "P_base": P_base,  # 基础概率（调整前）
         "F_score": F,  # F分数（-100到+100）
-        "F_adjustment": adjustment,  # 调整系数
+        "F_adjustment": 1.0,  # 调整系数（v6.2: F调节器已移除，固定为1.0）
         "prior_up": prior_up,
         "quality_score": quality_score,  # 质量系数（0.6-1.0）
 
