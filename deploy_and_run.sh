@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==========================================
-# CryptoSignal v6.4 Phase 2 全自动部署并运行脚本
+# CryptoSignal v6.5 全自动部署并运行脚本
 # 适用于：首次部署、更新部署、全新服务器
 # 自动处理：git冲突、依赖缺失、所有错误
 # ==========================================
@@ -12,7 +12,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 echo "=============================================="
-echo "🚀 CryptoSignal v6.4 Phase 2 全自动部署并运行"
+echo "🚀 CryptoSignal v6.5 全自动部署并运行"
 echo "=============================================="
 echo ""
 echo "📋 脚本功能："
@@ -41,7 +41,7 @@ if [ ! -d ~/cryptosignal ]; then
     echo "cd ~"
     echo "git clone https://github.com/FelixWayne0318/cryptosignal.git"
     echo "cd cryptosignal"
-    echo "git checkout claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ"
+    echo "git checkout claude/understand-realtime-scanner-system-011CUjuCJDa9UX3sbxtR2HvA"
     echo "./deploy_and_run.sh"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     exit 1
@@ -98,21 +98,21 @@ retry_git() {
 
 # Fetch 远程代码（带重试）
 echo "   正在 fetch 远程代码..."
-if ! retry_git "git fetch origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ"; then
+if ! retry_git "git fetch origin claude/understand-realtime-scanner-system-011CUjuCJDa9UX3sbxtR2HvA"; then
     echo -e "${RED}❌ git fetch 失败，请检查网络连接${NC}"
     exit 1
 fi
 
 # 强制重置到远程版本
 echo "   强制同步到远程最新版本..."
-git reset --hard origin/claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
+git reset --hard origin/claude/understand-realtime-scanner-system-011CUjuCJDa9UX3sbxtR2HvA
 
 # 切换分支
-git checkout claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ 2>/dev/null || true
+git checkout claude/understand-realtime-scanner-system-011CUjuCJDa9UX3sbxtR2HvA 2>/dev/null || true
 
 # Pull 最新代码（带重试）
 echo "   正在 pull 最新代码..."
-if ! retry_git "git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ"; then
+if ! retry_git "git pull origin claude/understand-realtime-scanner-system-011CUjuCJDa9UX3sbxtR2HvA"; then
     echo -e "${YELLOW}⚠️ git pull 失败，但已 reset 到远程版本，继续部署...${NC}"
 fi
 
@@ -331,7 +331,7 @@ else
 fi
 
 echo ""
-echo "2️⃣ 验证权重配置（v6.4 Phase 2 - 类型安全）..."
+echo "2️⃣ 验证权重配置（v6.5 - 8+2因子系统）..."
 python3 -c "
 import json
 
@@ -348,7 +348,7 @@ a_total = sum(factor_weights[k] for k in a_layer)
 b_layer = ['F', 'I']
 
 print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-print('权重配置验证 (v6.4 Phase 2)')
+print('权重配置验证 (v6.5 - 8+2因子系统)')
 print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
 print(f'A层9因子总和: {a_total}%')
 for k in a_layer:
@@ -472,7 +472,7 @@ echo ""
 echo "📍 第 7 步：自动启动生产环境"
 echo "=============================================="
 echo ""
-echo -e "${GREEN}✅ v6.4 Phase 2 部署验证完成！${NC}"
+echo -e "${GREEN}✅ v6.5 部署验证完成！${NC}"
 echo ""
 echo "🚀 正在启动生产环境（每5分钟扫描一次，200个币种）..."
 echo ""
@@ -524,12 +524,12 @@ else
     echo -e "${GREEN}✅ 部署并运行完成！${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "📊 v6.4 Phase 2 系统特性"
+    echo "📊 v6.5 系统特性"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "✅ I因子架构修正（从A层移至B层）"
-    echo "✅ 多空对称选币机制（波动率优先）"
-    echo "✅ 全面类型安全防护（4层防御）"
-    echo "✅ 扫描币种提升（140→200个）"
+    echo "✅ L因子架构重构（移至执行层）"
+    echo "✅ 8+2因子系统（8个方向因子+2个调制器）"
+    echo "✅ 权重优化：T20% M14% C20% O14%"
+    echo "✅ Spread阈值收紧：标准25bps 新币40bps"
     echo ""
     echo "预期效果："
     echo "  • 信号量：3-7个Prime信号/小时"
