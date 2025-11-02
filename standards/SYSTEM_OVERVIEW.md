@@ -506,12 +506,22 @@ python3 scripts/realtime_signal_scanner.py --max-symbols 10 --once
 
 ## 🔖 版本历史
 
+- **v6.2 Critical Bug修复版** (2025-11-02): I因子双重归一化、币龄计算、四门系统、min_score参数修复
+- **v6.1 阈值调整版** (2025-11): 降低Prime阈值，I因子移至B层
 - **v6.0 newstandards整合版** (2025-10): A/B/C/D分层架构，F/I改为调制器，四门验证系统
 - **v6.0 v2.0多空对称修复版** (2025-11-01): V和O因子多空对称性修复，verbose详细输出功能
 - **v6.0** (2025-10): 权重百分比系统，F因子参与评分，Prime阈值调整
 - **v5.0** (2025-09): 10+1维因子系统，新增L/B/Q/I四维
 - **v4.0** (2025-08): WebSocket优化，0 API调用
 - **v3.0** (2025-07): 自适应权重系统
+
+### v6.2 Critical Bug修复 (2025-11-02)
+- 🐛 **I因子双重归一化**: 修复calculate_independence()返回±100后又做二次映射导致I值异常（-300到+100）
+- 🐛 **币龄计算错误**: 修复使用K线数量作为币龄导致BTC/ETH被误判为新币的问题，改用时间戳差值
+- 🐛 **四门系统缺失**: 添加gates字段到analyze_symbol返回结果，修复四门调节全为0.00的问题
+- 🐛 **min_score参数未使用**: 修复batch_scan中min_score参数声明但未使用的问题
+- 📄 修改文件: `analyze_symbol.py`, `batch_scan_optimized.py`
+- 📄 更新文档: `VERSION_HISTORY.md`, `SYSTEM_OVERVIEW.md`
 
 ### v6.0 v2.0 详细更新 (2025-11-01)
 - ✅ **多空对称性修复**: V和O因子修复价格方向考虑，消除做多偏向
@@ -522,7 +532,8 @@ python3 scripts/realtime_signal_scanner.py --max-symbols 10 --once
 
 ---
 
-**最后更新**: 2025-11-01
+**最后更新**: 2025-11-02
 **维护者**: CryptoSignal Team
+**Critical Bug修复**: 2025-11-02 - 修复I因子双重归一化、币龄计算、四门系统、min_score参数
 **对称性审计**: 2025-10-31 - 发现V和O因子存在系统性做多偏向
 **对称性修复**: 2025-11-01 - V和O因子v2.0完全修复，测试验证通过

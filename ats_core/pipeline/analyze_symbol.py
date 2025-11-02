@@ -146,7 +146,18 @@ def _analyze_symbol_core(
 
     # ---- 新币检测（优先判断，决定数据要求）----
     new_coin_cfg = params.get("new_coin", {})
-    coin_age_hours = len(k1) if k1 else 0
+
+    # v6.2修复：计算真实币龄（基于K线时间戳，而非K线数量）
+    # 旧代码使用len(k1)导致BTC/ETH等成熟币被误判为新币
+    if k1 and len(k1) > 0:
+        # K线格式: [timestamp_ms, open, high, low, close, volume, ...]
+        first_kline_ts = k1[0][0]  # 第一根K线时间戳（毫秒）
+        latest_kline_ts = k1[-1][0]  # 最后一根K线时间戳（毫秒）
+        coin_age_ms = latest_kline_ts - first_kline_ts
+        coin_age_hours = coin_age_ms / (1000 * 3600)  # 转换为小时
+    else:
+        coin_age_hours = 0
+
     coin_age_days = coin_age_hours / 24
 
     # 4级分级阈值
@@ -325,20 +336,18 @@ def _analyze_symbol_core(
                 btc_prices = [_to_f(k[4]) for k in btc_klines[-use_len:]]  # Close prices
                 eth_prices = [_to_f(k[4]) for k in eth_klines[-use_len:]]  # Close prices
 
-                # 计算独立性分数（0-100）
-                I_raw, beta_sum, I_meta = calculate_independence(
+                # v6.2修复：calculate_independence已返回标准化后的±100分数
+                # (通过StandardizationChain处理，参见independence.py:187-188)
+                # 无需再次映射，直接使用
+                I, I_meta = calculate_independence(
                     alt_prices=alt_prices,
                     btc_prices=btc_prices,
                     eth_prices=eth_prices,
                     params=params.get("independence", {})
                 )
+                beta_sum = I_meta.get('beta_sum', 1.0)
 
-                # 归一化：0-100 → -100到+100（中性值50→0）
-                # 低独立性（<50）→负分（跟随大盘），高独立性（>50）→正分（独立走势）
-                I = (I_raw - 50) * 2
-                I_meta['raw_score'] = I_raw
-                I_meta['normalized_score'] = I
-                I_meta['beta_sum'] = beta_sum
+                # 补充元数据
                 I_meta['data_points'] = use_len
             else:
                 I, I_meta = 0, {"note": f"数据不足（需要25小时，实际{min_len}小时）"}
@@ -718,6 +727,25 @@ def _analyze_symbol_core(
 
         # F调节器否决警告（v6.2: F调节器已移除，固定为None）
         "f_veto_warning": None,
+
+        # v6.2新增：四门系统（简化版）
+        # 完整版需集成integrated_gates.py的FourGatesChecker
+        "gates": {
+            # Gate 1: DataQual - 数据质量评估（基于K线完整性）
+            "data_qual": min(1.0, len(k1) / 200.0) if k1 else 0.0,  # ≥200根K线为满分
+
+            # Gate 2: EV - 期望值简化估算
+            # EV ≈ (P - 0.5) * 2，范围-1到+1，归一化到0-1
+            "ev_gate": max(0.0, (P_chosen - 0.5) * 2),
+
+            # Gate 3: Execution - 执行质量（基于流动性）
+            # L>0表示流动性好，归一化到0-1
+            "execution": max(0.0, min(1.0, (L + 100) / 200)),  # L从-100映射到0-1
+
+            # Gate 4: Probability - 概率阈值
+            # P≥0.58视为达标，归一化显示
+            "probability": max(0.0, (P_chosen - 0.5) / 0.45) if P_chosen >= 0.5 else 0.0,
+        },
 
         # 🚀 世界顶级优化模块元数据
         "optimization_meta": {

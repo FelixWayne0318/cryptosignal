@@ -462,8 +462,16 @@ class OptimizedBatchScanner:
 
                 log(f"  └─ K线数据: 1h={len(k1h) if k1h else 0}根, 4h={len(k4h) if k4h else 0}根, 15m={len(k15m) if k15m else 0}根, 1d={len(k1d) if k1d else 0}根")
 
-                # 动态数据要求（支持新币）
-                coin_age_hours = len(k1h) if k1h else 0
+                # v6.2修复：计算真实币龄（基于K线时间戳，而非K线数量）
+                # 旧代码使用len(k1h)导致BTC/ETH等成熟币被误判为新币
+                if k1h and len(k1h) > 0:
+                    # K线格式: [timestamp_ms, open, high, low, close, volume, ...]
+                    first_kline_ts = k1h[0][0]  # 第一根K线时间戳（毫秒）
+                    latest_kline_ts = k1h[-1][0]  # 最后一根K线时间戳（毫秒）
+                    coin_age_ms = latest_kline_ts - first_kline_ts
+                    coin_age_hours = coin_age_ms / (1000 * 3600)  # 转换为小时
+                else:
+                    coin_age_hours = 0
 
                 # 根据币种年龄确定最小数据要求
                 if coin_age_hours <= 24:
@@ -574,7 +582,8 @@ class OptimizedBatchScanner:
                         f"prob_bonus={prime_breakdown.get('prob_bonus',0):.1f}, "
                         f"P_chosen={prime_breakdown.get('P_chosen',0):.3f}")
 
-                if is_prime:
+                # v6.2修复：使用min_score参数过滤信号
+                if is_prime and prime_strength >= min_score:
                     results.append(result)
                     log(f"✅ {symbol}: Prime强度={prime_strength}, 置信度={confidence:.0f}")
 

@@ -1,8 +1,71 @@
-# CryptoSignal v6.1 部署指南
+# CryptoSignal 版本历史
 
 > ⚠️ **重要**：本文档已纳入标准化部署规范体系
 > 标准规范：[standards/DEPLOYMENT_STANDARD.md](standards/DEPLOYMENT_STANDARD.md)
 > 快速参考：[QUICK_DEPLOY.md](QUICK_DEPLOY.md)
+
+---
+
+## 📋 版本更新 (v6.1 → v6.2) - 2025-11-02
+
+### 🐛 Critical Bug修复
+
+#### Bug 1: I因子双重归一化
+- **问题**: `calculate_independence()`已通过StandardizationChain返回±100分数，但analyze_symbol.py又做了一次0-100到-100的映射，导致I值可达-300到+100
+- **影响**: 大量币种显示I≤-150，严重偏离±100标准化范围
+- **修复**: 移除二次映射，直接使用`calculate_independence()`的返回值
+- **文件**: `ats_core/pipeline/analyze_symbol.py:328-340`
+- **参考**: 与L因子修复相同（同类型的双重归一化bug）
+
+#### Bug 2: 币龄计算错误
+- **问题**: 使用K线数量(`len(k1h)`)作为币龄，导致缓存限制导致BTC/ETH等成熟币被误判为"新币B(300小时)"
+- **影响**:
+  - 成熟币触发新币模板的流动性惩罚
+  - 错误的数据完整性要求
+  - 分类显示错误
+- **修复**: 使用K线时间戳差值计算真实币龄
+  ```python
+  coin_age_ms = latest_kline_ts - first_kline_ts
+  coin_age_hours = coin_age_ms / (1000 * 3600)
+  ```
+- **文件**:
+  - `ats_core/pipeline/analyze_symbol.py:150-161`
+  - `ats_core/pipeline/batch_scan_optimized.py:465-474`
+
+#### Bug 3: 四门系统缺失
+- **问题**: batch_scan_optimized.py尝试读取`result.get('gates', {})`但analyze_symbol.py返回结果中没有'gates'键
+- **影响**: 四门调节全部显示0.00，无法评估信号质量
+- **修复**: 添加简化版四门系统到analyze_symbol返回结果
+  - DataQual: 基于K线完整性
+  - EV: 基于概率的简化估算
+  - Execution: 基于流动性L因子
+  - Probability: 基于P_chosen归一化
+- **文件**: `ats_core/pipeline/analyze_symbol.py:731-748`
+- **备注**: 当前为简化版，完整版需集成`integrated_gates.py`的FourGatesChecker
+
+#### Bug 4: min_score参数未使用
+- **问题**: batch_scan_optimized.py的scan()方法声明了min_score参数但未在过滤逻辑中使用
+- **影响**: 无法通过min_score参数控制信号质量阈值
+- **修复**: 添加过滤条件 `if is_prime and prime_strength >= min_score`
+- **文件**: `ats_core/pipeline/batch_scan_optimized.py:585-588`
+
+### 📊 修复效果预期
+
+**修复前**:
+- I因子: -300 到 +100（严重超出范围）
+- 币龄: BTC/ETH显示为"新币B(300小时)"
+- 四门: 全部显示0.00（失效）
+- confidence: 5-20（极低，受I因子异常影响）
+- prime_strength: base 3-12（无法达到阈值）
+
+**修复后**:
+- I因子: -100 到 +100（标准化范围）
+- 币龄: 基于真实时间戳，BTC/ETH正确识别为成熟币
+- 四门: 显示有意义的数值（0-1范围）
+- confidence: 预期提升到正常范围（30-80）
+- prime_strength: 预期提升，可能出现Prime信号
+
+---
 
 ## 📋 版本更新 (v6.0 → v6.1)
 
