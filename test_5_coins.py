@@ -22,12 +22,8 @@ async def test_5_coins():
     log("🧪 快速测试 - 5个币种分析验证")
     log("=" * 60)
 
-    # 创建扫描器
-    scanner = OptimizedBatchScanner(
-        min_score=60,  # 降低阈值以便看到结果
-        enable_websocket=False,  # 禁用WebSocket
-        enable_telegram=False   # 禁用Telegram通知
-    )
+    # 创建扫描器（不接受参数）
+    scanner = OptimizedBatchScanner()
 
     # 初始化
     log("\n初始化扫描器...")
@@ -53,39 +49,49 @@ async def test_5_coins():
                 is_prime = result.get('publish', {}).get('prime', False)
 
                 # 获取L因子验证
-                L_score = result.get('scores', {}).get('L', 0)
+                scores_dict = result.get('scores', {})
+                L_score = scores_dict.get('L', 0)
                 L_meta = result.get('scores_meta', {}).get('L', {})
 
                 log(f"  ✅ 成功")
-                log(f"     分数: {score:.1f}, 概率: {prob:.2%}, Prime: {is_prime}")
-                log(f"     L因子: {L_score} (范围检查: {'✅' if -100 <= L_score <= 100 else '❌ 超出范围'})")
+                log(f"     加权分数: {score:.1f}")
+                log(f"     概率: {prob:.2%}")
+                log(f"     Prime: {is_prime}")
+                log(f"     L因子: {L_score} (范围检查: {'✅ 正常' if -100 <= L_score <= 100 else '❌ 超出±100范围'})")
+
+                # 显示所有因子
+                log(f"     所有因子:")
+                for factor, value in scores_dict.items():
+                    in_range = -100 <= value <= 100
+                    status = "✅" if in_range else "❌"
+                    log(f"       {factor}: {value:+4.0f} {status}")
 
                 # 检查L因子元数据
                 if 'liquidity_score' in L_meta:
-                    log(f"     流动性分数: {L_meta['liquidity_score']}")
                     log(f"     流动性等级: {L_meta.get('liquidity_level', 'N/A')}")
 
                 results.append({
                     'symbol': symbol,
                     'score': score,
                     'L_factor': L_score,
-                    'L_in_range': -100 <= L_score <= 100
+                    'all_factors_ok': all(-100 <= v <= 100 for v in scores_dict.values())
                 })
             else:
                 warn(f"  ⚠️  无结果")
                 results.append({
                     'symbol': symbol,
                     'score': None,
-                    'L_factor': None,
-                    'L_in_range': None
+                    'all_factors_ok': False
                 })
 
         except Exception as e:
             error(f"  ❌ 失败: {e}")
+            import traceback
+            traceback.print_exc()
             results.append({
                 'symbol': symbol,
                 'error': str(e),
-                'L_in_range': False
+                'all_factors_ok': False
             })
 
         log("")
@@ -96,17 +102,17 @@ async def test_5_coins():
     log("=" * 60)
 
     success_count = sum(1 for r in results if r.get('score') is not None)
-    l_factor_ok = sum(1 for r in results if r.get('L_in_range') == True)
+    all_factors_ok = sum(1 for r in results if r.get('all_factors_ok') == True)
 
     log(f"成功分析: {success_count}/5")
-    log(f"L因子正常: {l_factor_ok}/{success_count}")
+    log(f"因子范围正常: {all_factors_ok}/{success_count}")
 
-    if l_factor_ok == success_count and success_count > 0:
+    if all_factors_ok == success_count and success_count > 0:
         log("")
-        log("✅ 所有测试通过！L因子范围验证正常")
+        log("✅ 所有测试通过！所有因子在±100范围内")
     elif success_count > 0:
         log("")
-        warn(f"⚠️  部分L因子超出范围")
+        warn(f"⚠️  部分因子超出范围")
     else:
         log("")
         error("❌ 所有分析失败")
@@ -119,7 +125,7 @@ async def test_5_coins():
         if 'error' in r:
             log(f"  {r['symbol']}: ❌ {r['error']}")
         elif r['score'] is not None:
-            log(f"  {r['symbol']}: 分数={r['score']:.1f}, L={r['L_factor']}, 范围={'✅' if r['L_in_range'] else '❌'}")
+            log(f"  {r['symbol']}: 分数={r['score']:.1f}, L={r['L_factor']}, 范围={'✅' if r['all_factors_ok'] else '❌'}")
         else:
             log(f"  {r['symbol']}: 无结果")
 
