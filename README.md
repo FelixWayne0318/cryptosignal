@@ -1,10 +1,32 @@
-# CryptoSignal v6.0
+# CryptoSignal v6.2
 
 > **加密货币信号分析系统 - 10+1维因子体系**
+> v6.2 新增：多空对称选币机制 + 全面类型安全防护
 
 ---
 
-## 🚀 快速开始
+## 🚀 快速部署
+
+### 一键部署并运行（推荐）⭐⭐⭐
+
+```bash
+cd ~/cryptosignal
+git fetch origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
+git checkout claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
+git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
+./deploy_and_run.sh  # 自动部署并启动
+```
+
+### 部署脚本说明
+
+- **`./deploy_and_run.sh`** - ⭐⭐⭐ 推荐，自动部署并启动，无需确认
+- **`./deploy.sh`** - 部署后询问是否启动，需要手动确认
+
+详细文档见 [standards/SERVER_OPERATIONS.md](standards/SERVER_OPERATIONS.md)
+
+---
+
+## 📚 规范文档
 
 ### 新用户/新对话框必读
 

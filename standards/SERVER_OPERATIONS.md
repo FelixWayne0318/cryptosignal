@@ -4,23 +4,42 @@ CryptoSignal v6.2 服务器部署命令清单
 
 📌 快速索引：
   1. 首次部署 → 见下方"首次部署（全新服务器）"
-  2. 更新部署 → 见下方"更新部署（一键）" ⭐
+  2. 更新部署并运行 → 见下方"更新部署并运行（一键）" ⭐⭐⭐
+  3. 更新部署（手动启动） → 见下方"更新部署（手动启动）" ⭐
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
-🚀 更新部署（一键）⭐ - 推荐直接复制执行
+🚀 更新部署并运行（一键）⭐⭐⭐ - 最推荐，自动启动
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-适用场景：服务器已部署过，现在更新到最新版本
+适用场景：服务器已部署过，更新到最新版本并自动启动（推荐）
+
+复制以下命令直接执行：
+
+cd ~/cryptosignal && git fetch origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ && git checkout claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ && git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ && ./deploy_and_run.sh
+
+执行后：
+  - 自动完成8步验证
+  - 自动启动系统，无需确认
+  - 使用 Screen 会话（推荐）或 nohup 后台运行
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+🚀 更新部署（手动启动）⭐ - 需要确认后启动
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+适用场景：需要检查配置后再手动启动
 
 复制以下命令直接执行：
 
 cd ~/cryptosignal && git fetch origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ && git checkout claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ && git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ && ./deploy.sh
 
 执行后：
-  - 脚本会自动完成8步验证
-  - 最后询问是否启动，输入 y 即可
+  - 自动完成8步验证
+  - 最后询问是否启动，输入 y 启动，n 跳过
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
