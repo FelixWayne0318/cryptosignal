@@ -88,7 +88,7 @@ class OptimizedBatchScanner:
         self.client = get_binance_client()
         await self.client.initialize()
 
-        # 2. 获取高流动性USDT合约币种（TOP 140）
+        # 2. 获取高流动性USDT合约币种（TOP 200，v6.1优化）
         log("\n2️⃣  获取高流动性USDT合约币种...")
 
         # 获取交易所信息
@@ -103,30 +103,47 @@ class OptimizedBatchScanner:
         ]
         log(f"   总计: {len(all_symbols)} 个USDT永续合约")
 
-        # 获取24h行情数据（用于流动性过滤）
+        # 获取24h行情数据（用于波动率+流动性综合筛选）
         log("   获取24h行情数据...")
         ticker_24h = await self.client.get_ticker_24h()
 
-        # 构建成交额字典
-        volume_map = {}
+        # 构建行情字典（成交额 + 波动率）
+        ticker_map = {}
         for ticker in ticker_24h:
             symbol = ticker.get('symbol', '')
             if symbol in all_symbols:
-                # quoteVolume = USDT成交额
-                volume_map[symbol] = float(ticker.get('quoteVolume', 0))
-
-        # 按流动性排序，取TOP 140（WebSocket连接数：140币种×2周期=280<300限制）
-        symbols = sorted(
-            all_symbols,
-            key=lambda s: volume_map.get(s, 0),
-            reverse=True
-        )[:140]
+                ticker_map[symbol] = {
+                    'volume': float(ticker.get('quoteVolume', 0)),  # USDT成交额
+                    'change_pct': float(ticker.get('priceChangePercent', 0))  # 24h涨跌幅
+                }
 
         # 过滤掉流动性太低的（<3M USDT/24h）
         MIN_VOLUME = 3_000_000
-        symbols = [s for s in symbols if volume_map.get(s, 0) >= MIN_VOLUME]
+        filtered_symbols = [
+            s for s in all_symbols
+            if ticker_map.get(s, {}).get('volume', 0) >= MIN_VOLUME
+        ]
+        log(f"   流动性过滤后: {len(filtered_symbols)} 个币种（24h成交额>3M USDT）")
 
-        log(f"   ✅ 筛选出 {len(symbols)} 个高流动性币种（24h成交额>3M USDT）")
+        # 多空对称选币：波动率优先 + 流动性保障
+        # 设计原理：abs(涨跌幅)确保多空对称，避免只选上涨币
+        max_volume = max(ticker_map.get(s, {}).get('volume', 1) for s in filtered_symbols)
+
+        def calc_score(symbol):
+            """综合评分：波动率70% + 流动性30%"""
+            data = ticker_map.get(symbol, {})
+            volatility = abs(data.get('change_pct', 0))  # 多空对称（绝对值）
+            liquidity = data.get('volume', 0) / max_volume  # 归一化到[0,1]
+            return volatility * 0.7 + liquidity * 0.3 * 100  # 波动率占主导
+
+        # 按综合评分排序，取TOP 200
+        symbols = sorted(
+            filtered_symbols,
+            key=calc_score,
+            reverse=True
+        )[:200]
+
+        log(f"   ✅ 筛选出 {len(symbols)} 个高波动币种（多空对称选币）")
 
         # 验证是否成功获取到币种
         if not symbols:
@@ -138,8 +155,19 @@ class OptimizedBatchScanner:
                 "   请检查网络连接并重试。"
             )
 
+        # 显示选中的币种信息
         log(f"   TOP 5: {', '.join(symbols[:5])}")
-        log(f"   成交额范围: {volume_map.get(symbols[0], 0)/1e6:.1f}M ~ {volume_map.get(symbols[-1], 0)/1e6:.1f}M USDT")
+
+        # 统计多空分布
+        up_count = sum(1 for s in symbols if ticker_map.get(s, {}).get('change_pct', 0) > 0)
+        down_count = len(symbols) - up_count
+        log(f"   多空分布: 上涨{up_count}个 / 下跌{down_count}个（做多做空机会均衡）")
+
+        # 显示波动率和成交额范围
+        top_data = ticker_map.get(symbols[0], {})
+        last_data = ticker_map.get(symbols[-1], {})
+        log(f"   波动率范围: {abs(top_data.get('change_pct', 0)):.1f}% ~ {abs(last_data.get('change_pct', 0)):.1f}%")
+        log(f"   成交额范围: {top_data.get('volume', 0)/1e6:.1f}M ~ {last_data.get('volume', 0)/1e6:.1f}M USDT")
 
         # 保存初始化的币种列表
         self.symbols = symbols
@@ -155,11 +183,11 @@ class OptimizedBatchScanner:
         # 4. WebSocket实时更新（默认禁用，推荐使用REST定时更新）
         if enable_websocket:
             # v2.0合规：WebSocket模式违反DATA_LAYER.md § 2规范（连接数≤5）
-            # 当前实现会创建 ~140币种 × 2周期 = ~280个连接，严重超限
+            # 当前实现会创建 ~200币种 × 4周期 = ~800个连接，严重超限
             # 必须先实现组合流架构（Combined Stream）才能启用WebSocket
             raise NotImplementedError(
                 "❌ WebSocket模式需修复为组合流架构（≤5连接）\n"
-                "   当前实现: 280个独立连接（违反规范）\n"
+                "   当前实现: 800个独立连接（违反规范）\n"
                 "   规范要求: ≤5个组合流连接（DATA_LAYER.md § 2）\n"
                 "   解决方案: 实现Binance Combined Stream架构\n"
                 "   推荐模式: 使用enable_websocket=False（REST定时更新）"
@@ -374,7 +402,7 @@ class OptimizedBatchScanner:
 
     async def scan(
         self,
-        min_score: int = 70,
+        min_score: int = 35,  # v6.3: 降低阈值从70到35（专家建议 #4）
         max_symbols: Optional[int] = None,
         on_signal_found: Optional[callable] = None,
         verbose: bool = False
@@ -383,7 +411,7 @@ class OptimizedBatchScanner:
         批量扫描（超快速，约5秒）
 
         Args:
-            min_score: 最低信号分数
+            min_score: 最低信号分数（v6.3: 默认35，适配放宽后的评分系统）
             max_symbols: 最大扫描币种数（None=全部，用于测试）
             on_signal_found: 发现信号时的回调函数（实时处理信号）
                             async def callback(signal_dict) -> None
@@ -434,27 +462,61 @@ class OptimizedBatchScanner:
 
                 log(f"  └─ K线数据: 1h={len(k1h) if k1h else 0}根, 4h={len(k4h) if k4h else 0}根, 15m={len(k15m) if k15m else 0}根, 1d={len(k1d) if k1d else 0}根")
 
-                # 动态数据要求（支持新币）
-                coin_age_hours = len(k1h) if k1h else 0
+                # v6.2修复：计算真实币龄（基于K线时间戳，而非K线数量）
+                # 旧代码使用len(k1h)导致BTC/ETH等成熟币被误判为新币
+                if k1h and len(k1h) > 0:
+                    # K线格式: [timestamp_ms, open, high, low, close, volume, ...]
+                    first_kline_ts = k1h[0][0]  # 第一根K线时间戳（毫秒）
+                    latest_kline_ts = k1h[-1][0]  # 最后一根K线时间戳（毫秒）
+                    coin_age_ms = latest_kline_ts - first_kline_ts
+                    coin_age_hours = coin_age_ms / (1000 * 3600)  # 转换为小时
+                    bars_1h = len(k1h)  # K线根数
+                else:
+                    coin_age_hours = 0
+                    bars_1h = 0
 
-                # 根据币种年龄确定最小数据要求
-                if coin_age_hours <= 24:
-                    # 超新币（1-24小时）
-                    min_k1h = 10
-                    min_k4h = 3
-                    coin_type = "超新币"
-                elif coin_age_hours <= 168:  # 7天
-                    # 阶段A（1-7天）
-                    min_k1h = 30
-                    min_k4h = 8
-                    coin_type = "新币A"
-                elif coin_age_hours <= 720:  # 30天
-                    # 阶段B（7-30天）
+                coin_age_days = coin_age_hours / 24
+
+                # v6.3.1规范符合性修改：按照 NEWCOIN_SPEC.md § 1 标准
+                # 规范定义：
+                # - 进入新币通道: since_listing < 14d 或 bars_1h < 400
+                # - 回切标准通道: bars_1h ≥ 400 且 OI/funding连续≥3d，或 since_listing ≥ 14d
+                #
+                # 当前简化实现：
+                # - 使用bars_1h < 400作为主判断条件（符合规范）
+                # - coin_age_days < 14作为辅助（基于K线时间戳，非真实上币时间）
+                # - 未实现48h渐变切换（TODO）
+
+                # 检测数据受限情况
+                data_limited = (bars_1h >= 200)  # ≥200根1h K线，视为数据充足
+
+                # 根据规范判断币种类型并确定最小数据要求
+                if data_limited:
+                    # 数据受限（≥200根K线），无法确定真实币龄，默认成熟币
+                    min_k1h = 96
+                    min_k4h = 50
+                    coin_type = "成熟币(数据受限)"
+                elif bars_1h < 400:
+                    # 规范条件1: bars_1h < 400 → 新币
+                    if bars_1h < 24:  # < 1天
+                        min_k1h = 10
+                        min_k4h = 3
+                        coin_type = "新币Ultra(<24h)"
+                    elif bars_1h < 168:  # < 7天
+                        min_k1h = 30
+                        min_k4h = 8
+                        coin_type = "新币A(1-7d)"
+                    else:  # 7天 - 400根（≈16.7天）
+                        min_k1h = 50
+                        min_k4h = 15
+                        coin_type = "新币B(7-16.7d)"
+                elif coin_age_days < 14:
+                    # 规范条件2: since_listing < 14d（近似）
                     min_k1h = 50
                     min_k4h = 15
-                    coin_type = "新币B"
+                    coin_type = "新币B(bars≥400但<14d)"
                 else:
-                    # 成熟币
+                    # 成熟币：bars_1h ≥ 400 且 since_listing ≥ 14d
                     min_k1h = 96
                     min_k4h = 50
                     coin_type = "成熟币"
@@ -533,11 +595,11 @@ class OptimizedBatchScanner:
                     gates_info = result.get('gates', {})
 
                     log(f"  └─ [评分] confidence={confidence}, prime_strength={prime_strength}")
-                    # v2.0: F is NO longer in scores (moved to modulation per MODULATORS.md § 2.1)
-                    log(f"      A-层因子: T={scores.get('T',0)}, M={scores.get('M',0)}, C={scores.get('C',0)}, "
-                        f"S={scores.get('S',0)}, V={scores.get('V',0)}, O={scores.get('O',0)}")
-                    log(f"      A-层因子: L={scores.get('L',0)}, B={scores.get('B',0)}, Q={scores.get('Q',0)}, I={scores.get('I',0)}")
-                    log(f"      B-层调节器: F={modulation.get('F',0)}")
+                    # v6.1: F and I are B-layer modulators (per MODULATORS.md § 2.1)
+                    log(f"      A-层因子: T={scores.get('T',0):.1f}, M={scores.get('M',0):.1f}, C={scores.get('C',0):.1f}, "
+                        f"S={scores.get('S',0):.1f}, V={scores.get('V',0):.1f}, O={scores.get('O',0):.1f}")
+                    log(f"      A-层因子: L={scores.get('L',0):.1f}, B={scores.get('B',0):.1f}, Q={scores.get('Q',0):.1f}")
+                    log(f"      B-层调制器: F={modulation.get('F',0):.1f}, I={modulation.get('I',0):.1f}")
                     log(f"      四门调节: DataQual={gates_info.get('data_qual',0):.2f}, "
                         f"EV={gates_info.get('ev_gate',0):.2f}, "
                         f"Execution={gates_info.get('execution',0):.2f}, "
@@ -546,7 +608,10 @@ class OptimizedBatchScanner:
                         f"prob_bonus={prime_breakdown.get('prob_bonus',0):.1f}, "
                         f"P_chosen={prime_breakdown.get('P_chosen',0):.3f}")
 
-                if is_prime:
+                # v6.2修复：使用min_score参数过滤信号
+                # v6.3新增：显示拒绝原因（专家建议 #5）
+                rejection_reasons = result.get('publish', {}).get('rejection_reason', [])
+                if is_prime and prime_strength >= min_score:
                     results.append(result)
                     log(f"✅ {symbol}: Prime强度={prime_strength}, 置信度={confidence:.0f}")
 
@@ -555,8 +620,11 @@ class OptimizedBatchScanner:
                         try:
                             await on_signal_found(result)
                         except Exception as e:
-                            from ats_core.logging import warn
                             warn(f"⚠️  信号回调失败: {e}")
+                elif verbose or i < 10:
+                    # 显示拒绝原因（前10个或verbose模式）
+                    if rejection_reasons:
+                        log(f"  └─ ❌ 拒绝: {'; '.join(rejection_reasons[:2])}")  # 只显示前2条原因
 
                 # 进度显示（每20个）
                 if (i + 1) % 20 == 0:

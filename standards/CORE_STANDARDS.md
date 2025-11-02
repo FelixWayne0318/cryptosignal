@@ -66,8 +66,8 @@
 `Q_sig = StdChain( Σ_{p∈N(P)} sgn(P-p) * LD(p) )`（无 LD 用 qvol/ATR proxy，小权重）
 
 ### 2.8 聚合
-`S_lin = Σ w_k*s_k`；`S = 100*tanh(S_lin/T_agg) ∈ [-100,100]`  
-权重基线：`T18/M12/S10/V10/C18/O18/Q4`（可做 regime 自适应）
+`S_lin = Σ w_k*s_k`；`S = 100*tanh(S_lin/T_agg) ∈ [-100,100]`
+权重基线（v6.1实际配置）：`T18/M12/C18/S10/V10/O12/L12/B4/Q4` (总和100%)（可做 regime 自适应）
 
 ## 3. C 层：执行/流动性（闸门与触发）
 - `spread_bps = (ask1 - bid1)/mid * 1e4`  

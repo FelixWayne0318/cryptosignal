@@ -1,0 +1,139 @@
+# CryptoSignal 规范文档索引
+
+**当前版本**: v6.4 Phase 2
+**最后更新**: 2025-11-02
+**文档类型**: 总索引（系统工程入口）
+
+---
+
+## 📚 文档体系说明
+
+本文档体系遵循系统工程规范设计原则：
+- **层次化**: 总索引 → 子系统规范 → 具体实现
+- **唯一性**: 每个功能只在一个文件中描述
+- **可追溯性**: 从需求到实现完全可追溯
+- **完整性**: 可通过文档重建整个系统
+- **版本化**: 明确的版本历史和变更记录
+
+---
+
+## 🔝 核心文档（按优先级）
+
+### 1. 系统概览
+- **[01_SYSTEM_OVERVIEW.md](01_SYSTEM_OVERVIEW.md)** - 系统整体架构和核心概念
+- **[02_ARCHITECTURE.md](02_ARCHITECTURE.md)** - 技术架构和模块设计
+- **[03_VERSION_HISTORY.md](03_VERSION_HISTORY.md)** - 版本历史和变更记录
+
+### 2. 规范子系统 ([specifications/](specifications/))
+- **[FACTOR_SYSTEM.md](specifications/FACTOR_SYSTEM.md)** - 10+1维因子系统规范（核心）
+- **[MODULATORS.md](specifications/MODULATORS.md)** - B层调制器规范（F/I因子）
+- **[PUBLISHING.md](specifications/PUBLISHING.md)** - Prime/Watch发布规范
+- **[NEWCOIN.md](specifications/NEWCOIN.md)** - 新币通道完整规范
+- **[DATA_LAYER.md](specifications/DATA_LAYER.md)** - 数据层规范
+- **[GATES.md](specifications/GATES.md)** - 四门系统规范
+- **[INDEX.md](specifications/INDEX.md)** - 规范索引
+
+### 3. 部署运维 ([deployment/](deployment/))
+- **[QUICK_START.md](deployment/QUICK_START.md)** - 快速开始（新用户）
+- **[DEPLOYMENT_GUIDE.md](deployment/DEPLOYMENT_GUIDE.md)** - 完整部署指南
+- **[SERVER_OPERATIONS.md](deployment/SERVER_OPERATIONS.md)** - 服务器运维
+- **[TELEGRAM_SETUP.md](deployment/TELEGRAM_SETUP.md)** - Telegram配置
+- **[INDEX.md](deployment/INDEX.md)** - 部署索引
+
+### 4. 配置管理 ([configuration/](configuration/))
+- **[PARAMS_SPEC.md](configuration/PARAMS_SPEC.md)** - params.json配置规范
+- **[CREDENTIALS.md](configuration/CREDENTIALS.md)** - API凭证配置
+- **[WEIGHTS_TUNING.md](configuration/WEIGHTS_TUNING.md)** - 权重调优指南
+- **[INDEX.md](configuration/INDEX.md)** - 配置索引
+
+### 5. 开发指南 ([development/](development/))
+- **[WORKFLOW.md](development/WORKFLOW.md)** - 开发流程
+- **[MODIFICATION_RULES.md](development/MODIFICATION_RULES.md)** - 代码修改规范
+- **[DOCUMENTATION_RULES.md](development/DOCUMENTATION_RULES.md)** - 文档编写规范
+- **[INDEX.md](development/INDEX.md)** - 开发索引
+
+### 6. 参考资料 ([reference/](reference/))
+- **[QUICK_REFERENCE.md](reference/QUICK_REFERENCE.md)** - 快速参考手册
+- **[SCHEMAS.md](reference/SCHEMAS.md)** - 数据结构和接口定义
+- **[INDEX.md](reference/INDEX.md)** - 参考索引
+
+---
+
+## 🎯 快速导航
+
+### 我是...
+
+#### 新用户/运维人员
+1. 开始 → [deployment/QUICK_START.md](deployment/QUICK_START.md)
+2. 部署 → [deployment/DEPLOYMENT_GUIDE.md](deployment/DEPLOYMENT_GUIDE.md)
+3. 配置 → [configuration/PARAMS_SPEC.md](configuration/PARAMS_SPEC.md)
+
+#### 开发人员
+1. 了解系统 → [01_SYSTEM_OVERVIEW.md](01_SYSTEM_OVERVIEW.md)
+2. 架构设计 → [02_ARCHITECTURE.md](02_ARCHITECTURE.md)
+3. 核心规范 → [specifications/FACTOR_SYSTEM.md](specifications/FACTOR_SYSTEM.md)
+4. 开发流程 → [development/WORKFLOW.md](development/WORKFLOW.md)
+
+#### 想了解变更历史
+→ [03_VERSION_HISTORY.md](03_VERSION_HISTORY.md)
+
+#### 查找特定功能
+→ 使用对应子目录的INDEX.md索引
+
+---
+
+## 📋 系统工程追溯矩阵
+
+| 需求 | 规范文档 | 实现模块 | 测试 | 部署脚本 |
+|------|---------|---------|------|---------|
+| 10+1维因子系统 | [FACTOR_SYSTEM.md](specifications/FACTOR_SYSTEM.md) | `ats_core/factors_v2/` | - | - |
+| B层调制器 | [MODULATORS.md](specifications/MODULATORS.md) | `ats_core/factors_v2/{fund_leading,independence}.py` | - | - |
+| Prime发布 | [PUBLISHING.md](specifications/PUBLISHING.md) | `ats_core/publishing/anti_jitter.py` | - | - |
+| 新币通道 | [NEWCOIN.md](specifications/NEWCOIN.md) | `ats_core/data_feeds/newcoin_data.py` | `test_phase2.py` | - |
+| 四门系统 | [GATES.md](specifications/GATES.md) | `ats_core/gates/integrated_gates.py` | - | - |
+| 实时扫描 | [01_SYSTEM_OVERVIEW.md](01_SYSTEM_OVERVIEW.md) | `scripts/realtime_signal_scanner.py` | - | `deploy_and_run.sh` |
+
+---
+
+## 📝 文档维护规范
+
+### 修改原则
+1. **唯一性**: 每个功能点只在一处描述
+2. **完整性**: 修改时同步更新所有相关文档
+3. **版本化**: 重大变更必须更新VERSION_HISTORY.md
+4. **可追溯**: 在追溯矩阵中记录文档-代码映射
+
+### 新增文档
+1. 确定所属子目录
+2. 更新对应INDEX.md
+3. 在本文档（00_INDEX.md）中添加链接
+4. 如涉及新功能，更新追溯矩阵
+
+### 废弃文档
+1. 不删除，移至 `archive/` 目录
+2. 在原位置留下重定向说明
+3. 更新所有索引文件
+
+---
+
+## 🔗 外部资源
+
+- **项目仓库**: https://github.com/FelixWayne0318/cryptosignal
+- **当前分支**: `claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ`
+- **问题追踪**: GitHub Issues
+
+---
+
+## 📞 帮助与支持
+
+如果您在使用文档时遇到问题：
+1. 检查对应子目录的INDEX.md
+2. 查看VERSION_HISTORY.md了解最新变更
+3. 参考QUICK_REFERENCE.md快速手册
+4. 在GitHub提交Issue
+
+---
+
+**文档版本**: v6.4-phase2
+**生效日期**: 2025-11-02
+**维护责任**: 系统架构师

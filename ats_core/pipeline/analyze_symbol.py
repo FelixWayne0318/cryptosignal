@@ -2,27 +2,27 @@
 from __future__ import annotations
 
 """
-完整的单币种分析管道（统一±100系统 v6.0 - 10+1维因子）：
+完整的单币种分析管道（统一±100系统 v6.4 Phase 2 - 9+2因子系统）：
 1. 获取市场数据（K线、OI、订单簿、资金费率）
-2. 计算10+1维特征（T/M/C/S/V/O/L/B/Q/I/F）
+2. 计算9+2维特征（A层9因子: T/M/C/S/V/O/L/B/Q + B层调制器: F/I）
 3. 统一±100评分（正数=看多/好，负数=看空/差）
-4. 计算加权分数和置信度（权重百分比系统，总和100%）
-5. F极端值否决机制（安全阀）
-6. 判定发布条件
+4. 计算加权分数和置信度（权重百分比系统，A层总和100%）
+5. F/I调制器：调节温度/成本/阈值，不参与评分
+6. 判定发布条件（四门系统）
 
-核心改进（v6.0 - 10+1维因子系统）：
-- 10维因子：T/M/C/S/V/O/L/B/Q/I + F调节器
-- 权重百分比系统：总权重100%（从180分制升级）
-- F因子双重作用：参与评分（权重10.0%）+ 极端值否决（<-70时×0.7惩罚）⭐
-- Prime阈值调整：从65分→35分（适配100-base系统：65×100/180≈36）
-- L/I因子自动归一化：0-100 → ±100（消除系统偏差）
-- 所有因子均为方向因子：T/M/C/V/O/B/Q/F（±100）
+核心改进（v6.4 Phase 2 - 新币数据流架构）：
+- A层9因子: T/M/C/S/V/O/L/B/Q（权重百分比，总和100%）
+- B层调制器: F(资金领先)/I(独立性)（权重=0，仅调制参数）
+- 新币数据流: 快速预判 → 1m/5m/15m数据获取 → AVWAP锚点
+- WebSocket实时订阅: kline_1m/5m/15m + 心跳监控
+- 权重配置: T18/M12/C18/S10/V10/O12/L12/B4/Q4 (总和100%)
+- 四门系统: DataQual≥0.90 + EV>0 + 执行达标 + 概率阈值
 
-架构分层（100%权重百分比系统）：
-- Layer 1（价格行为36.1%）：T(13.9%) + M(8.3%) + S(5.6%) + V(8.3%)
-- Layer 2（资金流32.2%）：C(11.1%) + O(11.1%) + F(10.0%) ⭐
-- Layer 3（微观结构25.0%）：L(11.1%) + B(8.3%) + Q(5.6%)
-- Layer 4（市场环境6.7%）：I(6.7%)
+架构分层（实际权重配置 v6.1）：
+- Layer 1（价格行为50%）：T(18%) + M(12%) + S(10%) + V(10%)
+- Layer 2（资金流30%）：C(18%) + O(12%)
+- Layer 3（微观结构20%）：L(12%) + B(4%) + Q(4%)
+- Layer B（调制器0%）：F(0%) + I(0%)  ← 不参与评分，仅调制
 """
 
 from typing import Dict, Any, Tuple, List
@@ -145,33 +145,107 @@ def _analyze_symbol_core(
     bayesian_boost = 0.0  # 不再使用贝叶斯先验
 
     # ---- 新币检测（优先判断，决定数据要求）----
+    # 🔧 v6.3.1: 按照 newstandards/NEWCOIN_SPEC.md § 1 规范修改
     new_coin_cfg = params.get("new_coin", {})
-    coin_age_hours = len(k1) if k1 else 0
+
+    # 计算K线时间戳差值（用于数据受限检测）
+    if k1 and len(k1) > 0:
+        # K线格式: [timestamp_ms, open, high, low, close, volume, ...]
+        first_kline_ts = k1[0][0]  # 第一根K线时间戳（毫秒）
+        latest_kline_ts = k1[-1][0]  # 最后一根K线时间戳（毫秒）
+        coin_age_ms = latest_kline_ts - first_kline_ts
+        coin_age_hours = coin_age_ms / (1000 * 3600)  # 转换为小时
+        bars_1h = len(k1)  # K线根数
+    else:
+        coin_age_hours = 0
+        bars_1h = 0
+
     coin_age_days = coin_age_hours / 24
 
-    # 4级分级阈值
-    ultra_new_hours = new_coin_cfg.get("ultra_new_hours", 24)  # 1-24小时：超新
-    phaseA_days = new_coin_cfg.get("phaseA_days", 7)            # 1-7天：极度谨慎
-    phaseB_days = new_coin_cfg.get("phaseB_days", 30)           # 7-30天：谨慎
+    # 🔧 v6.3.1规范符合性修改：按照 NEWCOIN_SPEC.md § 1 标准
+    #
+    # 规范定义：
+    # - 进入新币通道: since_listing < 14d 或 bars_1h < 400 或 !has_OI/funding
+    # - 回切标准通道: bars_1h ≥ 400 且 OI/funding连续≥3d，或 since_listing ≥ 14d
+    # - 渐变切换: 48h线性混合（权重/温度/门槛/TTL同步过渡）
+    #
+    # 当前限制（简化实现）：
+    # - ⚠️ 无法获取真实since_listing（需集成交易所API）
+    # - ⚠️ 使用bars_1h < 400作为主判断条件（符合规范）
+    # - ⚠️ coin_age_hours作为辅助（基于K线时间戳差，非真实上币时间）
+    # - ⚠️ 暂未实现48h渐变切换（TODO: 需要状态记录机制）
+    # - ⚠️ 使用标准1h/4h因子，非新币专用1m/5m/15m因子（需独立新币通道）
+    #
+    # TODO: 完整新币通道实现需要：
+    # 1. 独立pipeline（新币专用因子：T_new/M_new基于ZLEMA_1m/5m）
+    # 2. 点火-成势-衰竭模型（非线性联立）
+    # 3. 1m/5m/15m数据流（WS实时订阅）
+    # 4. 更严执行闸门（impact≤7bps, spread≤35bps, DataQual≥0.90）
+    # 5. Prime时间窗口（0-3m冷启动, 3-8m首批, 8-15m主力）
 
-    # 判断阶段
-    is_ultra_new = coin_age_hours <= ultra_new_hours  # 1-24小时
-    is_phaseA = coin_age_days <= phaseA_days and not is_ultra_new  # 1-7天
-    is_phaseB = phaseA_days < coin_age_days <= phaseB_days  # 7-30天
-    is_new_coin = coin_age_days <= phaseB_days
+    # 检测数据受限情况
+    # 当K线数量接近缓存上限时，无法判断真实币龄，强制视为成熟币
+    data_limited = (bars_1h >= 200)  # ≥200根1h K线 ≈ 8.3天，视为数据充足
 
-    if is_ultra_new:
-        coin_phase = "ultra_new"  # 超新币（1-24小时）
-        min_data = 10              # 至少10根1h K线
-    elif is_phaseA:
-        coin_phase = "phaseA"     # 阶段A（1-7天）
-        min_data = 30
-    elif is_phaseB:
-        coin_phase = "phaseB"     # 阶段B（7-30天）
-        min_data = 50
+    # 🔧 规范符合性修改：使用bars_1h < 400作为新币判断标准（NEWCOIN_SPEC.md § 1）
+    # 旧阈值（不符合规范）：ultra_new≤24h, phaseA≤7d, phaseB≤30d
+    # 新阈值（符合规范）：newcoin < 400 bars (≈16.7天) 或 < 14天
+    newcoin_bars_threshold = new_coin_cfg.get("newcoin_bars_threshold", 400)  # 规范值：400根
+    newcoin_days_threshold = new_coin_cfg.get("newcoin_days_threshold", 14)   # 规范值：14天
+
+    # 判断是否为新币（按照规范 § 1）
+    if data_limited:
+        # 数据受限（≥200根K线），无法确定真实币龄，默认成熟币
+        is_new_coin = False
+        coin_phase = "mature(data_limited)"
+        # 兼容旧分级变量
+        is_ultra_new = False
+        is_phaseA = False
+        is_phaseB = False
+    elif bars_1h < newcoin_bars_threshold:
+        # 规范条件1: bars_1h < 400 → 新币
+        is_new_coin = True
+        # 内部细分（用于不同数据要求和阈值）
+        if bars_1h < 24:  # < 1天
+            coin_phase = "newcoin_ultra"  # 超新币（<24h）
+            is_ultra_new = True
+            is_phaseA = False
+            is_phaseB = False
+        elif bars_1h < 168:  # < 7天
+            coin_phase = "newcoin_phaseA"  # 新币阶段A（1-7天）
+            is_ultra_new = False
+            is_phaseA = True
+            is_phaseB = False
+        else:  # 7天 - 400根（≈16.7天）
+            coin_phase = "newcoin_phaseB"  # 新币阶段B（7-16.7天）
+            is_ultra_new = False
+            is_phaseA = False
+            is_phaseB = True
+    elif coin_age_days < newcoin_days_threshold:
+        # 规范条件2: since_listing < 14d（这里用coin_age_days近似）
+        # 注意：这是近似值，真实since_listing需要交易所API
+        is_new_coin = True
+        coin_phase = "newcoin_phaseB"  # 已有足够K线但仍<14天
+        is_ultra_new = False
+        is_phaseA = False
+        is_phaseB = True
     else:
-        coin_phase = "mature"     # 成熟币
-        min_data = 50
+        # 成熟币：bars_1h ≥ 400 且 since_listing ≥ 14d
+        is_new_coin = False
+        coin_phase = "mature"
+        is_ultra_new = False
+        is_phaseA = False
+        is_phaseB = False
+
+    # 确定数据要求（coin_phase已在上面设置）
+    if is_ultra_new:
+        min_data = 10  # 超新币：至少10根1h K线
+    elif is_phaseA:
+        min_data = 30  # 新币阶段A：至少30根
+    elif is_phaseB:
+        min_data = 50  # 新币阶段B：至少50根
+    else:
+        min_data = 50  # 成熟币：至少50根
 
     # 检查数据是否足够
     if not k1 or len(k1) < min_data:
@@ -243,16 +317,13 @@ def _analyze_symbol_core(
 
     # ---- 2.1. 10维因子系统：新增因子 ----
 
-    # 流动性（L）：0（差）到 100（好）→ 归一化到 ±100
+    # 流动性（L）：-100（差）到 +100（好）
+    # v6.2修复：calculate_liquidity已返回标准化后的±100分数，无需再次映射
     t0 = time.time()
     if orderbook is not None:
         try:
-            L_raw, L_meta = calculate_liquidity(orderbook, params.get("liquidity", {}))
-            # 归一化：0-100 → -100到+100（中性值50→0）
-            # 低流动性（<50）→负分（不适合交易），高流动性（>50）→正分（适合交易）
-            L = (L_raw - 50) * 2
-            L_meta['raw_score'] = L_raw
-            L_meta['normalized_score'] = L
+            L, L_meta = calculate_liquidity(orderbook, params.get("liquidity", {}))
+            # L已经是±100范围，直接使用
         except Exception as e:
             from ats_core.logging import warn
             warn(f"L因子计算失败: {e}")
@@ -328,7 +399,9 @@ def _analyze_symbol_core(
                 btc_prices = [_to_f(k[4]) for k in btc_klines[-use_len:]]  # Close prices
                 eth_prices = [_to_f(k[4]) for k in eth_klines[-use_len:]]  # Close prices
 
-                # 计算独立性分数（0-100）
+                # v6.2修复：calculate_independence已返回标准化后的±100分数
+                # (通过StandardizationChain处理，参见independence.py:187-188)
+                # 无需再次映射，直接使用
                 I_raw, beta_sum, I_meta = calculate_independence(
                     alt_prices=alt_prices,
                     btc_prices=btc_prices,
@@ -336,13 +409,14 @@ def _analyze_symbol_core(
                     params=params.get("independence", {})
                 )
 
-                # 归一化：0-100 → -100到+100（中性值50→0）
-                # 低独立性（<50）→负分（跟随大盘），高独立性（>50）→正分（独立走势）
-                I = (I_raw - 50) * 2
-                I_meta['raw_score'] = I_raw
-                I_meta['normalized_score'] = I
-                I_meta['beta_sum'] = beta_sum
+                # v6.3修复：软化I调制器，避免±100硬截断（专家建议 #2）
+                # 使用tanh()函数将极值软化：-100→-96, +100→+96
+                import math
+                I = 100 * math.tanh(I_raw / 50)
+
+                # 补充元数据
                 I_meta['data_points'] = use_len
+                I_meta['I_raw'] = I_raw  # 保存原始值用于调试
             else:
                 I, I_meta = 0, {"note": f"数据不足（需要25小时，实际{min_len}小时）"}
         except Exception as e:
@@ -362,35 +436,43 @@ def _analyze_symbol_core(
 
     # ---- 2.5. 计算F调节器（提前计算，让F参与方向判断）----
     # F本身是带符号的（+表示资金领先，-表示价格领先），不需要依赖side_long
-    F, F_meta = _calc_fund_leading(
+    F_raw, F_meta = _calc_fund_leading(
         oi_change_pct, vol_ratio, cvd6, price_change_24h, price_slope, params.get("fund_leading", {})
     )
 
-    # ---- 3. Scorecard（10维统一±100系统，v2.0合规版）----
-    # 🔧 v2.0合规修复：F移除出评分卡，仅用于调节Teff/cost/thresholds
-    # 符合MODULATORS.md § 2.1规范：F不参与方向评分
+    # v6.3修复：软化F调制器，避免±100硬截断（专家建议 #2）
+    # 使用tanh()函数将极值软化：-100→-96, -50→-76
+    import math
+    F = 100 * math.tanh(F_raw / 50)
+    F_meta['F_raw'] = F_raw  # 保存原始值用于调试
 
-    # 基础权重（从配置读取，10维系统：总权重100%）
-    # F的10.0%权重按比例重新分配到剩余9个因子（比例因子：100/90=1.111）
-    base_weights = params.get("weights", {
-        # Layer 1: 价格行为层（40%）
-        "T": 16.0,  # 趋势 (was 13.9, +2.1)
-        "M": 9.0,   # 动量 (was 8.3, +0.7)
-        "S": 6.0,   # 结构 (was 5.6, +0.4)
-        "V": 9.0,   # 量能 (was 8.3, +0.7)
-        # Layer 2: 资金流层（24%）
-        "C": 12.0,  # CVD (was 11.1, +0.9)
-        "O": 12.0,  # OI持仓 (was 11.1, +0.9)
-        # NO F - removed from scorecard (was 10.0%, redistributed above)
-        # Layer 3: 微观结构层（28%）
-        "L": 12.0,  # 流动性 (was 11.1, +0.9)
-        "B": 9.0,   # 基差+资金费 (was 8.3, +0.7)
-        "Q": 7.0,   # 清算密度 (was 5.6, +1.4)
-        # Layer 4: 市场环境层（8%）
-        "I": 8.0,   # 独立性 (was 6.7, +1.3)
-        # 废弃因子
-        "E": 0,     # 环境（已废弃，权重0）
-    })  # 总计: 16+9+6+9+12+12+12+9+7+8 = 100.0 ✓
+    # ---- 3. Scorecard（10维统一±100系统，v2.0合规版）----
+    # 🔧 v2.0合规修复：F/I移至B层调制器，不参与方向评分
+    # 符合MODULATORS.md § 2.1规范：F/I只调制Teff/cost/thresholds
+
+    # 基础权重（从配置读取，9维A层系统：总权重100%）
+    # I的8.0%权重重新分配到其他因子
+    base_weights_raw = params.get("weights", {
+        # Layer 1: 价格行为层（50%）
+        "T": 18.0,  # 趋势 (was 16.0, +2.0 from I)
+        "M": 12.0,  # 动量 (was 9.0, +3.0 from I)
+        "S": 10.0,  # 结构 (was 6.0, +4.0 from I+rebalance)
+        "V": 10.0,  # 量能 (was 9.0, +1.0 from rebalance)
+        # Layer 2: 资金流层（30%）
+        "C": 18.0,  # CVD资金流 (was 12.0, +6.0 redistributed)
+        "O": 12.0,  # OI持仓
+        # Layer 3: 微观结构层（20%）
+        "L": 12.0,  # 流动性
+        "B": 4.0,   # 基差+资金费 (was 9.0, -5.0 rebalance)
+        "Q": 4.0,   # 清算密度 (was 7.0, -3.0 rebalance)
+        # 废弃因子和B层调制器（不参与评分）
+        "E": 0.0,   # 环境（已废弃）
+        "I": 0.0,   # 独立性（B层调制器，不参与评分）
+        "F": 0.0,   # 资金领先（B层调制器，不参与评分）
+    })  # A层9因子总计: 18+12+10+10+18+12+12+4+4 = 100.0 ✓
+
+    # 过滤注释字段（防止传入blend_weights时出现类型错误）
+    base_weights = {k: v for k, v in base_weights_raw.items() if not k.startswith('_')}
 
     # 尝试提前获取市场状态（用于自适应权重）
     try:
@@ -411,12 +493,12 @@ def _analyze_symbol_core(
     # 平滑混合（70%自适应 + 30%基础）
     weights = blend_weights(regime_weights, base_weights, blend_ratio=0.7)
 
-    # 10维方向分数（统一±100，v2.0合规版：F已移除）
+    # 9维方向分数（统一±100，v2.0合规版：F和I移至B层）
     scores = {
-        # A-layer direction factors (10 factors, NO F)
-        "T": T, "M": M, "C": C, "S": S, "V": V, "O": O, "E": E,
-        "L": L, "B": B, "Q": Q, "I": I,
-        # F removed from scorecard (was 10.0%, redistributed to above 9 factors)
+        # A-layer direction factors (9 factors ONLY)
+        "T": T, "M": M, "C": C, "S": S, "V": V, "O": O,
+        "L": L, "B": B, "Q": Q,
+        # E废弃，F和I移至B层调制器
     }
 
     # v2.0合规：因子范围验证（HIGH #2）
@@ -427,10 +509,11 @@ def _analyze_symbol_core(
             warn(f"⚠️  因子{factor_name}超出范围: {factor_value}, 裁剪到±100")
             scores[factor_name] = max(-100, min(100, factor_value))
 
-    # B-layer modulation factors (F affects Teff/cost/thresholds ONLY, NOT S_score)
-    # Per MODULATORS.md § 2.1: "F 仅调节 Teff/cost/thresholds，绝不修改方向分数"
+    # B-layer modulation factors (F/I affect Teff/cost/thresholds ONLY, NOT S_score)
+    # Per MODULATORS.md § 2.1: "F/I 仅调节 Teff/cost/thresholds，绝不修改方向分数"
     modulation = {
-        "F": F,  # Funding rate factor (for Teff/cost adjustment)
+        "F": F,  # Funding leading factor (拥挤度调制器)
+        "I": I,  # Independence factor (独立性调制器)
     }
 
     # 计算加权分数（scorecard内部已归一化到±100）
@@ -465,6 +548,28 @@ def _analyze_symbol_core(
     # ---- 4. 基础概率计算（🚀 世界顶级优化：Sigmoid映射）----
     prior_up = 0.50  # 中性先验
     quality_score = _calc_quality(scores, len(k1), len(oi_data))
+
+    # v6.3.2新增：新币质量评分补偿
+    # 问题：_calc_quality对K线<100的币种惩罚(Q*=0.85)，新币天然数据少被惩罚
+    # 解决：给予适度补偿，但仍保留一定惩罚（数据少确实是风险）
+    #
+    # 补偿策略：
+    # - ultra_new: 部分补偿（0.85 → 0.90），仍保留10%惩罚
+    # - phaseA: 小幅补偿（0.85 → 0.88），保留12%惩罚
+    # - phaseB: 微调补偿（0.85 → 0.87），保留13%惩罚
+    # - mature: 无补偿
+    if is_new_coin and len(k1) < 100:
+        original_quality = quality_score
+        if is_ultra_new:
+            # 超新币：从0.85补偿到0.90
+            quality_score = min(1.0, quality_score / 0.85 * 0.90)
+        elif is_phaseA:
+            # 阶段A：从0.85补偿到0.88
+            quality_score = min(1.0, quality_score / 0.85 * 0.88)
+        elif is_phaseB:
+            # 阶段B：从0.85补偿到0.87
+            quality_score = min(1.0, quality_score / 0.85 * 0.87)
+        # 注：补偿不能超过1.0，且仍保留一定惩罚（体现数据少的风险）
 
     # 自适应温度参数
     temperature = get_adaptive_temperature(market_regime_early, current_volatility)
@@ -587,12 +692,67 @@ def _analyze_symbol_core(
         from ats_core.logging import warn
         warn(f"[MTF-Cached] {symbol}: 多时间框架验证失败 - {e}")
 
-    # Prime判定：得分 >= 35分（v6.0权重百分比系统）
-    is_prime = (prime_strength >= 35)
+    # 计算达标维度数（使用币种特定的阈值）
+    dims_ok = sum(1 for s in scores.values() if abs(s) >= prime_dim_threshold)
+
+    # v6.3.2修复：Prime判定应用币种特定阈值
+    # 问题：之前所有币种都用固定25分，新币专用阈值(prime_prob_min等)未生效
+    # 修复：新币使用更严格的prime_strength阈值，体现高风险需要高确定性
+    #
+    # 原因分析：
+    # - 新币数据少、流动性差、波动大 → 需要更高确定性
+    # - 成熟币数据充足、流动性好 → 可以适当放宽
+    # - 当前用标准因子（1h/4h）而非新币专用因子（1m/5m）→ 需补偿性提高阈值
+    #
+    # 阈值设计（基于prime_strength）：
+    # - ultra_new: 35分（数据最少，风险最高）
+    # - phaseA: 32分（仍然高风险）
+    # - phaseB: 28分（过渡阶段）
+    # - mature: 25分（标准阈值）
+    if is_ultra_new:
+        prime_strength_threshold = new_coin_cfg.get("ultra_new_prime_strength_min", 35)
+    elif is_phaseA:
+        prime_strength_threshold = new_coin_cfg.get("phaseA_prime_strength_min", 32)
+    elif is_phaseB:
+        prime_strength_threshold = new_coin_cfg.get("phaseB_prime_strength_min", 28)
+    else:
+        prime_strength_threshold = 25  # 成熟币标准阈值
+
+    # Prime判定：使用币种特定阈值
+    is_prime = (prime_strength >= prime_strength_threshold)
     is_watch = False  # 不再发布Watch信号
 
-    # 计算达标维度数（保留用于元数据）
-    dims_ok = sum(1 for s in scores.values() if abs(s) >= prime_dim_threshold)
+    # v6.3新增：拒绝原因跟踪（专家建议 #5）
+    # v6.3.2修复：使用币种特定的prime_strength_threshold
+    rejection_reason = []
+    if not is_prime:
+        if prime_strength < prime_strength_threshold:
+            rejection_reason.append(f"Prime强度不足({prime_strength:.1f} < {prime_strength_threshold}, 币种:{coin_phase})")
+            if base_strength < 15:
+                rejection_reason.append(f"  - 基础强度过低({base_strength:.1f}/60)")
+            if confidence < 25:
+                rejection_reason.append(f"  - 综合置信度低({confidence:.1f}/100)")
+            if prob_bonus < 5:
+                rejection_reason.append(f"  - 概率加成不足({prob_bonus:.1f}/40, P={P_chosen:.3f})")
+        if dims_ok < prime_dims_ok_min:
+            rejection_reason.append(f"达标维度不足({dims_ok} < {prime_dims_ok_min})")
+        if P_chosen < prime_prob_min:
+            rejection_reason.append(f"概率过低({P_chosen:.3f} < {prime_prob_min:.3f})")
+        # 检查四门得分
+        gates = {
+            "data_qual": min(1.0, len(k1) / 200.0) if k1 else 0.0,
+            "ev_gate": (P_chosen - 0.5) * 2,
+            "execution": (scores.get('L', 0) + 100) / 200,
+            "probability": (P_chosen - 0.5) / 0.45 if P_chosen >= 0.5 else (P_chosen - 0.5) / 0.5,
+        }
+        if gates['data_qual'] < 0.5:
+            rejection_reason.append(f"数据质量不足({gates['data_qual']:.2f} < 0.5)")
+        if gates['ev_gate'] < -0.5:
+            rejection_reason.append(f"EV过低({gates['ev_gate']:.2f} < -0.5)")
+        if gates['execution'] < 0.3:
+            rejection_reason.append(f"执行质量差({gates['execution']:.2f} < 0.3, L={scores.get('L',0):.1f})")
+    else:
+        rejection_reason = ["通过(Prime)"]
 
     # ---- 6. BTC/ETH市场过滤器（方案B - 独立过滤 + 避免双重惩罚）----
     # 计算市场大盘趋势，避免逆势做单
@@ -613,36 +773,19 @@ def _analyze_symbol_core(
             market_regime
         )
 
-        # 改进：避免双重惩罚（F调节器 + 市场过滤器）
-        # 策略：只应用更严格的一个惩罚
+        # v6.2：直接应用市场过滤器结果
+        # F调节器已移除（v2.0合规），无需担心双重惩罚
         if market_adjustment_reason:
-            # 计算市场过滤器的乘数
-            market_multiplier = P_chosen_filtered / P_chosen if P_chosen > 0 else 1.0
-
-            # 比较F调节器和市场过滤器的惩罚
-            # adjustment来自F调节器，market_multiplier来自市场过滤器
-            # 取两者中更小的（更严格的惩罚）
-            if adjustment < 1.0 and market_multiplier < 1.0:
-                # 两个都是惩罚，取更严格的
-                combined_multiplier = min(adjustment, market_multiplier)
-                # 重新计算概率（避免叠加惩罚）
-                P_chosen = P_base * combined_multiplier
-                # 更新对应方向的概率
-                if side_long:
-                    P_long = P_chosen
-                else:
-                    P_short = P_chosen
-                # 添加合并惩罚的说明
-                if combined_multiplier == adjustment:
-                    market_adjustment_reason = f"（F调节器惩罚更严：×{adjustment:.2f}）"
-                else:
-                    market_adjustment_reason = market_adjustment_reason + f"（已合并F惩罚）"
+            # 应用市场过滤（奖励或惩罚）
+            P_chosen = P_chosen_filtered
+            # 更新对应方向的概率
+            if side_long:
+                P_long = P_chosen
             else:
-                # 正常应用市场过滤（奖励或单一惩罚）
-                P_chosen = P_chosen_filtered
+                P_short = P_chosen
 
             prime_strength = prime_strength_filtered
-            is_prime = (prime_strength >= 35)  # 重新判定Prime (v6.0)
+            is_prime = (prime_strength >= prime_strength_threshold)  # v6.3.2: 使用币种特定阈值
 
         penalty_reason = market_adjustment_reason
 
@@ -693,7 +836,7 @@ def _analyze_symbol_core(
         "probability": P_chosen,
         "P_base": P_base,  # 基础概率（调整前）
         "F_score": F,  # F分数（-100到+100）
-        "F_adjustment": adjustment,  # 调整系数
+        "F_adjustment": 1.0,  # 调整系数（v6.2: F调节器已移除，固定为1.0）
         "prior_up": prior_up,
         "quality_score": quality_score,  # 质量系数（0.6-1.0）
 
@@ -703,7 +846,9 @@ def _analyze_symbol_core(
             "watch": is_watch,
             "dims_ok": dims_ok,
             "prime_strength": int(prime_strength),  # Prime评分（0-100）
+            "prime_strength_threshold": prime_strength_threshold,  # v6.3.2新增：币种特定阈值
             "prime_breakdown": prime_breakdown,  # Prime评分详细分解（v4.0新增）
+            "rejection_reason": rejection_reason,  # v6.3新增：拒绝原因跟踪
             "ttl_h": 8
         },
 
@@ -733,8 +878,29 @@ def _analyze_symbol_core(
         "market_meta": market_meta,
         "market_penalty": penalty_reason if penalty_reason else None,
 
-        # F调节器否决警告
-        "f_veto_warning": f_veto_warning,
+        # F调节器否决警告（v6.2: F调节器已移除，固定为None）
+        "f_veto_warning": None,
+
+        # v6.2新增：四门系统（简化版）
+        # v6.3修复：EV改为可选加分项，不再是硬性要求（专家建议 #3）
+        # 完整版需集成integrated_gates.py的FourGatesChecker
+        "gates": {
+            # Gate 1: DataQual - 数据质量评估（基于K线完整性）
+            "data_qual": min(1.0, len(k1) / 200.0) if k1 else 0.0,  # ≥200根K线为满分
+
+            # Gate 2: EV - 期望值简化估算（v6.3: 改为加分项，允许负值）
+            # EV ≈ (P - 0.5) * 2，范围-1到+1（不再截断为0-1）
+            # 正值=加分，负值=扣分，而非硬性否决
+            "ev_gate": (P_chosen - 0.5) * 2,  # 允许 -1 到 +1 范围
+
+            # Gate 3: Execution - 执行质量（基于流动性，v6.3: 软化为评分制）
+            # L值直接反映流动性好坏，不再强制截断到0-1
+            "execution": (L + 100) / 200,  # L从-100到+100映射到0-1，允许超出
+
+            # Gate 4: Probability - 概率阈值（v6.3: 改为渐变评分）
+            # 不再要求P≥0.5才有分，允许低概率也有部分得分
+            "probability": (P_chosen - 0.5) / 0.45 if P_chosen >= 0.5 else (P_chosen - 0.5) / 0.5,
+        },
 
         # 🚀 世界顶级优化模块元数据
         "optimization_meta": {
@@ -769,6 +935,12 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     """
     完整分析单个交易对（数据获取 + 分析）
 
+    🔧 Phase 2重构（v6.4）：
+    - 阶段0: 快速预判是否为新币（数据获取前）
+    - 阶段1: 根据预判结果分别获取数据（新币: 1m/5m/15m/1h，成熟币: 1h/4h）
+    - 阶段2: 精准判断（基于实际K线数量）
+    - 阶段3-4: 因子计算和判定（Phase 3实现新币专用因子）
+
     此函数负责：
     1. 从API获取K线和OI数据
     2. 调用_analyze_symbol_core()进行分析
@@ -789,9 +961,39 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     Args:
         symbol: 交易对符号
     """
-    # ---- 1. 获取数据 ----
-    k1 = get_klines(symbol, "1h", 300)
-    k4 = get_klines(symbol, "4h", 200)
+    from ats_core.logging import log, warn
+    from ats_core.data_feeds import (
+        quick_newcoin_check,
+        fetch_newcoin_data,
+        fetch_standard_data,
+    )
+
+    # ---- 阶段0: 快速预判（数据获取前）----
+    # 🔧 Phase 2新增：在数据获取前判断是否为新币
+    is_new_coin_likely, listing_time_ms, bars_1h_approx = quick_newcoin_check(symbol)
+
+    # ---- 阶段1: 分别获取数据 ----
+    newcoin_data = None  # 新币专用数据（k1m/k5m/k15m/avwap）
+
+    if is_new_coin_likely:
+        # 新币通道：获取1m/5m/15m/1h数据
+        log(f"🔧 Phase 2: {symbol} 预判为新币，使用新币数据流（1m/5m/15m/1h）")
+        newcoin_data = fetch_newcoin_data(symbol, listing_time_ms)
+
+        # 从新币数据中提取标准K线（兼容现有_analyze_symbol_core）
+        k1 = newcoin_data["k1h"]  # 使用1h K线作为k1
+        k4 = get_klines(symbol, "4h", 200)  # 仍需4h K线（Phase 3后可能移除）
+        k15m = newcoin_data["k15m"]  # 15m K线（用于MTF）
+
+    else:
+        # 成熟币通道：获取1h/4h数据
+        log(f"成熟币通道: {symbol} 使用标准数据流（1h/4h）")
+        standard_data = fetch_standard_data(symbol)
+        k1 = standard_data["k1h"]
+        k4 = standard_data["k4h"]
+        k15m = None  # 成熟币暂不使用15m数据
+
+    # ---- 继续获取其他数据（通用部分）----
     oi_data = get_open_interest_hist(symbol, "1h", 300)
 
     # 尝试获取现货K线（用于CVD组合计算）
@@ -870,13 +1072,14 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         eth_klines = []
 
     # ---- 2. 调用核心分析函数 ----
-    return _analyze_symbol_core(
+    result = _analyze_symbol_core(
         symbol=symbol,
         k1=k1,
         k4=k4,
         oi_data=oi_data,
         spot_k1=spot_k1,
         elite_meta=None,  # 不再使用候选池元数据
+        k15m=k15m,                   # 15m K线（新币/MTF）
         orderbook=orderbook,         # L（流动性）
         mark_price=mark_price,       # B（基差+资金费）
         funding_rate=funding_rate,   # B（基差+资金费）
@@ -885,6 +1088,35 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         btc_klines=btc_klines,       # I（独立性）
         eth_klines=eth_klines        # I（独立性）
     )
+
+    # ---- 3. 添加新币数据元信息（Phase 2）----
+    # 为Phase 3准备：将新币专用数据存储在metadata中
+    if newcoin_data:
+        if "metadata" not in result:
+            result["metadata"] = {}
+
+        result["metadata"]["newcoin_data"] = {
+            "is_new_coin": True,
+            "listing_time": listing_time_ms,
+            "bars_1h": newcoin_data["bars_1h"],
+            "avwap": newcoin_data["avwap"],
+            "avwap_meta": newcoin_data["avwap_meta"],
+            # K线数据量统计
+            "k1m_count": len(newcoin_data["k1m"]),
+            "k5m_count": len(newcoin_data["k5m"]),
+            "k15m_count": len(newcoin_data["k15m"]),
+            # Phase 3待实现: T_new/M_new/S_new因子将使用这些数据
+            "phase2_note": "新币数据已获取，Phase 3将实现专用因子",
+        }
+    else:
+        if "metadata" not in result:
+            result["metadata"] = {}
+        result["metadata"]["newcoin_data"] = {
+            "is_new_coin": False,
+            "phase2_note": "成熟币使用标准数据流",
+        }
+
+    return result
 
 
 # ============ 特征计算辅助函数 ============

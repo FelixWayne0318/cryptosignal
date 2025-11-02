@@ -186,7 +186,7 @@ D层（概率→发布）
 1. ✅ **F/I已从评分中移除**
    - 旧版：F权重10%, I权重6.7%
    - 新版：F/I仅调节温度/成本/门槛
-   - 符合newstandards/MODULATORS.md规范
+   - 符合standards/specifications/MODULATORS.md规范
 
 2. ✅ **四道闸必须全部通过**
    - 旧版：仅概率阈值

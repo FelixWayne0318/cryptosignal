@@ -157,19 +157,19 @@ class SignalScanner:
         self.exec_estimator = ExecutionMetricsEstimator()
         self.quality_monitor = DataQualMonitor()
 
-        # v2.0合规：初始化防抖动系统
+        # v2.0合规：初始化防抖动系统（v6.1调整：放宽阈值以增加信号响应速度）
         self.anti_jitter = AntiJitter(
-            prime_entry_threshold=0.80,
-            prime_maintain_threshold=0.70,
+            prime_entry_threshold=0.65,      # v6.1: 0.80→0.65（更现实的阈值）
+            prime_maintain_threshold=0.58,   # v6.1: 0.70→0.58（维持阈值）
             watch_entry_threshold=0.50,
             watch_maintain_threshold=0.40,
-            confirmation_bars=2,
-            total_bars=3,
-            cooldown_seconds=90
+            confirmation_bars=1,             # v6.1: 2→1（1/2确认即可，更快响应）
+            total_bars=2,                    # v6.1: 3→2
+            cooldown_seconds=60              # v6.1: 90→60（更快恢复）
         )
 
         log("✅ 四门系统组件初始化完成")
-        log("✅ 防抖动系统初始化完成 (K/N=2/3, cooldown=90s)")
+        log("✅ 防抖动系统初始化完成 (K/N=1/2, cooldown=60s, threshold=0.65)")
 
         # 加载Telegram配置
         if send_telegram:
@@ -199,14 +199,15 @@ class SignalScanner:
         if self.send_telegram:
             try:
                 telegram_send_wrapper(
-                    "🤖 <b>CryptoSignal v6.0 实时扫描器启动中...</b>\n\n"
+                    "🤖 <b>CryptoSignal v6.4 Phase 2 实时扫描器启动中...</b>\n\n"
                     "⏳ 正在初始化WebSocket缓存（约3-4分钟）\n"
                     "📊 目标: 200个高流动性币种\n"
                     "⚡ 后续扫描: 12-15秒/次\n\n"
-                    "🎯 系统版本: v6.0 newstandards整合版\n"
+                    "🎯 系统版本: v6.4 Phase 2\n"
                     "📦 9因子方向评分 (A层)\n"
                     "🚪 四门验证系统: DataQual/EV/执行/概率\n"
-                    "🔧 F/I调制器 (B层): 不参与评分",
+                    "🔧 F/I调制器 (B层): 不参与评分\n"
+                    "🆕 新币数据流架构: 1m/5m/15m粒度",
                     self.bot_token,
                     self.chat_id
                 )
@@ -385,17 +386,18 @@ class SignalScanner:
                 # 渲染信号
                 message = render_trade(signal)
 
-                # 添加v6.0系统标识
+                # 添加v6.4 Phase 2系统标识
                 gate_info = signal.get('four_gates', {})
                 gate_emoji = "✅" if gate_info.get('all_passed', False) else "❌"
 
                 footer = f"""
 
 ━━━━━━━━━━━━━━━━━━
-🎯 <b>系统版本: v6.0 newstandards整合版</b>
+🎯 <b>系统版本: v6.4 Phase 2</b>
 📦 9因子方向评分 (A层)
 🔧 F/I调制器 (B层)
 {gate_emoji} 四门验证: 已通过
+🆕 新币通道: Phase 2完成
 
 ⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                 """
