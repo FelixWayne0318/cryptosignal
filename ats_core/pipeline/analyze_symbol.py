@@ -339,13 +339,13 @@ def _analyze_symbol_core(
                 # v6.2修复：calculate_independence已返回标准化后的±100分数
                 # (通过StandardizationChain处理，参见independence.py:187-188)
                 # 无需再次映射，直接使用
-                I, I_meta = calculate_independence(
+                I, beta_sum, I_meta = calculate_independence(
                     alt_prices=alt_prices,
                     btc_prices=btc_prices,
                     eth_prices=eth_prices,
                     params=params.get("independence", {})
                 )
-                beta_sum = I_meta.get('beta_sum', 1.0)
+                # I已经是±100范围，直接使用（不再做二次映射）
 
                 # 补充元数据
                 I_meta['data_points'] = use_len
