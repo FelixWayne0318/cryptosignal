@@ -1,7 +1,9 @@
 # CryptoSignal v6.4 Phase 2
 
-> **加密货币信号分析系统 - 10+1维因子体系**
+> **加密货币信号分析系统 - 9+2因子体系**
 > v6.4 Phase 2: 新币数据流架构改造完成
+>
+> **因子系统**: A层9因子(T/M/C/S/V/O/L/B/Q) + B层2调制器(F/I)
 
 ---
 
@@ -88,7 +90,9 @@ git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 
 ### 核心系统
 
-- **10+1维因子系统** (T/M/C/S/V/O/L/B/Q/I + F调节器)
+- **9+2因子系统**
+  - A层9因子: T/M/C/S/V/O/L/B/Q (权重总和100%)
+  - B层2调制器: F/I (权重0%，仅调节参数)
 - **四门系统** (DataQual/EV/Execution/Probability)
 - **防抖动机制** (入场/确认/冷却)
 - **新币通道** (Phase 2已实现数据流，Phase 3-4待完成)
@@ -133,17 +137,23 @@ python3 scripts/realtime_signal_scanner.py --interval 300
 
 ### 修改权重
 
+**实际生效权重** (v6.1 - I因子架构修复版):
 ```json
 {
   "weights": {
-    "T": 13.9, "M": 8.3, "C": 11.1, "S": 5.6,
-    "V": 8.3, "O": 11.1, "L": 11.1, "B": 8.3,
-    "Q": 5.6, "F": 0.0, "I": 0.0
+    "T": 18.0, "M": 12.0, "C": 18.0, "S": 10.0,
+    "V": 10.0, "O": 12.0, "L": 12.0, "B": 4.0,
+    "Q": 4.0, "F": 0.0, "I": 0.0
   }
 }
 ```
 
-**要求**: A层9因子总和必须=100%，B层调制器(F/I)=0
+**要求**: A层9因子总和必须=100.0%，B层调制器(F/I)=0%
+
+**权重分层**:
+- Layer 1 (价格行为 50%): T(18%) + M(12%) + S(10%) + V(10%)
+- Layer 2 (资金流 30%): C(18%) + O(12%)
+- Layer 3 (微观结构 20%): L(12%) + B(4%) + Q(4%)
 
 详见: [standards/configuration/PARAMS_SPEC.md](standards/configuration/PARAMS_SPEC.md)
 

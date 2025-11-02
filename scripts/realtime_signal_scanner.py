@@ -199,14 +199,15 @@ class SignalScanner:
         if self.send_telegram:
             try:
                 telegram_send_wrapper(
-                    "🤖 <b>CryptoSignal v6.0 实时扫描器启动中...</b>\n\n"
+                    "🤖 <b>CryptoSignal v6.4 Phase 2 实时扫描器启动中...</b>\n\n"
                     "⏳ 正在初始化WebSocket缓存（约3-4分钟）\n"
                     "📊 目标: 200个高流动性币种\n"
                     "⚡ 后续扫描: 12-15秒/次\n\n"
-                    "🎯 系统版本: v6.0 newstandards整合版\n"
+                    "🎯 系统版本: v6.4 Phase 2\n"
                     "📦 9因子方向评分 (A层)\n"
                     "🚪 四门验证系统: DataQual/EV/执行/概率\n"
-                    "🔧 F/I调制器 (B层): 不参与评分",
+                    "🔧 F/I调制器 (B层): 不参与评分\n"
+                    "🆕 新币数据流架构: 1m/5m/15m粒度",
                     self.bot_token,
                     self.chat_id
                 )
@@ -385,17 +386,18 @@ class SignalScanner:
                 # 渲染信号
                 message = render_trade(signal)
 
-                # 添加v6.0系统标识
+                # 添加v6.4 Phase 2系统标识
                 gate_info = signal.get('four_gates', {})
                 gate_emoji = "✅" if gate_info.get('all_passed', False) else "❌"
 
                 footer = f"""
 
 ━━━━━━━━━━━━━━━━━━
-🎯 <b>系统版本: v6.0 newstandards整合版</b>
+🎯 <b>系统版本: v6.4 Phase 2</b>
 📦 9因子方向评分 (A层)
 🔧 F/I调制器 (B层)
 {gate_emoji} 四门验证: 已通过
+🆕 新币通道: Phase 2完成
 
 ⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                 """
