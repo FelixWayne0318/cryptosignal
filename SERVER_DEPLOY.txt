@@ -16,7 +16,7 @@ CryptoSignal v6.2 服务器部署命令清单
 
 复制以下命令直接执行：
 
-cd ~/cryptosignal && git fetch origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ && git checkout claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ && git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ && ./deploy_v6.1.sh
+cd ~/cryptosignal && git fetch origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ && git checkout claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ && git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ && ./deploy.sh
 
 执行后：
   - 脚本会自动完成8步验证
@@ -70,7 +70,7 @@ pip3 install -r requirements.txt
 git fetch origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 git checkout claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
-./deploy_v6.1.sh
+./deploy.sh
 
 
 ✅ 首次部署完成后，后续更新只需使用上方"更新部署（一键）"命令
@@ -151,7 +151,7 @@ grep -i "error" logs/scanner_*.log | tail -20
    - 新增监控：多空分布、波动率范围
 
 ✅ 部署流程标准化：
-   - 统一使用 ./deploy_v6.1.sh 一键部署
+   - 统一使用 ./deploy.sh 一键部署
    - 自动8步验证、备份、清理、测试
 
 

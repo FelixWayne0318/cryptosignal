@@ -56,7 +56,7 @@ git pull origin <BRANCH_NAME>
 # 见 § 凭证配置规范
 
 # 第 3 步：运行部署脚本
-./deploy_v6.1.sh
+./deploy.sh
 
 # 第 4 步：验证并启动
 # 脚本会自动询问是否启动（推荐选择 y）
@@ -133,7 +133,7 @@ claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 
 ## 🛠️ 部署脚本规范
 
-### deploy_v6.1.sh 标准流程
+### deploy.sh 标准流程
 
 脚本自动完成以下 9 步：
 
@@ -176,10 +176,10 @@ claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 
 ## 🚀 启动方式规范
 
-### 方式 1：deploy_v6.1.sh 自动启动（推荐）
+### 方式 1：deploy.sh 自动启动（推荐）
 
 ```bash
-./deploy_v6.1.sh
+./deploy.sh
 # 选择 y 自动启动
 ```
 
@@ -250,7 +250,7 @@ git log --oneline -10
 git checkout <STABLE_COMMIT>
 
 # 3. 重新部署
-./deploy_v6.1.sh
+./deploy.sh
 ```
 
 ### 配置回滚
@@ -312,7 +312,7 @@ cp config/params.json.bak.YYYYMMDD_HHMMSS config/params.json
 | **依赖缺失** | `pip3 install -r requirements.txt` |
 | **API连接失败** | 检查 `config/binance_credentials.json` |
 | **进程异常退出** | 查看日志 `tail -100 logs/scanner_*.log` |
-| **配置错误** | 运行 `./deploy_v6.1.sh` 重新验证 |
+| **配置错误** | 运行 `./deploy.sh` 重新验证 |
 
 ---
 
@@ -335,7 +335,7 @@ cp config/params.json.bak.YYYYMMDD_HHMMSS config/params.json
 - [ ] Binance API 凭证已配置（只读权限）
 - [ ] Telegram 配置已完成（如需通知）
 - [ ] 配置文件未提交到 Git
-- [ ] 运行 `./deploy_v6.1.sh` 所有验证通过
+- [ ] 运行 `./deploy.sh` 所有验证通过
 - [ ] 系统成功启动并初始化
 - [ ] 进程正常运行并能扫描币种
 - [ ] 已记录部署变更信息

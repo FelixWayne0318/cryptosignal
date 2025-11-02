@@ -269,7 +269,7 @@ git checkout claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 
 # 一键部署+启动
-./deploy_v6.1.sh
+./deploy.sh
 # 脚本会自动完成验证、测试，并询问是否启动
 # 输入 y 即可完成部署 ✅
 ```

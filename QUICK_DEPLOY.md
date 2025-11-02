@@ -33,7 +33,7 @@ EOF
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 第 3 步：一键部署+启动（推荐）⭐
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-./deploy_v6.1.sh
+./deploy.sh
 # 脚本会自动完成：
 #  1. 停止旧进程
 #  2. 备份配置
@@ -105,7 +105,7 @@ grep -i "error" logs/scanner_*.log | tail -20
 | **依赖缺失** | `pip3 install -r requirements.txt` |
 | **API连接失败** | 检查 `config/binance_credentials.json` |
 | **进程异常退出** | 查看日志 `tail -100 logs/scanner_*.log` |
-| **配置错误** | 运行 `./deploy_v6.1.sh` 重新验证 |
+| **配置错误** | 运行 `./deploy.sh` 重新验证 |
 
 ---
 
@@ -139,7 +139,7 @@ nohup python3 scripts/realtime_signal_scanner.py --interval 300 \
 
 - [ ] 代码已更新到最新提交
 - [ ] Binance API 配置已填写
-- [ ] `./deploy_v6.1.sh` 所有验证通过
+- [ ] `./deploy.sh` 所有验证通过
 - [ ] 系统成功启动
 - [ ] 进程正常运行
 - [ ] WebSocket 连接成功

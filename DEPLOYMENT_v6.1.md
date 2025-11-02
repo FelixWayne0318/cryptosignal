@@ -62,7 +62,7 @@ git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 # 见下文 "Binance API 凭证配置"
 
 # 第 3 步：运行部署脚本（自动验证 + 可选启动）
-./deploy_v6.1.sh
+./deploy.sh
 
 # 脚本会自动完成 8 步验证，最后询问是否立即启动（每5分钟扫描）
 # 选择 y：自动启动生产环境 ⬅️ 推荐
@@ -444,7 +444,7 @@ python3 --version
 如遇到问题，请提供以下信息：
 
 1. **Git版本**: `git log --oneline -3`
-2. **配置验证**: 运行 `./deploy_v6.1.sh` 的输出
+2. **配置验证**: 运行 `./deploy.sh` 的输出
 3. **错误日志**: 最近50行日志
 4. **系统信息**: Python版本、操作系统
 

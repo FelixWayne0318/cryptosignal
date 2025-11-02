@@ -37,7 +37,7 @@
 └─────────────────────────────────────────────────────────────────┘
                     ↓
     ┌──────────────────────────────────────┐
-    │  ./deploy_v6.1.sh 自动完成一切       │
+    │  ./deploy.sh 自动完成一切       │
     │  • 验证环境  • 测试运行  • 启动服务  │
     └──────────────────────────────────────┘
 ```
@@ -61,7 +61,7 @@ git pull origin <BRANCH_NAME>
 # 见下文 "凭证配置规范"
 
 # 第 3 步：运行一键部署脚本（自动完成所有验证+启动）
-./deploy_v6.1.sh
+./deploy.sh
 # ✅ 脚本会自动：
 #    1. 停止旧进程
 #    2. 备份配置
@@ -77,7 +77,7 @@ cd ~/cryptosignal
 git fetch origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 git checkout claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
-./deploy_v6.1.sh  # 一键完成所有操作
+./deploy.sh  # 一键完成所有操作
 ```
 
 ---
@@ -171,7 +171,7 @@ claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 
 ## 🛠️ 部署脚本规范
 
-### deploy_v6.1.sh 使用规范
+### deploy.sh 使用规范
 
 **脚本功能**：
 1. 停止旧进程并备份配置
@@ -186,7 +186,7 @@ claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 
 ```bash
 cd ~/cryptosignal
-./deploy_v6.1.sh
+./deploy.sh
 ```
 
 **脚本输出**：
@@ -224,13 +224,13 @@ cat > config/binance_credentials.json <<'EOF'
 EOF
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-配置完成后重新运行: ./deploy_v6.1.sh
+配置完成后重新运行: ./deploy.sh
 ```
 
 **标准处理流程**：
 1. 复制脚本输出的配置命令
 2. 替换 API 凭证为真实值
-3. 重新执行 `./deploy_v6.1.sh`
+3. 重新执行 `./deploy.sh`
 
 ---
 
@@ -384,7 +384,7 @@ git checkout <STABLE_COMMIT_HASH>
 git log --oneline -3
 
 # 5. 重新部署
-./deploy_v6.1.sh
+./deploy.sh
 ```
 
 ### 场景 2：配置回滚
@@ -488,7 +488,7 @@ with open('config/params.json') as f:
 | **快速部署** | `QUICK_DEPLOY.md` | 一页纸快速参考 |
 | **详细指南** | `DEPLOYMENT_v6.1.md` | 完整部署文档 |
 | **服务器命令** | `SERVER_DEPLOY.txt` | 可复制的命令清单 |
-| **部署脚本** | `deploy_v6.1.sh` | 自动化部署脚本 |
+| **部署脚本** | `deploy.sh` | 自动化部署脚本 |
 | **启动脚本** | `start_production.sh` | 生产环境启动脚本 |
 
 ---
@@ -566,7 +566,7 @@ df -h
 - [ ] Binance API 凭证已正确配置（只读权限）
 - [ ] Telegram 配置已完成（如需通知）
 - [ ] 配置文件未提交到 Git
-- [ ] 运行 `./deploy_v6.1.sh` 所有验证通过
+- [ ] 运行 `./deploy.sh` 所有验证通过
 - [ ] 系统成功启动并初始化
 - [ ] 进程正常运行并能够扫描币种
 - [ ] 已记录部署变更信息
