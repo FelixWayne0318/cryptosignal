@@ -549,6 +549,28 @@ def _analyze_symbol_core(
     prior_up = 0.50  # 中性先验
     quality_score = _calc_quality(scores, len(k1), len(oi_data))
 
+    # v6.3.2新增：新币质量评分补偿
+    # 问题：_calc_quality对K线<100的币种惩罚(Q*=0.85)，新币天然数据少被惩罚
+    # 解决：给予适度补偿，但仍保留一定惩罚（数据少确实是风险）
+    #
+    # 补偿策略：
+    # - ultra_new: 部分补偿（0.85 → 0.90），仍保留10%惩罚
+    # - phaseA: 小幅补偿（0.85 → 0.88），保留12%惩罚
+    # - phaseB: 微调补偿（0.85 → 0.87），保留13%惩罚
+    # - mature: 无补偿
+    if is_new_coin and len(k1) < 100:
+        original_quality = quality_score
+        if is_ultra_new:
+            # 超新币：从0.85补偿到0.90
+            quality_score = min(1.0, quality_score / 0.85 * 0.90)
+        elif is_phaseA:
+            # 阶段A：从0.85补偿到0.88
+            quality_score = min(1.0, quality_score / 0.85 * 0.88)
+        elif is_phaseB:
+            # 阶段B：从0.85补偿到0.87
+            quality_score = min(1.0, quality_score / 0.85 * 0.87)
+        # 注：补偿不能超过1.0，且仍保留一定惩罚（体现数据少的风险）
+
     # 自适应温度参数
     temperature = get_adaptive_temperature(market_regime_early, current_volatility)
 
@@ -670,18 +692,42 @@ def _analyze_symbol_core(
         from ats_core.logging import warn
         warn(f"[MTF-Cached] {symbol}: 多时间框架验证失败 - {e}")
 
-    # Prime判定：得分 >= 25分（v6.1调整：降低阈值以增加信号量）
-    is_prime = (prime_strength >= 25)
-    is_watch = False  # 不再发布Watch信号
-
-    # 计算达标维度数（保留用于元数据）
+    # 计算达标维度数（使用币种特定的阈值）
     dims_ok = sum(1 for s in scores.values() if abs(s) >= prime_dim_threshold)
 
+    # v6.3.2修复：Prime判定应用币种特定阈值
+    # 问题：之前所有币种都用固定25分，新币专用阈值(prime_prob_min等)未生效
+    # 修复：新币使用更严格的prime_strength阈值，体现高风险需要高确定性
+    #
+    # 原因分析：
+    # - 新币数据少、流动性差、波动大 → 需要更高确定性
+    # - 成熟币数据充足、流动性好 → 可以适当放宽
+    # - 当前用标准因子（1h/4h）而非新币专用因子（1m/5m）→ 需补偿性提高阈值
+    #
+    # 阈值设计（基于prime_strength）：
+    # - ultra_new: 35分（数据最少，风险最高）
+    # - phaseA: 32分（仍然高风险）
+    # - phaseB: 28分（过渡阶段）
+    # - mature: 25分（标准阈值）
+    if is_ultra_new:
+        prime_strength_threshold = new_coin_cfg.get("ultra_new_prime_strength_min", 35)
+    elif is_phaseA:
+        prime_strength_threshold = new_coin_cfg.get("phaseA_prime_strength_min", 32)
+    elif is_phaseB:
+        prime_strength_threshold = new_coin_cfg.get("phaseB_prime_strength_min", 28)
+    else:
+        prime_strength_threshold = 25  # 成熟币标准阈值
+
+    # Prime判定：使用币种特定阈值
+    is_prime = (prime_strength >= prime_strength_threshold)
+    is_watch = False  # 不再发布Watch信号
+
     # v6.3新增：拒绝原因跟踪（专家建议 #5）
+    # v6.3.2修复：使用币种特定的prime_strength_threshold
     rejection_reason = []
     if not is_prime:
-        if prime_strength < 25:
-            rejection_reason.append(f"Prime强度不足({prime_strength:.1f} < 25)")
+        if prime_strength < prime_strength_threshold:
+            rejection_reason.append(f"Prime强度不足({prime_strength:.1f} < {prime_strength_threshold}, 币种:{coin_phase})")
             if base_strength < 15:
                 rejection_reason.append(f"  - 基础强度过低({base_strength:.1f}/60)")
             if confidence < 25:
@@ -739,7 +785,7 @@ def _analyze_symbol_core(
                 P_short = P_chosen
 
             prime_strength = prime_strength_filtered
-            is_prime = (prime_strength >= 25)  # 重新判定Prime (v6.1: 降低阈值)
+            is_prime = (prime_strength >= prime_strength_threshold)  # v6.3.2: 使用币种特定阈值
 
         penalty_reason = market_adjustment_reason
 
@@ -800,6 +846,7 @@ def _analyze_symbol_core(
             "watch": is_watch,
             "dims_ok": dims_ok,
             "prime_strength": int(prime_strength),  # Prime评分（0-100）
+            "prime_strength_threshold": prime_strength_threshold,  # v6.3.2新增：币种特定阈值
             "prime_breakdown": prime_breakdown,  # Prime评分详细分解（v4.0新增）
             "rejection_reason": rejection_reason,  # v6.3新增：拒绝原因跟踪
             "ttl_h": 8
