@@ -8,7 +8,7 @@
 > - **A层**: 9个方向因子（T/M/C/S/V/O/L/B/Q），权重总和100%
 > - **B层**: 2个调制器（F/I），权重0%，仅调节温度/成本/阈值
 >
-> 完整的技术细节参见源文档：`../newstandards/STANDARDS.md § 2`
+> 完整的技术细节参见：[../CORE_STANDARDS.md § 2](../CORE_STANDARDS.md)
 
 ---
 
@@ -19,7 +19,7 @@
 - [统一标准化链](#统一标准化链)
 - [权重配置](#权重配置)
 
-详细规范请查阅：`newstandards/STANDARDS.md`（待合并）
+详细规范请查阅：[../CORE_STANDARDS.md](../CORE_STANDARDS.md)
 
 ---
 
