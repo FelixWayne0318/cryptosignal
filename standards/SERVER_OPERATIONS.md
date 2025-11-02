@@ -189,9 +189,9 @@ A5: 脚本会自动使用nohup后台启动
 📚 详细文档
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-- 快速参考：QUICK_DEPLOY.md
+- 快速参考：standards/QUICK_DEPLOY.md
 - 部署规范：standards/DEPLOYMENT_STANDARD.md
-- v6.1详细指南：DEPLOYMENT_v6.1.md
+- 版本历史：standards/VERSION_HISTORY.md
 - 选币优化说明：docs/COIN_SELECTION_OPTIMIZATION.md
 - 系统规范：standards/ 目录下所有文档
 
