@@ -935,6 +935,12 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     """
     完整分析单个交易对（数据获取 + 分析）
 
+    🔧 Phase 2重构（v6.4）：
+    - 阶段0: 快速预判是否为新币（数据获取前）
+    - 阶段1: 根据预判结果分别获取数据（新币: 1m/5m/15m/1h，成熟币: 1h/4h）
+    - 阶段2: 精准判断（基于实际K线数量）
+    - 阶段3-4: 因子计算和判定（Phase 3实现新币专用因子）
+
     此函数负责：
     1. 从API获取K线和OI数据
     2. 调用_analyze_symbol_core()进行分析
@@ -955,9 +961,39 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     Args:
         symbol: 交易对符号
     """
-    # ---- 1. 获取数据 ----
-    k1 = get_klines(symbol, "1h", 300)
-    k4 = get_klines(symbol, "4h", 200)
+    from ats_core.logging import log, warn
+    from ats_core.data_feeds import (
+        quick_newcoin_check,
+        fetch_newcoin_data,
+        fetch_standard_data,
+    )
+
+    # ---- 阶段0: 快速预判（数据获取前）----
+    # 🔧 Phase 2新增：在数据获取前判断是否为新币
+    is_new_coin_likely, listing_time_ms, bars_1h_approx = quick_newcoin_check(symbol)
+
+    # ---- 阶段1: 分别获取数据 ----
+    newcoin_data = None  # 新币专用数据（k1m/k5m/k15m/avwap）
+
+    if is_new_coin_likely:
+        # 新币通道：获取1m/5m/15m/1h数据
+        log(f"🔧 Phase 2: {symbol} 预判为新币，使用新币数据流（1m/5m/15m/1h）")
+        newcoin_data = fetch_newcoin_data(symbol, listing_time_ms)
+
+        # 从新币数据中提取标准K线（兼容现有_analyze_symbol_core）
+        k1 = newcoin_data["k1h"]  # 使用1h K线作为k1
+        k4 = get_klines(symbol, "4h", 200)  # 仍需4h K线（Phase 3后可能移除）
+        k15m = newcoin_data["k15m"]  # 15m K线（用于MTF）
+
+    else:
+        # 成熟币通道：获取1h/4h数据
+        log(f"成熟币通道: {symbol} 使用标准数据流（1h/4h）")
+        standard_data = fetch_standard_data(symbol)
+        k1 = standard_data["k1h"]
+        k4 = standard_data["k4h"]
+        k15m = None  # 成熟币暂不使用15m数据
+
+    # ---- 继续获取其他数据（通用部分）----
     oi_data = get_open_interest_hist(symbol, "1h", 300)
 
     # 尝试获取现货K线（用于CVD组合计算）
@@ -1036,13 +1072,14 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         eth_klines = []
 
     # ---- 2. 调用核心分析函数 ----
-    return _analyze_symbol_core(
+    result = _analyze_symbol_core(
         symbol=symbol,
         k1=k1,
         k4=k4,
         oi_data=oi_data,
         spot_k1=spot_k1,
         elite_meta=None,  # 不再使用候选池元数据
+        k15m=k15m,                   # 15m K线（新币/MTF）
         orderbook=orderbook,         # L（流动性）
         mark_price=mark_price,       # B（基差+资金费）
         funding_rate=funding_rate,   # B（基差+资金费）
@@ -1051,6 +1088,35 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         btc_klines=btc_klines,       # I（独立性）
         eth_klines=eth_klines        # I（独立性）
     )
+
+    # ---- 3. 添加新币数据元信息（Phase 2）----
+    # 为Phase 3准备：将新币专用数据存储在metadata中
+    if newcoin_data:
+        if "metadata" not in result:
+            result["metadata"] = {}
+
+        result["metadata"]["newcoin_data"] = {
+            "is_new_coin": True,
+            "listing_time": listing_time_ms,
+            "bars_1h": newcoin_data["bars_1h"],
+            "avwap": newcoin_data["avwap"],
+            "avwap_meta": newcoin_data["avwap_meta"],
+            # K线数据量统计
+            "k1m_count": len(newcoin_data["k1m"]),
+            "k5m_count": len(newcoin_data["k5m"]),
+            "k15m_count": len(newcoin_data["k15m"]),
+            # Phase 3待实现: T_new/M_new/S_new因子将使用这些数据
+            "phase2_note": "新币数据已获取，Phase 3将实现专用因子",
+        }
+    else:
+        if "metadata" not in result:
+            result["metadata"] = {}
+        result["metadata"]["newcoin_data"] = {
+            "is_new_coin": False,
+            "phase2_note": "成熟币使用标准数据流",
+        }
+
+    return result
 
 
 # ============ 特征计算辅助函数 ============
