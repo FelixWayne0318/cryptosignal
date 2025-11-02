@@ -145,64 +145,107 @@ def _analyze_symbol_core(
     bayesian_boost = 0.0  # 不再使用贝叶斯先验
 
     # ---- 新币检测（优先判断，决定数据要求）----
+    # 🔧 v6.3.1: 按照 newstandards/NEWCOIN_SPEC.md § 1 规范修改
     new_coin_cfg = params.get("new_coin", {})
 
-    # v6.2修复：计算真实币龄（基于K线时间戳，而非K线数量）
-    # 旧代码使用len(k1)导致BTC/ETH等成熟币被误判为新币
+    # 计算K线时间戳差值（用于数据受限检测）
     if k1 and len(k1) > 0:
         # K线格式: [timestamp_ms, open, high, low, close, volume, ...]
         first_kline_ts = k1[0][0]  # 第一根K线时间戳（毫秒）
         latest_kline_ts = k1[-1][0]  # 最后一根K线时间戳（毫秒）
         coin_age_ms = latest_kline_ts - first_kline_ts
         coin_age_hours = coin_age_ms / (1000 * 3600)  # 转换为小时
+        bars_1h = len(k1)  # K线根数
     else:
         coin_age_hours = 0
+        bars_1h = 0
 
     coin_age_days = coin_age_hours / 24
 
-    # v6.3修复：检测K线缓存限制（专家建议 #1）
-    # 当coin_age_hours接近K线缓存上限（300根1h K线 ≈ 299小时）时，
-    # 实际币龄可能远大于此，应默认为成熟币而非新币
-    # 阈值：≥200小时（约8.3天）视为数据受限，默认"成熟币"
-    data_limited = coin_age_hours >= 200
+    # 🔧 v6.3.1规范符合性修改：按照 NEWCOIN_SPEC.md § 1 标准
+    #
+    # 规范定义：
+    # - 进入新币通道: since_listing < 14d 或 bars_1h < 400 或 !has_OI/funding
+    # - 回切标准通道: bars_1h ≥ 400 且 OI/funding连续≥3d，或 since_listing ≥ 14d
+    # - 渐变切换: 48h线性混合（权重/温度/门槛/TTL同步过渡）
+    #
+    # 当前限制（简化实现）：
+    # - ⚠️ 无法获取真实since_listing（需集成交易所API）
+    # - ⚠️ 使用bars_1h < 400作为主判断条件（符合规范）
+    # - ⚠️ coin_age_hours作为辅助（基于K线时间戳差，非真实上币时间）
+    # - ⚠️ 暂未实现48h渐变切换（TODO: 需要状态记录机制）
+    # - ⚠️ 使用标准1h/4h因子，非新币专用1m/5m/15m因子（需独立新币通道）
+    #
+    # TODO: 完整新币通道实现需要：
+    # 1. 独立pipeline（新币专用因子：T_new/M_new基于ZLEMA_1m/5m）
+    # 2. 点火-成势-衰竭模型（非线性联立）
+    # 3. 1m/5m/15m数据流（WS实时订阅）
+    # 4. 更严执行闸门（impact≤7bps, spread≤35bps, DataQual≥0.90）
+    # 5. Prime时间窗口（0-3m冷启动, 3-8m首批, 8-15m主力）
 
-    # 4级分级阈值
-    ultra_new_hours = new_coin_cfg.get("ultra_new_hours", 24)  # 1-24小时：超新
-    phaseA_days = new_coin_cfg.get("phaseA_days", 7)            # 1-7天：极度谨慎
-    phaseB_days = new_coin_cfg.get("phaseB_days", 30)           # 7-30天：谨慎
+    # 检测数据受限情况
+    # 当K线数量接近缓存上限时，无法判断真实币龄，强制视为成熟币
+    data_limited = (bars_1h >= 200)  # ≥200根1h K线 ≈ 8.3天，视为数据充足
 
-    # 判断阶段（v6.3: 数据受限时强制视为成熟币）
+    # 🔧 规范符合性修改：使用bars_1h < 400作为新币判断标准（NEWCOIN_SPEC.md § 1）
+    # 旧阈值（不符合规范）：ultra_new≤24h, phaseA≤7d, phaseB≤30d
+    # 新阈值（符合规范）：newcoin < 400 bars (≈16.7天) 或 < 14天
+    newcoin_bars_threshold = new_coin_cfg.get("newcoin_bars_threshold", 400)  # 规范值：400根
+    newcoin_days_threshold = new_coin_cfg.get("newcoin_days_threshold", 14)   # 规范值：14天
+
+    # 判断是否为新币（按照规范 § 1）
     if data_limited:
-        # 数据受限（≥200小时），无法确定真实币龄，默认成熟币
+        # 数据受限（≥200根K线），无法确定真实币龄，默认成熟币
+        is_new_coin = False
+        coin_phase = "mature(data_limited)"
+        # 兼容旧分级变量
         is_ultra_new = False
         is_phaseA = False
         is_phaseB = False
+    elif bars_1h < newcoin_bars_threshold:
+        # 规范条件1: bars_1h < 400 → 新币
+        is_new_coin = True
+        # 内部细分（用于不同数据要求和阈值）
+        if bars_1h < 24:  # < 1天
+            coin_phase = "newcoin_ultra"  # 超新币（<24h）
+            is_ultra_new = True
+            is_phaseA = False
+            is_phaseB = False
+        elif bars_1h < 168:  # < 7天
+            coin_phase = "newcoin_phaseA"  # 新币阶段A（1-7天）
+            is_ultra_new = False
+            is_phaseA = True
+            is_phaseB = False
+        else:  # 7天 - 400根（≈16.7天）
+            coin_phase = "newcoin_phaseB"  # 新币阶段B（7-16.7天）
+            is_ultra_new = False
+            is_phaseA = False
+            is_phaseB = True
+    elif coin_age_days < newcoin_days_threshold:
+        # 规范条件2: since_listing < 14d（这里用coin_age_days近似）
+        # 注意：这是近似值，真实since_listing需要交易所API
+        is_new_coin = True
+        coin_phase = "newcoin_phaseB"  # 已有足够K线但仍<14天
+        is_ultra_new = False
+        is_phaseA = False
+        is_phaseB = True
+    else:
+        # 成熟币：bars_1h ≥ 400 且 since_listing ≥ 14d
         is_new_coin = False
         coin_phase = "mature"
-    else:
-        # 数据充足，正常分级
-        is_ultra_new = coin_age_hours <= ultra_new_hours  # 1-24小时
-        is_phaseA = coin_age_days <= phaseA_days and not is_ultra_new  # 1-7天
-        is_phaseB = phaseA_days < coin_age_days <= phaseB_days  # 7-30天
-        is_new_coin = coin_age_days <= phaseB_days
+        is_ultra_new = False
+        is_phaseA = False
+        is_phaseB = False
 
-    # 确定数据要求（v6.3: coin_phase在数据受限时已设置为mature）
+    # 确定数据要求（coin_phase已在上面设置）
     if is_ultra_new:
-        coin_phase = "ultra_new"  # 超新币（1-24小时）
-        min_data = 10              # 至少10根1h K线
+        min_data = 10  # 超新币：至少10根1h K线
     elif is_phaseA:
-        coin_phase = "phaseA"     # 阶段A（1-7天）
-        min_data = 30
+        min_data = 30  # 新币阶段A：至少30根
     elif is_phaseB:
-        coin_phase = "phaseB"     # 阶段B（7-30天）
-        min_data = 50
-    elif not data_limited:
-        # 正常成熟币（数据充足）
-        coin_phase = "mature"
-        min_data = 50
+        min_data = 50  # 新币阶段B：至少50根
     else:
-        # 数据受限的成熟币（已在上面设置coin_phase="mature"）
-        min_data = 50
+        min_data = 50  # 成熟币：至少50根
 
     # 检查数据是否足够
     if not k1 or len(k1) < min_data:

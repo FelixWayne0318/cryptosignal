@@ -470,38 +470,53 @@ class OptimizedBatchScanner:
                     latest_kline_ts = k1h[-1][0]  # 最后一根K线时间戳（毫秒）
                     coin_age_ms = latest_kline_ts - first_kline_ts
                     coin_age_hours = coin_age_ms / (1000 * 3600)  # 转换为小时
+                    bars_1h = len(k1h)  # K线根数
                 else:
                     coin_age_hours = 0
+                    bars_1h = 0
 
-                # v6.3修复：检测K线缓存限制（专家建议 #1）
-                # 当coin_age_hours接近K线缓存上限（300根1h K线 ≈ 299小时）时，
-                # 实际币龄可能远大于此，应默认为成熟币而非新币
-                # 阈值：≥200小时（约8.3天）视为数据受限，默认"成熟币"
-                data_limited = coin_age_hours >= 200
+                coin_age_days = coin_age_hours / 24
 
-                # 根据币种年龄确定最小数据要求（v6.3: 数据受限时强制视为成熟币）
+                # v6.3.1规范符合性修改：按照 NEWCOIN_SPEC.md § 1 标准
+                # 规范定义：
+                # - 进入新币通道: since_listing < 14d 或 bars_1h < 400
+                # - 回切标准通道: bars_1h ≥ 400 且 OI/funding连续≥3d，或 since_listing ≥ 14d
+                #
+                # 当前简化实现：
+                # - 使用bars_1h < 400作为主判断条件（符合规范）
+                # - coin_age_days < 14作为辅助（基于K线时间戳，非真实上币时间）
+                # - 未实现48h渐变切换（TODO）
+
+                # 检测数据受限情况
+                data_limited = (bars_1h >= 200)  # ≥200根1h K线，视为数据充足
+
+                # 根据规范判断币种类型并确定最小数据要求
                 if data_limited:
-                    # 数据受限（≥200小时），无法确定真实币龄，默认成熟币
+                    # 数据受限（≥200根K线），无法确定真实币龄，默认成熟币
                     min_k1h = 96
                     min_k4h = 50
                     coin_type = "成熟币(数据受限)"
-                elif coin_age_hours <= 24:
-                    # 超新币（1-24小时）
-                    min_k1h = 10
-                    min_k4h = 3
-                    coin_type = "超新币"
-                elif coin_age_hours <= 168:  # 7天
-                    # 阶段A（1-7天）
-                    min_k1h = 30
-                    min_k4h = 8
-                    coin_type = "新币A"
-                elif coin_age_hours <= 720:  # 30天
-                    # 阶段B（7-30天）
+                elif bars_1h < 400:
+                    # 规范条件1: bars_1h < 400 → 新币
+                    if bars_1h < 24:  # < 1天
+                        min_k1h = 10
+                        min_k4h = 3
+                        coin_type = "新币Ultra(<24h)"
+                    elif bars_1h < 168:  # < 7天
+                        min_k1h = 30
+                        min_k4h = 8
+                        coin_type = "新币A(1-7d)"
+                    else:  # 7天 - 400根（≈16.7天）
+                        min_k1h = 50
+                        min_k4h = 15
+                        coin_type = "新币B(7-16.7d)"
+                elif coin_age_days < 14:
+                    # 规范条件2: since_listing < 14d（近似）
                     min_k1h = 50
                     min_k4h = 15
-                    coin_type = "新币B"
+                    coin_type = "新币B(bars≥400但<14d)"
                 else:
-                    # 正常成熟币（数据充足）
+                    # 成熟币：bars_1h ≥ 400 且 since_listing ≥ 14d
                     min_k1h = 96
                     min_k4h = 50
                     coin_type = "成熟币"

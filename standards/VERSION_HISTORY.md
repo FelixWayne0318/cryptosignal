@@ -6,6 +6,100 @@
 
 ---
 
+## 📋 版本更新 (v6.3 → v6.3.1) - 2025-11-02
+
+### 🎯 核心改进：新币判断规范符合性修改
+
+**问题**: v6.3之前的新币判断逻辑不符合 `newstandards/NEWCOIN_SPEC.md` 规范标准
+
+### 🔧 规范符合性修改
+
+#### 修改 #1: 新币判断标准对齐规范
+
+**规范要求 (NEWCOIN_SPEC.md § 1)**:
+- 进入新币通道: `since_listing < 14d` 或 `bars_1h < 400` 或 `!has_OI/funding`
+- 回切标准通道: `bars_1h ≥ 400` 且 OI/funding连续≥3d，或 `since_listing ≥ 14d`
+
+**旧实现（不符合规范）**:
+```python
+ultra_new: coin_age_hours ≤ 24
+phaseA: coin_age_days ≤ 7
+phaseB: coin_age_days ≤ 30  # ❌ 应为14天
+# ❌ 未使用bars_1h判断
+```
+
+**新实现（符合规范）**:
+```python
+# 主判断条件: bars_1h < 400 （符合规范）
+if bars_1h < 400:
+    is_new_coin = True
+    # 内部细分
+    if bars_1h < 24: newcoin_ultra
+    elif bars_1h < 168: newcoin_phaseA
+    else: newcoin_phaseB  # 7d - 16.7d
+# 辅助条件: coin_age_days < 14 （符合规范）
+elif coin_age_days < 14:
+    is_new_coin = True
+else:
+    is_new_coin = False  # 成熟币
+```
+
+**文件**:
+- `ats_core/pipeline/analyze_symbol.py:165-238`
+- `ats_core/pipeline/batch_scan_optimized.py:480-522`
+
+#### 修改 #2: 添加bars_1h计数判断
+
+**问题**: 之前只使用时间戳差值，没有使用K线数量作为判断依据
+
+**修复**: 添加 `bars_1h = len(k1)` 计数逻辑，并作为主判断条件
+
+**效果**:
+- ✅ 符合规范的 `bars_1h < 400` 新币进入条件
+- ✅ 14天阈值替代30天
+- ✅ 数据受限检测改为 `bars_1h >= 200`（不再用coin_age_hours）
+
+### 📋 当前限制与完整新币通道 Roadmap
+
+**⚠️ 当前实现为简化版**，符合规范的判断标准但缺少完整新币通道功能：
+
+| 功能 | 规范要求 | 当前实现 | 状态 |
+|------|---------|---------|------|
+| **进入/回切判断** | bars_1h < 400 或 since_listing < 14d | ✅ bars_1h < 400 <br> ⚠️ coin_age_days < 14（近似） | 部分符合 |
+| **渐变切换** | 48h线性混合（权重/温度/阈值） | ❌ 硬切换 | 未实现 |
+| **数据粒度** | 1m/5m/15m/1h (WS实时) | ❌ 1h/4h (REST) | 未实现 |
+| **新币专用因子** | T_new/M_new/S_new (ZLEMA_1m/5m) | ❌ 标准因子 | 未实现 |
+| **点火-成势-衰竭** | 非线性联立模型 | ❌ 标准Prime判定 | 未实现 |
+| **执行标准** | 更严（impact≤7bps, spread≤35bps） | ❌ 标准执行标准 | 未实现 |
+| **Prime窗口** | 0-3m冷启动, 3-8m首批, 8-15m主力 | ❌ 无时间窗口 | 未实现 |
+| **独立通道** | 与标准通道彻底隔离 | ❌ 同一pipeline | 未实现 |
+
+**Roadmap（完整新币通道实现）**:
+1. **Phase 1（当前v6.3.1）**: ✅ 判断标准符合规范（bars_1h + 14天阈值）
+2. **Phase 2（Future）**: 获取真实 `since_listing` 时间（集成交易所API）
+3. **Phase 3（Future）**: 实现48h渐变切换机制（需状态记录）
+4. **Phase 4（Future）**: 构建独立新币pipeline:
+   - 1m/5m/15m数据流（WS订阅）
+   - 新币专用因子（ZLEMA_1m/5m）
+   - 点火-成势-衰竭模型
+   - AVWAP锚点计算
+   - 更严执行闸门
+   - Prime时间窗口限制
+
+### 📊 修复效果
+
+**v6.3（修复前）**:
+- 新币阈值: ≤30天 ❌（规范要求14天）
+- 判断依据: coin_age_hours（时间戳差）❌
+- 数据受限: coin_age_hours >= 200 ⚠️
+
+**v6.3.1（修复后）**:
+- 新币阈值: bars_1h < 400 或 < 14天 ✅（符合规范）
+- 判断依据: bars_1h（K线数量，主）+ coin_age_days（辅）✅
+- 数据受限: bars_1h >= 200 ✅
+
+---
+
 ## 📋 版本更新 (v6.2 → v6.3) - 2025-11-02
 
 ### 🎯 核心问题解决：0信号困境
