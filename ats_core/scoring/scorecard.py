@@ -28,14 +28,17 @@ def scorecard(scores, weights):
         - confidence: 绝对值（0-100）
         - edge: -1.0到+1.0的优势度
     """
-    # 计算加权总分
+    # 计算加权总分（跳过注释字段）
     total = 0.0
     weight_sum = 0.0
 
     for dim, score in scores.items():
-        if dim in weights:
-            total += score * weights[dim]
-            weight_sum += weights[dim]
+        if dim in weights and not dim.startswith('_'):
+            weight = weights[dim]
+            # 确保权重是数值类型
+            if isinstance(weight, (int, float)):
+                total += score * weight
+                weight_sum += weight
 
     # 归一化到 -100 到 +100（加权平均）
     if weight_sum > 0:
@@ -83,7 +86,9 @@ def get_factor_contributions(scores, weights):
         ──────────────────
         总分: -13 (看空)
     """
-    weight_sum = sum(weights.values())
+    # 过滤注释字段，只计算因子权重
+    factor_weights = {k: v for k, v in weights.items() if not k.startswith('_')}
+    weight_sum = sum(factor_weights.values())
     contributions = {}
 
     for dim in scores.keys():

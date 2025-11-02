@@ -154,9 +154,17 @@ def blend_weights(
     """
     blended = {}
 
+    # 只处理因子权重，跳过注释字段（以_开头的字段）
     for dim in base_weights.keys():
+        if dim.startswith('_'):
+            continue  # 跳过注释字段
+
         base_w = base_weights.get(dim, 0)
         regime_w = regime_weights.get(dim, base_w)
+
+        # 确保权重是数值类型
+        if not isinstance(base_w, (int, float)) or not isinstance(regime_w, (int, float)):
+            continue  # 跳过非数值字段
 
         # 线性插值
         blended[dim] = round(

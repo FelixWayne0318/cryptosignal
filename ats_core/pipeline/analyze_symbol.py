@@ -372,7 +372,7 @@ def _analyze_symbol_core(
 
     # 基础权重（从配置读取，9维A层系统：总权重100%）
     # I的8.0%权重重新分配到其他因子
-    base_weights = params.get("weights", {
+    base_weights_raw = params.get("weights", {
         # Layer 1: 价格行为层（50%）
         "T": 18.0,  # 趋势 (was 16.0, +2.0 from I)
         "M": 12.0,  # 动量 (was 9.0, +3.0 from I)
@@ -386,10 +386,13 @@ def _analyze_symbol_core(
         "B": 4.0,   # 基差+资金费 (was 9.0, -5.0 rebalance)
         "Q": 4.0,   # 清算密度 (was 7.0, -3.0 rebalance)
         # 废弃因子和B层调制器（不参与评分）
-        "E": 0,     # 环境（已废弃）
-        "I": 0,     # 独立性（B层调制器，不参与评分）
-        "F": 0,     # 资金领先（B层调制器，不参与评分）
+        "E": 0.0,   # 环境（已废弃）
+        "I": 0.0,   # 独立性（B层调制器，不参与评分）
+        "F": 0.0,   # 资金领先（B层调制器，不参与评分）
     })  # A层9因子总计: 18+12+10+10+18+12+12+4+4 = 100.0 ✓
+
+    # 过滤注释字段（防止传入blend_weights时出现类型错误）
+    base_weights = {k: v for k, v in base_weights_raw.items() if not k.startswith('_')}
 
     # 尝试提前获取市场状态（用于自适应权重）
     try:
