@@ -16,6 +16,7 @@
 - **修复**: 移除二次映射，直接使用`calculate_independence()`的返回值
 - **文件**: `ats_core/pipeline/analyze_symbol.py:328-340`
 - **参考**: 与L因子修复相同（同类型的双重归一化bug）
+- **Hotfix (2025-11-02)**: 修复解包错误 - calculate_independence()返回3个值(score, beta_sum, meta)，但代码只解包了2个，导致"too many values to unpack (expected 2)"错误
 
 #### Bug 2: 币龄计算错误
 - **问题**: 使用K线数量(`len(k1h)`)作为币龄，导致缓存限制导致BTC/ETH等成熟币被误判为"新币B(300小时)"
