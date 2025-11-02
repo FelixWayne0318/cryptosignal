@@ -2,32 +2,20 @@
 # coding: utf-8
 """
 快速测试5个币种 - 直接测试 analyze_symbol 函数
-不加载市场数据，只测试核心分析逻辑
+超级简单：只调用 analyze_symbol(symbol)
 """
 
 import sys
 import os
-import json
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from ats_core.pipeline.analyze_symbol import analyze_symbol
-from ats_core.execution.binance_futures_client import get_binance_client
 from ats_core.logging import log, warn, error
 
 
-def load_params():
-    """加载配置参数"""
-    try:
-        with open('config/params.json', 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception as e:
-        error(f"加载配置失败: {e}")
-        return {}
-
-
-async def test_5_coins():
+def test_5_coins():
     """测试5个币种"""
 
     log("=" * 60)
@@ -37,19 +25,8 @@ async def test_5_coins():
     # 测试币种
     test_symbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT']
 
-    # 加载配置
-    params = load_params()
-    if not params:
-        error("无法加载配置，退出测试")
-        return
-
-    # 初始化客户端
-    log("\n初始化Binance客户端...")
-    client = get_binance_client()
-    log("✅ 客户端初始化完成")
-
     log(f"\n测试币种: {', '.join(test_symbols)}")
-    log("注意: 只测试K线分析，不加载订单簿等额外数据")
+    log("注意: analyze_symbol 会自动获取K线数据")
     log("")
 
     # 逐个测试
@@ -58,19 +35,8 @@ async def test_5_coins():
         log(f"[{i}/5] 分析 {symbol}...")
 
         try:
-            # 直接调用 analyze_symbol（不传orderbook等可选参数）
-            result = await analyze_symbol(
-                symbol=symbol,
-                client=client,
-                params=params,
-                # 不传这些可选参数，加快测试速度
-                # orderbook=None,
-                # mark_price=None,
-                # spot_price=None,
-                # funding_rate=None,
-                # oi_data=None,
-                # agg_trades=None
-            )
+            # 直接调用 analyze_symbol（只需要 symbol 参数）
+            result = analyze_symbol(symbol)
 
             if result:
                 score = result.get('weighted_score', 0)
@@ -161,5 +127,4 @@ async def test_5_coins():
 
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(test_5_coins())
+    test_5_coins()
