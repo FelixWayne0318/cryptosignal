@@ -126,15 +126,15 @@
   },
 
   "weights": {
-    "_comment": "v6.0 - A层9因子权重（总和必须=100.0%），F/I为B层调制器（权重=0）",
-    "T": 18.0,
-    "M": 12.0,
-    "C": 18.0,
-    "S": 10.0,
-    "V": 10.0,
-    "O": 12.0,
-    "L": 12.0,
-    "B": 4.0,
+    "_comment": "v6.5 - A层8因子权重（总和必须=100.0%），L因子移至执行层，F/I为B层调制器（权重=0）",
+    "T": 20.0,
+    "M": 14.0,
+    "C": 20.0,
+    "S": 11.0,
+    "V": 11.0,
+    "O": 14.0,
+    "L": 0.0,
+    "B": 6.0,
     "Q": 4.0,
     "_b_layer": "以下为B层调制器，不参与评分",
     "I": 0.0,
@@ -142,16 +142,18 @@
     "F": 0.0
   },
   "weights_comment": {
-    "_version": "v6.1 - I因子架构修复版（9因子A层系统）",
-    "_total_weight": "100%（A层9因子权重百分比系统）",
-    "_layer1_price_action": "Layer 1 价格行为层（50%）: T(18%) + M(12%) + S(10%) + V(10%)",
-    "_layer2_capital_flow": "Layer 2 资金流层（30%）: C(18%) + O(12%)",
-    "_layer3_microstructure": "Layer 3 微观结构层（20%）: L(12%) + B(4%) + Q(4%)",
+    "_version": "v6.5 - L因子重构版（8因子A层系统）",
+    "_total_weight": "100%（A层8因子权重百分比系统）",
+    "_layer1_price_action": "Layer 1 价格行为层（56%）: T(20%) + M(14%) + S(11%) + V(11%)",
+    "_layer2_capital_flow": "Layer 2 资金流层（34%）: C(20%) + O(14%)",
+    "_layer3_microstructure": "Layer 3 微观结构层（10%）: B(6%) + Q(4%)",
     "_layer_b_modulators": "B层调制器（不评分）: F(拥挤度) + I(独立性)",
+    "_execution_layer": "执行层（不评分）: L(流动性) - 作为四门系统的质量门槛",
     "_modulator_role": "F/I仅调制Teff/cost/thresholds，不修改方向分数",
     "_deprecated": "E(0) - 环境因子已废弃",
-    "_change_log": "I因子8%权重重新分配：T+2%, M+3%, S+4%, C+6%, L+4%, 其他rebalance",
-    "_four_gates": "信号发布需通过四门：1)DataQual≥0.90, 2)EV>0, 3)执行指标达标, 4)概率阈值"
+    "_change_log_v6.5": "L因子12%权重重新分配：T+2%, M+2%, C+2%, S+1%, V+1%, O+2%, B+2%",
+    "_rationale": "L(流动性)是质量指标非方向指标，不应参与多空评分，移至执行层作为入场/止盈止损质量门槛",
+    "_four_gates": "信号发布需通过四门：1)DataQual≥0.90, 2)EV>0, 3)执行指标达标(含L), 4)概率阈值"
   },
 
   "fund_leading": {
