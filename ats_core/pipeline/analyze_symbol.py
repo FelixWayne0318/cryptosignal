@@ -243,16 +243,13 @@ def _analyze_symbol_core(
 
     # ---- 2.1. 10维因子系统：新增因子 ----
 
-    # 流动性（L）：0（差）到 100（好）→ 归一化到 ±100
+    # 流动性（L）：-100（差）到 +100（好）
+    # v6.2修复：calculate_liquidity已返回标准化后的±100分数，无需再次映射
     t0 = time.time()
     if orderbook is not None:
         try:
-            L_raw, L_meta = calculate_liquidity(orderbook, params.get("liquidity", {}))
-            # 归一化：0-100 → -100到+100（中性值50→0）
-            # 低流动性（<50）→负分（不适合交易），高流动性（>50）→正分（适合交易）
-            L = (L_raw - 50) * 2
-            L_meta['raw_score'] = L_raw
-            L_meta['normalized_score'] = L
+            L, L_meta = calculate_liquidity(orderbook, params.get("liquidity", {}))
+            # L已经是±100范围，直接使用
         except Exception as e:
             from ats_core.logging import warn
             warn(f"L因子计算失败: {e}")
@@ -719,8 +716,8 @@ def _analyze_symbol_core(
         "market_meta": market_meta,
         "market_penalty": penalty_reason if penalty_reason else None,
 
-        # F调节器否决警告
-        "f_veto_warning": f_veto_warning,
+        # F调节器否决警告（v6.2: F调节器已移除，固定为None）
+        "f_veto_warning": None,
 
         # 🚀 世界顶级优化模块元数据
         "optimization_meta": {

@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+# coding: utf-8
+"""
+快速测试5个币种 - 验证分析系统修复
+"""
+
+import asyncio
+import sys
+import os
+
+# 添加项目路径
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from ats_core.pipeline.batch_scan_optimized import OptimizedBatchScanner
+from ats_core.logging import info, warn, error
+
+
+async def test_5_coins():
+    """测试5个币种"""
+
+    info("=" * 60)
+    info("🧪 快速测试 - 5个币种分析验证")
+    info("=" * 60)
+
+    # 创建扫描器
+    scanner = OptimizedBatchScanner(
+        min_score=60,  # 降低阈值以便看到结果
+        enable_websocket=False,  # 禁用WebSocket
+        enable_telegram=False   # 禁用Telegram通知
+    )
+
+    # 初始化
+    info("\n初始化扫描器...")
+    await scanner.initialize()
+
+    # 获取前5个币种
+    test_symbols = scanner.symbols[:5]
+
+    info(f"\n测试币种: {', '.join(test_symbols)}")
+    info("")
+
+    # 逐个测试
+    results = []
+    for i, symbol in enumerate(test_symbols, 1):
+        info(f"[{i}/5] 分析 {symbol}...")
+
+        try:
+            result = await scanner.analyze_single_symbol(symbol)
+
+            if result:
+                score = result.get('weighted_score', 0)
+                prob = result.get('probability', 0)
+                is_prime = result.get('publish', {}).get('prime', False)
+
+                # 获取L因子验证
+                L_score = result.get('scores', {}).get('L', 0)
+                L_meta = result.get('scores_meta', {}).get('L', {})
+
+                info(f"  ✅ 成功")
+                info(f"     分数: {score:.1f}, 概率: {prob:.2%}, Prime: {is_prime}")
+                info(f"     L因子: {L_score} (范围检查: {'✅' if -100 <= L_score <= 100 else '❌ 超出范围'})")
+
+                # 检查L因子元数据
+                if 'liquidity_score' in L_meta:
+                    info(f"     流动性分数: {L_meta['liquidity_score']}")
+                    info(f"     流动性等级: {L_meta.get('liquidity_level', 'N/A')}")
+
+                results.append({
+                    'symbol': symbol,
+                    'score': score,
+                    'L_factor': L_score,
+                    'L_in_range': -100 <= L_score <= 100
+                })
+            else:
+                warn(f"  ⚠️  无结果")
+                results.append({
+                    'symbol': symbol,
+                    'score': None,
+                    'L_factor': None,
+                    'L_in_range': None
+                })
+
+        except Exception as e:
+            error(f"  ❌ 失败: {e}")
+            results.append({
+                'symbol': symbol,
+                'error': str(e),
+                'L_in_range': False
+            })
+
+        info("")
+
+    # 汇总报告
+    info("=" * 60)
+    info("📊 测试汇总")
+    info("=" * 60)
+
+    success_count = sum(1 for r in results if r.get('score') is not None)
+    l_factor_ok = sum(1 for r in results if r.get('L_in_range') == True)
+
+    info(f"成功分析: {success_count}/5")
+    info(f"L因子正常: {l_factor_ok}/{success_count}")
+
+    if l_factor_ok == success_count and success_count > 0:
+        info("")
+        info("✅ 所有测试通过！L因子范围验证正常")
+    elif success_count > 0:
+        info("")
+        warn(f"⚠️  部分L因子超出范围")
+    else:
+        info("")
+        error("❌ 所有分析失败")
+
+    info("=" * 60)
+
+    # 详细结果
+    info("\n详细结果:")
+    for r in results:
+        if 'error' in r:
+            info(f"  {r['symbol']}: ❌ {r['error']}")
+        elif r['score'] is not None:
+            info(f"  {r['symbol']}: 分数={r['score']:.1f}, L={r['L_factor']}, 范围={'✅' if r['L_in_range'] else '❌'}")
+        else:
+            info(f"  {r['symbol']}: 无结果")
+
+
+if __name__ == "__main__":
+    asyncio.run(test_5_coins())
