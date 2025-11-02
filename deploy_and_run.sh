@@ -1,14 +1,88 @@
 #!/bin/bash
 # ==========================================
-# CryptoSignal v6.2 部署并运行脚本
-# 自动部署后立即启动，无需确认
+# CryptoSignal v6.2 全自动部署并运行脚本
+# 适用于：首次部署、更新部署、全新服务器
 # ==========================================
 
 set -e  # 遇到错误立即退出
 
 echo "=============================================="
-echo "🚀 CryptoSignal v6.2 部署并运行脚本"
+echo "🚀 CryptoSignal v6.2 全自动部署并运行"
 echo "=============================================="
+echo ""
+echo "📋 脚本功能："
+echo "  ✓ 自动检测系统环境"
+echo "  ✓ 自动安装缺失依赖"
+echo "  ✓ 首次部署引导（API配置）"
+echo "  ✓ 完整验证（8步）"
+echo "  ✓ 自动启动系统"
+echo ""
+
+# ==========================================
+# 第 0 步：系统环境检测和依赖安装
+# ==========================================
+
+echo "📍 第 0 步：系统环境检测"
+echo "=============================================="
+
+# 0.1 检测 Python 3
+echo "1️⃣ 检测 Python 3..."
+if command -v python3 &> /dev/null; then
+    PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
+    echo "✅ Python 已安装: $PYTHON_VERSION"
+else
+    echo "❌ Python 3 未安装"
+    echo ""
+    echo "请先安装 Python 3.8+："
+    echo "  Ubuntu/Debian: sudo apt update && sudo apt install python3 python3-pip"
+    echo "  CentOS/RHEL:   sudo yum install python3 python3-pip"
+    exit 1
+fi
+
+# 0.2 检测 pip3
+echo ""
+echo "2️⃣ 检测 pip3..."
+if command -v pip3 &> /dev/null; then
+    echo "✅ pip3 已安装"
+else
+    echo "⚠️ pip3 未安装，尝试自动安装..."
+    if command -v apt-get &> /dev/null; then
+        sudo apt-get update && sudo apt-get install -y python3-pip
+    elif command -v yum &> /dev/null; then
+        sudo yum install -y python3-pip
+    else
+        echo "❌ 无法自动安装 pip3，请手动安装"
+        exit 1
+    fi
+    echo "✅ pip3 安装成功"
+fi
+
+# 0.3 检测 git
+echo ""
+echo "3️⃣ 检测 git..."
+if command -v git &> /dev/null; then
+    GIT_VERSION=$(git --version 2>&1 | awk '{print $3}')
+    echo "✅ git 已安装: $GIT_VERSION"
+else
+    echo "❌ git 未安装"
+    echo ""
+    echo "请先安装 git："
+    echo "  Ubuntu/Debian: sudo apt install git"
+    echo "  CentOS/RHEL:   sudo yum install git"
+    exit 1
+fi
+
+# 0.4 检测 screen（可选）
+echo ""
+echo "4️⃣ 检测 screen..."
+if command -v screen &> /dev/null; then
+    echo "✅ screen 已安装（推荐，支持后台运行）"
+else
+    echo "⚠️ screen 未安装（可选）"
+    echo "   安装方法: sudo apt install screen"
+    echo "   如未安装，将使用 nohup 后台运行"
+fi
+
 echo ""
 
 # ==========================================
@@ -17,19 +91,25 @@ echo ""
 
 echo "📍 第 1 步：停止当前运行的扫描器"
 echo "=============================================="
-cd ~/cryptosignal
 
-# 停止所有扫描器进程
-ps aux | grep realtime_signal_scanner | grep -v grep | awk '{print $2}' | xargs kill 2>/dev/null || true
-echo "✅ 已停止运行中的扫描器"
-sleep 2
+# 切换到项目目录（如果存在）
+if [ -d ~/cryptosignal ]; then
+    cd ~/cryptosignal
 
-# 确认已停止
-if ps aux | grep realtime_signal_scanner | grep -v grep; then
-    echo "⚠️ 仍有进程在运行，强制终止..."
-    ps aux | grep realtime_signal_scanner | grep -v grep | awk '{print $2}' | xargs kill -9 2>/dev/null || true
+    # 停止所有扫描器进程
+    ps aux | grep realtime_signal_scanner | grep -v grep | awk '{print $2}' | xargs kill 2>/dev/null || true
+    echo "✅ 已停止运行中的扫描器"
+    sleep 2
+
+    # 确认已停止
+    if ps aux | grep realtime_signal_scanner | grep -v grep; then
+        echo "⚠️ 仍有进程在运行，强制终止..."
+        ps aux | grep realtime_signal_scanner | grep -v grep | awk '{print $2}' | xargs kill -9 2>/dev/null || true
+    else
+        echo "✅ 没有运行的扫描器进程"
+    fi
 else
-    echo "✅ 没有运行的扫描器进程"
+    echo "⚠️ ~/cryptosignal 目录不存在，跳过停止进程"
 fi
 
 echo ""
@@ -40,49 +120,129 @@ echo ""
 
 echo "📍 第 2 步：备份当前配置"
 echo "=============================================="
-cd ~/cryptosignal
 
-# 备份配置文件（以防万一）
-BACKUP_TIME=$(date +%Y%m%d_%H%M%S)
-cp config/params.json config/params.json.bak.$BACKUP_TIME
-cp config/telegram.json config/telegram.json.bak.$BACKUP_TIME 2>/dev/null || echo "⚠️ telegram.json 不存在，跳过备份"
-cp config/binance_credentials.json config/binance_credentials.json.bak.$BACKUP_TIME 2>/dev/null || echo "⚠️ binance_credentials.json 不存在，跳过备份"
+if [ -d ~/cryptosignal/config ]; then
+    cd ~/cryptosignal
 
-echo "✅ 配置文件已备份到 *.bak.$BACKUP_TIME"
+    # 备份配置文件（以防万一）
+    BACKUP_TIME=$(date +%Y%m%d_%H%M%S)
+    cp config/params.json config/params.json.bak.$BACKUP_TIME 2>/dev/null || echo "⚠️ params.json 不存在"
+    cp config/telegram.json config/telegram.json.bak.$BACKUP_TIME 2>/dev/null || echo "⚠️ telegram.json 不存在，跳过备份"
+    cp config/binance_credentials.json config/binance_credentials.json.bak.$BACKUP_TIME 2>/dev/null || echo "⚠️ binance_credentials.json 不存在，跳过备份"
+
+    echo "✅ 配置文件已备份到 *.bak.$BACKUP_TIME"
+else
+    echo "⚠️ config 目录不存在，跳过备份"
+fi
+
 echo ""
 
 # ==========================================
-# 第 3 步：查看当前代码版本
+# 第 3 步：拉取最新代码
 # ==========================================
 
-echo "📍 第 3 步：查看当前代码版本"
+echo "📍 第 3 步：拉取最新代码（v6.2）"
+echo "=============================================="
+
+if [ -d ~/cryptosignal/.git ]; then
+    # 已在 git 仓库中，执行更新
+    cd ~/cryptosignal
+
+    echo "当前分支："
+    git branch --show-current
+
+    echo ""
+    echo "当前提交："
+    git log --oneline -3
+
+    echo ""
+    echo "正在拉取最新代码..."
+
+    # 拉取v6.2代码
+    git fetch origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
+    git checkout claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
+    git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
+
+    echo ""
+    echo "✅ 更新后的提交记录："
+    git log --oneline -5
+else
+    echo "⚠️ 不在 git 仓库中"
+    echo ""
+    echo "首次部署，请先克隆仓库："
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "cd ~"
+    echo "git clone <仓库地址> cryptosignal"
+    echo "cd cryptosignal"
+    echo "git checkout claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ"
+    echo "./deploy_and_run.sh"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    exit 1
+fi
+
+echo ""
+
+# ==========================================
+# 第 4 步：检测并安装 Python 依赖
+# ==========================================
+
+echo "📍 第 4 步：检测并安装 Python 依赖"
 echo "=============================================="
 cd ~/cryptosignal
 
-echo "当前分支："
-git branch --show-current
+# 检测 requirements.txt
+if [ ! -f "requirements.txt" ]; then
+    echo "❌ requirements.txt 不存在"
+    exit 1
+fi
 
-echo ""
-echo "当前提交："
-git log --oneline -3
+echo "1️⃣ 检测已安装的依赖..."
 
-echo ""
+# 检测关键依赖
+MISSING_DEPS=0
 
-# ==========================================
-# 第 4 步：拉取最新代码（v6.2）
-# ==========================================
+# 检测 numpy
+python3 -c "import numpy" 2>/dev/null || {
+    echo "⚠️ numpy 未安装"
+    MISSING_DEPS=1
+}
 
-echo "📍 第 4 步：拉取最新代码（v6.2）"
-echo "=============================================="
-cd ~/cryptosignal
+# 检测 pandas
+python3 -c "import pandas" 2>/dev/null || {
+    echo "⚠️ pandas 未安装"
+    MISSING_DEPS=1
+}
 
-# 拉取v6.2代码
-git fetch origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
-git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
+# 检测 aiohttp
+python3 -c "import aiohttp" 2>/dev/null || {
+    echo "⚠️ aiohttp 未安装"
+    MISSING_DEPS=1
+}
 
-echo ""
-echo "✅ 更新后的提交记录："
-git log --oneline -5
+# 检测 websockets
+python3 -c "import websockets" 2>/dev/null || {
+    echo "⚠️ websockets 未安装"
+    MISSING_DEPS=1
+}
+
+if [ $MISSING_DEPS -eq 1 ]; then
+    echo ""
+    echo "2️⃣ 检测到缺失依赖，开始安装..."
+    echo ""
+
+    # 升级 pip
+    echo "   升级 pip..."
+    python3 -m pip install --upgrade pip --quiet
+
+    # 安装依赖
+    echo "   安装依赖包（可能需要几分钟）..."
+    pip3 install -r requirements.txt --quiet
+
+    echo ""
+    echo "✅ 依赖安装完成"
+else
+    echo "✅ 所有依赖已安装"
+fi
 
 echo ""
 
@@ -157,6 +317,10 @@ print('✅ 类型安全检查通过')
 
 echo ""
 echo "3️⃣ 验证 Binance API 配置..."
+
+# 检测首次部署
+FIRST_TIME_DEPLOY=0
+
 if [ -f "config/binance_credentials.json" ]; then
     python3 -c "
 import json
@@ -164,30 +328,23 @@ with open('config/binance_credentials.json') as f:
     bn = json.load(f)['binance']
     if bn.get('api_key') and bn['api_key'] != 'YOUR_BINANCE_API_KEY_HERE':
         print('✅ Binance API配置存在')
+        exit(0)
     else:
-        print('❌ Binance API配置未填写')
-        print()
-        print('请执行以下命令配置API凭证：')
-        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-        print('cat > config/binance_credentials.json <<\\'EOF\\'')
-        print('{')
-        print('  \"_comment\": \"Binance Futures API凭证配置\",')
-        print('  \"binance\": {')
-        print('    \"api_key\": \"您的API_KEY\",')
-        print('    \"api_secret\": \"您的SECRET_KEY\",')
-        print('    \"testnet\": false,')
-        print('    \"_security\": \"只读权限API Key\"')
-        print('  }')
-        print('}')
-        print('EOF')
-        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
         exit(1)
-"
+" || FIRST_TIME_DEPLOY=1
 else
-    echo "❌ config/binance_credentials.json 不存在"
+    FIRST_TIME_DEPLOY=1
+fi
+
+if [ $FIRST_TIME_DEPLOY -eq 1 ]; then
+    echo "⚠️ Binance API 配置未填写（首次部署）"
     echo ""
-    echo "请先创建 Binance API 配置文件："
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "📝 首次部署引导：配置 Binance API"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "请执行以下命令配置 API 凭证："
+    echo ""
     echo "cat > config/binance_credentials.json <<'EOF'"
     echo '{'
     echo '  "_comment": "Binance Futures API凭证配置",'
@@ -199,9 +356,10 @@ else
     echo '  }'
     echo '}'
     echo "EOF"
+    echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "配置完成后重新运行: ./deploy_and_run.sh"
+    echo "配置完成后，重新运行: ./deploy_and_run.sh"
     exit 1
 fi
 
@@ -255,6 +413,9 @@ echo ""
 echo "🚀 正在启动生产环境（每5分钟扫描一次，200个币种）..."
 echo ""
 
+# 创建 logs 目录
+mkdir -p logs
+
 # 检查是否有 screen
 if command -v screen &> /dev/null; then
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -279,8 +440,9 @@ if command -v screen &> /dev/null; then
     # 启动 screen 会话
     screen -S cryptosignal python3 scripts/realtime_signal_scanner.py --interval 300
 else
-    echo "Screen 未安装，使用 nohup 后台启动"
-    mkdir -p logs
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "使用 nohup 后台启动"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     LOG_FILE="logs/scanner_$(date +%Y%m%d_%H%M%S).log"
 
     nohup python3 scripts/realtime_signal_scanner.py --interval 300 > "$LOG_FILE" 2>&1 &

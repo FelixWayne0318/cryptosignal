@@ -7,20 +7,43 @@
 
 ## 🚀 快速部署
 
-### 一键部署并运行（推荐）⭐⭐⭐
+### 一键全自动部署（适用于任何场景）⭐⭐⭐
+
+**适用于**：首次部署、更新部署、全新服务器（甚至删除后重新部署）
 
 ```bash
 cd ~/cryptosignal
 git fetch origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 git checkout claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
-./deploy_and_run.sh  # 自动部署并启动
+./deploy_and_run.sh  # 全自动：检测环境、安装依赖、部署、启动
 ```
 
-### 部署脚本说明
+### 脚本功能（deploy_and_run.sh）
 
-- **`./deploy_and_run.sh`** - ⭐⭐⭐ 推荐，自动部署并启动，无需确认
-- **`./deploy.sh`** - 部署后询问是否启动，需要手动确认
+✅ **第 0 步：系统环境检测**
+  - 自动检测 Python 3、pip3、git、screen
+  - pip3 未安装时自动安装
+
+✅ **第 4 步：Python 依赖自动安装**
+  - 检测 numpy、pandas、aiohttp、websockets
+  - 有缺失时自动执行 `pip install -r requirements.txt`
+
+✅ **首次部署引导**
+  - 检测 Binance API 配置
+  - 未配置时提供配置命令，引导用户完成
+
+✅ **智能检测**
+  - 检测是否在 git 仓库中
+  - 检测配置文件是否存在
+  - 自动创建 logs 目录
+
+### 部署脚本对比
+
+| 脚本 | 适用场景 | 依赖检测 | 自动启动 | 推荐度 |
+|------|----------|----------|----------|--------|
+| **deploy_and_run.sh** | **所有场景** | **✅ 自动** | **✅ 是** | **⭐⭐⭐** |
+| deploy.sh | 已部署的服务器 | ❌ 手动 | ⚠️ 需确认 | ⭐ |
 
 详细文档见 [standards/SERVER_OPERATIONS.md](standards/SERVER_OPERATIONS.md)
 
