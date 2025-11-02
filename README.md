@@ -1,15 +1,13 @@
-# CryptoSignal v6.2
+# CryptoSignal v6.4 Phase 2
 
 > **加密货币信号分析系统 - 10+1维因子体系**
-> v6.2 新增：多空对称选币机制 + 全面类型安全防护
+> v6.4 Phase 2: 新币数据流架构改造完成
 
 ---
 
 ## 🚀 快速部署
 
-### 一键全自动部署（适用于任何场景）⭐⭐⭐
-
-**适用于**：首次部署、更新部署、全新服务器（甚至删除后重新部署）
+### 一键全自动部署（推荐）⭐⭐⭐
 
 ```bash
 cd ~/cryptosignal
@@ -19,246 +17,239 @@ git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 ./deploy_and_run.sh  # 全自动：检测环境、安装依赖、部署、启动
 ```
 
-### 脚本功能（deploy_and_run.sh）
+**功能**:
+- ✅ 自动环境检测
+- ✅ 自动依赖安装
+- ✅ 首次部署引导
+- ✅ 自动启动系统
 
-✅ **第 0 步：系统环境检测**
-  - 自动检测 Python 3、pip3、git、screen
-  - pip3 未安装时自动安装
-
-✅ **第 4 步：Python 依赖自动安装**
-  - 检测 numpy、pandas、aiohttp、websockets
-  - 有缺失时自动执行 `pip install -r requirements.txt`
-
-✅ **首次部署引导**
-  - 检测 Binance API 配置
-  - 未配置时提供配置命令，引导用户完成
-
-✅ **智能检测**
-  - 检测是否在 git 仓库中
-  - 检测配置文件是否存在
-  - 自动创建 logs 目录
-
-### 部署脚本对比
-
-| 脚本 | 适用场景 | 依赖检测 | 自动启动 | 推荐度 |
-|------|----------|----------|----------|--------|
-| **deploy_and_run.sh** | **所有场景** | **✅ 自动** | **✅ 是** | **⭐⭐⭐** |
-| deploy.sh | 已部署的服务器 | ❌ 手动 | ⚠️ 需确认 | ⭐ |
-
-详细文档见 [standards/SERVER_OPERATIONS.md](standards/SERVER_OPERATIONS.md)
+详细文档见: [standards/deployment/DEPLOYMENT_GUIDE.md](standards/deployment/DEPLOYMENT_GUIDE.md)
 
 ---
 
-## 📚 规范文档
+## 📚 规范文档体系
 
-### 新用户/新对话框必读
+> ⚠️ **重要**: 所有规范文档已重组并统一到 `standards/` 目录
 
-**请先阅读规范文档**（5-10分钟快速了解整个系统）：
+### 快速导航
 
-| 文档 | 说明 | 必读性 |
-|------|------|--------|
-| **[SYSTEM_OVERVIEW.md](./docs/SYSTEM_OVERVIEW.md)** | 系统总览：核心功能、主文件、10+1维因子 | ⭐⭐⭐⭐⭐ 必读 |
-| **[MODIFICATION_RULES.md](./standards/MODIFICATION_RULES.md)** | 修改规范：什么场景改什么文件 | ⭐⭐⭐⭐ 强烈推荐 |
-| **[QUICK_REFERENCE.md](./docs/QUICK_REFERENCE.md)** | 快速参考：常用命令、文件路径、常见场景（1分钟速查） | ⭐⭐⭐⭐ 强烈推荐 |
-| **[DEVELOPMENT_WORKFLOW.md](./docs/DEVELOPMENT_WORKFLOW.md)** | 开发流程：提交规范、测试要求、完整流程示例 | ⭐⭐⭐⭐ 强烈推荐 |
-| **[CONFIGURATION_GUIDE.md](./docs/CONFIGURATION_GUIDE.md)** | 配置详解：所有参数的含义 | ⭐⭐⭐ 推荐 |
-| **[ARCHITECTURE.md](./docs/ARCHITECTURE.md)** | 技术架构：数据流和核心模块 | ⭐⭐⭐ 推荐 |
+| 角色 | 推荐文档 | 优先级 |
+|------|---------|--------|
+| **新用户** | [standards/deployment/QUICK_START.md](standards/deployment/QUICK_START.md) | ⭐⭐⭐⭐⭐ |
+| **运维人员** | [standards/deployment/DEPLOYMENT_GUIDE.md](standards/deployment/DEPLOYMENT_GUIDE.md) | ⭐⭐⭐⭐⭐ |
+| **开发人员** | [standards/01_SYSTEM_OVERVIEW.md](standards/01_SYSTEM_OVERVIEW.md) | ⭐⭐⭐⭐⭐ |
+| **量化研究** | [standards/specifications/FACTOR_SYSTEM.md](standards/specifications/FACTOR_SYSTEM.md) | ⭐⭐⭐⭐ |
 
----
+### 完整索引
 
-## 📦 项目结构
-
-```
-cryptosignal/
-│
-├── standards/                         # ⭐ 规范文档（规则性质）
-│   ├── MODIFICATION_RULES.md          # 修改规范
-│   └── STANDARDIZATION_REPORT.md      # 标准化报告
-│
-├── docs/                              # 📚 说明文档（指南性质）
-│   ├── SYSTEM_OVERVIEW.md             # 系统总览
-│   ├── QUICK_REFERENCE.md             # 快速参考
-│   ├── DEVELOPMENT_WORKFLOW.md        # 开发流程
-│   ├── CONFIGURATION_GUIDE.md         # 配置详解
-│   └── ARCHITECTURE.md                # 技术架构
-│
-├── scripts/
-│   └── realtime_signal_scanner.py     # ⭐ 主文件（唯一运行入口）
-│
-├── config/
-│   ├── params.json                    # ⭐ 核心参数配置
-│   └── telegram.json                  # Telegram配置
-│
-├── ats_core/                          # 核心代码库
-│   ├── pipeline/                      # 分析管道
-│   ├── features/                      # 基础因子（T/M/C/S/V/O/F）
-│   ├── factors_v2/                    # 新增因子（L/B/Q/I）
-│   ├── scoring/                       # 评分系统
-│   ├── sources/                       # 数据源
-│   ├── outputs/                       # 输出模块
-│   └── ...
-│
-├── tests/                             # 单元测试
-└── tools/                             # 辅助工具
-```
+→ **[standards/00_INDEX.md](standards/00_INDEX.md)** - 规范文档总索引（入口）
 
 ---
 
-## 🎯 主要功能
+## 🎯 系统版本
 
-- **10+1维因子分析系统**（T/M/C/S/V/O/L/B/Q/I + F调节器）
-- **WebSocket优化**（0次API调用，12-15秒/200币种）
-- **自适应权重系统**（根据市场状态动态调整）
-- **Prime信号判定**（v6.0权重百分比系统，阈值35分）
-- **Telegram自动推送**（格式化信号消息）
+**当前版本**: v6.4 Phase 2
+**更新日期**: 2025-11-02
+
+### 版本历史
+
+| 版本 | 日期 | 关键特性 | 合规度 |
+|------|------|---------|--------|
+| v6.0 | 2025-10-30 | 10+1维因子系统 | - |
+| v6.1 | 2025-11-01 | I因子架构修正 | - |
+| v6.2 | 2025-11-02 | 4个Critical Bug修复 | - |
+| v6.3 | 2025-11-02 | 解决0信号困境 | - |
+| v6.3.2 | 2025-11-02 | 新币逻辑冲突修复 | 12.8% |
+| **v6.4** | **2025-11-02** | **新币数据流架构改造** | **40%** |
+
+详见: [standards/03_VERSION_HISTORY.md](standards/03_VERSION_HISTORY.md)
+
+---
+
+## 📦 主要功能
+
+### v6.4 Phase 2 核心改进
+
+✅ **新币数据流分离**
+- 数据获取前快速预判
+- 新币使用1m/5m/15m数据（vs 成熟币1h/4h）
+- AVWAP锚点计算
+
+✅ **WebSocket实时订阅**
+- kline_1m/5m/15m实时流
+- 指数回退重连
+- 心跳监控与DataQual降级
+
+✅ **架构性改进**
+- 解决数据获取顺序倒置问题
+- 为Phase 3新币专用因子做准备
+
+详见: [standards/specifications/NEWCOIN.md](standards/specifications/NEWCOIN.md)
+
+### 核心系统
+
+- **10+1维因子系统** (T/M/C/S/V/O/L/B/Q/I + F调节器)
+- **四门系统** (DataQual/EV/Execution/Probability)
+- **防抖动机制** (入场/确认/冷却)
+- **新币通道** (Phase 2已实现数据流，Phase 3-4待完成)
 
 ---
 
 ## 🏃 运行方式
 
-### 主文件（唯一入口）
+### 主入口文件
 
 ```bash
 # 单次扫描
-python3 scripts/realtime_signal_scanner.py --once
+python3 scripts/realtime_signal_scanner.py
 
-# 持续扫描（每5分钟）
+# 定期扫描（每5分钟）
 python3 scripts/realtime_signal_scanner.py --interval 300
 
-# 测试模式（只扫描20个币种）
-python3 scripts/realtime_signal_scanner.py --max-symbols 20 --once
+# 测试模式（10个币种）
+python3 scripts/realtime_signal_scanner.py --max-symbols 10
 ```
 
-### 服务器部署
+### 后台运行（Screen）
 
 ```bash
-# 拉取最新代码
-cd ~/cryptosignal
-git pull origin <branch>
+# 启动Screen会话
+screen -S cryptosignal
+python3 scripts/realtime_signal_scanner.py --interval 300
 
-# 清除缓存
-find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
-
-# 后台运行
-nohup python3 scripts/realtime_signal_scanner.py --interval 300 > scanner.log 2>&1 &
-
-# 查看日志
-tail -f scanner.log
+# 分离会话: Ctrl+A 然后 D
+# 重连会话: screen -r cryptosignal
 ```
 
 ---
 
-## ⚙️ 配置
+## ⚙️ 配置文件
+
+### 核心配置
+
+- **`config/params.json`** - 权重、阈值、发布参数
+- **`config/telegram.json`** - Telegram通知配置
+- **`config/binance_credentials.json`** - Binance API凭证
 
 ### 修改权重
-
-编辑 `config/params.json` → `weights` 字段
-
-**要求**: 总权重必须=100%
 
 ```json
 {
   "weights": {
-    "T": 13.9,  "M": 8.3,  "C": 11.1,  "S": 5.6,
-    "V": 8.3,   "O": 11.1, "L": 11.1,  "B": 8.3,
-    "Q": 5.6,   "I": 6.7,  "E": 0,     "F": 10.0
+    "T": 13.9, "M": 8.3, "C": 11.1, "S": 5.6,
+    "V": 8.3, "O": 11.1, "L": 11.1, "B": 8.3,
+    "Q": 5.6, "F": 0.0, "I": 0.0
   }
 }
 ```
 
-详见: [CONFIGURATION_GUIDE.md](./docs/CONFIGURATION_GUIDE.md)
+**要求**: A层9因子总和必须=100%，B层调制器(F/I)=0
 
-### 修改Prime阈值
+详见: [standards/configuration/PARAMS_SPEC.md](standards/configuration/PARAMS_SPEC.md)
 
-编辑 `config/params.json` → `publish` 字段
+---
 
-```json
-{
-  "publish": {
-    "prime_prob_min": 0.62,     // 降低→信号更多
-    "prime_dims_ok_min": 4,
-    "prime_dim_threshold": 65
-  }
-}
+## 📊 项目结构
+
+```
+cryptosignal/
+├── standards/                    # ⭐ 规范文档（统一入口）
+│   ├── 00_INDEX.md              # 总索引
+│   ├── 01_SYSTEM_OVERVIEW.md    # 系统概览
+│   ├── 03_VERSION_HISTORY.md    # 版本历史
+│   ├── specifications/          # 规范子系统
+│   ├── deployment/              # 部署运维
+│   ├── configuration/           # 配置管理
+│   └── development/             # 开发指南
+│
+├── scripts/
+│   └── realtime_signal_scanner.py   # ⭐ 主入口
+│
+├── ats_core/                    # 核心代码
+│   ├── pipeline/                # 分析流水线
+│   ├── factors_v2/              # 因子计算
+│   ├── gates/                   # 四门系统
+│   ├── publishing/              # 发布系统
+│   └── data_feeds/              # 数据获取（Phase 2新增）
+│
+├── config/                      # 配置文件
+│   ├── params.json
+│   ├── telegram.json
+│   └── binance_credentials.json
+│
+├── deploy_and_run.sh            # ⭐ 一键部署脚本
+└── test_phase2.py               # Phase 2测试脚本
 ```
 
-详见: [MODIFICATION_RULES.md § 2](./standards/MODIFICATION_RULES.md#2-调整prime阈值)
-
 ---
 
-## 📊 系统版本
+## 🔬 测试
 
-- **当前版本**: v6.0（权重百分比系统）
-- **升级时间**: 2025-10
-- **主要变更**:
-  - 180分制 → 100%百分比系统
-  - F因子参与评分（权重10.0%）
-  - Prime阈值从65分调整为35分
+### Phase 2测试
 
----
+```bash
+# 测试新币数据获取
+python3 test_phase2.py BTCUSDT
 
-## 🔗 重要链接
-
-- **规范文档**: [standards/](./standards/)
-- **主文件**: [scripts/realtime_signal_scanner.py](./scripts/realtime_signal_scanner.py)
-- **配置文件**: [config/params.json](./config/params.json)
-
----
-
-## 📝 开发规范
-
-### 修改代码前必读
-
-1. 查看 [MODIFICATION_RULES.md](./standards/MODIFICATION_RULES.md) 确定修改哪个文件
-2. 查看 [CONFIGURATION_GUIDE.md](./standards/CONFIGURATION_GUIDE.md) 了解参数含义
-3. 修改后清除缓存并测试
-
-### 禁止修改的文件
-
-以下文件包含核心逻辑，除非完全理解系统架构，否则禁止修改：
-- `ats_core/pipeline/batch_scan_optimized.py`
-- `ats_core/data/realtime_kline_cache.py`
-- `ats_core/sources/binance.py`
-- `ats_core/cfg.py`
-
-详见: [MODIFICATION_RULES.md § 禁止修改的文件](./standards/MODIFICATION_RULES.md#-禁止修改的文件)
+# 测试新币vs成熟币
+python3 test_phase2.py BTCUSDT ETHUSDT
+```
 
 ---
 
 ## 🎓 学习路径
 
-### 初级用户（使用系统）
-1. 阅读 [SYSTEM_OVERVIEW.md](./standards/SYSTEM_OVERVIEW.md)
-2. 运行测试
-3. 调整Telegram配置
+### 新用户
 
-### 中级用户（调整参数）
-1. 阅读 [CONFIGURATION_GUIDE.md](./standards/CONFIGURATION_GUIDE.md)
-2. 调整权重或阈值
-3. 观察效果
+1. 阅读: [01_SYSTEM_OVERVIEW.md](standards/01_SYSTEM_OVERVIEW.md)
+2. 部署: `./deploy_and_run.sh`
+3. 配置: [deployment/TELEGRAM_SETUP.md](standards/deployment/TELEGRAM_SETUP.md)
 
-### 高级用户（修改代码）
-1. 阅读 [ARCHITECTURE.md](./standards/ARCHITECTURE.md)
-2. 理解核心模块
-3. 按规范修改
+### 开发人员
+
+1. 系统概览: [01_SYSTEM_OVERVIEW.md](standards/01_SYSTEM_OVERVIEW.md)
+2. 架构设计: [02_ARCHITECTURE.md](standards/02_ARCHITECTURE.md)
+3. 因子规范: [specifications/FACTOR_SYSTEM.md](standards/specifications/FACTOR_SYSTEM.md)
+4. 新币规范: [specifications/NEWCOIN.md](standards/specifications/NEWCOIN.md)
+5. 开发流程: [development/WORKFLOW.md](standards/development/WORKFLOW.md)
+
+---
+
+## 📈 下一步计划
+
+### Phase 3: 新币专用因子与模型（v6.5）
+
+**目标**: 合规度40% → 65%
+
+**待实现**:
+- T_new/M_new/S_new因子（基于ZLEMA_1m/5m）
+- 点火-成势-衰竭模型
+- 新币专用权重配置
+
+**工作量**: 4-6天
+
+详见: [specifications/NEWCOIN.md § 9](standards/specifications/NEWCOIN.md#9-实施进度phase-2-phase-4)
 
 ---
 
 ## ⚠️ 注意事项
 
-1. **所有修改必须符合规范**（参考 `standards/` 文件夹）
-2. **主文件**: 只有 `scripts/realtime_signal_scanner.py`
-3. **权重总和**: 必须=100%
-4. **修改后**: 清除缓存并测试
+1. **规范文档**：所有规范已统一到 `standards/` 目录
+2. **版本**: 当前为v6.4 Phase 2，合规度40%
+3. **主入口**: `scripts/realtime_signal_scanner.py`
+4. **部署脚本**: `deploy_and_run.sh`
+5. **配置**: 修改 `config/params.json` 后需清除缓存
 
 ---
 
 ## 📞 支持
 
-- 遇到问题: 先查看文档 [docs/](./docs/) 和 [standards/](./standards/)
-- 新对话框: 先阅读 [SYSTEM_OVERVIEW.md](./docs/SYSTEM_OVERVIEW.md)
+- **规范文档**: [standards/00_INDEX.md](standards/00_INDEX.md)
+- **快速参考**: [standards/reference/QUICK_REFERENCE.md](standards/reference/QUICK_REFERENCE.md)
+- **问题反馈**: GitHub Issues
 
 ---
 
-**版本**: v6.0
-**最后更新**: 2025-10-30
+**版本**: v6.4 Phase 2
+**最后更新**: 2025-11-02
+**分支**: claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ

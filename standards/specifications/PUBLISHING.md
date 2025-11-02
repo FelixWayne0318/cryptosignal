@@ -1,0 +1,1 @@
+../../newstandards/PUBLISHING.md
