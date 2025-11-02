@@ -402,7 +402,7 @@ class OptimizedBatchScanner:
 
     async def scan(
         self,
-        min_score: int = 70,
+        min_score: int = 35,  # v6.3: 降低阈值从70到35（专家建议 #4）
         max_symbols: Optional[int] = None,
         on_signal_found: Optional[callable] = None,
         verbose: bool = False
@@ -411,7 +411,7 @@ class OptimizedBatchScanner:
         批量扫描（超快速，约5秒）
 
         Args:
-            min_score: 最低信号分数
+            min_score: 最低信号分数（v6.3: 默认35，适配放宽后的评分系统）
             max_symbols: 最大扫描币种数（None=全部，用于测试）
             on_signal_found: 发现信号时的回调函数（实时处理信号）
                             async def callback(signal_dict) -> None
@@ -473,8 +473,19 @@ class OptimizedBatchScanner:
                 else:
                     coin_age_hours = 0
 
-                # 根据币种年龄确定最小数据要求
-                if coin_age_hours <= 24:
+                # v6.3修复：检测K线缓存限制（专家建议 #1）
+                # 当coin_age_hours接近K线缓存上限（300根1h K线 ≈ 299小时）时，
+                # 实际币龄可能远大于此，应默认为成熟币而非新币
+                # 阈值：≥200小时（约8.3天）视为数据受限，默认"成熟币"
+                data_limited = coin_age_hours >= 200
+
+                # 根据币种年龄确定最小数据要求（v6.3: 数据受限时强制视为成熟币）
+                if data_limited:
+                    # 数据受限（≥200小时），无法确定真实币龄，默认成熟币
+                    min_k1h = 96
+                    min_k4h = 50
+                    coin_type = "成熟币(数据受限)"
+                elif coin_age_hours <= 24:
                     # 超新币（1-24小时）
                     min_k1h = 10
                     min_k4h = 3
@@ -490,7 +501,7 @@ class OptimizedBatchScanner:
                     min_k4h = 15
                     coin_type = "新币B"
                 else:
-                    # 成熟币
+                    # 正常成熟币（数据充足）
                     min_k1h = 96
                     min_k4h = 50
                     coin_type = "成熟币"
@@ -583,6 +594,8 @@ class OptimizedBatchScanner:
                         f"P_chosen={prime_breakdown.get('P_chosen',0):.3f}")
 
                 # v6.2修复：使用min_score参数过滤信号
+                # v6.3新增：显示拒绝原因（专家建议 #5）
+                rejection_reasons = result.get('publish', {}).get('rejection_reason', [])
                 if is_prime and prime_strength >= min_score:
                     results.append(result)
                     log(f"✅ {symbol}: Prime强度={prime_strength}, 置信度={confidence:.0f}")
@@ -593,6 +606,10 @@ class OptimizedBatchScanner:
                             await on_signal_found(result)
                         except Exception as e:
                             warn(f"⚠️  信号回调失败: {e}")
+                elif verbose or i < 10:
+                    # 显示拒绝原因（前10个或verbose模式）
+                    if rejection_reasons:
+                        log(f"  └─ ❌ 拒绝: {'; '.join(rejection_reasons[:2])}")  # 只显示前2条原因
 
                 # 进度显示（每20个）
                 if (i + 1) % 20 == 0:

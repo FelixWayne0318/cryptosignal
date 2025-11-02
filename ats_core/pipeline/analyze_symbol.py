@@ -160,17 +160,33 @@ def _analyze_symbol_core(
 
     coin_age_days = coin_age_hours / 24
 
+    # v6.3修复：检测K线缓存限制（专家建议 #1）
+    # 当coin_age_hours接近K线缓存上限（300根1h K线 ≈ 299小时）时，
+    # 实际币龄可能远大于此，应默认为成熟币而非新币
+    # 阈值：≥200小时（约8.3天）视为数据受限，默认"成熟币"
+    data_limited = coin_age_hours >= 200
+
     # 4级分级阈值
     ultra_new_hours = new_coin_cfg.get("ultra_new_hours", 24)  # 1-24小时：超新
     phaseA_days = new_coin_cfg.get("phaseA_days", 7)            # 1-7天：极度谨慎
     phaseB_days = new_coin_cfg.get("phaseB_days", 30)           # 7-30天：谨慎
 
-    # 判断阶段
-    is_ultra_new = coin_age_hours <= ultra_new_hours  # 1-24小时
-    is_phaseA = coin_age_days <= phaseA_days and not is_ultra_new  # 1-7天
-    is_phaseB = phaseA_days < coin_age_days <= phaseB_days  # 7-30天
-    is_new_coin = coin_age_days <= phaseB_days
+    # 判断阶段（v6.3: 数据受限时强制视为成熟币）
+    if data_limited:
+        # 数据受限（≥200小时），无法确定真实币龄，默认成熟币
+        is_ultra_new = False
+        is_phaseA = False
+        is_phaseB = False
+        is_new_coin = False
+        coin_phase = "mature"
+    else:
+        # 数据充足，正常分级
+        is_ultra_new = coin_age_hours <= ultra_new_hours  # 1-24小时
+        is_phaseA = coin_age_days <= phaseA_days and not is_ultra_new  # 1-7天
+        is_phaseB = phaseA_days < coin_age_days <= phaseB_days  # 7-30天
+        is_new_coin = coin_age_days <= phaseB_days
 
+    # 确定数据要求（v6.3: coin_phase在数据受限时已设置为mature）
     if is_ultra_new:
         coin_phase = "ultra_new"  # 超新币（1-24小时）
         min_data = 10              # 至少10根1h K线
@@ -180,8 +196,12 @@ def _analyze_symbol_core(
     elif is_phaseB:
         coin_phase = "phaseB"     # 阶段B（7-30天）
         min_data = 50
+    elif not data_limited:
+        # 正常成熟币（数据充足）
+        coin_phase = "mature"
+        min_data = 50
     else:
-        coin_phase = "mature"     # 成熟币
+        # 数据受限的成熟币（已在上面设置coin_phase="mature"）
         min_data = 50
 
     # 检查数据是否足够
@@ -339,16 +359,21 @@ def _analyze_symbol_core(
                 # v6.2修复：calculate_independence已返回标准化后的±100分数
                 # (通过StandardizationChain处理，参见independence.py:187-188)
                 # 无需再次映射，直接使用
-                I, beta_sum, I_meta = calculate_independence(
+                I_raw, beta_sum, I_meta = calculate_independence(
                     alt_prices=alt_prices,
                     btc_prices=btc_prices,
                     eth_prices=eth_prices,
                     params=params.get("independence", {})
                 )
-                # I已经是±100范围，直接使用（不再做二次映射）
+
+                # v6.3修复：软化I调制器，避免±100硬截断（专家建议 #2）
+                # 使用tanh()函数将极值软化：-100→-96, +100→+96
+                import math
+                I = 100 * math.tanh(I_raw / 50)
 
                 # 补充元数据
                 I_meta['data_points'] = use_len
+                I_meta['I_raw'] = I_raw  # 保存原始值用于调试
             else:
                 I, I_meta = 0, {"note": f"数据不足（需要25小时，实际{min_len}小时）"}
         except Exception as e:
@@ -368,9 +393,15 @@ def _analyze_symbol_core(
 
     # ---- 2.5. 计算F调节器（提前计算，让F参与方向判断）----
     # F本身是带符号的（+表示资金领先，-表示价格领先），不需要依赖side_long
-    F, F_meta = _calc_fund_leading(
+    F_raw, F_meta = _calc_fund_leading(
         oi_change_pct, vol_ratio, cvd6, price_change_24h, price_slope, params.get("fund_leading", {})
     )
+
+    # v6.3修复：软化F调制器，避免±100硬截断（专家建议 #2）
+    # 使用tanh()函数将极值软化：-100→-96, -50→-76
+    import math
+    F = 100 * math.tanh(F_raw / 50)
+    F_meta['F_raw'] = F_raw  # 保存原始值用于调试
 
     # ---- 3. Scorecard（10维统一±100系统，v2.0合规版）----
     # 🔧 v2.0合规修复：F/I移至B层调制器，不参与方向评分
@@ -603,6 +634,37 @@ def _analyze_symbol_core(
     # 计算达标维度数（保留用于元数据）
     dims_ok = sum(1 for s in scores.values() if abs(s) >= prime_dim_threshold)
 
+    # v6.3新增：拒绝原因跟踪（专家建议 #5）
+    rejection_reason = []
+    if not is_prime:
+        if prime_strength < 25:
+            rejection_reason.append(f"Prime强度不足({prime_strength:.1f} < 25)")
+            if base_strength < 15:
+                rejection_reason.append(f"  - 基础强度过低({base_strength:.1f}/60)")
+            if confidence < 25:
+                rejection_reason.append(f"  - 综合置信度低({confidence:.1f}/100)")
+            if prob_bonus < 5:
+                rejection_reason.append(f"  - 概率加成不足({prob_bonus:.1f}/40, P={P_chosen:.3f})")
+        if dims_ok < prime_dims_ok_min:
+            rejection_reason.append(f"达标维度不足({dims_ok} < {prime_dims_ok_min})")
+        if P_chosen < prime_prob_min:
+            rejection_reason.append(f"概率过低({P_chosen:.3f} < {prime_prob_min:.3f})")
+        # 检查四门得分
+        gates = {
+            "data_qual": min(1.0, len(k1) / 200.0) if k1 else 0.0,
+            "ev_gate": (P_chosen - 0.5) * 2,
+            "execution": (scores.get('L', 0) + 100) / 200,
+            "probability": (P_chosen - 0.5) / 0.45 if P_chosen >= 0.5 else (P_chosen - 0.5) / 0.5,
+        }
+        if gates['data_qual'] < 0.5:
+            rejection_reason.append(f"数据质量不足({gates['data_qual']:.2f} < 0.5)")
+        if gates['ev_gate'] < -0.5:
+            rejection_reason.append(f"EV过低({gates['ev_gate']:.2f} < -0.5)")
+        if gates['execution'] < 0.3:
+            rejection_reason.append(f"执行质量差({gates['execution']:.2f} < 0.3, L={scores.get('L',0):.1f})")
+    else:
+        rejection_reason = ["通过(Prime)"]
+
     # ---- 6. BTC/ETH市场过滤器（方案B - 独立过滤 + 避免双重惩罚）----
     # 计算市场大盘趋势，避免逆势做单
     import time
@@ -696,6 +758,7 @@ def _analyze_symbol_core(
             "dims_ok": dims_ok,
             "prime_strength": int(prime_strength),  # Prime评分（0-100）
             "prime_breakdown": prime_breakdown,  # Prime评分详细分解（v4.0新增）
+            "rejection_reason": rejection_reason,  # v6.3新增：拒绝原因跟踪
             "ttl_h": 8
         },
 
@@ -729,22 +792,24 @@ def _analyze_symbol_core(
         "f_veto_warning": None,
 
         # v6.2新增：四门系统（简化版）
+        # v6.3修复：EV改为可选加分项，不再是硬性要求（专家建议 #3）
         # 完整版需集成integrated_gates.py的FourGatesChecker
         "gates": {
             # Gate 1: DataQual - 数据质量评估（基于K线完整性）
             "data_qual": min(1.0, len(k1) / 200.0) if k1 else 0.0,  # ≥200根K线为满分
 
-            # Gate 2: EV - 期望值简化估算
-            # EV ≈ (P - 0.5) * 2，范围-1到+1，归一化到0-1
-            "ev_gate": max(0.0, (P_chosen - 0.5) * 2),
+            # Gate 2: EV - 期望值简化估算（v6.3: 改为加分项，允许负值）
+            # EV ≈ (P - 0.5) * 2，范围-1到+1（不再截断为0-1）
+            # 正值=加分，负值=扣分，而非硬性否决
+            "ev_gate": (P_chosen - 0.5) * 2,  # 允许 -1 到 +1 范围
 
-            # Gate 3: Execution - 执行质量（基于流动性）
-            # L>0表示流动性好，归一化到0-1
-            "execution": max(0.0, min(1.0, (L + 100) / 200)),  # L从-100映射到0-1
+            # Gate 3: Execution - 执行质量（基于流动性，v6.3: 软化为评分制）
+            # L值直接反映流动性好坏，不再强制截断到0-1
+            "execution": (L + 100) / 200,  # L从-100到+100映射到0-1，允许超出
 
-            # Gate 4: Probability - 概率阈值
-            # P≥0.58视为达标，归一化显示
-            "probability": max(0.0, (P_chosen - 0.5) / 0.45) if P_chosen >= 0.5 else 0.0,
+            # Gate 4: Probability - 概率阈值（v6.3: 改为渐变评分）
+            # 不再要求P≥0.5才有分，允许低概率也有部分得分
+            "probability": (P_chosen - 0.5) / 0.45 if P_chosen >= 0.5 else (P_chosen - 0.5) / 0.5,
         },
 
         # 🚀 世界顶级优化模块元数据
