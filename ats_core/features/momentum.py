@@ -54,10 +54,6 @@ def score_momentum(
     if isinstance(params, dict):
         p.update(params)
 
-    # DEBUG: 验证参数是否正确加载
-    from ats_core.logging import log as _log
-    _log(f"  [M因子参数] slope_scale={p['slope_scale']}, accel_scale={p['accel_scale']}")
-
     if len(c) < 30:
         return 0, {"slope_now": 0.0, "accel": 0.0, "slope_score": 0, "accel_score": 0}
 
@@ -98,23 +94,12 @@ def score_momentum(
     slope_score = (slope_score_raw - 50) * 2
     accel_score = (accel_score_raw - 50) * 2
 
-    # DEBUG: 添加更详细的中间值日志
-    from ats_core.logging import log as _log
-    _log(f"  [M因子详细] slope_now={slope_now:.6f}, accel={accel:.6f}, atr={atr_val:.4f}")
-    _log(f"  [M因子详细] slope_norm={slope_normalized:.4f}, accel_norm={accel_normalized:.4f}")
-    _log(f"  [M因子详细] slope_raw={slope_score_raw}, accel_raw={accel_score_raw} → slope={slope_score}, accel={accel_score}")
-
     # ========== 4. 加权平均（原始值）==========
     M_raw = p["slope_weight"] * slope_score + p["accel_weight"] * accel_score
 
     # v2.0合规：应用StandardizationChain
     M_pub, diagnostics = _momentum_chain.standardize(M_raw)
     M = int(round(M_pub))
-
-    # DEBUG: 临时日志，观察M_raw到M_pub的转换
-    if abs(M_raw) > 1.0:  # 只记录非零情况
-        from ats_core.logging import log as _log
-        _log(f"  [M因子DEBUG] M_raw={M_raw:.2f} → M_pub={M_pub:.2f} → M={M} (z_raw={diagnostics.z_raw:.2f}, median={diagnostics.ew_median:.2f}, mad={diagnostics.ew_mad:.4f})")
 
     # ========== 5. 解释 ==========
     if M >= 60:
