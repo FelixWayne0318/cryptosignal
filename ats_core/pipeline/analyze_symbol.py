@@ -43,6 +43,9 @@ from ats_core.scoring.adaptive_weights import (
     get_regime_weights,
     blend_weights
 )
+
+# ========== v6.6 统一调制器系统 ==========
+from ats_core.modulators.modulator_chain import ModulatorChain
 from ats_core.features.multi_timeframe import multi_timeframe_coherence
 
 # ========== 10维因子系统 ==========
@@ -475,11 +478,13 @@ def _analyze_symbol_core(
             warn(f"⚠️  因子{factor_name}超出范围: {factor_value}, 裁剪到±100")
             scores[factor_name] = max(-100, min(100, factor_value))
 
-    # B-layer modulation factors (F/I affect Teff/cost/thresholds ONLY, NOT S_score)
-    # Per MODULATORS.md § 2.1: "F/I 仅调节 Teff/cost/thresholds，绝不修改方向分数"
+    # v6.6: B-layer modulation factors (L/S/F/I affect position/Teff/cost/confidence)
+    # 调制器不参与评分（权重=0%），仅调整执行参数
     modulation = {
-        "F": F,  # Funding leading factor (拥挤度调制器)
-        "I": I,  # Independence factor (独立性调制器)
+        "L": L,  # Liquidity modulator
+        "S": S,  # Structure modulator
+        "F": F,  # Funding leading modulator
+        "I": I,  # Independence modulator
     }
 
     # 计算加权分数（scorecard内部已归一化到±100）
@@ -491,6 +496,39 @@ def _analyze_symbol_core(
 
     # 方向判断（根据加权分数符号）
     side_long = (weighted_score > 0)
+
+    # ---- v6.6: 调制器链调用 ----
+    # 创建调制器链实例
+    modulator_chain = ModulatorChain(params={
+        "T0": 2.0,
+        "cost_base": 0.0015,
+        "L_params": {"min_position": 0.30, "safety_margin": 0.005},
+        "S_params": {"confidence_min": 0.70, "confidence_max": 1.30},
+        "F_params": {"Teff_min": 0.80, "Teff_max": 1.20},
+        "I_params": {"Teff_min": 0.85, "Teff_max": 1.15}
+    })
+
+    # 准备L_components（从L_meta提取）
+    L_components = {
+        "spread_bps": L_meta.get("spread_bps", 10.0),
+        "depth_quality": L_meta.get("depth_quality", 50.0),
+        "impact_bps": L_meta.get("impact_bps", 5.0),
+        "obi": L_meta.get("obi", 0.0)
+    }
+
+    # 执行调制器链
+    modulator_output = modulator_chain.modulate_all(
+        L_score=L,  # L from liquidity.py: [0, 100]
+        S_score=S,  # S from structure_sq.py: [-100, +100]
+        F_score=F,  # F from fund_leading.py: [-100, +100]
+        I_score=I,  # I from independence.py: [-100, +100]
+        L_components=L_components,
+        confidence_base=confidence,
+        symbol=symbol
+    )
+
+    # 更新confidence使用调制后的值
+    confidence_modulated = modulator_output.confidence_final
 
     # 元数据
     scores_meta = {
@@ -537,10 +575,12 @@ def _analyze_symbol_core(
             quality_score = min(1.0, quality_score / 0.85 * 0.87)
         # 注：补偿不能超过1.0，且仍保留一定惩罚（体现数据少的风险）
 
-    # 自适应温度参数
-    temperature = get_adaptive_temperature(market_regime_early, current_volatility)
+    # v6.6: 使用调制器链的Teff（替代get_adaptive_temperature）
+    # 调制器已融合了L/S/F/I的温度调整
+    temperature = modulator_output.Teff_final
 
     # 使用Sigmoid概率映射（替代线性映射）
+    # v6.6: 使用调制后的temperature和cost
     P_long_base, P_short_base = map_probability_sigmoid(edge, prior_up, quality_score, temperature)
     P_base = P_long_base if side_long else P_short_base
 
@@ -786,6 +826,12 @@ def _analyze_symbol_core(
 
         # B-layer调节因子（v2.0新增：F不参与评分，仅用于Teff/cost调节）
         "modulation": modulation,
+
+        # v6.6: 调制器输出（L/S/F/I调制链结果）
+        "modulator_output": modulator_output.to_dict(),
+        "position_mult": modulator_output.position_mult,  # 仓位倍数 [0.30, 1.00]
+        "Teff_final": modulator_output.Teff_final,  # 最终温度（融合后）
+        "cost_modulated": modulator_output.cost_final,  # 调制后成本
 
         # Scorecard结果
         "weighted_score": weighted_score,  # -100 到 +100
