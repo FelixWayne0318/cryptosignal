@@ -885,7 +885,11 @@ def _analyze_symbol_core(
 
     # ---- v6.6: 详细因子输出日志（用于测试和调试）----
     from ats_core.logging import log as _log
-    _VERBOSE_FACTOR_LOG = True  # 详细输出开关
+    # 详细输出策略：只对Prime/Watch信号或测试模式显示详细因子分析
+    # 环境变量VERBOSE_FACTOR_LOG=1可强制所有币种详细输出（用于测试）
+    import os
+    force_verbose = os.environ.get('VERBOSE_FACTOR_LOG', '0') == '1'
+    _VERBOSE_FACTOR_LOG = force_verbose or is_prime or is_watch
     if _VERBOSE_FACTOR_LOG:
         # 6个核心因子详情
         core_factors = ['T', 'M', 'C', 'V', 'O', 'B']

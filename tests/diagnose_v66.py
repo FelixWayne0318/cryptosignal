@@ -12,6 +12,10 @@ v6.6架构诊断工具 - 深度分析单个币种
 
 import sys
 import os
+
+# 启用详细因子日志（诊断模式）
+os.environ['VERBOSE_FACTOR_LOG'] = '1'
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ats_core.pipeline.analyze_symbol import analyze_symbol

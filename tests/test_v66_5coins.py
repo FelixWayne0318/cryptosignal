@@ -19,6 +19,9 @@ v6.6架构：
 import sys
 import os
 
+# 启用详细因子日志（测试模式）
+os.environ['VERBOSE_FACTOR_LOG'] = '1'
+
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

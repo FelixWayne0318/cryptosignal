@@ -94,6 +94,12 @@ def score_momentum(
     slope_score = (slope_score_raw - 50) * 2
     accel_score = (accel_score_raw - 50) * 2
 
+    # DEBUG: 添加更详细的中间值日志
+    from ats_core.logging import log as _log
+    _log(f"  [M因子详细] slope_now={slope_now:.6f}, accel={accel:.6f}, atr={atr_val:.4f}")
+    _log(f"  [M因子详细] slope_norm={slope_normalized:.4f}, accel_norm={accel_normalized:.4f}")
+    _log(f"  [M因子详细] slope_raw={slope_score_raw}, accel_raw={accel_score_raw} → slope={slope_score}, accel={accel_score}")
+
     # ========== 4. 加权平均（原始值）==========
     M_raw = p["slope_weight"] * slope_score + p["accel_weight"] * accel_score
 
