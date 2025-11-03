@@ -54,6 +54,10 @@ def score_momentum(
     if isinstance(params, dict):
         p.update(params)
 
+    # DEBUG: 验证参数是否正确加载
+    from ats_core.logging import log as _log
+    _log(f"  [M因子参数] slope_scale={p['slope_scale']}, accel_scale={p['accel_scale']}")
+
     if len(c) < 30:
         return 0, {"slope_now": 0.0, "accel": 0.0, "slope_score": 0, "accel_score": 0}
 
