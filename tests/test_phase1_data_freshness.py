@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from ats_core.pipeline.batch_scan_optimized import BatchScanner
+from ats_core.pipeline.batch_scan_optimized import OptimizedBatchScanner
 from ats_core.data.realtime_kline_cache import get_kline_cache
 from ats_core.sources.binance import BinanceClient
 from ats_core.logging import log, warn, error
@@ -228,16 +228,29 @@ def test_phase1_data_freshness():
     log("=" * 80)
     log("")
 
-    log("初始化BatchScanner...")
-    scanner = BatchScanner()
+    log("初始化OptimizedBatchScanner...")
+    scanner = OptimizedBatchScanner()
+
+    # 初始化scanner（必须先初始化）
+    log("初始化scanner...")
+    try:
+        await_sync(scanner.initialize())
+    except Exception as e:
+        error(f"❌ Scanner初始化失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return
+
+    # 修改scanner的symbols列表为测试币种
+    scanner.symbols = test_symbols
 
     log("执行扫描...")
     scan_start = time.time()
 
     try:
         results = await_sync(scanner.scan(
-            symbols=test_symbols,
-            use_cache=True
+            max_symbols=len(test_symbols),
+            verbose=False
         ))
         scan_elapsed = time.time() - scan_start
 
@@ -246,23 +259,27 @@ def test_phase1_data_freshness():
         log(f"  扫描币种: {len(test_symbols)}")
         log("")
 
+        # 获取结果列表
+        result_list = results.get('results', [])
+        log(f"发现信号: {len(result_list)} 个")
+        log("")
+
         # 分析每个币种的结果
-        for symbol in test_symbols:
-            result = results.get(symbol, {})
-            if result:
-                log(f"{symbol}:")
-                log(f"  加权分数: {result.get('weighted_score', 0):+.1f}")
-                log(f"  置信度: {result.get('confidence', 0):.1f}")
-                log(f"  Edge: {result.get('edge', 0):+.4f}")
-                log(f"  概率: {result.get('probability', 0.5):.3f}")
+        for result in result_list:
+            symbol = result.get('symbol', 'UNKNOWN')
+            log(f"{symbol}:")
+            log(f"  加权分数: {result.get('weighted_score', 0):+.1f}")
+            log(f"  置信度: {result.get('confidence', 0):.1f}")
+            log(f"  Edge: {result.get('edge', 0):+.4f}")
+            log(f"  概率: {result.get('probability', 0.5):.3f}")
 
-                # 检查gates信息（包含DataQual）
-                gates = result.get('gates', {})
-                if gates:
-                    data_qual = gates.get('data_qual', 0)
-                    log(f"  DataQual: {data_qual:.3f} {'✅' if data_qual >= 0.9 else '⚠️'}")
+            # 检查gates信息（包含DataQual）
+            gates = result.get('gates', {})
+            if gates:
+                data_qual = gates.get('data_qual', 0)
+                log(f"  DataQual: {data_qual:.3f} {'✅' if data_qual >= 0.9 else '⚠️'}")
 
-                log("")
+            log("")
     except Exception as e:
         error(f"❌ 扫描失败: {e}")
         import traceback
