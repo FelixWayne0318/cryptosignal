@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==========================================
-# CryptoSignal v6.5 全自动部署并运行脚本
+# CryptoSignal v6.6 全自动部署并运行脚本
 # 适用于：首次部署、更新部署、全新服务器
 # 自动处理：git冲突、依赖缺失、所有错误
 # ==========================================
@@ -12,7 +12,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 echo "=============================================="
-echo "🚀 CryptoSignal v6.5 全自动部署并运行"
+echo "🚀 CryptoSignal v6.6 全自动部署并运行"
 echo "=============================================="
 echo ""
 echo "📋 脚本功能："
@@ -331,7 +331,7 @@ else
 fi
 
 echo ""
-echo "2️⃣ 验证权重配置（v6.5 - 8+2因子系统）..."
+echo "2️⃣ 验证权重配置（v6.6 - 6因子系统）..."
 python3 -c "
 import json
 
@@ -342,37 +342,38 @@ with open('config/params.json') as f:
     publish = config['publish']
 
 # 验证权重（跳过注释字段）
-a_layer = ['T', 'M', 'C', 'S', 'V', 'O', 'L', 'B', 'Q']
+core_factors = ['T', 'M', 'C', 'V', 'O', 'B']
 factor_weights = {k: v for k, v in weights.items() if not k.startswith('_')}
-a_total = sum(factor_weights[k] for k in a_layer)
-b_layer = ['F', 'I']
+factors_total = sum(factor_weights[k] for k in core_factors if k in factor_weights)
+modulators = ['L', 'S', 'F', 'I']
 
 print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-print('权重配置验证 (v6.5 - 8+2因子系统)')
+print('权重配置验证 (v6.6 - 6因子系统)')
 print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-print(f'A层9因子总和: {a_total}%')
-for k in a_layer:
-    print(f'  {k}: {weights[k]}%')
+print(f'核心6因子总和: {factors_total}%')
+for k in core_factors:
+    if k in factor_weights:
+        print(f'  {k}: {weights[k]}%')
 print()
-print('B层调制器（应为0.0）:')
-for k in b_layer:
-    print(f'  {k}: {weights[k]}')
+print('调制器（应为0.0，不参与评分）:')
+for k in modulators:
+    if k in weights:
+        print(f'  {k}: {weights[k]}')
 print()
 
 # 验证发布阈值
-print('发布阈值 (v6.1):')
-print(f'  prime_prob_min: {publish[\"prime_prob_min\"]} (应为0.58)')
-print(f'  prime_dims_ok_min: {publish[\"prime_dims_ok_min\"]} (应为3)')
-print(f'  prime_dim_threshold: {publish[\"prime_dim_threshold\"]} (应为30)')
+print('发布阈值 (v6.6软约束):')
+print(f'  prime_prob_min: {publish[\"prime_prob_min\"]} (软约束)')
+print(f'  prime_dims_ok_min: {publish[\"prime_dims_ok_min\"]}')
+print(f'  prime_dim_threshold: {publish[\"prime_dim_threshold\"]}')
 print()
 
 # 断言验证
-assert abs(a_total - 100.0) < 0.01, f'错误: A层权重={a_total}, 应为100.0'
-assert all(weights[k] == 0.0 for k in b_layer), '错误: B层调制器必须为0.0'
-assert publish['prime_prob_min'] == 0.58, '错误: prime_prob_min应为0.58'
-assert publish['prime_dims_ok_min'] == 3, '错误: prime_dims_ok_min应为3'
+assert abs(factors_total - 100.0) < 0.01, f'错误: 核心因子权重={factors_total}, 应为100.0'
+if all(k in weights for k in modulators):
+    assert all(weights[k] == 0.0 for k in modulators), '错误: 调制器权重必须为0.0'
 
-print('✅ 权重配置验证通过')
+print('✅ v6.6 权重配置验证通过')
 print('✅ 类型安全检查通过')
 " || {
     echo -e "${RED}❌ 配置验证失败${NC}"

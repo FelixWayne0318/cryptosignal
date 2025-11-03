@@ -46,15 +46,10 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from ats_core.pipeline.batch_scan_optimized import OptimizedBatchScanner
-from ats_core.outputs.telegram_fmt import render_trade
+from ats_core.outputs.telegram_fmt_v66 import render_v66_signal
 from ats_core.logging import log, warn, error
 
-# 四门系统导入
-from ats_core.gates.integrated_gates import FourGatesChecker
-from ats_core.execution.metrics_estimator import ExecutionMetricsEstimator
-from ats_core.data.quality import DataQualMonitor
-
-# v2.0合规：发布防抖动系统
+# v6.6: 发布防抖动系统
 from ats_core.publishing.anti_jitter import AntiJitter
 
 
@@ -152,24 +147,18 @@ class SignalScanner:
         self.initialized = False
         self.scan_count = 0
 
-        # 初始化四门系统组件
-        self.gates_checker = FourGatesChecker()
-        self.exec_estimator = ExecutionMetricsEstimator()
-        self.quality_monitor = DataQualMonitor()
-
-        # v2.0合规：初始化防抖动系统（v6.1调整：放宽阈值以增加信号响应速度）
+        # v6.6: 初始化防抖动系统（放宽阈值以增加信号响应速度）
         self.anti_jitter = AntiJitter(
-            prime_entry_threshold=0.65,      # v6.1: 0.80→0.65（更现实的阈值）
-            prime_maintain_threshold=0.58,   # v6.1: 0.70→0.58（维持阈值）
+            prime_entry_threshold=0.65,      # v6.6: 放宽阈值（更现实的阈值）
+            prime_maintain_threshold=0.58,   # v6.6: 维持阈值
             watch_entry_threshold=0.50,
             watch_maintain_threshold=0.40,
-            confirmation_bars=1,             # v6.1: 2→1（1/2确认即可，更快响应）
-            total_bars=2,                    # v6.1: 3→2
-            cooldown_seconds=60              # v6.1: 90→60（更快恢复）
+            confirmation_bars=1,             # v6.6: 1/2确认即可，更快响应
+            total_bars=2,
+            cooldown_seconds=60              # v6.6: 更快恢复
         )
 
-        log("✅ 四门系统组件初始化完成")
-        log("✅ 防抖动系统初始化完成 (K/N=1/2, cooldown=60s, threshold=0.65)")
+        log("✅ v6.6 防抖动系统初始化完成 (K/N=1/2, cooldown=60s, threshold=0.65)")
 
         # 加载Telegram配置
         if send_telegram:
@@ -199,14 +188,15 @@ class SignalScanner:
         if self.send_telegram:
             try:
                 telegram_send_wrapper(
-                    "🤖 <b>CryptoSignal v6.4 Phase 2 实时扫描器启动中...</b>\n\n"
+                    "🤖 <b>CryptoSignal v6.6 实时扫描器启动中...</b>\n\n"
                     "⏳ 正在初始化WebSocket缓存（约3-4分钟）\n"
                     "📊 目标: 200个高流动性币种\n"
                     "⚡ 后续扫描: 12-15秒/次\n\n"
-                    "🎯 系统版本: v6.4 Phase 2\n"
-                    "📦 9因子方向评分 (A层)\n"
-                    "🚪 四门验证系统: DataQual/EV/执行/概率\n"
-                    "🔧 F/I调制器 (B层): 不参与评分\n"
+                    "🎯 系统版本: v6.6\n"
+                    "📦 6因子系统: T/M/C/V/O/B\n"
+                    "🔧 L/S/F/I调制器: 连续调节\n"
+                    "🎚️ 软约束: EV≤0和P<p_min标记但不拒绝\n"
+                    "🎯 三层止损: 结构>订单簿>ATR\n"
                     "🆕 新币数据流架构: 1m/5m/15m粒度",
                     self.bot_token,
                     self.chat_id
@@ -273,72 +263,44 @@ class SignalScanner:
                 symbol = s.get('symbol', '')
                 probability = s.get('probability', 0.5)
 
-                # v2.0合规：F从modulation获取，I从scores获取
-                # F 和 I 分数范围是 -100 到 +100，归一化到 0-1
-                F_score = s.get('modulation', {}).get('F', 0)  # v2.0: F moved to modulation
-                I_score = s.get('scores', {}).get('I', 0)      # I still in scores
-                F_raw = (F_score + 100) / 200  # -100~+100 → 0~1
-                I_raw = (I_score + 100) / 200  # -100~+100 → 0~1
+                # v6.6: 检查软约束（从analyze_symbol结果中获取）
+                publish_info = s.get('publish', {})
+                soft_filtered = publish_info.get('soft_filtered', False)
+                ev = publish_info.get('ev', 0.0)
 
-                # 计算概率变化（简化：使用 P - 0.5 作为 delta_p）
-                delta_p = abs(probability - 0.5)
+                # v6.6: 软约束仅标记，不过滤
+                # 所有信号都通过软约束检查（除非显式标记为filtered）
+                constraints_passed = not soft_filtered
 
-                # 获取最新 K 线数据用于执行指标估算
-                # 注意：这里使用信号中的价格数据作为代理
-                pricing = s.get('pricing', {})
-                if pricing:
-                    entry_price = pricing.get('entry', 0)
-                    # 使用简化的估算（假设 spread 为 entry 的 0.1%）
-                    high = entry_price * 1.001
-                    low = entry_price * 0.999
-                    close = entry_price
-                    volume = 1000000  # 默认值
-                else:
-                    # 如果没有定价信息，跳过
-                    log(f"  ⚠️  {symbol}: 缺少定价信息，跳过四门检查")
-                    continue
+                # 获取软约束警告信息
+                soft_warnings = []
+                if ev <= 0:
+                    soft_warnings.append(f"EV≤0 ({ev:.4f})")
+                if probability < 0.52:  # p_min threshold
+                    soft_warnings.append(f"P<p_min ({probability:.3f})")
 
-                # 计算执行指标
-                exec_metrics = self.exec_estimator.calculate(
-                    high=high,
-                    low=low,
-                    close=close,
-                    volume=volume,
-                    taker_buy_volume=volume * 0.5
-                )
+                warning_str = " | ".join(soft_warnings) if soft_warnings else "无"
 
-                # 检查四门
-                all_gates_passed, gate_results = self.gates_checker.check_all_gates(
-                    symbol=symbol,
-                    probability=probability,
-                    execution_metrics=exec_metrics,
-                    F_raw=F_raw,
-                    I_raw=I_raw,
-                    delta_p=delta_p,
-                    is_newcoin=s.get('new_coin', {}).get('is_new', False)
-                )
-
-                # v2.0合规：应用防抖动机制
-                # 获取EV值（如果没有则估算为0）
-                ev = s.get('publish', {}).get('ev', 0.0)
-
-                # 调用防抖动系统
+                # v6.6: 应用防抖动机制
+                # 调用防抖动系统（v6.6中，软约束不影响gates_passed）
                 new_level, should_publish = self.anti_jitter.update(
                     symbol=symbol,
                     probability=probability,
                     ev=ev,
-                    gates_passed=all_gates_passed
+                    gates_passed=constraints_passed  # v6.6: 使用软约束结果
                 )
 
                 # 只在满足以下条件时发布信号：
-                # 1. 通过所有四门
-                # 2. 防抖动系统确认（2/3棒确认 + 90秒冷却）
-                if all_gates_passed and should_publish and new_level == 'PRIME':
-                    # 添加四门结果到信号中（用于调试）
-                    s['four_gates'] = {
-                        'all_passed': True,
-                        'results': {k: {'passed': v.passed, 'reason': v.reason}
-                                   for k, v in gate_results.items()}
+                # 1. 未被软约束过滤（v6.6中软约束仅标记）
+                # 2. 防抖动系统确认（1/2棒确认 + 60秒冷却）
+                # 3. 级别为PRIME
+                if constraints_passed and should_publish and new_level == 'PRIME':
+                    # 添加软约束信息到信号中
+                    s['soft_constraints'] = {
+                        'passed': True,
+                        'warnings': soft_warnings,
+                        'ev': ev,
+                        'probability': probability
                     }
                     # 添加防抖动信息
                     s['anti_jitter'] = {
@@ -347,20 +309,19 @@ class SignalScanner:
                         'bars_in_state': self.anti_jitter.states[symbol].bars_in_state if symbol in self.anti_jitter.states else 0
                     }
                     prime_signals.append(s)
-                    log(f"  ✅ {symbol}: 通过四门验证 + 防抖动确认 (P={probability:.3f}, EV={ev:.4f})")
-                elif all_gates_passed and not should_publish:
-                    # 通过四门但防抖动未确认
-                    log(f"  ⏸️  {symbol}: 通过四门但等待防抖动确认 (P={probability:.3f}, level={new_level})")
-                elif all_gates_passed:
-                    # 通过四门但级别不是PRIME（可能是WATCH）
-                    log(f"  🔍 {symbol}: 通过四门但级别={new_level} (P={probability:.3f})")
+                    log(f"  ✅ {symbol}: 软约束通过 + 防抖动确认 (P={probability:.3f}, EV={ev:.4f}, 警告={warning_str})")
+                elif constraints_passed and not should_publish:
+                    # 通过软约束但防抖动未确认
+                    log(f"  ⏸️  {symbol}: 软约束通过但等待防抖动确认 (P={probability:.3f}, level={new_level})")
+                elif constraints_passed:
+                    # 通过软约束但级别不是PRIME（可能是WATCH）
+                    log(f"  🔍 {symbol}: 软约束通过但级别={new_level} (P={probability:.3f})")
                 else:
-                    # 记录失败原因
-                    failed_gates = [k for k, v in gate_results.items() if not v.passed]
-                    log(f"  ❌ {symbol}: 未通过四门 - {', '.join(failed_gates)}")
+                    # 被软约束过滤
+                    log(f"  ❌ {symbol}: 被软约束过滤 (P={probability:.3f}, EV={ev:.4f})")
 
             except Exception as e:
-                warn(f"  ⚠️  {symbol}: 四门检查失败 - {e}")
+                warn(f"  ⚠️  {symbol}: 软约束检查失败 - {e}")
 
         log("\n" + "=" * 60)
         log("📊 扫描结果")
@@ -383,20 +344,21 @@ class SignalScanner:
 
         for i, signal in enumerate(signals, 1):
             try:
-                # 渲染信号
-                message = render_trade(signal)
+                # 渲染信号（v6.6富媒体模板）
+                message = render_v66_signal(signal, mode='rich')
 
-                # 添加v6.4 Phase 2系统标识
-                gate_info = signal.get('four_gates', {})
-                gate_emoji = "✅" if gate_info.get('all_passed', False) else "❌"
+                # 添加v6.6系统标识
+                soft_info = signal.get('soft_constraints', {})
+                warnings = soft_info.get('warnings', [])
+                warning_emoji = "⚠️" if warnings else "✅"
 
                 footer = f"""
 
 ━━━━━━━━━━━━━━━━━━
-🎯 <b>系统版本: v6.4 Phase 2</b>
-📦 9因子方向评分 (A层)
-🔧 F/I调制器 (B层)
-{gate_emoji} 四门验证: 已通过
+🎯 <b>系统版本: v6.6</b>
+📦 6因子系统: T/M/C/V/O/B
+🔧 L/S/F/I调制器: 连续调节
+{warning_emoji} 软约束: {"有警告" if warnings else "无警告"}
 🆕 新币通道: Phase 2完成
 
 ⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}

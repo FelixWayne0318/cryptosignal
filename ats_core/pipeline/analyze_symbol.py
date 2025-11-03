@@ -51,10 +51,9 @@ from ats_core.features.multi_timeframe import multi_timeframe_coherence
 # ========== v6.6 三层止损系统 ==========
 from ats_core.execution.stop_loss_calculator import ThreeTierStopLoss
 
-# ========== 10维因子系统 ==========
+# ========== v6.6 因子系统（6因子：T/M/C/V/O/B）==========
 from ats_core.factors_v2.liquidity import calculate_liquidity
 from ats_core.factors_v2.basis_funding import calculate_basis_funding
-from ats_core.factors_v2.liquidation import calculate_liquidation
 from ats_core.factors_v2.independence import calculate_independence
 
 # ============ 工具函数 ============
@@ -109,20 +108,26 @@ def _analyze_symbol_core(
     elite_meta: Dict[str, Any] = None,  # 保留参数兼容性，但不再使用
     k15m: List = None,  # MTF优化：15分钟K线
     k1d: List = None,   # MTF优化：1天K线
-    orderbook: Dict = None,     # 10维因子：订单簿数据（L）
-    mark_price: float = None,   # 10维因子：标记价格（B）
-    funding_rate: float = None, # 10维因子：资金费率（B）
-    spot_price: float = None,   # 10维因子：现货价格（B）
-    agg_trades: List = None,    # 10维因子：聚合成交数据（Q - 替代清算数据）
-    btc_klines: List = None,    # 10维因子：BTC K线（I）
-    eth_klines: List = None,    # 10维因子：ETH K线（I）
-    liquidations: List = None   # 向后兼容：旧的清算数据（已废弃）
+    orderbook: Dict = None,     # v6.6: 订单簿数据（L - 流动性）
+    mark_price: float = None,   # v6.6: 标记价格（B - 基差）
+    funding_rate: float = None, # v6.6: 资金费率（B - 基差）
+    spot_price: float = None,   # v6.6: 现货价格（B - 基差）
+    btc_klines: List = None,    # v6.6: BTC K线（独立性）
+    eth_klines: List = None     # v6.6: ETH K线（独立性）
 ) -> Dict[str, Any]:
     """
-    核心分析逻辑（使用已获取的K线数据）
+    核心分析逻辑（使用已获取的K线数据）- v6.6
 
-    此函数包含完整的10维因子分析逻辑，但不负责获取数据。
+    此函数包含完整的6因子分析逻辑，但不负责获取数据。
     由analyze_symbol()和analyze_symbol_with_preloaded_klines()调用。
+
+    v6.6 因子系统：
+    - T (Trend): 趋势因子
+    - M (Momentum): 动量因子
+    - C (Carry): 持仓成本因子
+    - V (Volatility): 波动率因子
+    - O (Open Interest): 持仓量因子
+    - B (Basis): 基差因子
 
     Args:
         symbol: 交易对符号
@@ -133,13 +138,12 @@ def _analyze_symbol_core(
         elite_meta: 已废弃，保留仅为兼容性
         k15m: 15分钟K线（可选，用于MTF）
         k1d: 1天K线（可选，用于MTF）
-        orderbook: 订单簿数据（可选，用于L因子）
-        mark_price: 标记价格（可选，用于B因子）
-        funding_rate: 资金费率（可选，用于B因子）
-        spot_price: 现货价格（可选，用于B因子）
-        liquidations: 清算数据列表（可选，用于Q因子）
-        btc_klines: BTC K线数据（可选，用于I因子）
-        eth_klines: ETH K线数据（可选，用于I因子）
+        orderbook: 订单簿数据（可选，用于流动性分析）
+        mark_price: 标记价格（可选，用于基差因子）
+        funding_rate: 资金费率（可选，用于基差因子）
+        spot_price: 现货价格（可选，用于基差因子）
+        btc_klines: BTC K线数据（可选，用于独立性分析）
+        eth_klines: ETH K线数据（可选，用于独立性分析）
 
     Returns:
         分析结果字典
@@ -1097,13 +1101,12 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     except Exception:
         spot_k1 = None
 
-    # 10维因子系统：获取L/B/Q/I因子所需数据
+    # v6.6 因子系统：获取L/B/I因子所需数据
     from ats_core.sources.binance import (
         get_orderbook_snapshot,
         get_mark_price,
         get_funding_rate,
-        get_spot_price,
-        get_liquidations
+        get_spot_price
     )
 
     # 获取订单簿数据（L因子）
@@ -1138,17 +1141,7 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         warn(f"获取{symbol}现货价格失败: {e}")
         spot_price = None
 
-    # 获取清算数据（Q因子）- 使用aggTrades替代已废弃的清算API
-    try:
-        from ats_core.sources.binance import get_agg_trades
-        # 获取最近500笔聚合成交（分析大额异常交易）
-        agg_trades = get_agg_trades(symbol, limit=500)
-    except Exception as e:
-        from ats_core.logging import warn
-        warn(f"获取{symbol}聚合成交数据失败: {e}")
-        agg_trades = []
-
-    # 获取BTC/ETH K线数据（I因子）
+    # 获取BTC/ETH K线数据（独立性分析）
     # 注意：只需要获取一次，不需要每个币种都获取
     # 但为了保持analyze_symbol()的独立性，这里还是获取
     try:
@@ -1178,9 +1171,8 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         mark_price=mark_price,       # B（基差+资金费）
         funding_rate=funding_rate,   # B（基差+资金费）
         spot_price=spot_price,       # B（基差+资金费）
-        agg_trades=agg_trades,       # Q（清算密度 - 使用aggTrades）
-        btc_klines=btc_klines,       # I（独立性）
-        eth_klines=eth_klines        # I（独立性）
+        btc_klines=btc_klines,       # 独立性分析
+        eth_klines=eth_klines        # 独立性分析
     )
 
     # ---- 3. 添加新币数据元信息（Phase 2）----
@@ -1385,17 +1377,17 @@ def analyze_symbol_with_preloaded_klines(
     elite_meta: Dict = None,
     k15m: List = None,  # MTF优化：15分钟K线
     k1d: List = None,   # MTF优化：1天K线
-    orderbook: Dict = None,     # 10维因子：订单簿数据（L）
-    mark_price: float = None,   # 10维因子：标记价格（B）
-    funding_rate: float = None, # 10维因子：资金费率（B）
-    spot_price: float = None,   # 10维因子：现货价格（B）
-    agg_trades: List = None,    # 10维因子：聚合成交数据（Q - 使用aggTrades替代清算数据）
-    liquidations: List = None,  # 10维因子：清算数据（Q - 已废弃，向后兼容）
-    btc_klines: List = None,    # 10维因子：BTC K线（I）
-    eth_klines: List = None     # 10维因子：ETH K线（I）
+    orderbook: Dict = None,     # v6.6: 订单簿数据（L - 流动性）
+    mark_price: float = None,   # v6.6: 标记价格（B - 基差）
+    funding_rate: float = None, # v6.6: 资金费率（B - 基差）
+    spot_price: float = None,   # v6.6: 现货价格（B - 基差）
+    btc_klines: List = None,    # v6.6: BTC K线（独立性）
+    eth_klines: List = None     # v6.6: ETH K线（独立性）
 ) -> Dict[str, Any]:
     """
-    使用预加载的K线数据分析币种（用于批量扫描优化）
+    使用预加载的K线数据分析币种（用于批量扫描优化）- v6.6
+
+    v6.6 因子系统（6因子）：T/M/C/V/O/B
 
     Args:
         symbol: 交易对符号
@@ -1406,14 +1398,12 @@ def analyze_symbol_with_preloaded_klines(
         elite_meta: Elite Universe元数据（可选）
         k15m: 15分钟K线（可选，用于MTF）
         k1d: 1天K线（可选，用于MTF）
-        orderbook: 订单簿数据（可选，用于L因子）
-        mark_price: 标记价格（可选，用于B因子）
-        funding_rate: 资金费率（可选，用于B因子）
-        spot_price: 现货价格（可选，用于B因子）
-        agg_trades: 聚合成交数据列表（可选，用于Q因子 - 新方法）
-        liquidations: 清算数据列表（可选，用于Q因子 - 已废弃，仅保留向后兼容）
-        btc_klines: BTC K线数据（可选，用于I因子）
-        eth_klines: ETH K线数据（可选，用于I因子）
+        orderbook: 订单簿数据（可选，用于流动性分析）
+        mark_price: 标记价格（可选，用于基差因子）
+        funding_rate: 资金费率（可选，用于基差因子）
+        spot_price: 现货价格（可选，用于基差因子）
+        btc_klines: BTC K线数据（可选，用于独立性分析）
+        eth_klines: ETH K线数据（可选，用于独立性分析）
 
     Returns:
         分析结果字典（格式与analyze_symbol相同）
@@ -1424,7 +1414,7 @@ def analyze_symbol_with_preloaded_klines(
     注意:
         这个函数不会自动获取K线数据，调用者必须提供
     """
-    # 🔧 修复：使用预加载的数据调用核心分析函数
+    # 使用预加载的数据调用核心分析函数（v6.6）
     # 如果oi_data为None，使用空列表避免NoneType错误
     return _analyze_symbol_core(
         symbol=symbol,
@@ -1439,8 +1429,6 @@ def analyze_symbol_with_preloaded_klines(
         mark_price=mark_price,       # 传递标记价格（B）
         funding_rate=funding_rate,   # 传递资金费率（B）
         spot_price=spot_price,       # 传递现货价格（B）
-        agg_trades=agg_trades,       # 传递聚合成交数据（Q - 新方法）
-        liquidations=liquidations,   # 传递清算数据（Q - 已废弃，向后兼容）
-        btc_klines=btc_klines,       # 传递BTC K线（I）
-        eth_klines=eth_klines        # 传递ETH K线（I）
+        btc_klines=btc_klines,       # 传递BTC K线（独立性）
+        eth_klines=eth_klines        # 传递ETH K线（独立性）
     )
