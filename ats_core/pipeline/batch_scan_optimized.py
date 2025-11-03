@@ -549,11 +549,11 @@ class OptimizedBatchScanner:
                     gates_info = result.get('gates', {})
 
                     log(f"  └─ [评分] confidence={confidence}, prime_strength={prime_strength}")
-                    # v6.1: F and I are B-layer modulators (per MODULATORS.md § 2.1)
-                    log(f"      A-层因子: T={scores.get('T',0):.1f}, M={scores.get('M',0):.1f}, C={scores.get('C',0):.1f}, "
-                        f"S={scores.get('S',0):.1f}, V={scores.get('V',0):.1f}, O={scores.get('O',0):.1f}")
-                    log(f"      A-层因子: L={scores.get('L',0):.1f}, B={scores.get('B',0):.1f}, Q={scores.get('Q',0):.1f}")
-                    log(f"      B-层调制器: F={modulation.get('F',0):.1f}, I={modulation.get('I',0):.1f}")
+                    # v6.6: 6+4因子架构（6核心因子+4调制器）
+                    log(f"      A-层核心因子: T={scores.get('T',0):.1f}, M={scores.get('M',0):.1f}, C={scores.get('C',0):.1f}, "
+                        f"V={scores.get('V',0):.1f}, O={scores.get('O',0):.1f}, B={scores.get('B',0):.1f}")
+                    log(f"      B-层调制器: L={modulation.get('L',0):.1f}, S={modulation.get('S',0):.1f}, "
+                        f"F={modulation.get('F',0):.1f}, I={modulation.get('I',0):.1f}")
                     log(f"      四门调节: DataQual={gates_info.get('data_qual',0):.2f}, "
                         f"EV={gates_info.get('ev_gate',0):.2f}, "
                         f"Execution={gates_info.get('execution',0):.2f}, "
