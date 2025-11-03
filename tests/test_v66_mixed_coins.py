@@ -61,7 +61,9 @@ def test_v66_mixed_coins():
         try:
             result = analyze_symbol(symbol)
 
-            if result.get('success'):
+            # 修复：analyze_symbol()正常情况下不返回success字段，只有失败时返回success=False
+            # 正确的判断：success不是False（即None或True都算成功）
+            if result.get('success') is not False:
                 # 基本信息
                 scores = result.get('scores', {})
                 weighted_score = result.get('weighted_score', 0)
