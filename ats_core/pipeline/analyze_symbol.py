@@ -1159,6 +1159,9 @@ def _analyze_symbol_core(
     # 兼容旧版 telegram_fmt.py：将分数直接放在顶层
     result.update(scores)
 
+    # v6.6: 同样将调制器放在顶层（用于测试和调试访问）
+    result.update(modulation)
+
     return result
 
 
