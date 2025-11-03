@@ -230,23 +230,80 @@ class DataQualMonitor:
 
         return self.metrics[symbol]
 
-    def can_publish_prime(self, symbol: str) -> Tuple[bool, float, str]:
+    def check_cache_freshness(
+        self,
+        symbol: str,
+        kline_cache=None,
+        max_age_seconds: int = 300
+    ) -> Tuple[float, str]:
+        """
+        检查缓存数据新鲜度（REST模式下使用）
+
+        Args:
+            symbol: 交易币种
+            kline_cache: K线缓存管理器
+            max_age_seconds: 最大过期时间（默认5分钟）
+
+        Returns:
+            Tuple of (dataqual_score, reason)
+        """
+        if kline_cache is None:
+            return 1.0, "No cache to check"
+
+        # 检查缓存是否存在
+        if not kline_cache.is_initialized(symbol):
+            return 0.5, f"Cache not initialized for {symbol}"
+
+        # 检查数据新鲜度
+        if symbol not in kline_cache.last_update:
+            return 0.7, "No update timestamp"
+
+        age = time.time() - kline_cache.last_update[symbol]
+
+        # 根据数据年龄计算质量分数
+        if age <= 30:  # 30秒内
+            return 1.0, f"Data fresh ({age:.0f}s)"
+        elif age <= 60:  # 1分钟内
+            return 0.95, f"Data slightly old ({age:.0f}s)"
+        elif age <= 180:  # 3分钟内
+            return 0.90, f"Data moderately old ({age:.0f}s)"
+        elif age <= max_age_seconds:  # 5分钟内
+            return 0.85, f"Data old ({age:.0f}s)"
+        else:  # 超过5分钟
+            return 0.70, f"Data stale ({age:.0f}s > {max_age_seconds}s)"
+
+    def can_publish_prime(
+        self,
+        symbol: str,
+        kline_cache=None  # 新增：K线缓存，用于REST模式
+    ) -> Tuple[bool, float, str]:
         """
         Check if symbol's data quality allows Prime signal publishing.
 
         Args:
             symbol: Trading symbol
+            kline_cache: K线缓存管理器（REST模式下必须提供）
 
         Returns:
             Tuple of (allowed, dataqual_score, reason)
         """
+        # 优先使用WebSocket模式的质量指标
         quality = self.get_quality(symbol)
 
-        if quality.dataqual >= self.ALLOW_PRIME_THRESHOLD:
-            return True, quality.dataqual, "Quality sufficient for Prime"
+        # 如果有WebSocket事件记录，使用WebSocket质量
+        if symbol in self.metrics and self.metrics[symbol].total_received > 0:
+            dataqual = quality.dataqual
+            reason_suffix = " (WebSocket mode)"
+        else:
+            # REST模式：检查缓存新鲜度
+            dataqual, cache_reason = self.check_cache_freshness(symbol, kline_cache)
+            reason_suffix = f" (REST mode: {cache_reason})"
 
-        if quality.dataqual < self.DEGRADE_THRESHOLD:
-            return False, quality.dataqual, f"Quality degraded: {quality.dataqual:.3f} < {self.DEGRADE_THRESHOLD}"
+        if dataqual >= self.ALLOW_PRIME_THRESHOLD:
+            return True, dataqual, "Quality sufficient for Prime" + reason_suffix
+
+        if dataqual < self.DEGRADE_THRESHOLD:
+            return False, dataqual, f"Quality degraded: {dataqual:.3f} < {self.DEGRADE_THRESHOLD}" + reason_suffix
 
         return False, quality.dataqual, f"Quality below Prime threshold: {quality.dataqual:.3f} < {self.ALLOW_PRIME_THRESHOLD}"
 
