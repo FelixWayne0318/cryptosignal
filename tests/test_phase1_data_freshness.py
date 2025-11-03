@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ats_core.pipeline.batch_scan_optimized import OptimizedBatchScanner
 from ats_core.data.realtime_kline_cache import get_kline_cache
-from ats_core.sources.binance import BinanceClient
+from ats_core.execution.binance_futures_client import get_binance_client
 from ats_core.logging import log, warn, error
 
 
@@ -69,7 +69,15 @@ def test_phase1_data_freshness():
 
     # 初始化K线缓存
     kline_cache = get_kline_cache()
-    client = BinanceClient()
+
+    # 初始化client（用于手动测试Layer 1/2）
+    client = None
+    try:
+        client = get_binance_client()
+        await_sync(client.initialize())
+    except Exception as e:
+        warn(f"⚠️  Client初始化失败: {e}")
+        warn("将通过Scanner初始化client")
 
     # 第一步：检查初始缓存状态
     log("=" * 80)
