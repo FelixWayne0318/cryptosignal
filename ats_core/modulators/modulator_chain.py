@@ -144,7 +144,7 @@ class ModulatorChain:
         执行完整调制器链
 
         参数：
-        - L_score: 流动性分数 [0, 100]
+        - L_score: 流动性分数 [-100, +100]
         - S_score: 结构分数 [-100, +100]
         - F_score: 资金领先分数 [-100, +100]
         - I_score: 独立性分数 [-100, +100]
@@ -198,13 +198,13 @@ class ModulatorChain:
         L调制器：流动性 → 仓位倍数 + 成本调整
 
         逻辑：
-        - L高（80-100）：position_mult接近1.0，cost略降
-        - L中（40-80）：position_mult=0.5-0.8，cost不变
-        - L低（0-40）：position_mult=0.3-0.5，cost略升
-        - **关键**：L=0时position_mult=30%（不拒绝！）
+        - L高（+80~+100）：position_mult接近1.0，cost略降
+        - L中（0~+80）：position_mult=0.5-0.8，cost不变
+        - L低（-100~0）：position_mult=0.3-0.5，cost略升
+        - **关键**：L=-100时position_mult=30%（不拒绝！）
 
         参数：
-        - L_score: [0, 100]
+        - L_score: [-100, +100]
         - L_components: {spread_bps, depth_quality, impact_bps, obi}
         - symbol: 交易对
 
@@ -218,13 +218,14 @@ class ModulatorChain:
         max_position = self.L_params.get("max_position", 1.00)  # 100%最大仓位
         safety_margin = self.L_params.get("safety_margin", 0.005)  # 0.5%安全边际（用户确认）
 
-        # 基础映射：L [0, 100] → position_mult [0.30, 1.00]
-        # 使用平方根函数增加中低流动性的仓位（避免过于保守）
-        normalized_L = L_score / 100.0
+        # 基础映射：L [-100, +100] → position_mult [0.30, 1.00]
+        # 步骤1: 将L从[-100, +100]映射到[0, 1]
+        # 步骤2: 使用平方根函数增加中低流动性的仓位（避免过于保守）
+        normalized_L = (L_score + 100.0) / 200.0  # [-100,+100] → [0,1]
         position_mult = min_position + (max_position - min_position) * math.sqrt(normalized_L)
 
         # 成本调整：L高 → cost降低，L低 → cost升高
-        # 映射：L=100 → cost_eff=-0.20, L=50 → 0, L=0 → +0.20
+        # 映射：L=+100 → cost_eff=-0.20, L=0 → -0.10, L=-100 → +0.20
         cost_eff = -0.20 * (2 * normalized_L - 1)  # [-0.20, +0.20]
 
         # 特殊情况：如果有详细组件，进一步微调
