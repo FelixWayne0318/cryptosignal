@@ -712,9 +712,9 @@ def _analyze_symbol_core(
 
     # Gate 2: EV - 期望值（基于概率和成本）
     # EV ≈ 2 * P_chosen - 1 - cost
-    # 简化版：EV = 2 * P - 1（P=0.5→0, P=0.75→0.5, P=1.0→1.0）
+    # 使用调制器输出的最终成本
     # 负值表示不利，会额外惩罚Prime强度
-    gates_ev = 2 * P_chosen - 1 - cost
+    gates_ev = 2 * P_chosen - 1 - modulator_output.cost_final
 
     # Gate 3: Execution - 执行质量（基于流动性L）
     # L范围-100到+100，映射到execution 0.0-1.0
