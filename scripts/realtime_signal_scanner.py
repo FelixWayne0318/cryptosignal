@@ -39,7 +39,7 @@ import argparse
 import signal
 import json
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # 添加项目根目录到路径
 project_root = Path(__file__).parent.parent
@@ -375,6 +375,46 @@ class SignalScanner:
 
         log(f"✅ 信号发送完成\n")
 
+    def _calculate_next_scan_time(self) -> datetime:
+        """
+        智能计算下次扫描时间（对齐K线更新时机）
+
+        策略：
+        - 基础频率：5分钟
+        - 智能对齐：在K线完成后的2-3分钟扫描（确保数据已更新）
+        - 关键时刻：02, 07, 12, 17, 22, 27, 32, 37, 42, 47, 52, 57分
+
+        原理：
+        - 15m K线在00, 15, 30, 45分完成，我们在02, 17, 32, 47分扫描
+        - 1h K线在每小时00分完成，我们在05, 07分扫描
+        - 这样确保扫描时数据已经更新完毕
+
+        Returns:
+            下次扫描的datetime对象
+        """
+        now = datetime.now()
+        current_minute = now.minute
+
+        # 关键时刻列表（K线完成后2-7分钟）
+        key_minutes = [2, 7, 12, 17, 22, 27, 32, 37, 42, 47, 52, 57]
+
+        # 找到下一个关键时刻
+        next_key_minute = None
+        for km in key_minutes:
+            if km > current_minute:
+                next_key_minute = km
+                break
+
+        if next_key_minute is None:
+            # 如果已经过了57分，下一个关键时刻是下一小时的02分
+            next_scan = now.replace(minute=2, second=0, microsecond=0)
+            next_scan = next_scan + timedelta(hours=1)
+        else:
+            # 使用下一个关键时刻
+            next_scan = now.replace(minute=next_key_minute, second=0, microsecond=0)
+
+        return next_scan
+
     async def run_periodic(self, interval_seconds: int = 300):
         """
         定期扫描
@@ -397,18 +437,13 @@ class SignalScanner:
                 # 执行扫描
                 await self.scan_once()
 
-                # 等待下次扫描
-                next_scan = datetime.now()
-                next_scan = next_scan.replace(
-                    second=0, microsecond=0
-                )
-                next_scan = next_scan.replace(
-                    minute=(next_scan.minute // (interval_seconds // 60) + 1) * (interval_seconds // 60)
-                )
+                # 智能计算下次扫描时间（对齐K线更新时机）
+                next_scan = self._calculate_next_scan_time()
 
                 wait_seconds = (next_scan - datetime.now()).total_seconds()
                 if wait_seconds > 0:
-                    log(f"\n⏰ 等待 {wait_seconds:.0f}秒后进行下次扫描（{next_scan.strftime('%H:%M')}）...\n")
+                    log(f"\n⏰ 下次扫描时间: {next_scan.strftime('%H:%M:%S')} （{wait_seconds:.0f}秒后）")
+                    log(f"   原因: 对齐K线更新时机（确保数据最新）\n")
                     await asyncio.sleep(wait_seconds)
 
             except KeyboardInterrupt:

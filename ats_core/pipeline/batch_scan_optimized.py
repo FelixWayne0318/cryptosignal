@@ -399,6 +399,67 @@ class OptimizedBatchScanner:
         log(f"   最低分数: {min_score}")
         log("=" * 60)
 
+        # ═══════════════════════════════════════════════════════════
+        # Phase 1: 三层智能数据更新
+        # ═══════════════════════════════════════════════════════════
+        from datetime import datetime
+        current_time = datetime.now()
+        current_minute = current_time.minute
+
+        # Layer 1: 价格更新（每次都执行，最轻量）
+        log("\n📈 [Layer 1] 更新实时价格...")
+        try:
+            await self.kline_cache.update_current_prices(
+                symbols=symbols,
+                client=self.data_client
+            )
+        except Exception as e:
+            warn(f"⚠️  Layer 1 更新失败: {e}")
+
+        # Layer 2: K线增量更新（智能触发）
+        # 15m K线：在02, 17, 32, 47分触发
+        if current_minute in [2, 17, 32, 47]:
+            log(f"\n📊 [Layer 2] 更新15m K线（完成时间: {current_minute-2:02d}分）...")
+            try:
+                await self.kline_cache.update_completed_klines(
+                    symbols=symbols,
+                    intervals=['15m'],
+                    client=self.data_client
+                )
+            except Exception as e:
+                warn(f"⚠️  Layer 2 (15m) 更新失败: {e}")
+
+        # 1h/4h K线：在05分或07分触发（每小时一次，07分作为备份）
+        if current_minute in [5, 7]:
+            log(f"\n📊 [Layer 2] 更新1h/4h K线（完成时间: {current_time.hour:02d}:00）...")
+            try:
+                await self.kline_cache.update_completed_klines(
+                    symbols=symbols,
+                    intervals=['1h', '4h'],
+                    client=self.data_client
+                )
+            except Exception as e:
+                warn(f"⚠️  Layer 2 (1h/4h) 更新失败: {e}")
+
+        # Layer 3: 市场数据更新（低频，每30分钟）
+        if current_minute in [0, 30]:
+            log(f"\n📉 [Layer 3] 更新市场数据（资金费率/持仓量）...")
+            try:
+                await self.kline_cache.update_market_data(
+                    symbols=symbols,
+                    client=self.data_client
+                )
+            except Exception as e:
+                warn(f"⚠️  Layer 3 更新失败: {e}")
+
+        log("\n" + "=" * 60)
+        log("✅ 数据更新完成，开始分析币种")
+        log("=" * 60)
+
+        # ═══════════════════════════════════════════════════════════
+        # Phase 2: 批量扫描分析
+        # ═══════════════════════════════════════════════════════════
+
         results = []
         skipped = 0
         errors = 0

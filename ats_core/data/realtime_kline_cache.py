@@ -347,6 +347,333 @@ class RealtimeKlineCache:
         )
         return total_klines * 200 / 1024 / 1024  # MB
 
+    # ============ 三层智能更新方案 (Phase 1) ============
+
+    async def update_current_prices(
+        self,
+        symbols: List[str],
+        client = None
+    ) -> Dict[str, str]:
+        """
+        Layer 1: 快速价格更新（每次扫描都执行）
+
+        功能：
+        - 批量获取所有币种最新价格（1次API调用）
+        - 更新所有时间周期的"当前K线"收盘价
+        - 同步更新最高价和最低价
+
+        性能：
+        - 耗时：~0.5秒（200币种）
+        - API调用：1次（ticker_24hr）
+        - 更新频率：每次扫描（5分钟）
+
+        Args:
+            symbols: 币种列表
+            client: Binance客户端
+
+        Returns:
+            更新统计信息
+        """
+        start_time = time.time()
+        updated_count = 0
+
+        try:
+            # 批量获取所有币种的最新ticker（1次API调用）
+            all_tickers = await client.get_ticker_24hr()
+            ticker_map = {t['symbol']: t for t in all_tickers if 'symbol' in t}
+
+            # 更新每个币种的当前价格
+            for symbol in symbols:
+                if symbol not in ticker_map:
+                    continue
+
+                ticker = ticker_map[symbol]
+                current_price = float(ticker.get('lastPrice', 0))
+
+                if current_price == 0:
+                    continue
+
+                # 更新所有时间周期的最后一根K线（当前K线）
+                if symbol in self.cache:
+                    for interval, klines in self.cache[symbol].items():
+                        if not klines:
+                            continue
+
+                        # 获取最后一根K线（当前未完成的K线）
+                        last_kline = list(klines[-1])
+
+                        # 更新价格
+                        old_close = float(last_kline[4])
+                        last_kline[4] = str(current_price)  # 收盘价
+                        last_kline[2] = str(max(float(last_kline[2]), current_price))  # 最高价
+                        last_kline[3] = str(min(float(last_kline[3]), current_price))  # 最低价
+
+                        # 写回缓存
+                        klines[-1] = last_kline
+                        updated_count += 1
+
+                # 更新时间戳
+                self.last_update[symbol] = time.time()
+
+            elapsed = time.time() - start_time
+
+            log(f"✅ [Layer 1] 价格更新完成: {updated_count}个K线缓存已更新 (耗时: {elapsed:.2f}秒)")
+
+            return {
+                'updated_count': updated_count,
+                'elapsed': elapsed,
+                'symbols_count': len(symbols)
+            }
+
+        except Exception as e:
+            elapsed = time.time() - start_time
+            error(f"❌ [Layer 1] 价格更新失败: {e} (耗时: {elapsed:.2f}秒)")
+            return {
+                'updated_count': 0,
+                'elapsed': elapsed,
+                'error': str(e)
+            }
+
+    async def update_completed_klines(
+        self,
+        symbols: List[str],
+        intervals: List[str],
+        client = None
+    ) -> Dict[str, int]:
+        """
+        Layer 2: 增量K线更新（根据时间智能触发）
+
+        功能：
+        - 只获取最新2根K线（已完成 + 当前未完成）
+        - 更新缓存中已完成的K线
+        - 替换当前未完成的K线
+
+        性能：
+        - 耗时：~8-15秒（200币种 × 1-3周期）
+        - API调用：200-600次（取决于intervals数量）
+        - 更新频率：
+          * 15m K线：每15分钟后2分钟（02, 17, 32, 47分）
+          * 1h K线：每小时后5分钟（05分）
+          * 4h K线：每4小时后5分钟（05分）
+
+        Args:
+            symbols: 币种列表
+            intervals: 需要更新的周期列表（如 ['15m'] 或 ['1h', '4h']）
+            client: Binance客户端
+
+        Returns:
+            更新统计信息
+        """
+        start_time = time.time()
+        updated_count = 0
+        error_count = 0
+
+        try:
+            log(f"📊 [Layer 2] 开始更新K线: {len(symbols)}个币种 × {len(intervals)}个周期")
+
+            for symbol in symbols:
+                for interval in intervals:
+                    try:
+                        # 获取最新2根K线（limit=2）
+                        new_klines = await client.get_klines(
+                            symbol=symbol,
+                            interval=interval,
+                            limit=2
+                        )
+
+                        # 检查错误
+                        if isinstance(new_klines, dict) and 'error' in new_klines:
+                            error_count += 1
+                            continue
+
+                        if not new_klines or len(new_klines) < 2:
+                            error_count += 1
+                            continue
+
+                        # 获取缓存
+                        if symbol not in self.cache or interval not in self.cache[symbol]:
+                            error_count += 1
+                            continue
+
+                        cached_klines = self.cache[symbol][interval]
+
+                        if len(cached_klines) < 2:
+                            error_count += 1
+                            continue
+
+                        # 比较时间戳，更新K线
+                        # new_klines[0] = 倒数第二根（已完成）
+                        # new_klines[1] = 最后一根（当前未完成）
+
+                        new_timestamp_1 = int(new_klines[0][0])
+                        new_timestamp_2 = int(new_klines[1][0])
+                        cached_timestamp_1 = int(cached_klines[-2][0])
+                        cached_timestamp_2 = int(cached_klines[-1][0])
+
+                        # 更新倒数第二根（已完成的K线）
+                        if new_timestamp_1 == cached_timestamp_1:
+                            cached_klines[-2] = new_klines[0]
+                            updated_count += 1
+                        elif new_timestamp_1 > cached_timestamp_1:
+                            # 新的K线周期开始了，追加新K线
+                            cached_klines.append(new_klines[0])
+                            updated_count += 1
+
+                        # 更新最后一根（当前未完成的K线）
+                        if new_timestamp_2 == cached_timestamp_2:
+                            cached_klines[-1] = new_klines[1]
+                            updated_count += 1
+                        elif new_timestamp_2 > cached_timestamp_2:
+                            # 当前K线完成，开始新周期
+                            cached_klines.append(new_klines[1])
+                            updated_count += 1
+
+                        # 更新时间戳
+                        self.last_update[symbol] = time.time()
+
+                        # 小延迟，避免触发限频
+                        await asyncio.sleep(0.01)
+
+                    except Exception as e:
+                        error_count += 1
+                        # 不打印每个错误，避免刷屏
+                        continue
+
+            elapsed = time.time() - start_time
+
+            log(f"✅ [Layer 2] K线更新完成: {updated_count}根K线已更新, {error_count}个失败 (耗时: {elapsed:.2f}秒)")
+
+            return {
+                'updated_count': updated_count,
+                'error_count': error_count,
+                'elapsed': elapsed,
+                'symbols_count': len(symbols),
+                'intervals': intervals
+            }
+
+        except Exception as e:
+            elapsed = time.time() - start_time
+            error(f"❌ [Layer 2] K线更新失败: {e} (耗时: {elapsed:.2f}秒)")
+            return {
+                'updated_count': 0,
+                'error_count': 0,
+                'elapsed': elapsed,
+                'error': str(e)
+            }
+
+    async def update_market_data(
+        self,
+        symbols: List[str],
+        client = None
+    ) -> Dict[str, int]:
+        """
+        Layer 3: 低频市场数据更新（每30-60分钟触发）
+
+        功能：
+        - 更新资金费率（每8小时变化一次）
+        - 更新持仓量OI（每小时统计）
+        - 更新订单簿深度（用于流动性分析）
+
+        性能：
+        - 耗时：~20-30秒（200币种）
+        - API调用：200-400次
+        - 更新频率：每30-60分钟（00, 30分）
+
+        注意：
+        - 市场数据存储在单独的缓存中（self.market_data_cache）
+        - 当前v6.6架构暂未使用这些数据，预留给未来增强
+
+        Args:
+            symbols: 币种列表
+            client: Binance客户端
+
+        Returns:
+            更新统计信息
+        """
+        start_time = time.time()
+        updated_count = 0
+        error_count = 0
+
+        # 初始化市场数据缓存（如果不存在）
+        if not hasattr(self, 'market_data_cache'):
+            self.market_data_cache: Dict[str, Dict] = {}
+
+        try:
+            log(f"📉 [Layer 3] 开始更新市场数据: {len(symbols)}个币种")
+
+            for symbol in symbols:
+                try:
+                    # 创建币种缓存
+                    if symbol not in self.market_data_cache:
+                        self.market_data_cache[symbol] = {}
+
+                    # 获取资金费率
+                    try:
+                        funding_rate_data = await client.get_funding_rate(symbol)
+                        if funding_rate_data and not isinstance(funding_rate_data, dict):
+                            # 取最新一条
+                            latest = funding_rate_data[0] if isinstance(funding_rate_data, list) else funding_rate_data
+                            funding_rate = float(latest.get('fundingRate', 0))
+                            self.market_data_cache[symbol]['funding_rate'] = funding_rate
+                    except:
+                        pass
+
+                    # 获取持仓量
+                    try:
+                        oi_data = await client.get_open_interest(symbol)
+                        if oi_data:
+                            open_interest = float(oi_data.get('openInterest', 0))
+                            self.market_data_cache[symbol]['open_interest'] = open_interest
+                    except:
+                        pass
+
+                    # 更新时间
+                    self.market_data_cache[symbol]['update_time'] = time.time()
+                    updated_count += 1
+
+                    # 小延迟
+                    await asyncio.sleep(0.05)
+
+                except Exception as e:
+                    error_count += 1
+                    continue
+
+            elapsed = time.time() - start_time
+
+            log(f"✅ [Layer 3] 市场数据更新完成: {updated_count}个币种已更新, {error_count}个失败 (耗时: {elapsed:.2f}秒)")
+
+            return {
+                'updated_count': updated_count,
+                'error_count': error_count,
+                'elapsed': elapsed,
+                'symbols_count': len(symbols)
+            }
+
+        except Exception as e:
+            elapsed = time.time() - start_time
+            error(f"❌ [Layer 3] 市场数据更新失败: {e} (耗时: {elapsed:.2f}秒)")
+            return {
+                'updated_count': 0,
+                'error_count': 0,
+                'elapsed': elapsed,
+                'error': str(e)
+            }
+
+    def get_market_data(self, symbol: str) -> Optional[Dict]:
+        """
+        获取市场数据（资金费率、持仓量等）
+
+        Args:
+            symbol: 币种
+
+        Returns:
+            市场数据字典，如果不存在返回None
+        """
+        if not hasattr(self, 'market_data_cache'):
+            return None
+
+        return self.market_data_cache.get(symbol, None)
+
 
 # ============ 全局单例 ============
 
