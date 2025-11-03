@@ -879,6 +879,50 @@ def _analyze_symbol_core(
     if is_prime:
         pricing = _calc_pricing(h, l, c, atr_now, params.get("pricing", {}), side_long)
 
+    # ---- v6.6: 详细因子输出日志（用于测试和调试）----
+    import sys
+    _VERBOSE_FACTOR_LOG = True  # 详细输出开关
+    if _VERBOSE_FACTOR_LOG:
+        # 6个核心因子详情
+        core_factors = ['T', 'M', 'C', 'V', 'O', 'B']
+        factor_details = []
+        for f in core_factors:
+            val = scores.get(f, 0)
+            wt = base_weights.get(f, 0)
+            contrib = val * wt / 100.0 if wt > 0 else 0
+            sign = '+' if val >= 0 else ''
+            factor_details.append(f"{f}={sign}{val:.1f}({wt:.0f}%→{sign}{contrib:.1f})")
+
+        # 4个调制器详情
+        modulators = ['L', 'S', 'F', 'I']
+        mod_details = []
+        for m in modulators:
+            val = modulation.get(m, 0)
+            sign = '+' if val >= 0 else ''
+            mod_details.append(f"{m}={sign}{val:.1f}")
+
+        # 软约束检查
+        soft_warnings = []
+        if EV <= 0:
+            soft_warnings.append(f"EV={EV:.4f}≤0")
+        if p_below_threshold:
+            soft_warnings.append(f"P={P_chosen:.3f}<{p_min_adjusted:.3f}")
+
+        soft_status = "⚠️ " + ", ".join(soft_warnings) if soft_warnings else "✅ 通过"
+
+        # 输出到stderr（不影响正常输出流）
+        print(f"\n📊 [{symbol}] v6.6因子详细分析:", file=sys.stderr)
+        print(f"   A层-核心因子(6): {', '.join(factor_details)}", file=sys.stderr)
+        print(f"   B层-调制器(4):   {', '.join(mod_details)}", file=sys.stderr)
+        print(f"   加权总分: {weighted_score:+.2f} | 置信度: {confidence:.1f} | Edge: {edge:+.4f}", file=sys.stderr)
+        print(f"   方向: {'LONG' if side_long else 'SHORT'} | P={P_chosen:.3f} | Prime强度: {prime_strength:.1f}/{prime_strength_threshold:.1f}", file=sys.stderr)
+        print(f"   调制链输出: 仓位倍数={modulator_output.position_mult:.2f}, Teff={modulator_output.Teff_final:.1f}h, Cost={modulator_output.cost_final:.4f}", file=sys.stderr)
+        print(f"   软约束: {soft_status}", file=sys.stderr)
+        print(f"   发布状态: {'🟢 Prime' if is_prime else '🟡 Watch' if is_watch else '⚪ 不发布'}", file=sys.stderr)
+        if rejection_reason and not is_prime:
+            print(f"   拒绝原因: {', '.join(rejection_reason)}", file=sys.stderr)
+        print("", file=sys.stderr)  # 空行分隔
+
     # ---- 8. 组装结果（统一±100系统）----
     result = {
         "symbol": symbol,
