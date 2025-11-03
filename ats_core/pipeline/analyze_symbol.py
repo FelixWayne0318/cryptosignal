@@ -1280,8 +1280,10 @@ def _calc_momentum(h, l, c, cfg):
         from ats_core.features.momentum import score_momentum
         M, meta = score_momentum(h, l, c, cfg)
         return int(M), meta
-    except Exception:
-        return 0, {"slope_now": 0.0, "accel": 0.0}
+    except Exception as e:
+        from ats_core.logging import warn
+        warn(f"⚠️  M因子计算异常: {e}")
+        return 0, {"slope_now": 0.0, "accel": 0.0, "error": str(e)}
 
 def _calc_cvd_flow(cvd_series, c, cfg):
     """CVD资金流打分（±100系统）"""
@@ -1307,8 +1309,10 @@ def _calc_volume(vol, closes=None):
         from ats_core.features.volume import score_volume
         V, meta = score_volume(vol, closes=closes)
         return int(V), meta
-    except Exception:
-        return 0, {"v5v20": 1.0, "vroc_abs": 0.0}
+    except Exception as e:
+        from ats_core.logging import warn
+        warn(f"⚠️  V因子计算异常: {e}")
+        return 0, {"v5v20": 1.0, "vroc_abs": 0.0, "error": str(e)}
 
 def _calc_oi(symbol, closes, cfg, cvd6_fallback, oi_data=None):
     """持仓打分（±100系统）"""
