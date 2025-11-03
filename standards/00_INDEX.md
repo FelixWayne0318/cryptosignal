@@ -1,7 +1,7 @@
 # CryptoSignal 规范文档索引
 
-**当前版本**: v6.4 Phase 2
-**最后更新**: 2025-11-02
+**当前版本**: v6.6
+**最后更新**: 2025-11-03
 **文档类型**: 总索引（系统工程入口）
 
 ---
@@ -25,12 +25,12 @@
 - **[03_VERSION_HISTORY.md](03_VERSION_HISTORY.md)** - 版本历史和变更记录
 
 ### 2. 规范子系统 ([specifications/](specifications/))
-- **[FACTOR_SYSTEM.md](specifications/FACTOR_SYSTEM.md)** - 10+1维因子系统规范（核心）
-- **[MODULATORS.md](specifications/MODULATORS.md)** - B层调制器规范（F/I因子）
-- **[PUBLISHING.md](specifications/PUBLISHING.md)** - Prime/Watch发布规范
+- **[FACTOR_SYSTEM.md](specifications/FACTOR_SYSTEM.md)** - 6因子系统规范（T/M/C/V/O/B）
+- **[MODULATORS.md](specifications/MODULATORS.md)** - L/S/F/I调制器规范（连续调节）
+- **[PUBLISHING.md](specifications/PUBLISHING.md)** - Prime/Watch发布规范（v6.6软约束）
 - **[NEWCOIN.md](specifications/NEWCOIN.md)** - 新币通道完整规范
 - **[DATA_LAYER.md](specifications/DATA_LAYER.md)** - 数据层规范
-- **[GATES.md](specifications/GATES.md)** - 四门系统规范
+- **[STOP_LOSS.md](specifications/STOP_LOSS.md)** - 三层止损系统规范（v6.6新增）
 - **[INDEX.md](specifications/INDEX.md)** - 规范索引
 
 ### 3. 部署运维 ([deployment/](deployment/))
@@ -86,12 +86,13 @@
 
 | 需求 | 规范文档 | 实现模块 | 测试 | 部署脚本 |
 |------|---------|---------|------|---------|
-| 10+1维因子系统 | [FACTOR_SYSTEM.md](specifications/FACTOR_SYSTEM.md) | `ats_core/factors_v2/` | - | - |
-| B层调制器 | [MODULATORS.md](specifications/MODULATORS.md) | `ats_core/factors_v2/{fund_leading,independence}.py` | - | - |
-| Prime发布 | [PUBLISHING.md](specifications/PUBLISHING.md) | `ats_core/publishing/anti_jitter.py` | - | - |
+| 6因子系统 | [FACTOR_SYSTEM.md](specifications/FACTOR_SYSTEM.md) | `ats_core/factors_v2/` | - | - |
+| L/S/F/I调制器 | [MODULATORS.md](specifications/MODULATORS.md) | `ats_core/modulators/modulator_chain.py` | - | - |
+| Prime发布（软约束） | [PUBLISHING.md](specifications/PUBLISHING.md) | `ats_core/publishing/anti_jitter.py` | - | - |
 | 新币通道 | [NEWCOIN.md](specifications/NEWCOIN.md) | `ats_core/data_feeds/newcoin_data.py` | `test_phase2.py` | - |
-| 四门系统 | [GATES.md](specifications/GATES.md) | `ats_core/gates/integrated_gates.py` | - | - |
+| 三层止损 | [STOP_LOSS.md](specifications/STOP_LOSS.md) | `ats_core/execution/stop_loss_calculator.py` | - | - |
 | 实时扫描 | [01_SYSTEM_OVERVIEW.md](01_SYSTEM_OVERVIEW.md) | `scripts/realtime_signal_scanner.py` | - | `deploy_and_run.sh` |
+| Telegram富媒体 | [PUBLISHING.md](specifications/PUBLISHING.md) | `ats_core/outputs/telegram_fmt_v66.py` | - | - |
 
 ---
 
@@ -134,6 +135,6 @@
 
 ---
 
-**文档版本**: v6.4-phase2
-**生效日期**: 2025-11-02
+**文档版本**: v6.6
+**生效日期**: 2025-11-03
 **维护责任**: 系统架构师

@@ -10,9 +10,9 @@
   "accel": {},
 
   "momentum": {
-    "slope_lookback": 30,
-    "slope_scale": 0.01,
-    "accel_scale": 0.005,
+    "slope_lookback": 12,
+    "slope_scale": 1.00,
+    "accel_scale": 1.00,
     "slope_weight": 0.6,
     "accel_weight": 0.4
   },
@@ -126,32 +126,33 @@
   },
 
   "weights": {
-    "_comment": "v6.0 - A层9因子权重（总和必须=100.0%），F/I为B层调制器（权重=0）",
-    "T": 18.0,
-    "M": 12.0,
-    "C": 18.0,
-    "S": 10.0,
-    "V": 10.0,
-    "O": 12.0,
-    "L": 12.0,
-    "B": 4.0,
-    "Q": 4.0,
+    "_comment": "v6.6 - A层6因子权重（总和=100.0%），B层4调制器（L/S/F/I权重=0），Q因子完全移除",
+    "T": 24.0,
+    "M": 17.0,
+    "C": 24.0,
+    "V": 12.0,
+    "O": 17.0,
+    "B": 6.0,
     "_b_layer": "以下为B层调制器，不参与评分",
+    "L": 0.0,
+    "S": 0.0,
+    "F": 0.0,
     "I": 0.0,
-    "E": 0.0,
-    "F": 0.0
+    "E": 0.0
   },
   "weights_comment": {
-    "_version": "v6.1 - I因子架构修复版（9因子A层系统）",
-    "_total_weight": "100%（A层9因子权重百分比系统）",
-    "_layer1_price_action": "Layer 1 价格行为层（50%）: T(18%) + M(12%) + S(10%) + V(10%)",
-    "_layer2_capital_flow": "Layer 2 资金流层（30%）: C(18%) + O(12%)",
-    "_layer3_microstructure": "Layer 3 微观结构层（20%）: L(12%) + B(4%) + Q(4%)",
-    "_layer_b_modulators": "B层调制器（不评分）: F(拥挤度) + I(独立性)",
-    "_modulator_role": "F/I仅调制Teff/cost/thresholds，不修改方向分数",
+    "_version": "v6.6 - 统一调制器架构（6因子A层 + 4调制器B层）",
+    "_total_weight": "100%（A层6因子权重百分比系统）",
+    "_layer1_price_action": "Layer 1 价格行为层（53%）: T(24%) + M(17%) + V(12%)",
+    "_layer2_capital_flow": "Layer 2 资金流层（41%）: C(24%) + O(17%)",
+    "_layer3_microstructure": "Layer 3 微观结构层（6%）: B(6%)",
+    "_layer_b_modulators": "B层调制器（不评分）: L(流动性) + S(结构) + F(资金领先) + I(独立性)",
+    "_modulator_role": "L/S/F/I仅调制position/Teff/cost/confidence，不修改方向分数",
     "_deprecated": "E(0) - 环境因子已废弃",
-    "_change_log": "I因子8%权重重新分配：T+2%, M+3%, S+4%, C+6%, L+4%, 其他rebalance",
-    "_four_gates": "信号发布需通过四门：1)DataQual≥0.90, 2)EV>0, 3)执行指标达标, 4)概率阈值"
+    "_removed_v6.6": "Q因子完全移除（数据不可靠收益低），L/S移至B层调制器",
+    "_change_log_v6.6": "权重再分配（S的11% + Q的4%）: T+4%, M+3%, C+4%, V+1%, O+3%",
+    "_rationale": "L/S是质量指标非方向指标，整合为调制器实现连续仓位调整，消除硬拒绝门槛",
+    "_soft_constraints": "仅DataQual≥0.90为硬门槛，EV和P改为软约束（不拒绝信号，仅不发布）"
   },
 
   "fund_leading": {

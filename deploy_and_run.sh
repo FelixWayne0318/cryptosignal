@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==========================================
-# CryptoSignal v6.4 Phase 2 全自动部署并运行脚本
+# CryptoSignal v6.6 全自动部署并运行脚本
 # 适用于：首次部署、更新部署、全新服务器
 # 自动处理：git冲突、依赖缺失、所有错误
 # ==========================================
@@ -12,7 +12,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 echo "=============================================="
-echo "🚀 CryptoSignal v6.4 Phase 2 全自动部署并运行"
+echo "🚀 CryptoSignal v6.6 全自动部署并运行"
 echo "=============================================="
 echo ""
 echo "📋 脚本功能："
@@ -41,7 +41,7 @@ if [ ! -d ~/cryptosignal ]; then
     echo "cd ~"
     echo "git clone https://github.com/FelixWayne0318/cryptosignal.git"
     echo "cd cryptosignal"
-    echo "git checkout claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ"
+    echo "git checkout claude/understand-realtime-scanner-system-011CUjuCJDa9UX3sbxtR2HvA"
     echo "./deploy_and_run.sh"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     exit 1
@@ -98,21 +98,21 @@ retry_git() {
 
 # Fetch 远程代码（带重试）
 echo "   正在 fetch 远程代码..."
-if ! retry_git "git fetch origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ"; then
+if ! retry_git "git fetch origin claude/understand-realtime-scanner-system-011CUjuCJDa9UX3sbxtR2HvA"; then
     echo -e "${RED}❌ git fetch 失败，请检查网络连接${NC}"
     exit 1
 fi
 
 # 强制重置到远程版本
 echo "   强制同步到远程最新版本..."
-git reset --hard origin/claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
+git reset --hard origin/claude/understand-realtime-scanner-system-011CUjuCJDa9UX3sbxtR2HvA
 
 # 切换分支
-git checkout claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ 2>/dev/null || true
+git checkout claude/understand-realtime-scanner-system-011CUjuCJDa9UX3sbxtR2HvA 2>/dev/null || true
 
 # Pull 最新代码（带重试）
 echo "   正在 pull 最新代码..."
-if ! retry_git "git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ"; then
+if ! retry_git "git pull origin claude/understand-realtime-scanner-system-011CUjuCJDa9UX3sbxtR2HvA"; then
     echo -e "${YELLOW}⚠️ git pull 失败，但已 reset 到远程版本，继续部署...${NC}"
 fi
 
@@ -331,7 +331,7 @@ else
 fi
 
 echo ""
-echo "2️⃣ 验证权重配置（v6.4 Phase 2 - 类型安全）..."
+echo "2️⃣ 验证权重配置（v6.6 - 6因子系统）..."
 python3 -c "
 import json
 
@@ -342,37 +342,38 @@ with open('config/params.json') as f:
     publish = config['publish']
 
 # 验证权重（跳过注释字段）
-a_layer = ['T', 'M', 'C', 'S', 'V', 'O', 'L', 'B', 'Q']
+core_factors = ['T', 'M', 'C', 'V', 'O', 'B']
 factor_weights = {k: v for k, v in weights.items() if not k.startswith('_')}
-a_total = sum(factor_weights[k] for k in a_layer)
-b_layer = ['F', 'I']
+factors_total = sum(factor_weights[k] for k in core_factors if k in factor_weights)
+modulators = ['L', 'S', 'F', 'I']
 
 print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-print('权重配置验证 (v6.4 Phase 2)')
+print('权重配置验证 (v6.6 - 6因子系统)')
 print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-print(f'A层9因子总和: {a_total}%')
-for k in a_layer:
-    print(f'  {k}: {weights[k]}%')
+print(f'核心6因子总和: {factors_total}%')
+for k in core_factors:
+    if k in factor_weights:
+        print(f'  {k}: {weights[k]}%')
 print()
-print('B层调制器（应为0.0）:')
-for k in b_layer:
-    print(f'  {k}: {weights[k]}')
+print('调制器（应为0.0，不参与评分）:')
+for k in modulators:
+    if k in weights:
+        print(f'  {k}: {weights[k]}')
 print()
 
 # 验证发布阈值
-print('发布阈值 (v6.1):')
-print(f'  prime_prob_min: {publish[\"prime_prob_min\"]} (应为0.58)')
-print(f'  prime_dims_ok_min: {publish[\"prime_dims_ok_min\"]} (应为3)')
-print(f'  prime_dim_threshold: {publish[\"prime_dim_threshold\"]} (应为30)')
+print('发布阈值 (v6.6软约束):')
+print(f'  prime_prob_min: {publish[\"prime_prob_min\"]} (软约束)')
+print(f'  prime_dims_ok_min: {publish[\"prime_dims_ok_min\"]}')
+print(f'  prime_dim_threshold: {publish[\"prime_dim_threshold\"]}')
 print()
 
 # 断言验证
-assert abs(a_total - 100.0) < 0.01, f'错误: A层权重={a_total}, 应为100.0'
-assert all(weights[k] == 0.0 for k in b_layer), '错误: B层调制器必须为0.0'
-assert publish['prime_prob_min'] == 0.58, '错误: prime_prob_min应为0.58'
-assert publish['prime_dims_ok_min'] == 3, '错误: prime_dims_ok_min应为3'
+assert abs(factors_total - 100.0) < 0.01, f'错误: 核心因子权重={factors_total}, 应为100.0'
+if all(k in weights for k in modulators):
+    assert all(weights[k] == 0.0 for k in modulators), '错误: 调制器权重必须为0.0'
 
-print('✅ 权重配置验证通过')
+print('✅ v6.6 权重配置验证通过')
 print('✅ 类型安全检查通过')
 " || {
     echo -e "${RED}❌ 配置验证失败${NC}"
@@ -472,7 +473,7 @@ echo ""
 echo "📍 第 7 步：自动启动生产环境"
 echo "=============================================="
 echo ""
-echo -e "${GREEN}✅ v6.4 Phase 2 部署验证完成！${NC}"
+echo -e "${GREEN}✅ v6.6 部署验证完成！${NC}"
 echo ""
 echo "🚀 正在启动生产环境（每5分钟扫描一次，200个币种）..."
 echo ""
@@ -524,18 +525,22 @@ else
     echo -e "${GREEN}✅ 部署并运行完成！${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "📊 v6.4 Phase 2 系统特性"
+    echo "📊 v6.6 系统特性"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "✅ I因子架构修正（从A层移至B层）"
-    echo "✅ 多空对称选币机制（波动率优先）"
-    echo "✅ 全面类型安全防护（4层防御）"
-    echo "✅ 扫描币种提升（140→200个）"
+    echo "✅ 6+4因子架构（6核心因子+4调制器）"
+    echo "✅ 核心因子: T/M/C/V/O/B（权重总和100%）"
+    echo "✅ 调制器: L/S/F/I（权重0%，调节执行参数）"
+    echo "✅ 权重优化：T24% M17% C24% V12% O17% B6%"
+    echo "✅ M因子修复：scale=1.00，消除tanh饱和"
+    echo "✅ 软约束系统：EV≤0和P<p_min标记但不拒绝"
+    echo "✅ 三层止损：结构>订单簿>ATR"
+    echo "✅ 新币数据流：1m/5m/15m粒度自动判断"
     echo ""
     echo "预期效果："
-    echo "  • 信号量：3-7个Prime信号/小时"
-    echo "  • 多空比例：接近1:1（对称）"
-    echo "  • 做空信号：增加2-3倍"
-    echo "  • 响应速度：提升33%"
+    echo "  • M因子范围：-100 ~ +100（不再恒定）"
+    echo "  • 信号质量：更精准的动量识别"
+    echo "  • 新币支持：自动检测上币时间"
+    echo "  • 响应速度：K/N=1/2防抖动"
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 fi

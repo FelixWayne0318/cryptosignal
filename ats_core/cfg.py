@@ -17,7 +17,12 @@ def _read_json(path: str) -> Dict[str, Any]:
 
 def _validate_weights(params: Dict[str, Any]) -> None:
     """
-    验证权重配置（v6.0: 100%系统）
+    验证权重配置（v6.6: 6+4维架构）
+
+    v6.6架构：
+    - A层核心因子(6): T, M, C, V, O, B - 权重总和=100%
+    - B层调制器(4): L, S, F, I - 权重必须=0%（不参与评分）
+    - 废弃因子: E（环境）, Q（清算密度） - 可选，建议权重=0%
 
     Raises:
         ValueError: 如果权重配置无效
@@ -34,38 +39,65 @@ def _validate_weights(params: Dict[str, Any]) -> None:
             f"配置错误: 'weights'必须是字典类型，当前类型: {type(weights).__name__}"
         )
 
-    # 计算权重总和（跳过以_开头的注释字段）
+    # v6.6架构定义
+    core_factors = ['T', 'M', 'C', 'V', 'O', 'B']  # A层：6个核心因子
+    modulators = ['L', 'S', 'F', 'I']              # B层：4个调制器
+    deprecated = ['E']                              # 可选：废弃因子（向后兼容）
+
+    # 检查必需的核心因子
+    missing_core = [f for f in core_factors if f not in weights]
+    if missing_core:
+        raise ValueError(
+            f"配置错误: 缺少必需的核心因子权重\n"
+            f"缺失因子: {', '.join(missing_core)}\n"
+            f"v6.6架构要求:\n"
+            f"  A层核心因子(6): T/M/C/V/O/B - 权重总和=100%\n"
+            f"  B层调制器(4): L/S/F/I - 权重必须=0%"
+        )
+
+    # 检查必需的调制器
+    missing_mod = [m for m in modulators if m not in weights]
+    if missing_mod:
+        raise ValueError(
+            f"配置错误: 缺少必需的调制器权重\n"
+            f"缺失调制器: {', '.join(missing_mod)}\n"
+            f"v6.6架构要求:\n"
+            f"  A层核心因子(6): T/M/C/V/O/B - 权重总和=100%\n"
+            f"  B层调制器(4): L/S/F/I - 权重必须=0%"
+        )
+
+    # 计算核心因子权重总和
     try:
-        # 只对因子权重求和，跳过 _comment, _b_layer 等注释字段
-        factor_weights = {k: v for k, v in weights.items() if not k.startswith('_')}
-        total = sum(factor_weights.values())
+        core_weights = {k: weights[k] for k in core_factors}
+        core_total = sum(core_weights.values())
     except (TypeError, AttributeError) as e:
         raise ValueError(
             f"配置错误: 权重值必须是数字类型\n"
             f"错误详情: {e}\n"
-            f"提示: 权重值应为数字（如 18.0），不能是字符串"
+            f"提示: 权重值应为数字（如 24.0），不能是字符串"
         )
 
-    # v6.0系统要求权重总和=100%
-    if abs(total - 100.0) > 0.01:
+    # v6.6要求：核心因子权重总和=100%
+    if abs(core_total - 100.0) > 0.01:
         raise ValueError(
-            f"配置错误: 权重总和必须=100.0% (v6.0系统)\n"
-            f"当前总和: {total}%\n"
-            f"因子权重: {factor_weights}\n\n"
-            f"修复方法: 调整 config/params.json 中的权重值，确保总和=100.0\n"
-            f"验证命令: python3 -c \"import json; w=json.load(open('config/params.json'))['weights']; "
-            f"fw={{k:v for k,v in w.items() if not k.startswith('_')}}; print(f'总和={{sum(fw.values())}}')\""
+            f"配置错误: 核心因子权重总和必须=100.0% (v6.6系统)\n"
+            f"当前总和: {core_total}%\n"
+            f"核心因子权重: {core_weights}\n\n"
+            f"修复方法: 调整 config/params.json 中的核心因子权重，确保总和=100.0\n"
+            f"v6.6标准配置: T=24%, M=17%, C=24%, V=12%, O=17%, B=6%"
         )
 
-    # 检查必需的因子（v6.0: 10+1维）
-    required_factors = ['T', 'M', 'C', 'S', 'V', 'O', 'L', 'B', 'Q', 'I', 'F']
-    missing_factors = [f for f in required_factors if f not in weights]
-    if missing_factors:
-        raise ValueError(
-            f"配置错误: 缺少必需的因子权重\n"
-            f"缺失因子: {', '.join(missing_factors)}\n"
-            f"v6.0系统要求: T/M/C/S/V/O/L/B/Q/I + F (10+1维)"
-        )
+    # v6.6要求：调制器权重必须=0%
+    modulator_weights = {k: weights[k] for k in modulators}
+    for mod, wt in modulator_weights.items():
+        if abs(wt) > 0.01:
+            raise ValueError(
+                f"配置错误: 调制器权重必须=0% (v6.6系统)\n"
+                f"调制器 {mod} 权重={wt}% (应为0%)\n"
+                f"v6.6架构: 调制器不参与评分，仅调节执行参数\n"
+                f"调制器权重: {modulator_weights}\n\n"
+                f"修复方法: 设置 L/S/F/I 权重为 0.0"
+            )
 
 class _Cfg:
     def __init__(self) -> None:
@@ -94,7 +126,7 @@ class _Cfg:
         if not isinstance(raw, dict):
             raw = {}
 
-        # 验证配置（v6.0: 权重总和必须=100%）
+        # 验证配置（v6.6: 核心因子权重总和=100%, 调制器权重=0%）
         try:
             _validate_weights(raw)
         except ValueError as e:

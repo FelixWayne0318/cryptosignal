@@ -2,27 +2,27 @@
 from __future__ import annotations
 
 """
-完整的单币种分析管道（统一±100系统 v6.4 Phase 2 - 9+2因子系统）：
+完整的单币种分析管道（统一±100系统 v6.6 - 6+4因子架构）：
 1. 获取市场数据（K线、OI、订单簿、资金费率）
-2. 计算9+2维特征（A层9因子: T/M/C/S/V/O/L/B/Q + B层调制器: F/I）
+2. 计算6+4维特征（A层6因子: T/M/C/V/O/B + B层4调制器: L/S/F/I）
 3. 统一±100评分（正数=看多/好，负数=看空/差）
 4. 计算加权分数和置信度（权重百分比系统，A层总和100%）
-5. F/I调制器：调节温度/成本/阈值，不参与评分
-6. 判定发布条件（四门系统）
+5. L/S/F/I调制器：调节仓位/置信度/温度/成本，不参与评分
+6. 判定发布条件（软约束系统：EV≤0和P<p_min仅标记，不硬拒绝）
 
-核心改进（v6.4 Phase 2 - 新币数据流架构）：
-- A层9因子: T/M/C/S/V/O/L/B/Q（权重百分比，总和100%）
-- B层调制器: F(资金领先)/I(独立性)（权重=0，仅调制参数）
-- 新币数据流: 快速预判 → 1m/5m/15m数据获取 → AVWAP锚点
-- WebSocket实时订阅: kline_1m/5m/15m + 心跳监控
-- 权重配置: T18/M12/C18/S10/V10/O12/L12/B4/Q4 (总和100%)
-- 四门系统: DataQual≥0.90 + EV>0 + 执行达标 + 概率阈值
+核心架构（v6.6 - 软约束+调制器系统）：
+- A层6因子: T/M/C/V/O/B（权重百分比，总和100%）
+- B层4调制器: L(流动性)/S(结构)/F(资金领先)/I(独立性)（权重=0，仅调制参数）
+- 废弃因子: Q(清算密度-数据不可靠), E(环境-低收益), S移至调制器
+- 权重配置: T24/M17/C24/V12/O17/B6 (总和100%)
+- 软约束: EV≤0和P<p_min不硬拒绝，仅标记soft_filtered=True
+- 三层止损: 结构止损(Swing) > 订单簿聚类 > ATR后备
 
-架构分层（实际权重配置 v6.1）：
-- Layer 1（价格行为50%）：T(18%) + M(12%) + S(10%) + V(10%)
-- Layer 2（资金流30%）：C(18%) + O(12%)
-- Layer 3（微观结构20%）：L(12%) + B(4%) + Q(4%)
-- Layer B（调制器0%）：F(0%) + I(0%)  ← 不参与评分，仅调制
+架构分层（v6.6标准配置）：
+- Layer 1（价格行为53%）：T(24%) + M(17%) + V(12%)
+- Layer 2（资金流41%）：C(24%) + O(17%)
+- Layer 3（微观结构6%）：B(6%)
+- Layer B（调制器0%）：L/S/F/I(0%)  ← 不参与评分，仅调制执行参数
 """
 
 from typing import Dict, Any, Tuple, List
@@ -43,12 +43,17 @@ from ats_core.scoring.adaptive_weights import (
     get_regime_weights,
     blend_weights
 )
+
+# ========== v6.6 统一调制器系统 ==========
+from ats_core.modulators.modulator_chain import ModulatorChain
 from ats_core.features.multi_timeframe import multi_timeframe_coherence
 
-# ========== 10维因子系统 ==========
+# ========== v6.6 三层止损系统 ==========
+from ats_core.execution.stop_loss_calculator import ThreeTierStopLoss
+
+# ========== v6.6 因子系统（6因子：T/M/C/V/O/B）==========
 from ats_core.factors_v2.liquidity import calculate_liquidity
 from ats_core.factors_v2.basis_funding import calculate_basis_funding
-from ats_core.factors_v2.liquidation import calculate_liquidation
 from ats_core.factors_v2.independence import calculate_independence
 
 # ============ 工具函数 ============
@@ -103,20 +108,26 @@ def _analyze_symbol_core(
     elite_meta: Dict[str, Any] = None,  # 保留参数兼容性，但不再使用
     k15m: List = None,  # MTF优化：15分钟K线
     k1d: List = None,   # MTF优化：1天K线
-    orderbook: Dict = None,     # 10维因子：订单簿数据（L）
-    mark_price: float = None,   # 10维因子：标记价格（B）
-    funding_rate: float = None, # 10维因子：资金费率（B）
-    spot_price: float = None,   # 10维因子：现货价格（B）
-    agg_trades: List = None,    # 10维因子：聚合成交数据（Q - 替代清算数据）
-    btc_klines: List = None,    # 10维因子：BTC K线（I）
-    eth_klines: List = None,    # 10维因子：ETH K线（I）
-    liquidations: List = None   # 向后兼容：旧的清算数据（已废弃）
+    orderbook: Dict = None,     # v6.6: 订单簿数据（L - 流动性）
+    mark_price: float = None,   # v6.6: 标记价格（B - 基差）
+    funding_rate: float = None, # v6.6: 资金费率（B - 基差）
+    spot_price: float = None,   # v6.6: 现货价格（B - 基差）
+    btc_klines: List = None,    # v6.6: BTC K线（独立性）
+    eth_klines: List = None     # v6.6: ETH K线（独立性）
 ) -> Dict[str, Any]:
     """
-    核心分析逻辑（使用已获取的K线数据）
+    核心分析逻辑（使用已获取的K线数据）- v6.6
 
-    此函数包含完整的10维因子分析逻辑，但不负责获取数据。
+    此函数包含完整的6因子分析逻辑，但不负责获取数据。
     由analyze_symbol()和analyze_symbol_with_preloaded_klines()调用。
+
+    v6.6 因子系统：
+    - T (Trend): 趋势因子
+    - M (Momentum): 动量因子
+    - C (Carry): 持仓成本因子
+    - V (Volatility): 波动率因子
+    - O (Open Interest): 持仓量因子
+    - B (Basis): 基差因子
 
     Args:
         symbol: 交易对符号
@@ -127,13 +138,12 @@ def _analyze_symbol_core(
         elite_meta: 已废弃，保留仅为兼容性
         k15m: 15分钟K线（可选，用于MTF）
         k1d: 1天K线（可选，用于MTF）
-        orderbook: 订单簿数据（可选，用于L因子）
-        mark_price: 标记价格（可选，用于B因子）
-        funding_rate: 资金费率（可选，用于B因子）
-        spot_price: 现货价格（可选，用于B因子）
-        liquidations: 清算数据列表（可选，用于Q因子）
-        btc_klines: BTC K线数据（可选，用于I因子）
-        eth_klines: ETH K线数据（可选，用于I因子）
+        orderbook: 订单簿数据（可选，用于流动性分析）
+        mark_price: 标记价格（可选，用于基差因子）
+        funding_rate: 资金费率（可选，用于基差因子）
+        spot_price: 现货价格（可选，用于基差因子）
+        btc_klines: BTC K线数据（可选，用于独立性分析）
+        eth_klines: ETH K线数据（可选，用于独立性分析）
 
     Returns:
         分析结果字典
@@ -161,6 +171,21 @@ def _analyze_symbol_core(
         bars_1h = 0
 
     coin_age_days = coin_age_hours / 24
+
+    # ---- v6.6: DataQual硬门槛检查（唯一硬拒绝）----
+    # 计算数据质量分数
+    data_qual = min(1.0, bars_1h / 200.0) if bars_1h > 0 else 0.0
+
+    # 硬拒绝：DataQual < 0.90
+    if data_qual < 0.90:
+        return {
+            "success": False,
+            "symbol": symbol,
+            "error": f"数据质量不足: DataQual={data_qual:.2f} < 0.90 (bars_1h={bars_1h})",
+            "data_qual": data_qual,
+            "bars_1h": bars_1h,
+            "rejection_type": "hard_gate_dataqual"
+        }
 
     # 🔧 v6.3.1规范符合性修改：按照 NEWCOIN_SPEC.md § 1 标准
     #
@@ -275,7 +300,9 @@ def _analyze_symbol_core(
     cvd_series, cvd_mix = cvd_mix_with_oi_price(k1, oi_data, window=20, spot_klines=spot_k1)
     perf['CVD计算'] = time.time() - t0
 
-    # ---- 2. 计算7维特征（统一±100系统）----
+    # ---- 2. 计算v6.6因子（6因子 + 4调制器，统一±100系统）----
+
+    # === A层：6个方向因子（参与评分）===
 
     # 趋势（T）：-100（下跌）到 +100（上涨）
     t0 = time.time()
@@ -310,28 +337,6 @@ def _analyze_symbol_core(
     O, O_meta = _calc_oi(symbol, c, params.get("open_interest", {}), cvd6, oi_data=oi_data)
     perf['O持仓'] = time.time() - t0
 
-    # 环境（E）：-100（差）到 +100（好）
-    t0 = time.time()
-    E, E_meta = _calc_environment(h, l, c, atr_now, params.get("environment", {}))
-    perf['E环境'] = time.time() - t0
-
-    # ---- 2.1. 10维因子系统：新增因子 ----
-
-    # 流动性（L）：-100（差）到 +100（好）
-    # v6.2修复：calculate_liquidity已返回标准化后的±100分数，无需再次映射
-    t0 = time.time()
-    if orderbook is not None:
-        try:
-            L, L_meta = calculate_liquidity(orderbook, params.get("liquidity", {}))
-            # L已经是±100范围，直接使用
-        except Exception as e:
-            from ats_core.logging import warn
-            warn(f"L因子计算失败: {e}")
-            L, L_meta = 0, {"error": str(e)}
-    else:
-        L, L_meta = 0, {"note": "无订单簿数据"}
-    perf['L流动性'] = time.time() - t0
-
     # 基差+资金费（B）：-100（看跌）到 +100（看涨）- 方向维度
     t0 = time.time()
     if mark_price is not None and spot_price is not None and funding_rate is not None:
@@ -350,38 +355,30 @@ def _analyze_symbol_core(
         B, B_meta = 0, {"note": "缺少mark_price/spot_price/funding_rate数据"}
     perf['B基差资金费'] = time.time() - t0
 
-    # 清算密度（Q）：-100（空单密集清算，超涨回调，看空）到 +100（多单密集清算，超跌反弹，看多）
-    # 逻辑：大量多单清算后抛压减轻可能反弹，大量空单清算后买压减轻可能回调
+    # v6.6: E环境因子已废弃（不再计算）
+    E_meta = {"deprecated": True, "note": "v6.6: 环境因子已废弃"}
+
+    # v6.6: Q因子已完全移除（清算密度数据不可靠且收益低）
+
+    # === B层：4个调制器（不参与评分）===
+
+    # 流动性（L）：-100（差）到 +100（好）
+    # v6.2修复：calculate_liquidity已返回标准化后的±100分数，无需再次映射
     t0 = time.time()
-    if agg_trades is not None and len(agg_trades) > 0:
-        # 使用aggTrades数据（新方法 - 分析大额异常交易）
+    if orderbook is not None:
         try:
-            from ats_core.factors_v2.liquidation_v2 import calculate_liquidation_from_trades
-            Q, Q_meta = calculate_liquidation_from_trades(
-                agg_trades=agg_trades,
-                current_price=close_now,
-                params=params.get("liquidation", {})
-            )
+            L, L_meta = calculate_liquidity(orderbook, params.get("liquidity", {}))
+            # L已经是±100范围，直接使用
         except Exception as e:
             from ats_core.logging import warn
-            warn(f"Q因子计算失败(aggTrades): {e}")
-            Q, Q_meta = 0, {"error": str(e)}
-    elif liquidations is not None and len(liquidations) > 0:
-        # 向后兼容：如果有旧的清算数据则使用（已废弃）
-        try:
-            Q, Q_meta = calculate_liquidation(
-                liquidations=liquidations,
-                current_price=close_now,
-                liquidation_map=None,
-                params=params.get("liquidation", {})
-            )
-        except Exception as e:
-            from ats_core.logging import warn
-            warn(f"Q因子计算失败(liquidations): {e}")
-            Q, Q_meta = 0, {"error": str(e)}
+            warn(f"L因子计算失败: {e}")
+            L, L_meta = 0, {"error": str(e)}
     else:
-        Q, Q_meta = 0, {"note": "无清算数据或聚合成交数据"}
-    perf['Q清算密度'] = time.time() - t0
+        L, L_meta = 0, {"note": "无订单簿数据"}
+    perf['L流动性'] = time.time() - t0
+
+    # 结构（S）：-100（差）到 +100（好）
+    # v6.6: S因子已在line 323-326计算，此处作为B层调制器使用
 
     # 独立性（I）：0（完全相关）到 100（完全独立）→ 归一化到 ±100
     # 越独立越好，所以高分=正分，低分=负分
@@ -409,14 +406,13 @@ def _analyze_symbol_core(
                     params=params.get("independence", {})
                 )
 
-                # v6.3修复：软化I调制器，避免±100硬截断（专家建议 #2）
-                # 使用tanh()函数将极值软化：-100→-96, +100→+96
-                import math
-                I = 100 * math.tanh(I_raw / 50)
+                # v6.6修复：I_raw已经过StandardizationChain输出±100，无需再tanh
+                # 之前的tanh(I_raw/50)造成double-tanh bug，将±100压缩到±96
+                I = I_raw  # 直接使用StandardizationChain的输出
 
                 # 补充元数据
                 I_meta['data_points'] = use_len
-                I_meta['I_raw'] = I_raw  # 保存原始值用于调试
+                I_meta['note'] = 'v6.6: I_raw直接使用，已移除double-tanh bug'
             else:
                 I, I_meta = 0, {"note": f"数据不足（需要25小时，实际{min_len}小时）"}
         except Exception as e:
@@ -440,36 +436,35 @@ def _analyze_symbol_core(
         oi_change_pct, vol_ratio, cvd6, price_change_24h, price_slope, params.get("fund_leading", {})
     )
 
-    # v6.3修复：软化F调制器，避免±100硬截断（专家建议 #2）
-    # 使用tanh()函数将极值软化：-100→-96, -50→-76
-    import math
-    F = 100 * math.tanh(F_raw / 50)
-    F_meta['F_raw'] = F_raw  # 保存原始值用于调试
+    # v6.6修复：F_raw已经过fund_leading.py中的tanh输出±100，无需再tanh
+    # 之前的tanh(F_raw/50)造成double-tanh bug，将±100压缩到±96
+    F = F_raw  # 直接使用fund_leading.py的输出
+    F_meta['note'] = 'v6.6: F_raw直接使用，已移除double-tanh bug'
 
-    # ---- 3. Scorecard（10维统一±100系统，v2.0合规版）----
-    # 🔧 v2.0合规修复：F/I移至B层调制器，不参与方向评分
-    # 符合MODULATORS.md § 2.1规范：F/I只调制Teff/cost/thresholds
+    # ---- 3. Scorecard（v6.6: 6因子A层 + 4调制器B层）----
+    # v6.6架构：L/S/F/I移至B层调制器，不参与方向评分
+    # 符合MODULATORS.md § 2.1规范：调制器只调制position/Teff/cost/confidence
 
-    # 基础权重（从配置读取，9维A层系统：总权重100%）
-    # I的8.0%权重重新分配到其他因子
+    # v6.6基础权重（6因子A层系统：总权重100%）
+    # 配置优先级：config/params.json > 硬编码默认值
     base_weights_raw = params.get("weights", {
-        # Layer 1: 价格行为层（50%）
-        "T": 18.0,  # 趋势 (was 16.0, +2.0 from I)
-        "M": 12.0,  # 动量 (was 9.0, +3.0 from I)
-        "S": 10.0,  # 结构 (was 6.0, +4.0 from I+rebalance)
-        "V": 10.0,  # 量能 (was 9.0, +1.0 from rebalance)
-        # Layer 2: 资金流层（30%）
-        "C": 18.0,  # CVD资金流 (was 12.0, +6.0 redistributed)
-        "O": 12.0,  # OI持仓
-        # Layer 3: 微观结构层（20%）
-        "L": 12.0,  # 流动性
-        "B": 4.0,   # 基差+资金费 (was 9.0, -5.0 rebalance)
-        "Q": 4.0,   # 清算密度 (was 7.0, -3.0 rebalance)
-        # 废弃因子和B层调制器（不参与评分）
-        "E": 0.0,   # 环境（已废弃）
-        "I": 0.0,   # 独立性（B层调制器，不参与评分）
-        "F": 0.0,   # 资金领先（B层调制器，不参与评分）
-    })  # A层9因子总计: 18+12+10+10+18+12+12+4+4 = 100.0 ✓
+        # Layer 1: 价格行为层（53%）
+        "T": 24.0,  # 趋势（v6.6: +4% from S/Q重分配）
+        "M": 17.0,  # 动量（v6.6: +3% from S/Q重分配）
+        "V": 12.0,  # 量能（v6.6: +1% from S/Q重分配）
+        # Layer 2: 资金流层（41%）
+        "C": 24.0,  # CVD资金流（v6.6: +4% from S/Q重分配）
+        "O": 17.0,  # OI持仓（v6.6: +3% from S/Q重分配）
+        # Layer 3: 微观结构层（6%）
+        "B": 6.0,   # 基差+资金费（v6.6: unchanged）
+        # B层调制器（不参与评分，权重=0）
+        "L": 0.0,   # 流动性调制器（v6.6: moved from A-layer）
+        "S": 0.0,   # 结构调制器（v6.6: moved from A-layer）
+        "F": 0.0,   # 资金领先调制器（v6.6: already B-layer）
+        "I": 0.0,   # 独立性调制器（v6.6: already B-layer）
+        # 废弃因子
+        "E": 0.0,   # 环境因子（v6.6: deprecated）
+    })  # A层6因子总计: 24+17+12+24+17+6 = 100.0 ✓
 
     # 过滤注释字段（防止传入blend_weights时出现类型错误）
     base_weights = {k: v for k, v in base_weights_raw.items() if not k.startswith('_')}
@@ -493,12 +488,11 @@ def _analyze_symbol_core(
     # 平滑混合（70%自适应 + 30%基础）
     weights = blend_weights(regime_weights, base_weights, blend_ratio=0.7)
 
-    # 9维方向分数（统一±100，v2.0合规版：F和I移至B层）
+    # v6.6: 6维方向分数（T/M/C/V/O/B）+ 4维B层调制器（L/S/F/I）
     scores = {
-        # A-layer direction factors (9 factors ONLY)
-        "T": T, "M": M, "C": C, "S": S, "V": V, "O": O,
-        "L": L, "B": B, "Q": Q,
-        # E废弃，F和I移至B层调制器
+        # A-layer direction factors (6 factors in v6.6)
+        "T": T, "M": M, "C": C, "V": V, "O": O, "B": B,
+        # v6.6移除: L/S移至B层调制器, Q完全删除, E废弃
     }
 
     # v2.0合规：因子范围验证（HIGH #2）
@@ -509,11 +503,13 @@ def _analyze_symbol_core(
             warn(f"⚠️  因子{factor_name}超出范围: {factor_value}, 裁剪到±100")
             scores[factor_name] = max(-100, min(100, factor_value))
 
-    # B-layer modulation factors (F/I affect Teff/cost/thresholds ONLY, NOT S_score)
-    # Per MODULATORS.md § 2.1: "F/I 仅调节 Teff/cost/thresholds，绝不修改方向分数"
+    # v6.6: B-layer modulation factors (L/S/F/I affect position/Teff/cost/confidence)
+    # 调制器不参与评分（权重=0%），仅调整执行参数
     modulation = {
-        "F": F,  # Funding leading factor (拥挤度调制器)
-        "I": I,  # Independence factor (独立性调制器)
+        "L": L,  # Liquidity modulator
+        "S": S,  # Structure modulator
+        "F": F,  # Funding leading modulator
+        "I": I,  # Independence modulator
     }
 
     # 计算加权分数（scorecard内部已归一化到±100）
@@ -525,6 +521,39 @@ def _analyze_symbol_core(
 
     # 方向判断（根据加权分数符号）
     side_long = (weighted_score > 0)
+
+    # ---- v6.6: 调制器链调用 ----
+    # 创建调制器链实例
+    modulator_chain = ModulatorChain(params={
+        "T0": 2.0,
+        "cost_base": 0.0015,
+        "L_params": {"min_position": 0.30, "safety_margin": 0.005},
+        "S_params": {"confidence_min": 0.70, "confidence_max": 1.30},
+        "F_params": {"Teff_min": 0.80, "Teff_max": 1.20},
+        "I_params": {"Teff_min": 0.85, "Teff_max": 1.15}
+    })
+
+    # 准备L_components（从L_meta提取）
+    L_components = {
+        "spread_bps": L_meta.get("spread_bps", 10.0),
+        "depth_quality": L_meta.get("depth_quality", 50.0),
+        "impact_bps": L_meta.get("impact_bps", 5.0),
+        "obi": L_meta.get("obi", 0.0)
+    }
+
+    # 执行调制器链
+    modulator_output = modulator_chain.modulate_all(
+        L_score=L,  # L from liquidity.py: [0, 100]
+        S_score=S,  # S from structure_sq.py: [-100, +100]
+        F_score=F,  # F from fund_leading.py: [-100, +100]
+        I_score=I,  # I from independence.py: [-100, +100]
+        L_components=L_components,
+        confidence_base=confidence,
+        symbol=symbol
+    )
+
+    # 更新confidence使用调制后的值
+    confidence_modulated = modulator_output.confidence_final
 
     # 元数据
     scores_meta = {
@@ -539,7 +568,7 @@ def _analyze_symbol_core(
         # 新因子
         "L": L_meta,
         "B": B_meta,
-        "Q": Q_meta,
+        # v6.6: Q_meta已移除（Q因子完全删除）
         "I": I_meta,
         # 调节器
         "F": F_meta
@@ -571,10 +600,12 @@ def _analyze_symbol_core(
             quality_score = min(1.0, quality_score / 0.85 * 0.87)
         # 注：补偿不能超过1.0，且仍保留一定惩罚（体现数据少的风险）
 
-    # 自适应温度参数
-    temperature = get_adaptive_temperature(market_regime_early, current_volatility)
+    # v6.6: 使用调制器链的Teff（替代get_adaptive_temperature）
+    # 调制器已融合了L/S/F/I的温度调整
+    temperature = modulator_output.Teff_final
 
     # 使用Sigmoid概率映射（替代线性映射）
+    # v6.6: 使用调制后的temperature和cost
     P_long_base, P_short_base = map_probability_sigmoid(edge, prior_up, quality_score, temperature)
     P_base = P_long_base if side_long else P_short_base
 
@@ -588,8 +619,33 @@ def _analyze_symbol_core(
     P_short = min(0.95, P_short_base)
     P_chosen = P_long if side_long else P_short
 
-    # ---- 6. 发布判定（4级分级标准）----
+    # ---- v6.6: 软约束检查（EV和P门槛）----
+    # 获取发布配置
     publish_cfg = params.get("publish", {})
+
+    # 计算EV使用调制后的cost
+    EV = P_chosen * edge - (1 - P_chosen) * modulator_output.cost_final
+
+    # 软约束1：EV ≤ 0
+    if EV <= 0:
+        # 不是硬拒绝，记录为"自然过滤"
+        # 返回success=True但publish=False
+        pass  # 允许继续，但后续会标记为不发布
+
+    # 软约束2：P < p_min（基于F调制器调整）
+    # 计算p_min（动态）
+    base_p_min = publish_cfg.get("prime_prob_min", 0.58)
+    safety_margin = modulator_output.L_meta.get("safety_margin", 0.005)
+    p_min = base_p_min + safety_margin / (edge + 1e-6)
+
+    # 应用F调制器的p_min调整
+    p_min_adjusted = p_min + modulator_output.p_min_adj
+    p_min_adjusted = max(0.50, min(0.70, p_min_adjusted))  # 限制在合理范围
+
+    # 检查P是否低于阈值
+    p_below_threshold = P_chosen < p_min_adjusted
+
+    # ---- 6. 发布判定（4级分级标准）----
 
     # 新币特殊处理：应用分级标准
     if is_ultra_new:
@@ -635,8 +691,8 @@ def _analyze_symbol_core(
 
     prime_strength = 0.0
 
-    # 1. 基础强度：基于10维综合评分（60分）
-    # confidence = abs(weighted_score)，已包含T/M/C/S/V/O/L/B/Q/I全部因子
+    # 1. 基础强度：基于v6.6综合评分（60分）
+    # confidence = abs(weighted_score)，已包含6个核心因子T/M/C/V/O/B
     # 范围：0-100 → 映射到 0-60分
     base_strength = confidence * 0.6
     prime_strength += base_strength
@@ -798,11 +854,81 @@ def _analyze_symbol_core(
     # ---- 7. 15分钟微确认 ----
     m15_ok = _check_microconfirm_15m(symbol, side_long, params.get("microconfirm_15m", {}), atr_now)
 
-    # ---- 7. 给价计划 ----
-    # 只为Prime信号计算止盈止损（因为不发Watch信号了）
+    # ---- v6.6: 三层止损计算 ----
+    # 为所有信号计算止损（不限于Prime）
+    stop_loss_calculator = ThreeTierStopLoss(params=params.get("stop_loss", {}))
+
+    direction = "LONG" if side_long else "SHORT"
+    stop_loss_result = stop_loss_calculator.calculate_stop_loss(
+        direction=direction,
+        current_price=close_now,
+        highs=h,
+        lows=l,
+        orderbook=orderbook,
+        atr=atr_now
+    )
+
+    # 计算止盈（简化版：基于edge和RR比）
+    # v6.6: 使用调制后的edge和止损距离计算止盈
+    target_rr_ratio = 2.0  # 目标盈亏比2:1
+    take_profit_distance = stop_loss_result.distance_pct * target_rr_ratio
+
+    if direction == "LONG":
+        take_profit_price = close_now * (1 + take_profit_distance)
+    else:
+        take_profit_price = close_now * (1 - take_profit_distance)
+
+    # 旧版给价计划（兼容性保留）
     pricing = None
     if is_prime:
         pricing = _calc_pricing(h, l, c, atr_now, params.get("pricing", {}), side_long)
+
+    # ---- v6.6: 详细因子输出日志（用于测试和调试）----
+    from ats_core.logging import log as _log
+    # 详细输出策略：只对Prime/Watch信号或测试模式显示详细因子分析
+    # 环境变量VERBOSE_FACTOR_LOG=1可强制所有币种详细输出（用于测试）
+    import os
+    force_verbose = os.environ.get('VERBOSE_FACTOR_LOG', '0') == '1'
+    _VERBOSE_FACTOR_LOG = force_verbose or is_prime or is_watch
+    if _VERBOSE_FACTOR_LOG:
+        # 6个核心因子详情
+        core_factors = ['T', 'M', 'C', 'V', 'O', 'B']
+        factor_details = []
+        for f in core_factors:
+            val = scores.get(f, 0)
+            wt = weights.get(f, 0)  # 使用自适应权重
+            contrib = val * wt / 100.0 if wt > 0 else 0
+            sign = '+' if val >= 0 else ''
+            factor_details.append(f"{f}={sign}{val:.1f}({wt:.0f}%→{sign}{contrib:.1f})")
+
+        # 4个调制器详情
+        modulators = ['L', 'S', 'F', 'I']
+        mod_details = []
+        for m in modulators:
+            val = modulation.get(m, 0)
+            sign = '+' if val >= 0 else ''
+            mod_details.append(f"{m}={sign}{val:.1f}")
+
+        # 软约束检查
+        soft_warnings = []
+        if EV <= 0:
+            soft_warnings.append(f"EV={EV:.4f}≤0")
+        if p_below_threshold:
+            soft_warnings.append(f"P={P_chosen:.3f}<{p_min_adjusted:.3f}")
+
+        soft_status = "⚠️ " + ", ".join(soft_warnings) if soft_warnings else "✅ 通过"
+
+        # 使用系统日志函数输出到stdout
+        _log(f"📊 [{symbol}] v6.6因子详细分析:")
+        _log(f"   A层-核心因子(6): {', '.join(factor_details)}")
+        _log(f"   B层-调制器(4):   {', '.join(mod_details)}")
+        _log(f"   加权总分: {weighted_score:+.2f} | 置信度: {confidence:.1f} | Edge: {edge:+.4f}")
+        _log(f"   方向: {'LONG' if side_long else 'SHORT'} | P={P_chosen:.3f} | Prime强度: {prime_strength:.1f}/{prime_strength_threshold:.1f}")
+        _log(f"   调制链输出: 仓位倍数={modulator_output.position_mult:.2f}, Teff={modulator_output.Teff_final:.1f}h, Cost={modulator_output.cost_final:.4f}")
+        _log(f"   软约束: {soft_status}")
+        _log(f"   发布状态: {'🟢 Prime' if is_prime else '🟡 Watch' if is_watch else '⚪ 不发布'}")
+        if rejection_reason and not is_prime:
+            _log(f"   拒绝原因: {', '.join(rejection_reason)}")
 
     # ---- 8. 组装结果（统一±100系统）----
     result = {
@@ -820,6 +946,12 @@ def _analyze_symbol_core(
 
         # B-layer调节因子（v2.0新增：F不参与评分，仅用于Teff/cost调节）
         "modulation": modulation,
+
+        # v6.6: 调制器输出（L/S/F/I调制链结果）
+        "modulator_output": modulator_output.to_dict(),
+        "position_mult": modulator_output.position_mult,  # 仓位倍数 [0.30, 1.00]
+        "Teff_final": modulator_output.Teff_final,  # 最终温度（融合后）
+        "cost_modulated": modulator_output.cost_final,  # 调制后成本
 
         # Scorecard结果
         "weighted_score": weighted_score,  # -100 到 +100
@@ -849,7 +981,14 @@ def _analyze_symbol_core(
             "prime_strength_threshold": prime_strength_threshold,  # v6.3.2新增：币种特定阈值
             "prime_breakdown": prime_breakdown,  # Prime评分详细分解（v4.0新增）
             "rejection_reason": rejection_reason,  # v6.3新增：拒绝原因跟踪
-            "ttl_h": 8
+            "ttl_h": 8,
+            # v6.6软约束（不硬拒绝，仅标记）
+            "EV": EV,
+            "EV_positive": EV > 0,
+            "P_threshold": p_min_adjusted,
+            "P_above_threshold": not p_below_threshold,
+            "soft_filtered": (EV <= 0) or p_below_threshold,
+            "soft_filter_reason": "EV≤0" if EV <= 0 else ("P<p_min" if p_below_threshold else None)
         },
 
         # 新币信息（嵌套格式，匹配scanner读取）
@@ -868,6 +1007,17 @@ def _analyze_symbol_core(
 
         # 给价
         "pricing": pricing,
+
+        # v6.6: 三层止损止盈
+        "stop_loss": stop_loss_result.to_dict(),
+        "take_profit": {
+            "price": take_profit_price,
+            "distance_pct": take_profit_distance,
+            "distance_usdt": take_profit_distance * 1000,
+            "method": "rr_based",
+            "method_cn": f"盈亏比 (RR={target_rr_ratio:.1f})",
+            "rr_ratio": target_rr_ratio
+        },
 
         # CVD
         "cvd_z20": _zscore_last(cvd_series, 20) if cvd_series else 0.0,
@@ -1003,13 +1153,12 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     except Exception:
         spot_k1 = None
 
-    # 10维因子系统：获取L/B/Q/I因子所需数据
+    # v6.6 因子系统：获取L/B/I因子所需数据
     from ats_core.sources.binance import (
         get_orderbook_snapshot,
         get_mark_price,
         get_funding_rate,
-        get_spot_price,
-        get_liquidations
+        get_spot_price
     )
 
     # 获取订单簿数据（L因子）
@@ -1044,17 +1193,7 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         warn(f"获取{symbol}现货价格失败: {e}")
         spot_price = None
 
-    # 获取清算数据（Q因子）- 使用aggTrades替代已废弃的清算API
-    try:
-        from ats_core.sources.binance import get_agg_trades
-        # 获取最近500笔聚合成交（分析大额异常交易）
-        agg_trades = get_agg_trades(symbol, limit=500)
-    except Exception as e:
-        from ats_core.logging import warn
-        warn(f"获取{symbol}聚合成交数据失败: {e}")
-        agg_trades = []
-
-    # 获取BTC/ETH K线数据（I因子）
+    # 获取BTC/ETH K线数据（独立性分析）
     # 注意：只需要获取一次，不需要每个币种都获取
     # 但为了保持analyze_symbol()的独立性，这里还是获取
     try:
@@ -1084,9 +1223,8 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         mark_price=mark_price,       # B（基差+资金费）
         funding_rate=funding_rate,   # B（基差+资金费）
         spot_price=spot_price,       # B（基差+资金费）
-        agg_trades=agg_trades,       # Q（清算密度 - 使用aggTrades）
-        btc_klines=btc_klines,       # I（独立性）
-        eth_klines=eth_klines        # I（独立性）
+        btc_klines=btc_klines,       # 独立性分析
+        eth_klines=eth_klines        # 独立性分析
     )
 
     # ---- 3. 添加新币数据元信息（Phase 2）----
@@ -1146,8 +1284,10 @@ def _calc_momentum(h, l, c, cfg):
         from ats_core.features.momentum import score_momentum
         M, meta = score_momentum(h, l, c, cfg)
         return int(M), meta
-    except Exception:
-        return 0, {"slope_now": 0.0, "accel": 0.0}
+    except Exception as e:
+        from ats_core.logging import warn
+        warn(f"⚠️  M因子计算异常: {e}")
+        return 0, {"slope_now": 0.0, "accel": 0.0, "error": str(e)}
 
 def _calc_cvd_flow(cvd_series, c, cfg):
     """CVD资金流打分（±100系统）"""
@@ -1173,8 +1313,10 @@ def _calc_volume(vol, closes=None):
         from ats_core.features.volume import score_volume
         V, meta = score_volume(vol, closes=closes)
         return int(V), meta
-    except Exception:
-        return 0, {"v5v20": 1.0, "vroc_abs": 0.0}
+    except Exception as e:
+        from ats_core.logging import warn
+        warn(f"⚠️  V因子计算异常: {e}")
+        return 0, {"v5v20": 1.0, "vroc_abs": 0.0, "error": str(e)}
 
 def _calc_oi(symbol, closes, cfg, cvd6_fallback, oi_data=None):
     """持仓打分（±100系统）"""
@@ -1291,17 +1433,17 @@ def analyze_symbol_with_preloaded_klines(
     elite_meta: Dict = None,
     k15m: List = None,  # MTF优化：15分钟K线
     k1d: List = None,   # MTF优化：1天K线
-    orderbook: Dict = None,     # 10维因子：订单簿数据（L）
-    mark_price: float = None,   # 10维因子：标记价格（B）
-    funding_rate: float = None, # 10维因子：资金费率（B）
-    spot_price: float = None,   # 10维因子：现货价格（B）
-    agg_trades: List = None,    # 10维因子：聚合成交数据（Q - 使用aggTrades替代清算数据）
-    liquidations: List = None,  # 10维因子：清算数据（Q - 已废弃，向后兼容）
-    btc_klines: List = None,    # 10维因子：BTC K线（I）
-    eth_klines: List = None     # 10维因子：ETH K线（I）
+    orderbook: Dict = None,     # v6.6: 订单簿数据（L - 流动性）
+    mark_price: float = None,   # v6.6: 标记价格（B - 基差）
+    funding_rate: float = None, # v6.6: 资金费率（B - 基差）
+    spot_price: float = None,   # v6.6: 现货价格（B - 基差）
+    btc_klines: List = None,    # v6.6: BTC K线（独立性）
+    eth_klines: List = None     # v6.6: ETH K线（独立性）
 ) -> Dict[str, Any]:
     """
-    使用预加载的K线数据分析币种（用于批量扫描优化）
+    使用预加载的K线数据分析币种（用于批量扫描优化）- v6.6
+
+    v6.6 因子系统（6因子）：T/M/C/V/O/B
 
     Args:
         symbol: 交易对符号
@@ -1312,14 +1454,12 @@ def analyze_symbol_with_preloaded_klines(
         elite_meta: Elite Universe元数据（可选）
         k15m: 15分钟K线（可选，用于MTF）
         k1d: 1天K线（可选，用于MTF）
-        orderbook: 订单簿数据（可选，用于L因子）
-        mark_price: 标记价格（可选，用于B因子）
-        funding_rate: 资金费率（可选，用于B因子）
-        spot_price: 现货价格（可选，用于B因子）
-        agg_trades: 聚合成交数据列表（可选，用于Q因子 - 新方法）
-        liquidations: 清算数据列表（可选，用于Q因子 - 已废弃，仅保留向后兼容）
-        btc_klines: BTC K线数据（可选，用于I因子）
-        eth_klines: ETH K线数据（可选，用于I因子）
+        orderbook: 订单簿数据（可选，用于流动性分析）
+        mark_price: 标记价格（可选，用于基差因子）
+        funding_rate: 资金费率（可选，用于基差因子）
+        spot_price: 现货价格（可选，用于基差因子）
+        btc_klines: BTC K线数据（可选，用于独立性分析）
+        eth_klines: ETH K线数据（可选，用于独立性分析）
 
     Returns:
         分析结果字典（格式与analyze_symbol相同）
@@ -1330,7 +1470,7 @@ def analyze_symbol_with_preloaded_klines(
     注意:
         这个函数不会自动获取K线数据，调用者必须提供
     """
-    # 🔧 修复：使用预加载的数据调用核心分析函数
+    # 使用预加载的数据调用核心分析函数（v6.6）
     # 如果oi_data为None，使用空列表避免NoneType错误
     return _analyze_symbol_core(
         symbol=symbol,
@@ -1345,8 +1485,6 @@ def analyze_symbol_with_preloaded_klines(
         mark_price=mark_price,       # 传递标记价格（B）
         funding_rate=funding_rate,   # 传递资金费率（B）
         spot_price=spot_price,       # 传递现货价格（B）
-        agg_trades=agg_trades,       # 传递聚合成交数据（Q - 新方法）
-        liquidations=liquidations,   # 传递清算数据（Q - 已废弃，向后兼容）
-        btc_klines=btc_klines,       # 传递BTC K线（I）
-        eth_klines=eth_klines        # 传递ETH K线（I）
+        btc_klines=btc_klines,       # 传递BTC K线（独立性）
+        eth_klines=eth_klines        # 传递ETH K线（独立性）
     )

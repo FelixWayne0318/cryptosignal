@@ -43,8 +43,8 @@ def score_momentum(
     # 默认参数
     default_params = {
         "slope_lookback": 12,      # EMA周期（优化：30→12，更快响应）
-        "slope_scale": 0.01,       # 斜率scale
-        "accel_scale": 0.005,      # 加速度scale
+        "slope_scale": 1.00,       # 斜率scale（修复：0.01→0.30→1.00，避免过度饱和）
+        "accel_scale": 1.00,       # 加速度scale（修复：0.005→0.30→1.00，避免过度饱和）
         "slope_weight": 0.6,       # 斜率权重
         "accel_weight": 0.4,       # 加速度权重
         "atr_period": 14,          # ATR周期

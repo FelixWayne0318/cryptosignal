@@ -39,15 +39,15 @@ class OptimizedBatchScanner:
         self.initialized = False
         self.symbols = []  # 保存初始化时的币种列表
 
-        # 10维因子系统：预加载的市场数据缓存
-        self.orderbook_cache = {}      # {symbol: orderbook_dict}
-        self.mark_price_cache = {}     # {symbol: mark_price}
-        self.funding_rate_cache = {}   # {symbol: funding_rate}
-        self.spot_price_cache = {}     # {symbol: spot_price}
-        self.liquidation_cache = {}    # {symbol: agg_trades_list} - Q因子（使用aggTrades替代已废弃的清算API）
+        # v6.6因子系统：预加载的市场数据缓存
+        self.orderbook_cache = {}      # {symbol: orderbook_dict} - L调制器
+        self.mark_price_cache = {}     # {symbol: mark_price} - B因子
+        self.funding_rate_cache = {}   # {symbol: funding_rate} - B因子
+        self.spot_price_cache = {}     # {symbol: spot_price} - B因子
+        # v6.6: liquidation_cache已移除（Q因子废弃）
         self.oi_cache = {}             # {symbol: oi_data_list} - O因子（持仓量历史）
-        self.btc_klines = []           # BTC K线数据 - I因子
-        self.eth_klines = []           # ETH K线数据 - I因子
+        self.btc_klines = []           # BTC K线数据 - I调制器
+        self.eth_klines = []           # ETH K线数据 - I调制器
 
         log("✅ 优化批量扫描器创建成功")
 
@@ -292,57 +292,12 @@ class OptimizedBatchScanner:
 
         log(f"       ✅ 成功: {orderbook_success}, 失败: {orderbook_failed}")
 
-        # 5.4 批量获取聚合成交数据（Q因子 - 使用aggTrades替代已废弃的清算API）
-        log("   5.4 批量获取聚合成交数据（Q因子）...")
-        log("       🚀 使用并发模式，预计10-15秒")
-        from ats_core.sources.binance import get_agg_trades
-
-        agg_trades_success = 0
-        agg_trades_failed = 0
-
-        # 🔧 FIX: 使用并发获取，大幅提升速度
-        async def fetch_one_agg_trades(symbol: str):
-            """异步获取单个币种的聚合成交数据"""
-            try:
-                loop = asyncio.get_event_loop()
-                agg_trades = await loop.run_in_executor(
-                    None,
-                    lambda: get_agg_trades(symbol, limit=500)
-                )
-                return symbol, agg_trades, None
-            except Exception as e:
-                return symbol, [], e
-
-        # 分批并发获取
-        batch_size = 20  # 每批20个并发请求
-        for i in range(0, len(symbols), batch_size):
-            batch = symbols[i:i+batch_size]
-
-            # 并发获取这一批的所有聚合成交数据
-            tasks = [fetch_one_agg_trades(symbol) for symbol in batch]
-            results = await asyncio.gather(*tasks)
-
-            # 处理结果
-            for symbol, agg_trades, error in results:
-                if error is None:
-                    self.liquidation_cache[symbol] = agg_trades
-                    agg_trades_success += 1
-                else:
-                    self.liquidation_cache[symbol] = []
-                    agg_trades_failed += 1
-                    if agg_trades_failed <= 5:
-                        warn(f"       获取{symbol}聚合成交数据失败: {error}")
-
-            # 批间延迟
-            if i + batch_size < len(symbols):
-                await asyncio.sleep(0.5)
-
-            # 进度显示
-            progress = min(i + batch_size, len(symbols))
-            if progress % 40 == 0 or progress >= len(symbols):
-                log(f"       进度: {progress}/{len(symbols)} ({progress/len(symbols)*100:.0f}%)")
-
-        log(f"       ✅ 成功: {agg_trades_success}, 失败: {agg_trades_failed}")
+        # v6.6: 移除聚合成交数据获取（Q因子已废弃）
+        # 原v6.5代码：5.4 批量获取聚合成交数据
+        # log("   5.4 批量获取聚合成交数据（Q因子）...")
+        # log("       🚀 使用并发模式，预计10-15秒")
+        # from ats_core.sources.binance import get_agg_trades
+        # [已移除约50行代码]
 
         # 5.5 批量获取持仓量历史数据（O因子 - 最大性能瓶颈优化）
         log("   5.5 批量获取持仓量历史数据（O因子）...")
@@ -444,6 +399,67 @@ class OptimizedBatchScanner:
         log(f"   最低分数: {min_score}")
         log("=" * 60)
 
+        # ═══════════════════════════════════════════════════════════
+        # Phase 1: 三层智能数据更新
+        # ═══════════════════════════════════════════════════════════
+        from datetime import datetime
+        current_time = datetime.now()
+        current_minute = current_time.minute
+
+        # Layer 1: 价格更新（每次都执行，最轻量）
+        log("\n📈 [Layer 1] 更新实时价格...")
+        try:
+            await self.kline_cache.update_current_prices(
+                symbols=symbols,
+                client=self.data_client
+            )
+        except Exception as e:
+            warn(f"⚠️  Layer 1 更新失败: {e}")
+
+        # Layer 2: K线增量更新（智能触发）
+        # 15m K线：在02, 17, 32, 47分触发
+        if current_minute in [2, 17, 32, 47]:
+            log(f"\n📊 [Layer 2] 更新15m K线（完成时间: {current_minute-2:02d}分）...")
+            try:
+                await self.kline_cache.update_completed_klines(
+                    symbols=symbols,
+                    intervals=['15m'],
+                    client=self.data_client
+                )
+            except Exception as e:
+                warn(f"⚠️  Layer 2 (15m) 更新失败: {e}")
+
+        # 1h/4h K线：在05分或07分触发（每小时一次，07分作为备份）
+        if current_minute in [5, 7]:
+            log(f"\n📊 [Layer 2] 更新1h/4h K线（完成时间: {current_time.hour:02d}:00）...")
+            try:
+                await self.kline_cache.update_completed_klines(
+                    symbols=symbols,
+                    intervals=['1h', '4h'],
+                    client=self.data_client
+                )
+            except Exception as e:
+                warn(f"⚠️  Layer 2 (1h/4h) 更新失败: {e}")
+
+        # Layer 3: 市场数据更新（低频，每30分钟）
+        if current_minute in [0, 30]:
+            log(f"\n📉 [Layer 3] 更新市场数据（资金费率/持仓量）...")
+            try:
+                await self.kline_cache.update_market_data(
+                    symbols=symbols,
+                    client=self.data_client
+                )
+            except Exception as e:
+                warn(f"⚠️  Layer 3 更新失败: {e}")
+
+        log("\n" + "=" * 60)
+        log("✅ 数据更新完成，开始分析币种")
+        log("=" * 60)
+
+        # ═══════════════════════════════════════════════════════════
+        # Phase 2: 批量扫描分析
+        # ═══════════════════════════════════════════════════════════
+
         results = []
         skipped = 0
         errors = 0
@@ -539,31 +555,30 @@ class OptimizedBatchScanner:
                 # 性能监控
                 analysis_start = time.time()
 
-                # 获取10维因子系统所需的市场数据
+                # 获取v6.6因子系统所需的市场数据
                 orderbook = self.orderbook_cache.get(symbol)
                 mark_price = self.mark_price_cache.get(symbol)
                 funding_rate = self.funding_rate_cache.get(symbol)
                 spot_price = self.spot_price_cache.get(symbol)
-                liquidations = self.liquidation_cache.get(symbol)  # Q因子
+                # v6.6: 移除 liquidations（Q因子已废弃）
                 oi_data = self.oi_cache.get(symbol, [])  # O因子（持仓量历史）
-                btc_klines = self.btc_klines  # I因子
-                eth_klines = self.eth_klines  # I因子
+                btc_klines = self.btc_klines  # I调制器（独立性）
+                eth_klines = self.eth_klines  # I调制器（独立性）
 
-                # 因子分析（使用预加载的K线和市场数据，支持完整10维因子系统）
+                # v6.6因子分析（6因子+4调制器）
                 result = analyze_symbol_with_preloaded_klines(
                     symbol=symbol,
                     k1h=k1h,
                     k4h=k4h,
                     k15m=k15m,  # 用于微确认和MTF
                     k1d=k1d,    # 用于MTF
-                    orderbook=orderbook,       # L（流动性）
-                    mark_price=mark_price,     # B（基差+资金费）
-                    funding_rate=funding_rate, # B（基差+资金费）
-                    spot_price=spot_price,     # B（基差+资金费）
-                    agg_trades=liquidations,   # Q（清算密度 - 使用aggTrades）
-                    oi_data=oi_data,           # O（持仓量历史 - 预加载优化）
-                    btc_klines=btc_klines,     # I（独立性）
-                    eth_klines=eth_klines      # I（独立性）
+                    orderbook=orderbook,       # L调制器（流动性）
+                    mark_price=mark_price,     # B因子（基差+资金费）
+                    funding_rate=funding_rate, # B因子（基差+资金费）
+                    spot_price=spot_price,     # B因子（基差+资金费）
+                    oi_data=oi_data,           # O因子（持仓量历史）
+                    btc_klines=btc_klines,     # I调制器（独立性）
+                    eth_klines=eth_klines      # I调制器（独立性）
                 )
 
                 analysis_time = time.time() - analysis_start
@@ -595,11 +610,11 @@ class OptimizedBatchScanner:
                     gates_info = result.get('gates', {})
 
                     log(f"  └─ [评分] confidence={confidence}, prime_strength={prime_strength}")
-                    # v6.1: F and I are B-layer modulators (per MODULATORS.md § 2.1)
-                    log(f"      A-层因子: T={scores.get('T',0):.1f}, M={scores.get('M',0):.1f}, C={scores.get('C',0):.1f}, "
-                        f"S={scores.get('S',0):.1f}, V={scores.get('V',0):.1f}, O={scores.get('O',0):.1f}")
-                    log(f"      A-层因子: L={scores.get('L',0):.1f}, B={scores.get('B',0):.1f}, Q={scores.get('Q',0):.1f}")
-                    log(f"      B-层调制器: F={modulation.get('F',0):.1f}, I={modulation.get('I',0):.1f}")
+                    # v6.6: 6+4因子架构（6核心因子+4调制器）
+                    log(f"      A-层核心因子: T={scores.get('T',0):.1f}, M={scores.get('M',0):.1f}, C={scores.get('C',0):.1f}, "
+                        f"V={scores.get('V',0):.1f}, O={scores.get('O',0):.1f}, B={scores.get('B',0):.1f}")
+                    log(f"      B-层调制器: L={modulation.get('L',0):.1f}, S={modulation.get('S',0):.1f}, "
+                        f"F={modulation.get('F',0):.1f}, I={modulation.get('I',0):.1f}")
                     log(f"      四门调节: DataQual={gates_info.get('data_qual',0):.2f}, "
                         f"EV={gates_info.get('ev_gate',0):.2f}, "
                         f"Execution={gates_info.get('execution',0):.2f}, "
