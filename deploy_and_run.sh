@@ -41,7 +41,7 @@ if [ ! -d ~/cryptosignal ]; then
     echo "cd ~"
     echo "git clone https://github.com/FelixWayne0318/cryptosignal.git"
     echo "cd cryptosignal"
-    echo "git checkout claude/understand-realtime-scanner-system-011CUjuCJDa9UX3sbxtR2HvA"
+    echo "git checkout claude/audit-system-compliance-011CUkshDA3WNmJWFjbAEEn8"
     echo "./deploy_and_run.sh"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     exit 1
@@ -98,21 +98,21 @@ retry_git() {
 
 # Fetch 远程代码（带重试）
 echo "   正在 fetch 远程代码..."
-if ! retry_git "git fetch origin claude/understand-realtime-scanner-system-011CUjuCJDa9UX3sbxtR2HvA"; then
+if ! retry_git "git fetch origin claude/audit-system-compliance-011CUkshDA3WNmJWFjbAEEn8"; then
     echo -e "${RED}❌ git fetch 失败，请检查网络连接${NC}"
     exit 1
 fi
 
 # 强制重置到远程版本
 echo "   强制同步到远程最新版本..."
-git reset --hard origin/claude/understand-realtime-scanner-system-011CUjuCJDa9UX3sbxtR2HvA
+git reset --hard origin/claude/audit-system-compliance-011CUkshDA3WNmJWFjbAEEn8
 
 # 切换分支
-git checkout claude/understand-realtime-scanner-system-011CUjuCJDa9UX3sbxtR2HvA 2>/dev/null || true
+git checkout claude/audit-system-compliance-011CUkshDA3WNmJWFjbAEEn8 2>/dev/null || true
 
 # Pull 最新代码（带重试）
 echo "   正在 pull 最新代码..."
-if ! retry_git "git pull origin claude/understand-realtime-scanner-system-011CUjuCJDa9UX3sbxtR2HvA"; then
+if ! retry_git "git pull origin claude/audit-system-compliance-011CUkshDA3WNmJWFjbAEEn8"; then
     echo -e "${YELLOW}⚠️ git pull 失败，但已 reset 到远程版本，继续部署...${NC}"
 fi
 
