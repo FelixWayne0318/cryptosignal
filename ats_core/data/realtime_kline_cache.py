@@ -379,7 +379,7 @@ class RealtimeKlineCache:
 
         try:
             # 批量获取所有币种的最新ticker（1次API调用）
-            all_tickers = await client.get_ticker_24hr()
+            all_tickers = await client.get_ticker_24h()
             ticker_map = {t['symbol']: t for t in all_tickers if 'symbol' in t}
 
             # 更新每个币种的当前价格
