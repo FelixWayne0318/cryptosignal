@@ -513,8 +513,13 @@ def _analyze_symbol_core(
         "I": I,  # Independence modulator
     }
 
+    # v6.6: 将调制器也加入到scores字典（用于测试和完整性）
+    # 注意：调制器在scorecard中权重为0，不影响加权分数
+    scores.update(modulation)
+
     # 计算加权分数（scorecard内部已归一化到±100）
     # 注意：scorecard函数通过 total/weight_sum 自动归一化，无需再除以1.6
+    # 注意：scores现在包含L/S/F/I，但它们在weights中权重为0，不影响结果
     weighted_score, confidence, edge = scorecard(scores, weights)
 
     # 计算每个因子对总分的贡献（用于电报消息显示）
@@ -1157,10 +1162,8 @@ def _analyze_symbol_core(
     }
 
     # 兼容旧版 telegram_fmt.py：将分数直接放在顶层
+    # 注意：scores现在包含所有10个因子（T/M/C/V/O/B + L/S/F/I）
     result.update(scores)
-
-    # v6.6: 同样将调制器放在顶层（用于测试和调试访问）
-    result.update(modulation)
 
     return result
 
