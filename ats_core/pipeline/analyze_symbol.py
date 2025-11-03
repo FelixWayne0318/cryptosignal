@@ -165,6 +165,21 @@ def _analyze_symbol_core(
 
     coin_age_days = coin_age_hours / 24
 
+    # ---- v6.6: DataQual硬门槛检查（唯一硬拒绝）----
+    # 计算数据质量分数
+    data_qual = min(1.0, bars_1h / 200.0) if bars_1h > 0 else 0.0
+
+    # 硬拒绝：DataQual < 0.90
+    if data_qual < 0.90:
+        return {
+            "success": False,
+            "symbol": symbol,
+            "error": f"数据质量不足: DataQual={data_qual:.2f} < 0.90 (bars_1h={bars_1h})",
+            "data_qual": data_qual,
+            "bars_1h": bars_1h,
+            "rejection_type": "hard_gate_dataqual"
+        }
+
     # 🔧 v6.3.1规范符合性修改：按照 NEWCOIN_SPEC.md § 1 标准
     #
     # 规范定义：
@@ -594,6 +609,29 @@ def _analyze_symbol_core(
     P_short = min(0.95, P_short_base)
     P_chosen = P_long if side_long else P_short
 
+    # ---- v6.6: 软约束检查（EV和P门槛）----
+    # 计算EV使用调制后的cost
+    EV = P_chosen * edge - (1 - P_chosen) * modulator_output.cost_final
+
+    # 软约束1：EV ≤ 0
+    if EV <= 0:
+        # 不是硬拒绝，记录为"自然过滤"
+        # 返回success=True但publish=False
+        pass  # 允许继续，但后续会标记为不发布
+
+    # 软约束2：P < p_min（基于F调制器调整）
+    # 计算p_min（动态）
+    base_p_min = publish_cfg.get("prime_prob_min", 0.58)
+    safety_margin = modulator_output.L_meta.get("safety_margin", 0.005)
+    p_min = base_p_min + safety_margin / (edge + 1e-6)
+
+    # 应用F调制器的p_min调整
+    p_min_adjusted = p_min + modulator_output.p_min_adj
+    p_min_adjusted = max(0.50, min(0.70, p_min_adjusted))  # 限制在合理范围
+
+    # 检查P是否低于阈值
+    p_below_threshold = P_chosen < p_min_adjusted
+
     # ---- 6. 发布判定（4级分级标准）----
     publish_cfg = params.get("publish", {})
 
@@ -861,7 +899,14 @@ def _analyze_symbol_core(
             "prime_strength_threshold": prime_strength_threshold,  # v6.3.2新增：币种特定阈值
             "prime_breakdown": prime_breakdown,  # Prime评分详细分解（v4.0新增）
             "rejection_reason": rejection_reason,  # v6.3新增：拒绝原因跟踪
-            "ttl_h": 8
+            "ttl_h": 8,
+            # v6.6软约束（不硬拒绝，仅标记）
+            "EV": EV,
+            "EV_positive": EV > 0,
+            "P_threshold": p_min_adjusted,
+            "P_above_threshold": not p_below_threshold,
+            "soft_filtered": (EV <= 0) or p_below_threshold,
+            "soft_filter_reason": "EV≤0" if EV <= 0 else ("P<p_min" if p_below_threshold else None)
         },
 
         # 新币信息（嵌套格式，匹配scanner读取）
