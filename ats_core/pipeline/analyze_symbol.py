@@ -620,6 +620,9 @@ def _analyze_symbol_core(
     P_chosen = P_long if side_long else P_short
 
     # ---- v6.6: 软约束检查（EV和P门槛）----
+    # 获取发布配置
+    publish_cfg = params.get("publish", {})
+
     # 计算EV使用调制后的cost
     EV = P_chosen * edge - (1 - P_chosen) * modulator_output.cost_final
 
@@ -643,7 +646,6 @@ def _analyze_symbol_core(
     p_below_threshold = P_chosen < p_min_adjusted
 
     # ---- 6. 发布判定（4级分级标准）----
-    publish_cfg = params.get("publish", {})
 
     # 新币特殊处理：应用分级标准
     if is_ultra_new:
@@ -882,7 +884,7 @@ def _analyze_symbol_core(
         pricing = _calc_pricing(h, l, c, atr_now, params.get("pricing", {}), side_long)
 
     # ---- v6.6: 详细因子输出日志（用于测试和调试）----
-    import sys
+    from ats_core.logging import log as _log
     _VERBOSE_FACTOR_LOG = True  # 详细输出开关
     if _VERBOSE_FACTOR_LOG:
         # 6个核心因子详情
@@ -890,7 +892,7 @@ def _analyze_symbol_core(
         factor_details = []
         for f in core_factors:
             val = scores.get(f, 0)
-            wt = base_weights.get(f, 0)
+            wt = weights.get(f, 0)  # 使用自适应权重
             contrib = val * wt / 100.0 if wt > 0 else 0
             sign = '+' if val >= 0 else ''
             factor_details.append(f"{f}={sign}{val:.1f}({wt:.0f}%→{sign}{contrib:.1f})")
@@ -912,18 +914,17 @@ def _analyze_symbol_core(
 
         soft_status = "⚠️ " + ", ".join(soft_warnings) if soft_warnings else "✅ 通过"
 
-        # 输出到stderr（不影响正常输出流）
-        print(f"\n📊 [{symbol}] v6.6因子详细分析:", file=sys.stderr)
-        print(f"   A层-核心因子(6): {', '.join(factor_details)}", file=sys.stderr)
-        print(f"   B层-调制器(4):   {', '.join(mod_details)}", file=sys.stderr)
-        print(f"   加权总分: {weighted_score:+.2f} | 置信度: {confidence:.1f} | Edge: {edge:+.4f}", file=sys.stderr)
-        print(f"   方向: {'LONG' if side_long else 'SHORT'} | P={P_chosen:.3f} | Prime强度: {prime_strength:.1f}/{prime_strength_threshold:.1f}", file=sys.stderr)
-        print(f"   调制链输出: 仓位倍数={modulator_output.position_mult:.2f}, Teff={modulator_output.Teff_final:.1f}h, Cost={modulator_output.cost_final:.4f}", file=sys.stderr)
-        print(f"   软约束: {soft_status}", file=sys.stderr)
-        print(f"   发布状态: {'🟢 Prime' if is_prime else '🟡 Watch' if is_watch else '⚪ 不发布'}", file=sys.stderr)
+        # 使用系统日志函数输出到stdout
+        _log(f"📊 [{symbol}] v6.6因子详细分析:")
+        _log(f"   A层-核心因子(6): {', '.join(factor_details)}")
+        _log(f"   B层-调制器(4):   {', '.join(mod_details)}")
+        _log(f"   加权总分: {weighted_score:+.2f} | 置信度: {confidence:.1f} | Edge: {edge:+.4f}")
+        _log(f"   方向: {'LONG' if side_long else 'SHORT'} | P={P_chosen:.3f} | Prime强度: {prime_strength:.1f}/{prime_strength_threshold:.1f}")
+        _log(f"   调制链输出: 仓位倍数={modulator_output.position_mult:.2f}, Teff={modulator_output.Teff_final:.1f}h, Cost={modulator_output.cost_final:.4f}")
+        _log(f"   软约束: {soft_status}")
+        _log(f"   发布状态: {'🟢 Prime' if is_prime else '🟡 Watch' if is_watch else '⚪ 不发布'}")
         if rejection_reason and not is_prime:
-            print(f"   拒绝原因: {', '.join(rejection_reason)}", file=sys.stderr)
-        print("", file=sys.stderr)  # 空行分隔
+            _log(f"   拒绝原因: {', '.join(rejection_reason)}")
 
     # ---- 8. 组装结果（统一±100系统）----
     result = {
