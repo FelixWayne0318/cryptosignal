@@ -370,15 +370,17 @@ class ThreeTierStopLoss:
         """
         if direction == "LONG":
             # 做多止损：寻找下方支撑（bid侧）
+            # 注意：Binance API返回的price和qty是字符串，需要转float
             relevant_orders = [
-                (p, q) for p, q in orderbook.get("bids", [])
-                if current_price * 0.95 <= p <= current_price * 0.998
+                (float(p), float(q)) for p, q in orderbook.get("bids", [])
+                if current_price * 0.95 <= float(p) <= current_price * 0.998
             ]
         else:
             # 做空止损：寻找上方阻力（ask侧）
+            # 注意：Binance API返回的price和qty是字符串，需要转float
             relevant_orders = [
-                (p, q) for p, q in orderbook.get("asks", [])
-                if current_price * 1.002 <= p <= current_price * 1.05
+                (float(p), float(q)) for p, q in orderbook.get("asks", [])
+                if current_price * 1.002 <= float(p) <= current_price * 1.05
             ]
 
         if len(relevant_orders) < self.orderbook_min_orders:
