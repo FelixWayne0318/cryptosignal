@@ -350,38 +350,7 @@ def _analyze_symbol_core(
         B, B_meta = 0, {"note": "缺少mark_price/spot_price/funding_rate数据"}
     perf['B基差资金费'] = time.time() - t0
 
-    # 清算密度（Q）：-100（空单密集清算，超涨回调，看空）到 +100（多单密集清算，超跌反弹，看多）
-    # 逻辑：大量多单清算后抛压减轻可能反弹，大量空单清算后买压减轻可能回调
-    t0 = time.time()
-    if agg_trades is not None and len(agg_trades) > 0:
-        # 使用aggTrades数据（新方法 - 分析大额异常交易）
-        try:
-            from ats_core.factors_v2.liquidation_v2 import calculate_liquidation_from_trades
-            Q, Q_meta = calculate_liquidation_from_trades(
-                agg_trades=agg_trades,
-                current_price=close_now,
-                params=params.get("liquidation", {})
-            )
-        except Exception as e:
-            from ats_core.logging import warn
-            warn(f"Q因子计算失败(aggTrades): {e}")
-            Q, Q_meta = 0, {"error": str(e)}
-    elif liquidations is not None and len(liquidations) > 0:
-        # 向后兼容：如果有旧的清算数据则使用（已废弃）
-        try:
-            Q, Q_meta = calculate_liquidation(
-                liquidations=liquidations,
-                current_price=close_now,
-                liquidation_map=None,
-                params=params.get("liquidation", {})
-            )
-        except Exception as e:
-            from ats_core.logging import warn
-            warn(f"Q因子计算失败(liquidations): {e}")
-            Q, Q_meta = 0, {"error": str(e)}
-    else:
-        Q, Q_meta = 0, {"note": "无清算数据或聚合成交数据"}
-    perf['Q清算密度'] = time.time() - t0
+    # v6.6: Q因子已完全移除（清算密度数据不可靠且收益低）
 
     # 独立性（I）：0（完全相关）到 100（完全独立）→ 归一化到 ±100
     # 越独立越好，所以高分=正分，低分=负分
@@ -409,14 +378,13 @@ def _analyze_symbol_core(
                     params=params.get("independence", {})
                 )
 
-                # v6.3修复：软化I调制器，避免±100硬截断（专家建议 #2）
-                # 使用tanh()函数将极值软化：-100→-96, +100→+96
-                import math
-                I = 100 * math.tanh(I_raw / 50)
+                # v6.6修复：I_raw已经过StandardizationChain输出±100，无需再tanh
+                # 之前的tanh(I_raw/50)造成double-tanh bug，将±100压缩到±96
+                I = I_raw  # 直接使用StandardizationChain的输出
 
                 # 补充元数据
                 I_meta['data_points'] = use_len
-                I_meta['I_raw'] = I_raw  # 保存原始值用于调试
+                I_meta['note'] = 'v6.6: I_raw直接使用，已移除double-tanh bug'
             else:
                 I, I_meta = 0, {"note": f"数据不足（需要25小时，实际{min_len}小时）"}
         except Exception as e:
@@ -440,11 +408,10 @@ def _analyze_symbol_core(
         oi_change_pct, vol_ratio, cvd6, price_change_24h, price_slope, params.get("fund_leading", {})
     )
 
-    # v6.3修复：软化F调制器，避免±100硬截断（专家建议 #2）
-    # 使用tanh()函数将极值软化：-100→-96, -50→-76
-    import math
-    F = 100 * math.tanh(F_raw / 50)
-    F_meta['F_raw'] = F_raw  # 保存原始值用于调试
+    # v6.6修复：F_raw已经过fund_leading.py中的tanh输出±100，无需再tanh
+    # 之前的tanh(F_raw/50)造成double-tanh bug，将±100压缩到±96
+    F = F_raw  # 直接使用fund_leading.py的输出
+    F_meta['note'] = 'v6.6: F_raw直接使用，已移除double-tanh bug'
 
     # ---- 3. Scorecard（10维统一±100系统，v2.0合规版）----
     # 🔧 v2.0合规修复：F/I移至B层调制器，不参与方向评分
@@ -493,12 +460,11 @@ def _analyze_symbol_core(
     # 平滑混合（70%自适应 + 30%基础）
     weights = blend_weights(regime_weights, base_weights, blend_ratio=0.7)
 
-    # 9维方向分数（统一±100，v2.0合规版：F和I移至B层）
+    # v6.6: 6维方向分数（T/M/C/V/O/B）+ 4维B层调制器（L/S/F/I）
     scores = {
-        # A-layer direction factors (9 factors ONLY)
-        "T": T, "M": M, "C": C, "S": S, "V": V, "O": O,
-        "L": L, "B": B, "Q": Q,
-        # E废弃，F和I移至B层调制器
+        # A-layer direction factors (6 factors in v6.6)
+        "T": T, "M": M, "C": C, "V": V, "O": O, "B": B,
+        # v6.6移除: L/S移至B层调制器, Q完全删除, E废弃
     }
 
     # v2.0合规：因子范围验证（HIGH #2）
@@ -539,7 +505,7 @@ def _analyze_symbol_core(
         # 新因子
         "L": L_meta,
         "B": B_meta,
-        "Q": Q_meta,
+        # v6.6: Q_meta已移除（Q因子完全删除）
         "I": I_meta,
         # 调节器
         "F": F_meta
