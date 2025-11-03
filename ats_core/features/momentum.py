@@ -101,6 +101,11 @@ def score_momentum(
     M_pub, diagnostics = _momentum_chain.standardize(M_raw)
     M = int(round(M_pub))
 
+    # DEBUG: 临时日志，观察M_raw到M_pub的转换
+    if abs(M_raw) > 1.0:  # 只记录非零情况
+        from ats_core.logging import log as _log
+        _log(f"  [M因子DEBUG] M_raw={M_raw:.2f} → M_pub={M_pub:.2f} → M={M} (z_raw={diagnostics.z_raw:.2f}, median={diagnostics.ew_median:.2f}, mad={diagnostics.ew_mad:.4f})")
+
     # ========== 5. 解释 ==========
     if M >= 60:
         interpretation = "强势上涨"
