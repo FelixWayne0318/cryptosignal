@@ -21,13 +21,28 @@
      * `ats_core/data/quality.py:233-308`
      * `ats_core/gates/integrated_gates.py:64-98`
 
+### P1-四门完整集成 ✅
+3. ✅ **四门调节完全集成到Prime强度计算**
+   - 四门现在真正影响Prime强度（通过gate_multiplier乘法调节）
+   - 修改内容：
+     * 添加 `kline_cache` 参数到 `_analyze_symbol_core()`
+     * 在Prime计算前添加四门计算逻辑
+     * Prime强度应用gate_multiplier调节（可降低0-50%）
+     * 更新返回结果中的gates信息
+     * 更新 `analyze_symbol_with_preloaded_klines()` 传递kline_cache
+     * 更新 `batch_scan_optimized.py` 调用时传递kline_cache
+   - 文件：
+     * `ats_core/pipeline/analyze_symbol.py:102-118,693-789,1112-1134,1508-1573`
+     * `ats_core/pipeline/batch_scan_optimized.py:589-603`
+   - 效果：低质量信号（DataQual低、EV负、Execution差）将被正确降级或过滤
+
 ---
 
 ## ⏳ 待完成（后续PR）
 
 ### P1-重要任务
 
-#### Task 1: 让四门调节结果影响Prime强度计算
+#### Task 1: 让四门调节结果影响Prime强度计算 ✅ 已完成
 
 **问题描述**：
 当前四门调节只是记录和显示，不影响Prime强度计算。导致：

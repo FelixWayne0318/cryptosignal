@@ -598,7 +598,8 @@ class OptimizedBatchScanner:
                     spot_price=spot_price,     # B因子（基差+资金费）
                     oi_data=oi_data,           # O因子（持仓量历史）
                     btc_klines=btc_klines,     # I调制器（独立性）
-                    eth_klines=eth_klines      # I调制器（独立性）
+                    eth_klines=eth_klines,     # I调制器（独立性）
+                    kline_cache=self.kline_cache  # v6.6: 四门DataQual检查
                 )
 
                 analysis_time = time.time() - analysis_start
