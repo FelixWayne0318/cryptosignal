@@ -48,6 +48,9 @@ from ats_core.scoring.adaptive_weights import (
 from ats_core.modulators.modulator_chain import ModulatorChain
 from ats_core.features.multi_timeframe import multi_timeframe_coherence
 
+# ========== v6.6 三层止损系统 ==========
+from ats_core.execution.stop_loss_calculator import ThreeTierStopLoss
+
 # ========== 10维因子系统 ==========
 from ats_core.factors_v2.liquidity import calculate_liquidity
 from ats_core.factors_v2.basis_funding import calculate_basis_funding
@@ -842,8 +845,31 @@ def _analyze_symbol_core(
     # ---- 7. 15分钟微确认 ----
     m15_ok = _check_microconfirm_15m(symbol, side_long, params.get("microconfirm_15m", {}), atr_now)
 
-    # ---- 7. 给价计划 ----
-    # 只为Prime信号计算止盈止损（因为不发Watch信号了）
+    # ---- v6.6: 三层止损计算 ----
+    # 为所有信号计算止损（不限于Prime）
+    stop_loss_calculator = ThreeTierStopLoss(params=params.get("stop_loss", {}))
+
+    direction = "LONG" if side_long else "SHORT"
+    stop_loss_result = stop_loss_calculator.calculate_stop_loss(
+        direction=direction,
+        current_price=close_now,
+        highs=h,
+        lows=l,
+        orderbook=orderbook,
+        atr=atr_now
+    )
+
+    # 计算止盈（简化版：基于edge和RR比）
+    # v6.6: 使用调制后的edge和止损距离计算止盈
+    target_rr_ratio = 2.0  # 目标盈亏比2:1
+    take_profit_distance = stop_loss_result.distance_pct * target_rr_ratio
+
+    if direction == "LONG":
+        take_profit_price = close_now * (1 + take_profit_distance)
+    else:
+        take_profit_price = close_now * (1 - take_profit_distance)
+
+    # 旧版给价计划（兼容性保留）
     pricing = None
     if is_prime:
         pricing = _calc_pricing(h, l, c, atr_now, params.get("pricing", {}), side_long)
@@ -925,6 +951,17 @@ def _analyze_symbol_core(
 
         # 给价
         "pricing": pricing,
+
+        # v6.6: 三层止损止盈
+        "stop_loss": stop_loss_result.to_dict(),
+        "take_profit": {
+            "price": take_profit_price,
+            "distance_pct": take_profit_distance,
+            "distance_usdt": take_profit_distance * 1000,
+            "method": "rr_based",
+            "method_cn": f"盈亏比 (RR={target_rr_ratio:.1f})",
+            "rr_ratio": target_rr_ratio
+        },
 
         # CVD
         "cvd_z20": _zscore_last(cvd_series, 20) if cvd_series else 0.0,
