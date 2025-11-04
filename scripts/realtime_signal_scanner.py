@@ -147,18 +147,18 @@ class SignalScanner:
         self.initialized = False
         self.scan_count = 0
 
-        # v6.6: 初始化防抖动系统（放宽阈值以增加信号响应速度）
+        # v6.6: 初始化防抖动系统（阈值匹配Sigmoid概率映射实际输出）
         self.anti_jitter = AntiJitter(
-            prime_entry_threshold=0.65,      # v6.6: 放宽阈值（更现实的阈值）
-            prime_maintain_threshold=0.58,   # v6.6: 维持阈值
+            prime_entry_threshold=0.55,      # v6.6: 匹配实际概率分布（edge=0.11-0.16 → P=0.53-0.58）
+            prime_maintain_threshold=0.52,   # v6.6: 维持阈值相应降低
             watch_entry_threshold=0.50,
-            watch_maintain_threshold=0.40,
+            watch_maintain_threshold=0.45,   # v6.6: 调整为0.45保持滞后性
             confirmation_bars=1,             # v6.6: 1/2确认即可，更快响应
             total_bars=2,
             cooldown_seconds=60              # v6.6: 更快恢复
         )
 
-        log("✅ v6.6 防抖动系统初始化完成 (K/N=1/2, cooldown=60s, threshold=0.65)")
+        log("✅ v6.6 防抖动系统初始化完成 (K/N=1/2, cooldown=60s, prime_entry=0.55, prime_maintain=0.52)")
 
         # 加载Telegram配置
         if send_telegram:
@@ -266,7 +266,7 @@ class SignalScanner:
                 # v6.6: 检查软约束（从analyze_symbol结果中获取）
                 publish_info = s.get('publish', {})
                 soft_filtered = publish_info.get('soft_filtered', False)
-                ev = publish_info.get('ev', 0.0)
+                ev = publish_info.get('EV', 0.0)  # 修复：使用大写'EV'匹配analyze_symbol输出
 
                 # v6.6: 软约束仅标记，不过滤
                 # 所有信号都通过软约束检查（除非显式标记为filtered）
