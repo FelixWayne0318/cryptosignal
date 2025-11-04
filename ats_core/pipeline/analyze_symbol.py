@@ -643,8 +643,10 @@ def _analyze_symbol_core(
     # 计算p_min（动态）
     base_p_min = publish_cfg.get("prime_prob_min", 0.58)
     safety_margin = modulator_output.L_meta.get("safety_margin", 0.005)
-    # 修复：使用abs(edge)避免负数除法问题
-    p_min = base_p_min + safety_margin / (abs(edge) + 1e-6)
+    # 修复：使用abs(edge)避免负数除法问题，并限制最大adjustment
+    adjustment = safety_margin / (abs(edge) + 1e-6)
+    adjustment = min(adjustment, 0.02)  # 限制最大调整为0.02，避免过度惩罚小edge信号
+    p_min = base_p_min + adjustment
 
     # 应用F调制器的p_min调整
     p_min_adjusted = p_min + modulator_output.p_min_adj
