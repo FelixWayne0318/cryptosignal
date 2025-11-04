@@ -36,14 +36,7 @@ echo "=============================================="
 if [ ! -d ~/cryptosignal ]; then
     echo -e "${RED}❌ ~/cryptosignal 目录不存在${NC}"
     echo ""
-    echo "首次部署，请先克隆仓库："
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "cd ~"
-    echo "git clone https://github.com/FelixWayne0318/cryptosignal.git"
-    echo "cd cryptosignal"
-    echo "git checkout claude/audit-system-compliance-011CUkshDA3WNmJWFjbAEEn8"
-    echo "./deploy_and_run.sh"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "首次部署，请先克隆仓库并运行 setup.sh"
     exit 1
 fi
 
@@ -54,6 +47,10 @@ if [ ! -d .git ]; then
     echo -e "${RED}❌ 不在 git 仓库中${NC}"
     exit 1
 fi
+
+# 自动检测当前分支
+CURRENT_BRANCH=$(git branch --show-current)
+echo "当前分支: $CURRENT_BRANCH"
 
 echo "1️⃣ 备份本地修改..."
 # 备份本地修改（如果有）
@@ -98,22 +95,16 @@ retry_git() {
 
 # Fetch 远程代码（带重试）
 echo "   正在 fetch 远程代码..."
-if ! retry_git "git fetch origin claude/audit-system-compliance-011CUkshDA3WNmJWFjbAEEn8"; then
-    echo -e "${RED}❌ git fetch 失败，请检查网络连接${NC}"
-    exit 1
-fi
+if ! retry_git "git fetch origin $CURRENT_BRANCH"; then
+    echo -e "${YELLOW}⚠️ git fetch 失败，跳过代码同步...${NC}"
+else
+    # 强制重置到远程版本
+    echo "   强制同步到远程最新版本..."
+    git reset --hard origin/$CURRENT_BRANCH 2>/dev/null || true
 
-# 强制重置到远程版本
-echo "   强制同步到远程最新版本..."
-git reset --hard origin/claude/audit-system-compliance-011CUkshDA3WNmJWFjbAEEn8
-
-# 切换分支
-git checkout claude/audit-system-compliance-011CUkshDA3WNmJWFjbAEEn8 2>/dev/null || true
-
-# Pull 最新代码（带重试）
-echo "   正在 pull 最新代码..."
-if ! retry_git "git pull origin claude/audit-system-compliance-011CUkshDA3WNmJWFjbAEEn8"; then
-    echo -e "${YELLOW}⚠️ git pull 失败，但已 reset 到远程版本，继续部署...${NC}"
+    # Pull 最新代码（带重试）
+    echo "   正在 pull 最新代码..."
+    retry_git "git pull origin $CURRENT_BRANCH" || echo -e "${YELLOW}⚠️ git pull 失败，继续部署...${NC}"
 fi
 
 echo ""
