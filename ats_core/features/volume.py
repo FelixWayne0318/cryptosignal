@@ -124,7 +124,9 @@ def score_volume(vol, closes=None, params=None):
         V_raw = V_strength
 
     # v2.0合规：应用StandardizationChain
-    V_pub, diagnostics = _volume_chain.standardize(V_raw)
+    # ⚠️ 2025-11-04紧急修复：禁用StandardizationChain，过度压缩导致信号丢失
+    # V_pub, diagnostics = _volume_chain.standardize(V_raw)
+    V_pub = max(-100, min(100, V_raw))  # 直接使用原始值
     V = int(round(V_pub))
 
     # ========== 解释文本（考虑价格方向）==========

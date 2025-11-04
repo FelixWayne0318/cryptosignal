@@ -36,14 +36,7 @@ echo "=============================================="
 if [ ! -d ~/cryptosignal ]; then
     echo -e "${RED}❌ ~/cryptosignal 目录不存在${NC}"
     echo ""
-    echo "首次部署，请先克隆仓库："
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "cd ~"
-    echo "git clone https://github.com/FelixWayne0318/cryptosignal.git"
-    echo "cd cryptosignal"
-    echo "git checkout claude/understand-realtime-scanner-system-011CUjuCJDa9UX3sbxtR2HvA"
-    echo "./deploy_and_run.sh"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "首次部署，请先克隆仓库并运行 setup.sh"
     exit 1
 fi
 
@@ -54,6 +47,10 @@ if [ ! -d .git ]; then
     echo -e "${RED}❌ 不在 git 仓库中${NC}"
     exit 1
 fi
+
+# 自动检测当前分支
+CURRENT_BRANCH=$(git branch --show-current)
+echo "当前分支: $CURRENT_BRANCH"
 
 echo "1️⃣ 备份本地修改..."
 # 备份本地修改（如果有）
@@ -98,22 +95,16 @@ retry_git() {
 
 # Fetch 远程代码（带重试）
 echo "   正在 fetch 远程代码..."
-if ! retry_git "git fetch origin claude/understand-realtime-scanner-system-011CUjuCJDa9UX3sbxtR2HvA"; then
-    echo -e "${RED}❌ git fetch 失败，请检查网络连接${NC}"
-    exit 1
-fi
+if ! retry_git "git fetch origin $CURRENT_BRANCH"; then
+    echo -e "${YELLOW}⚠️ git fetch 失败，跳过代码同步...${NC}"
+else
+    # 强制重置到远程版本
+    echo "   强制同步到远程最新版本..."
+    git reset --hard origin/$CURRENT_BRANCH 2>/dev/null || true
 
-# 强制重置到远程版本
-echo "   强制同步到远程最新版本..."
-git reset --hard origin/claude/understand-realtime-scanner-system-011CUjuCJDa9UX3sbxtR2HvA
-
-# 切换分支
-git checkout claude/understand-realtime-scanner-system-011CUjuCJDa9UX3sbxtR2HvA 2>/dev/null || true
-
-# Pull 最新代码（带重试）
-echo "   正在 pull 最新代码..."
-if ! retry_git "git pull origin claude/understand-realtime-scanner-system-011CUjuCJDa9UX3sbxtR2HvA"; then
-    echo -e "${YELLOW}⚠️ git pull 失败，但已 reset 到远程版本，继续部署...${NC}"
+    # Pull 最新代码（带重试）
+    echo "   正在 pull 最新代码..."
+    retry_git "git pull origin $CURRENT_BRANCH" || echo -e "${YELLOW}⚠️ git pull 失败，继续部署...${NC}"
 fi
 
 echo ""
@@ -481,29 +472,70 @@ echo ""
 # 创建 logs 目录
 mkdir -p logs
 
-# 检查是否有 screen
+# 检查是否有 screen 和是否有交互式terminal
 if command -v screen &> /dev/null; then
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "使用 Screen 会话启动（推荐）"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo ""
-    echo "📋 Screen 工作原理："
-    echo "  1. 启动后您会看到实时日志（类似前台运行）"
-    echo "  2. 按 Ctrl+A 然后按 D 键分离会话"
-    echo "  3. 分离后程序继续在后台运行"
-    echo "  4. ✅ 退出 SSH/Termius 不影响程序运行"
-    echo "  5. 随时可以重连查看日志"
-    echo ""
-    echo "🔧 常用命令："
-    echo "  重连会话: screen -r cryptosignal"
-    echo "  查看所有: screen -ls"
-    echo "  停止程序: 在会话中按 Ctrl+C"
-    echo ""
-    echo "⏳ 3秒后启动..."
-    sleep 3
+    # 检测是否在交互式terminal中
+    if [ -t 0 ]; then
+        # 有交互式terminal，使用前台screen
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "使用 Screen 会话启动（交互模式）"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        echo "📋 Screen 工作原理："
+        echo "  1. 启动后您会看到实时日志（类似前台运行）"
+        echo "  2. 按 Ctrl+A 然后按 D 键分离会话"
+        echo "  3. 分离后程序继续在后台运行"
+        echo "  4. ✅ 退出 SSH/Termius 不影响程序运行"
+        echo "  5. 随时可以重连查看日志"
+        echo ""
+        echo "🔧 常用命令："
+        echo "  重连会话: screen -r cryptosignal"
+        echo "  查看所有: screen -ls"
+        echo "  停止程序: 在会话中按 Ctrl+C"
+        echo ""
+        echo "⏳ 3秒后启动..."
+        sleep 3
 
-    # 启动 screen 会话
-    screen -S cryptosignal python3 scripts/realtime_signal_scanner.py --interval 300
+        # 启动 screen 会话（前台）
+        screen -S cryptosignal python3 scripts/realtime_signal_scanner.py --interval 300
+    else
+        # 无交互式terminal（如从cron/nohup调用），使用detached模式
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "使用 Screen 会话启动（后台模式）"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+        # 清理旧的同名会话
+        screen -S cryptosignal -X quit 2>/dev/null || true
+
+        # 创建日志文件名
+        LOG_FILE="logs/scanner_$(date +%Y%m%d_%H%M%S).log"
+
+        # 启动 screen 会话（detached模式，带日志）
+        screen -dmS cryptosignal bash -c "python3 scripts/realtime_signal_scanner.py --interval 300 2>&1 | tee $LOG_FILE"
+
+        sleep 2
+
+        # 验证启动
+        if screen -list | grep -q cryptosignal; then
+            echo ""
+            echo -e "${GREEN}✅ Screen会话已启动${NC}"
+            echo "会话名称: cryptosignal"
+            echo "日志文件: $LOG_FILE"
+            echo ""
+            echo "🔧 管理命令："
+            echo "  查看日志: tail -f $LOG_FILE"
+            echo "  重连会话: screen -r cryptosignal"
+            echo "  查看所有会话: screen -ls"
+            echo "  停止会话: screen -S cryptosignal -X quit"
+        else
+            echo -e "${YELLOW}⚠️ Screen启动可能失败，回退到nohup模式${NC}"
+            nohup python3 scripts/realtime_signal_scanner.py --interval 300 > "$LOG_FILE" 2>&1 &
+            PID=$!
+            echo ""
+            echo -e "${GREEN}✅ 已启动（nohup模式），PID: $PID${NC}"
+            echo "日志文件: $LOG_FILE"
+        fi
+    fi
 else
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "使用 nohup 后台启动"

@@ -88,7 +88,9 @@ def score_structure(h,l,c, ema30_last, atr_now, params, ctx):
 
     # v2.0合规：应用StandardizationChain（5步稳健化）
     # 输入S_raw，输出标准化后的S_pub（稳健压缩到±100）
-    S_pub, diagnostics = _structure_chain.standardize(S_raw)
+    # ⚠️ 2025-11-04紧急修复：禁用StandardizationChain，过度压缩导致信号丢失
+    # S_pub, diagnostics = _structure_chain.standardize(S_raw)
+    S_pub = max(-100, min(100, S_raw))  # 直接使用原始值
 
     # 转换为整数
     S = int(round(S_pub))

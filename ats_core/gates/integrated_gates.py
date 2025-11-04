@@ -63,19 +63,24 @@ class FourGatesChecker:
 
     def check_gate1_dataqual(
         self,
-        symbol: str
+        symbol: str,
+        kline_cache=None  # 新增：REST模式下的K线缓存
     ) -> GateResult:
         """
         Gate 1: DataQual ≥ 0.90
 
         Args:
             symbol: Trading symbol
+            kline_cache: K线缓存管理器（REST模式下用于检查数据新鲜度）
 
         Returns:
             GateResult
         """
         quality = self.dataqual_monitor.get_quality(symbol)
-        can_publish, dataqual, reason = self.dataqual_monitor.can_publish_prime(symbol)
+        can_publish, dataqual, reason = self.dataqual_monitor.can_publish_prime(
+            symbol,
+            kline_cache=kline_cache  # ✅ 传入kline_cache
+        )
 
         return GateResult(
             passed=can_publish,

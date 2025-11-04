@@ -46,7 +46,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from ats_core.pipeline.batch_scan_optimized import OptimizedBatchScanner
-from ats_core.outputs.telegram_fmt_v66 import render_v66_signal
+from ats_core.outputs.telegram_fmt import render_signal
 from ats_core.logging import log, warn, error
 
 # v6.6: 发布防抖动系统
@@ -131,12 +131,12 @@ def telegram_send_wrapper(text: str, bot_token: str, chat_id: str, parse_mode: s
 class SignalScanner:
     """WebSocket实时信号扫描器"""
 
-    def __init__(self, min_score: int = 50, send_telegram: bool = True, verbose: bool = True):
+    def __init__(self, min_score: int = 35, send_telegram: bool = True, verbose: bool = True):
         """
         初始化扫描器
 
         Args:
-            min_score: 最低信号分数（默认50，可调整：40-70）
+            min_score: 最低信号分数（默认35，匹配batch_scan_optimized.py）
             send_telegram: 是否发送Telegram通知
             verbose: 是否显示所有币种的详细因子评分（默认True，可用--no-verbose关闭）
         """
@@ -147,18 +147,18 @@ class SignalScanner:
         self.initialized = False
         self.scan_count = 0
 
-        # v6.6: 初始化防抖动系统（放宽阈值以增加信号响应速度）
+        # v6.6: 初始化防抖动系统（阈值匹配市场过滤后的实际概率分布）
         self.anti_jitter = AntiJitter(
-            prime_entry_threshold=0.65,      # v6.6: 放宽阈值（更现实的阈值）
-            prime_maintain_threshold=0.58,   # v6.6: 维持阈值
-            watch_entry_threshold=0.50,
-            watch_maintain_threshold=0.40,
+            prime_entry_threshold=0.45,      # v6.6: 匹配市场过滤后的概率（P=0.45-0.60）
+            prime_maintain_threshold=0.42,   # v6.6: 维持阈值相应降低
+            watch_entry_threshold=0.40,      # v6.6: WATCH门槛
+            watch_maintain_threshold=0.37,   # v6.6: 保持滞后性
             confirmation_bars=1,             # v6.6: 1/2确认即可，更快响应
             total_bars=2,
             cooldown_seconds=60              # v6.6: 更快恢复
         )
 
-        log("✅ v6.6 防抖动系统初始化完成 (K/N=1/2, cooldown=60s, threshold=0.65)")
+        log("✅ v6.6 防抖动系统初始化完成 (K/N=1/2, cooldown=60s, prime_entry=0.45, prime_maintain=0.42)")
 
         # 加载Telegram配置
         if send_telegram:
@@ -266,11 +266,12 @@ class SignalScanner:
                 # v6.6: 检查软约束（从analyze_symbol结果中获取）
                 publish_info = s.get('publish', {})
                 soft_filtered = publish_info.get('soft_filtered', False)
-                ev = publish_info.get('ev', 0.0)
+                ev = publish_info.get('EV', 0.0)  # 修复：使用大写'EV'匹配analyze_symbol输出
 
-                # v6.6: 软约束仅标记，不过滤
-                # 所有信号都通过软约束检查（除非显式标记为filtered）
-                constraints_passed = not soft_filtered
+                # v6.6: 软约束真正"软化" - 仅记录警告，不阻止PRIME级别
+                # 修复：soft_filtered应该只是警告标记，不应阻止信号发布
+                # 原因：市场过滤会降低概率30%，导致P<p_min，但信号仍然有效
+                constraints_passed = True  # 所有通过analyze_symbol的信号都视为约束通过
 
                 # 获取软约束警告信息
                 soft_warnings = []
@@ -344,26 +345,8 @@ class SignalScanner:
 
         for i, signal in enumerate(signals, 1):
             try:
-                # 渲染信号（v6.6富媒体模板）
-                message = render_v66_signal(signal, mode='rich')
-
-                # 添加v6.6系统标识
-                soft_info = signal.get('soft_constraints', {})
-                warnings = soft_info.get('warnings', [])
-                warning_emoji = "⚠️" if warnings else "✅"
-
-                footer = f"""
-
-━━━━━━━━━━━━━━━━━━
-🎯 <b>系统版本: v6.6</b>
-📦 6因子系统: T/M/C/V/O/B
-🔧 L/S/F/I调制器: 连续调节
-{warning_emoji} 软约束: {"有警告" if warnings else "无警告"}
-🆕 新币通道: Phase 2完成
-
-⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-                """
-                message = message + footer
+                # 渲染信号（v6.7简洁版：适合非专业人士）
+                message = render_signal(signal, is_watch=False)
 
                 # 发送
                 telegram_send_wrapper(message, self.bot_token, self.chat_id)
@@ -477,8 +460,8 @@ async def main():
     parser.add_argument(
         '--min-score',
         type=int,
-        default=70,
-        help='最低信号分数（默认70）'
+        default=35,
+        help='最低信号分数（默认35，匹配batch_scan_optimized.py）'
     )
     parser.add_argument(
         '--max-symbols',

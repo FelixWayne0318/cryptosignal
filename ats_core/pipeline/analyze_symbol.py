@@ -113,7 +113,8 @@ def _analyze_symbol_core(
     funding_rate: float = None, # v6.6: 资金费率（B - 基差）
     spot_price: float = None,   # v6.6: 现货价格（B - 基差）
     btc_klines: List = None,    # v6.6: BTC K线（独立性）
-    eth_klines: List = None     # v6.6: ETH K线（独立性）
+    eth_klines: List = None,    # v6.6: ETH K线（独立性）
+    kline_cache = None          # v6.6: K线缓存（用于四门DataQual检查）
 ) -> Dict[str, Any]:
     """
     核心分析逻辑（使用已获取的K线数据）- v6.6
@@ -512,8 +513,13 @@ def _analyze_symbol_core(
         "I": I,  # Independence modulator
     }
 
+    # v6.6: 将调制器也加入到scores字典（用于测试和完整性）
+    # 注意：调制器在scorecard中权重为0，不影响加权分数
+    scores.update(modulation)
+
     # 计算加权分数（scorecard内部已归一化到±100）
     # 注意：scorecard函数通过 total/weight_sum 自动归一化，无需再除以1.6
+    # 注意：scores现在包含L/S/F/I，但它们在weights中权重为0，不影响结果
     weighted_score, confidence, edge = scorecard(scores, weights)
 
     # 计算每个因子对总分的贡献（用于电报消息显示）
@@ -624,7 +630,8 @@ def _analyze_symbol_core(
     publish_cfg = params.get("publish", {})
 
     # 计算EV使用调制后的cost
-    EV = P_chosen * edge - (1 - P_chosen) * modulator_output.cost_final
+    # 修复：使用abs(edge)，因为无论做多还是做空，收益都应该是正数
+    EV = P_chosen * abs(edge) - (1 - P_chosen) * modulator_output.cost_final
 
     # 软约束1：EV ≤ 0
     if EV <= 0:
@@ -634,13 +641,19 @@ def _analyze_symbol_core(
 
     # 软约束2：P < p_min（基于F调制器调整）
     # 计算p_min（动态）
-    base_p_min = publish_cfg.get("prime_prob_min", 0.58)
+    # v6.6修复：降低base_p_min以匹配市场过滤后的实际概率分布
+    # 原因：市场过滤会对逆势信号施加0.70-0.85倍惩罚，导致P下降15-30%
+    # 如果base_p_min=0.58，过滤后P可能降至0.40-0.50，无法通过阈值
+    base_p_min = publish_cfg.get("prime_prob_min", 0.50)  # 从0.58降至0.50
     safety_margin = modulator_output.L_meta.get("safety_margin", 0.005)
-    p_min = base_p_min + safety_margin / (edge + 1e-6)
+    # 修复：使用abs(edge)避免负数除法问题，并限制最大adjustment
+    adjustment = safety_margin / (abs(edge) + 1e-6)
+    adjustment = min(adjustment, 0.02)  # 限制最大调整为0.02，避免过度惩罚小edge信号
+    p_min = base_p_min + adjustment
 
     # 应用F调制器的p_min调整
     p_min_adjusted = p_min + modulator_output.p_min_adj
-    p_min_adjusted = max(0.50, min(0.70, p_min_adjusted))  # 限制在合理范围
+    p_min_adjusted = max(0.45, min(0.65, p_min_adjusted))  # 限制在[0.45, 0.65]，匹配Anti-Jitter
 
     # 检查P是否低于阈值
     p_below_threshold = P_chosen < p_min_adjusted
@@ -689,6 +702,47 @@ def _analyze_symbol_core(
     # 目标：prime_strength >= 35 → is_prime (v6.0权重百分比系统)
     # 注：从65调整为35，因为权重从180-base改为100-base（65×100/180≈36）
 
+    # ---- 四门调节：计算部分（v6.6完整集成）----
+    # 四门：DataQual / EV / Execution / Probability
+    # 这些值将影响Prime强度的最终得分（通过乘法调节）
+
+    # Gate 1: DataQual - 数据质量（基于缓存新鲜度）
+    gates_data_qual = 1.0  # 默认值
+    if kline_cache is not None:
+        try:
+            from ats_core.data.quality import DataQualMonitor
+            dataqual_monitor = DataQualMonitor()
+            can_publish, gates_data_qual, reason = dataqual_monitor.can_publish_prime(
+                symbol,
+                kline_cache=kline_cache
+            )
+            # DataQual会在下面影响prime_strength
+        except Exception as e:
+            from ats_core.logging import warn
+            warn(f"DataQual检查失败 ({symbol}): {e}")
+            gates_data_qual = 1.0
+
+    # Gate 2: EV - 期望值（基于概率和成本）
+    # 修复：使用实际edge而不是假设edge=1.0
+    # EV = P * abs(edge) - (1-P) * cost
+    # 使用调制器输出的最终成本
+    # 负值表示不利，会额外惩罚Prime强度
+    gates_ev = P_chosen * abs(edge) - (1 - P_chosen) * modulator_output.cost_final
+
+    # Gate 3: Execution - 执行质量（基于流动性L）
+    # L范围-100到+100，映射到execution 0.0-1.0
+    # L=0 → execution=0.5（中性）
+    # L=100 → execution=1.0（优秀）
+    # L=-100 → execution=0.0（极差）
+    gates_execution = 0.5 + L / 200.0  # L已在上面计算得到
+
+    # Gate 4: Probability - 概率门（基于P_chosen）
+    # P=0.5 → 0（中性）
+    # P=0.75 → 0.5（良好）
+    # P=1.0 → 1.0（优秀）
+    # P<0.5 → 负值（不利）
+    gates_probability = 2 * P_chosen - 1
+
     prime_strength = 0.0
 
     # 1. 基础强度：基于v6.6综合评分（60分）
@@ -697,19 +751,55 @@ def _analyze_symbol_core(
     base_strength = confidence * 0.6
     prime_strength += base_strength
 
-    # 2. 概率加成（40分）- 保持原逻辑
-    # 60%→0分, 75%→40分, >75%截断
+    # 2. 概率加成（40分）- 2025-11-04审计优化：降低阈值从0.60到0.30
+    # 30%→0分, 60%→40分, >60%截断
+    # 原因：熊市时P_chosen普遍在0.32-0.44范围，0.60阈值过高导致无法获得加成
     prob_bonus = 0.0
-    if P_chosen >= 0.60:
-        prob_bonus = min(40.0, (P_chosen - 0.60) / 0.15 * 40.0)
+    if P_chosen >= 0.30:
+        prob_bonus = min(40.0, (P_chosen - 0.30) / 0.30 * 40.0)
         prime_strength += prob_bonus
+
+    # 3. ✅ 四门调节影响（乘法调节，可降低0-50%）
+    # 这是v6.6完整集成的关键：让四门真正影响Prime强度
+    gate_multiplier = 1.0
+
+    # DataQual影响（30%权重）
+    # DataQual=1.0 → *1.0（无影响）
+    # DataQual=0.9 → *0.97（-3%）
+    # DataQual=0.8 → *0.94（-6%）
+    # DataQual=0.5 → *0.85（-15%）
+    gate_multiplier *= (0.7 + 0.3 * gates_data_qual)
+
+    # Execution影响（40%权重）
+    # Execution=1.0 → *1.0（无影响）
+    # Execution=0.5 → *0.8（-20%）
+    # Execution=0.0 → *0.6（-40%）
+    gate_multiplier *= (0.6 + 0.4 * gates_execution)
+
+    # EV负值时额外惩罚（最多-30%）
+    if gates_ev < 0:
+        ev_penalty = max(0.7, 1.0 + gates_ev * 0.3)  # ev=-1 → *0.7
+        gate_multiplier *= ev_penalty
+
+    # Probability负值时额外惩罚（最多-20%）
+    if gates_probability < 0:
+        prob_penalty = max(0.8, 1.0 + gates_probability * 0.2)  # P=0 → *0.8
+        gate_multiplier *= prob_penalty
+
+    # 应用四门调节
+    prime_strength_before_gates = prime_strength  # 记录调整前的值
+    prime_strength *= gate_multiplier
 
     # 记录各部分得分（用于调试）
     prime_breakdown = {
         'base_strength': round(base_strength, 1),
         'prob_bonus': round(prob_bonus, 1),
         'confidence': confidence,
-        'P_chosen': round(P_chosen, 4)
+        'P_chosen': round(P_chosen, 4),
+        # v6.6新增：四门调节信息
+        'gate_multiplier': round(gate_multiplier, 3),
+        'strength_before_gates': round(prime_strength_before_gates, 1),
+        'strength_after_gates': round(prime_strength, 1)
     }
 
     # ---- 🚀 世界顶级优化：多时间框架协同验证（缓存版，零API调用）----
@@ -772,9 +862,26 @@ def _analyze_symbol_core(
     elif is_phaseB:
         prime_strength_threshold = new_coin_cfg.get("phaseB_prime_strength_min", 28)
     else:
-        prime_strength_threshold = 25  # 成熟币标准阈值
+        prime_strength_threshold = 50  # 成熟币标准阈值（从33提高到50，大幅减少信号80%，只保留最优质信号）
 
-    # Prime判定：使用币种特定阈值
+    # v6.7新增：蓄势待发检测（F优先通道）
+    # 目标：在价格上涨前捕捉信号，而非等趋势确立后才发现
+    # 特征：资金强势流入(C高) + 资金领先价格(F高) + 但趋势未确立(T低)
+    is_accumulating = False
+    accumulating_reason = ""
+
+    if F >= 90 and C >= 60 and T < 40:
+        # 强烈蓄势特征：资金大量流入，但价格还在横盘/初期
+        is_accumulating = True
+        accumulating_reason = "强势蓄势(F≥90+C≥60+T<40)"
+        prime_strength_threshold = 35  # 降低阈值，允许早期捕捉
+    elif F >= 85 and C >= 70 and T < 30 and V < 0:
+        # 深度蓄势特征：资金流入 + 量能萎缩（洗盘完成）+ 价格横盘
+        is_accumulating = True
+        accumulating_reason = "深度蓄势(F≥85+C≥70+V<0+T<30)"
+        prime_strength_threshold = 38  # 稍微提高一点要求
+
+    # Prime判定：使用币种特定阈值（可能被蓄势通道降低）
     is_prime = (prime_strength >= prime_strength_threshold)
     is_watch = False  # 不再发布Watch信号
 
@@ -988,7 +1095,10 @@ def _analyze_symbol_core(
             "P_threshold": p_min_adjusted,
             "P_above_threshold": not p_below_threshold,
             "soft_filtered": (EV <= 0) or p_below_threshold,
-            "soft_filter_reason": "EV≤0" if EV <= 0 else ("P<p_min" if p_below_threshold else None)
+            "soft_filter_reason": "EV≤0" if EV <= 0 else ("P<p_min" if p_below_threshold else None),
+            # v6.7新增：蓄势待发标识
+            "is_accumulating": is_accumulating,
+            "accumulating_reason": accumulating_reason
         },
 
         # 新币信息（嵌套格式，匹配scanner读取）
@@ -1031,25 +1141,30 @@ def _analyze_symbol_core(
         # F调节器否决警告（v6.2: F调节器已移除，固定为None）
         "f_veto_warning": None,
 
-        # v6.2新增：四门系统（简化版）
-        # v6.3修复：EV改为可选加分项，不再是硬性要求（专家建议 #3）
-        # 完整版需集成integrated_gates.py的FourGatesChecker
+        # v6.6完整版：四门系统（已集成到Prime强度计算）
+        # 这些门现在真正影响Prime强度（通过gate_multiplier）
         "gates": {
-            # Gate 1: DataQual - 数据质量评估（基于K线完整性）
-            "data_qual": min(1.0, len(k1) / 200.0) if k1 else 0.0,  # ≥200根K线为满分
+            # Gate 1: DataQual - 数据质量（基于缓存新鲜度，REST模式）
+            # 1.0 = 最新（<30s）, 0.9 = 良好（<3min）, 0.7 = 陈旧（>5min）
+            "data_qual": round(gates_data_qual, 3),
 
-            # Gate 2: EV - 期望值简化估算（v6.3: 改为加分项，允许负值）
-            # EV ≈ (P - 0.5) * 2，范围-1到+1（不再截断为0-1）
-            # 正值=加分，负值=扣分，而非硬性否决
-            "ev_gate": (P_chosen - 0.5) * 2,  # 允许 -1 到 +1 范围
+            # Gate 2: EV - 期望值（基于概率和成本）
+            # EV = P*abs(edge) - (1-P)*cost, 正值=有利，负值=不利
+            # 负值会额外惩罚Prime强度（最多-30%）
+            "ev_gate": round(gates_ev, 3),
 
-            # Gate 3: Execution - 执行质量（基于流动性，v6.3: 软化为评分制）
-            # L值直接反映流动性好坏，不再强制截断到0-1
-            "execution": (L + 100) / 200,  # L从-100到+100映射到0-1，允许超出
+            # Gate 3: Execution - 执行质量（基于流动性L）
+            # 0.0-1.0 范围，L=-100→0.0, L=0→0.5, L=100→1.0
+            # 影响Prime强度（最多-40%）
+            "execution": round(gates_execution, 3),
 
-            # Gate 4: Probability - 概率阈值（v6.3: 改为渐变评分）
-            # 不再要求P≥0.5才有分，允许低概率也有部分得分
-            "probability": (P_chosen - 0.5) / 0.45 if P_chosen >= 0.5 else (P_chosen - 0.5) / 0.5,
+            # Gate 4: Probability - 概率门（基于P_chosen）
+            # -1.0到+1.0范围，P=0.5→0, P=0.75→0.5, P=1.0→1.0
+            # 负值会额外惩罚Prime强度（最多-20%）
+            "probability": round(gates_probability, 3),
+
+            # v6.6新增：四门综合影响
+            "gate_multiplier": round(gate_multiplier, 3),  # Prime强度调节系数（0.6-1.0）
         },
 
         # 🚀 世界顶级优化模块元数据
@@ -1076,6 +1191,7 @@ def _analyze_symbol_core(
     }
 
     # 兼容旧版 telegram_fmt.py：将分数直接放在顶层
+    # 注意：scores现在包含所有10个因子（T/M/C/V/O/B + L/S/F/I）
     result.update(scores)
 
     return result
@@ -1438,7 +1554,8 @@ def analyze_symbol_with_preloaded_klines(
     funding_rate: float = None, # v6.6: 资金费率（B - 基差）
     spot_price: float = None,   # v6.6: 现货价格（B - 基差）
     btc_klines: List = None,    # v6.6: BTC K线（独立性）
-    eth_klines: List = None     # v6.6: ETH K线（独立性）
+    eth_klines: List = None,    # v6.6: ETH K线（独立性）
+    kline_cache = None          # v6.6: K线缓存（用于四门DataQual检查）
 ) -> Dict[str, Any]:
     """
     使用预加载的K线数据分析币种（用于批量扫描优化）- v6.6
@@ -1486,5 +1603,6 @@ def analyze_symbol_with_preloaded_klines(
         funding_rate=funding_rate,   # 传递资金费率（B）
         spot_price=spot_price,       # 传递现货价格（B）
         btc_klines=btc_klines,       # 传递BTC K线（独立性）
-        eth_klines=eth_klines        # 传递ETH K线（独立性）
+        eth_klines=eth_klines,       # 传递ETH K线（独立性）
+        kline_cache=kline_cache      # 传递K线缓存（四门DataQual）
     )
