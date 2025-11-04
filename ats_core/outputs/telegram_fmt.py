@@ -1064,7 +1064,14 @@ def _header_lines(r: Dict[str, Any], is_watch: bool) -> Tuple[str, str]:
     return line1, line2
 
 def _six_block(r: Dict[str, Any]) -> str:
-    """生成10维因子显示块（v6.0升级）"""
+    """
+    生成多维因子显示块（v6.7简洁版：适合非专业人士）
+
+    特点：
+    - 简洁清晰的emoji + 分数 + 描述
+    - 只显示主要因子（非零的）
+    - 独立显示市场环境和资金动量
+    """
     T, M, C, S, V, OI, L, B, Q, I, F = _ten_scores(r)
 
     # 获取方向
@@ -1078,7 +1085,6 @@ def _six_block(r: Dict[str, Any]) -> str:
     M_meta = _get(r, "scores_meta.M") or {}
     C_meta = _get(r, "scores_meta.C") or {}
     O_meta = _get(r, "scores_meta.O") or {}
-    E_meta = _get(r, "scores_meta.E") or {}
     L_meta = _get(r, "scores_meta.L") or {}
     B_meta = _get(r, "scores_meta.B") or {}
     Q_meta = _get(r, "scores_meta.Q") or {}
@@ -1094,10 +1100,6 @@ def _six_block(r: Dict[str, Any]) -> str:
     cvd_consistency = C_meta.get("consistency")
     cvd_is_consistent = C_meta.get("is_consistent")
     oi24h_pct = O_meta.get("oi24h_pct")
-    chop = E_meta.get("chop")
-    leading_raw = F_meta.get("leading_raw")
-
-    # v6.0新因子元数据
     spread_bps = L_meta.get("spread_bps")
     obi = L_meta.get("obi")
     basis_bps = B_meta.get("basis_bps")
@@ -1106,96 +1108,216 @@ def _six_block(r: Dict[str, Any]) -> str:
     beta_sum = I_meta.get("beta_sum")
 
     lines = []
-    # Layer 1: 价格行为层（65分）
+
+    # 主要因子（总是显示的核心维度）
     lines.append(f"• 趋势 {_emoji_by_score(T)} {T:+4d} —— {_desc_trend(T, Tm)}")
     lines.append(f"• 动量 {_emoji_by_score(M)} {M:+4d} —— {_desc_momentum(M, slope)}")
+    lines.append(f"• 资金 {_emoji_by_score(C)} {C:+4d} —— {_desc_cvd_flow(C, is_long, cvd6, cvd_consistency, cvd_is_consistent)}")
     lines.append(f"• 结构 {_emoji_by_score(S)} {S:+4d} —— {_desc_structure(S, theta)}")
     lines.append(f"• 成交 {_emoji_by_score(V)} {V:+4d} —— {_desc_volume(V, v5v20)}")
-
-    # Layer 2: 资金流层（40分）
-    lines.append(f"• 资金 {_emoji_by_score(C)} {C:+4d} —— {_desc_cvd_flow(C, is_long, cvd6, cvd_consistency, cvd_is_consistent)}")
     lines.append(f"• 持仓 {_emoji_by_score(OI)} {OI:+4d} —— {_desc_positions(OI, oi24h_pct)}")
 
-    # Layer 3: 微观结构层（45分） - v6.0新增
-    lines.append(f"• 流动 {_emoji_by_score(L)} {L:+4d} —— {_desc_liquidity(L, spread_bps, obi)}")
-    lines.append(f"• 情绪 {_emoji_by_score(B)} {B:+4d} —— {_desc_basis_funding(B, basis_bps, funding_rate)}")
-    if Q != 0:  # 只在有数据时显示
+    # 辅助因子（只在有意义时显示）
+    if L != 0:
+        lines.append(f"• 流动 {_emoji_by_score(L)} {L:+4d} —— {_desc_liquidity(L, spread_bps, obi)}")
+    if B != 0:
+        lines.append(f"• 情绪 {_emoji_by_score(B)} {B:+4d} —— {_desc_basis_funding(B, basis_bps, funding_rate)}")
+    if Q != 0:
         lines.append(f"• 清算 {_emoji_by_score(Q)} {Q:+4d} —— {_desc_liquidation(Q, lti)}")
-
-    # Layer 4: 市场环境层（10分） - v6.0新增
-    if I != 0:  # 只在有数据时显示
+    if I != 0:
         lines.append(f"• 独立 {_emoji_by_score(I)} {I:+4d} —— {_desc_independence(I, beta_sum)}")
 
-    # ━━━━━━ 市场环境分析 ━━━━━━
-
-    # 1. BTC/ETH大盘趋势（外部市场环境）
+    # 市场环境
     market_regime = _get(r, "market_regime")
     market_meta = _get(r, "market_meta") or {}
-    market_penalty = _get(r, "market_penalty")
 
     if market_regime is not None:
         regime_desc = market_meta.get("regime_desc", "未知")
         btc_trend = market_meta.get("btc_trend", 0)
         eth_trend = market_meta.get("eth_trend", 0)
-
-        # 市场趋势emoji
         market_emoji = _emoji_by_score(market_regime)
 
-        # 显示市场状态
         lines.append(f"\n📊 大盘环境 {market_emoji} {regime_desc} (市场{market_regime:+d})")
         lines.append(f"   └─ BTC{btc_trend:+d} · ETH{eth_trend:+d}")
 
-        # 如果有市场调整（奖励或惩罚），显示说明
-        if market_penalty:
-            lines.append(f"   └─ {market_penalty}")
-
-    # 2. F调节器（个币资金动量）
+    # 资金动量（F调节器）
     F_adj = _get(r, "F_adjustment", 1.0)
     f_desc = _desc_fund_leading(F)
     f_emoji = _emoji_by_fund_leading(F)
-    f_veto_warning = _get(r, "f_veto_warning")
 
-    f_line = f"\n⚡ 资金动量 {f_emoji} {f_desc} (F{F:+d})"
-    lines.append(f_line)
+    lines.append(f"\n⚡ 资金动量 {f_emoji} {f_desc} (F{F:+d})")
     lines.append(f"   └─ 概率调整 ×{F_adj:.2f}")
-
-    if f_veto_warning:
-        lines.append(f"   └─ {f_veto_warning}")
 
     return "\n".join(lines)
 
 def _pricing_block(r: Dict[str, Any]) -> str:
-    """生成价格信息块（入场、止损、止盈）"""
+    """
+    生成价格信息块（v6.7简洁增强版）
+
+    显示：
+    - 入场区间
+    - 止损（距离% · 方法 · 置信度）
+    - 止盈1/2（距离%）
+    - 盈亏比
+    """
+    # 获取价格数据
+    price = _get(r, "price") or _get(r, "last") or 0
+    stop_loss = _get(r, "stop_loss") or {}
+    take_profit = _get(r, "take_profit") or {}
     pricing = _get(r, "pricing") or {}
-    if not pricing:
-        return ""
 
     lines = []
 
     # 入场区间
-    entry_lo = pricing.get("entry_lo")
-    entry_hi = pricing.get("entry_hi")
-    if entry_lo is not None and entry_hi is not None:
-        if abs(entry_lo - entry_hi) < 0.0001:
-            lines.append(f"📍 入场价: {_fmt_price(entry_lo)}")
+    entry_lo = pricing.get("entry_lo") or price
+    entry_hi = pricing.get("entry_hi") or price
+    if abs(entry_lo - entry_hi) < 0.0001:
+        lines.append(f"📍 入场价: {_fmt_price(entry_lo)}")
+    else:
+        lines.append(f"📍 入场区间: {_fmt_price(entry_lo)} - {_fmt_price(entry_hi)}")
+
+    # 止损（增强显示）
+    sl_price = stop_loss.get("stop_price")
+    if sl_price:
+        sl_distance_pct = stop_loss.get("distance_pct", 0)
+        sl_method_cn = stop_loss.get("method_cn", "")
+        sl_confidence = stop_loss.get("confidence", 0)
+
+        # 构建止损描述
+        sl_details = []
+        if sl_distance_pct:
+            sl_details.append(f"距离{abs(sl_distance_pct):.1%}")
+        if sl_method_cn:
+            sl_details.append(sl_method_cn)
+        if sl_confidence:
+            sl_details.append(f"置信{sl_confidence}")
+
+        if sl_details:
+            lines.append(f"🛑 止损: {_fmt_price(sl_price)} ({' · '.join(sl_details)})")
         else:
-            lines.append(f"📍 入场区间: {_fmt_price(entry_lo)} - {_fmt_price(entry_hi)}")
+            lines.append(f"🛑 止损: {_fmt_price(sl_price)}")
 
-    # 止损
-    sl = pricing.get("sl")
-    if sl is not None:
-        lines.append(f"🛑 止损: {_fmt_price(sl)}")
+    # 止盈1
+    tp1_price = take_profit.get("price") or pricing.get("tp1")
+    if tp1_price and price:
+        tp1_dist_pct = abs(tp1_price - price) / price
+        lines.append(f"🎯 止盈1: {_fmt_price(tp1_price)} (距离{tp1_dist_pct:.1%})")
 
-    # 止盈
-    tp1 = pricing.get("tp1")
-    tp2 = pricing.get("tp2")
-    if tp1 is not None:
-        lines.append(f"🎯 止盈1: {_fmt_price(tp1)}")
-    if tp2 is not None:
-        lines.append(f"🎯 止盈2: {_fmt_price(tp2)}")
+    # 止盈2（如果有）
+    tp2_price = pricing.get("tp2")
+    if tp2_price and price:
+        tp2_dist_pct = abs(tp2_price - price) / price
+        lines.append(f"🎯 止盈2: {_fmt_price(tp2_price)} (距离{tp2_dist_pct:.1%})")
 
     if lines:
         return "\n" + "\n".join(lines)
+    return ""
+
+
+def _core_metrics_block(r: Dict[str, Any]) -> str:
+    """
+    生成核心指标块（v6.7新增）
+
+    显示：期望收益和盈亏比（一行）
+    """
+    # 期望收益
+    publish_info = _get(r, "publish") or {}
+    EV = publish_info.get("EV") or _get(r, "expected_value") or 0
+
+    # v6.7类型安全
+    if isinstance(EV, dict):
+        EV = 0
+
+    # 盈亏比
+    take_profit = _get(r, "take_profit") or {}
+    rr_ratio = take_profit.get("rr_ratio", 0)
+
+    # 盈亏比emoji
+    if rr_ratio >= 2.0:
+        rr_emoji = "✅"
+    elif rr_ratio >= 1.5:
+        rr_emoji = "⚠️"
+    else:
+        rr_emoji = "❌"
+
+    return f"期望收益 {EV:+.1%} · 盈亏比 1:{rr_ratio:.1f} {rr_emoji}"
+
+
+def _position_block(r: Dict[str, Any]) -> str:
+    """
+    生成仓位建议块（v6.7简洁版）
+
+    显示：基准、调制、分配策略
+    """
+    position_mult = _get(r, "position_mult") or 1.0
+    modulation = _get(r, "modulation") or {}
+    L_score = modulation.get("L", 50)
+
+    base_position = 10000
+    adjusted_position = base_position * position_mult
+    entry_immediate = adjusted_position * 0.60
+    entry_reserve = adjusted_position * 0.40
+
+    lines = []
+    lines.append("💼 仓位建议")
+    lines.append(f"• 基准仓位: ${base_position:.0f}")
+    lines.append(f"• L调制器: {position_mult:.0%} (L={L_score})")
+    lines.append(f"• 调整后: ${adjusted_position:.0f}")
+    lines.append(f"  ├─ 立即入场: ${entry_immediate:.0f} (60%)")
+    lines.append(f"  └─ 预留加仓: ${entry_reserve:.0f} (40%)")
+
+    return "\n" + "\n".join(lines)
+
+
+def _risk_alerts_block(r: Dict[str, Any]) -> str:
+    """
+    生成风险提示块（v6.7自动化）
+
+    根据各项指标自动生成风险警告
+    """
+    alerts = []
+    modulation = _get(r, "modulation") or {}
+    modulator_output = _get(r, "modulator_output") or {}
+    publish_info = _get(r, "publish") or {}
+
+    # 风险1：流动性
+    L_score = modulation.get("L", 50)
+    if L_score < 50:
+        L_meta = modulator_output.get("L", {}).get("meta", {})
+        warnings = L_meta.get("warnings", [])
+        if warnings:
+            alerts.append(f"⚠️ [流动性] {'; '.join(warnings)}")
+        else:
+            alerts.append("⚠️ [流动性] 流动性偏低，注意滑点")
+
+    # 风险2：结构
+    S_score = modulation.get("S", 0)
+    if S_score < -50:
+        alerts.append("⚠️ [结构] 市场结构混乱，止损可能频繁触发")
+
+    # 风险3：成交量
+    T, M, C, S, V, OI, L, B, Q, I, F = _ten_scores(r)
+    if V < -60:
+        alerts.append("⚠️ [成交量] 量能不足，注意追涨风险")
+
+    # 风险4：独立性
+    I_score = modulation.get("I", 0)
+    if I_score < -30:
+        alerts.append("⚠️ [独立性] 跟随性强，注意市场联动风险")
+
+    # 风险5：数据质量
+    data_qual = _get(r, "data_qual") or 1.0
+    if data_qual < 0.95:
+        alerts.append(f"⚠️ [数据] 数据质量略低({data_qual:.0%})，建议复核")
+
+    # 风险6：软约束
+    soft_filtered = publish_info.get("soft_filtered", False)
+    if soft_filtered:
+        reason = publish_info.get("soft_filter_reason", "")
+        alerts.append(f"ℹ️ [软约束] {reason}")
+
+    if alerts:
+        return "\n\n🚨 风险提示\n" + "\n".join(alerts)
     return ""
 
 def _note_and_tags(r: Dict[str, Any], is_watch: bool) -> str:
@@ -1210,12 +1332,46 @@ def _note_and_tags(r: Dict[str, Any], is_watch: bool) -> str:
     return tail
 
 def render_signal(r: Dict[str, Any], is_watch: bool = False) -> str:
-    """Unified template for both watch and trade (v6.0: 10-dimension system)."""
+    """
+    v6.7简洁模板：适合非专业人士
+
+    特点：
+    - 清晰的结构和emoji
+    - 核心信息前置（期望收益、盈亏比）
+    - 止损止盈详细信息（距离、方法）
+    - 仓位建议完整（基准、调制、分配）
+    - 多维分析简洁（主要因子）
+    - 自动风险提示
+    """
+    # 1. 头部（交易对、价格、方向、概率、有效期）
     l1, l2 = _header_lines(r, is_watch)
-    ten = _six_block(r)  # 虽然叫six_block，但已升级为10维
+
+    # 2. 核心指标（期望收益、盈亏比）
+    core_metrics = _core_metrics_block(r)
+
+    # 3. 入场止损止盈
     pricing = _pricing_block(r)
-    # 价格信息放在10维分析前面（入场区间前空一行）
-    body = f"{l1}\n{l2}\n{pricing}\n\n━━━━━ 10维因子分析 ━━━━━\n{ten}\n\n{_note_and_tags(r, is_watch)}"
+
+    # 4. 仓位建议
+    position = _position_block(r)
+
+    # 5. 多维分析（因子列表）
+    factors = _six_block(r)
+
+    # 6. 风险提示（如果有）
+    risk_alerts = _risk_alerts_block(r)
+
+    # 7. 标签
+    tags = _note_and_tags(r, is_watch)
+
+    # 组装消息
+    body = f"{l1}\n{l2}\n{core_metrics}"
+    body += pricing
+    body += position
+    body += f"\n\n多维分析\n{factors}"
+    body += risk_alerts
+    body += f"\n\n{tags}"
+
     return body
 
 def render_watch(r: Dict[str, Any]) -> str:
