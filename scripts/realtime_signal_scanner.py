@@ -131,12 +131,12 @@ def telegram_send_wrapper(text: str, bot_token: str, chat_id: str, parse_mode: s
 class SignalScanner:
     """WebSocket实时信号扫描器"""
 
-    def __init__(self, min_score: int = 50, send_telegram: bool = True, verbose: bool = True):
+    def __init__(self, min_score: int = 35, send_telegram: bool = True, verbose: bool = True):
         """
         初始化扫描器
 
         Args:
-            min_score: 最低信号分数（默认50，可调整：40-70）
+            min_score: 最低信号分数（默认35，匹配batch_scan_optimized.py）
             send_telegram: 是否发送Telegram通知
             verbose: 是否显示所有币种的详细因子评分（默认True，可用--no-verbose关闭）
         """
@@ -478,8 +478,8 @@ async def main():
     parser.add_argument(
         '--min-score',
         type=int,
-        default=70,
-        help='最低信号分数（默认70）'
+        default=35,
+        help='最低信号分数（默认35，匹配batch_scan_optimized.py）'
     )
     parser.add_argument(
         '--max-symbols',
