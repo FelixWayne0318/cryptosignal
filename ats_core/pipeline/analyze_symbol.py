@@ -718,10 +718,11 @@ def _analyze_symbol_core(
             gates_data_qual = 1.0
 
     # Gate 2: EV - 期望值（基于概率和成本）
-    # EV ≈ 2 * P_chosen - 1 - cost
+    # 修复：使用实际edge而不是假设edge=1.0
+    # EV = P * abs(edge) - (1-P) * cost
     # 使用调制器输出的最终成本
     # 负值表示不利，会额外惩罚Prime强度
-    gates_ev = 2 * P_chosen - 1 - modulator_output.cost_final
+    gates_ev = P_chosen * abs(edge) - (1 - P_chosen) * modulator_output.cost_final
 
     # Gate 3: Execution - 执行质量（基于流动性L）
     # L范围-100到+100，映射到execution 0.0-1.0
@@ -1123,7 +1124,7 @@ def _analyze_symbol_core(
             "data_qual": round(gates_data_qual, 3),
 
             # Gate 2: EV - 期望值（基于概率和成本）
-            # EV = 2*P - 1 - cost, 正值=有利，负值=不利
+            # EV = P*abs(edge) - (1-P)*cost, 正值=有利，负值=不利
             # 负值会额外惩罚Prime强度（最多-30%）
             "ev_gate": round(gates_ev, 3),
 
