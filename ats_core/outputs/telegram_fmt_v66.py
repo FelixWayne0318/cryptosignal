@@ -64,6 +64,12 @@ def _render_rich(data: Dict[str, Any]) -> str:
     symbol = data.get("symbol", "UNKNOWN")
     score = data.get("weighted_score", 0)
 
+    # v6.6修复：确保score是数值类型（防止dict导致abs()错误）
+    if isinstance(score, dict):
+        score = 0
+    elif not isinstance(score, (int, float)):
+        score = 0
+
     direction_emoji = "🟢" if direction == "LONG" else "🔴"
     strength_emoji = _get_strength_emoji(abs(score))
 
@@ -77,9 +83,19 @@ def _render_rich(data: Dict[str, Any]) -> str:
     probability = data.get("probability", 0)
     confidence = data.get("confidence", 0)
 
+    # v6.6修复：确保数值类型（防止dict导致格式化错误）
+    if isinstance(edge, dict):
+        edge = 0
+    if isinstance(probability, dict):
+        probability = 0
+    if isinstance(confidence, dict):
+        confidence = 0
+
     # v6.6: 使用软约束的EV
     publish_info = data.get("publish", {})
     EV = publish_info.get("EV", 0)
+    if isinstance(EV, dict):
+        EV = 0
 
     core_metrics = f"""
 📊 **核心指标**
