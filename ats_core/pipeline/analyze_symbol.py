@@ -853,7 +853,7 @@ def _analyze_symbol_core(
     elif is_phaseB:
         prime_strength_threshold = new_coin_cfg.get("phaseB_prime_strength_min", 28)
     else:
-        prime_strength_threshold = 25  # 成熟币标准阈值
+        prime_strength_threshold = 16  # 成熟币标准阈值（从25降低到16，2025-11-04审计建议）
 
     # Prime判定：使用币种特定阈值
     is_prime = (prime_strength >= prime_strength_threshold)
