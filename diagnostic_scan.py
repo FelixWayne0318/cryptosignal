@@ -111,18 +111,29 @@ print("🧪 第二部分：运行测试扫描 (10个币种)")
 print("=" * 80)
 
 try:
-    from ats_core.pipeline.batch_scan_optimized import batch_scan_optimized
+    from ats_core.pipeline.batch_scan_optimized import OptimizedBatchScanner
     from ats_core.publishing.anti_jitter import AntiJitter
 
-    print("\n正在扫描...")
+    print("\n正在初始化扫描器...")
 
-    # 运行扫描（限制10个币种以加快速度）
-    result = batch_scan_optimized(
-        symbols=None,  # 自动获取
-        max_symbols=10,  # 只扫描10个币种用于诊断
-        interval='1h',
-        log=True
-    )
+    # 创建扫描器实例
+    scanner = OptimizedBatchScanner()
+
+    # 使用asyncio运行异步初始化和扫描
+    import asyncio
+
+    async def run_scan():
+        # 初始化
+        await scanner.initialize()
+        # 扫描（限制10个币种以加快速度）
+        result = await scanner.scan(
+            max_symbols=10,  # 只扫描10个币种用于诊断
+            verbose=True
+        )
+        return result
+
+    print("\n正在扫描（约1-2分钟）...")
+    result = asyncio.run(run_scan())
 
     signals = result.get('signals', [])
 
