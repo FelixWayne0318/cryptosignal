@@ -1059,8 +1059,19 @@ def _header_lines(r: Dict[str, Any], is_watch: bool) -> Tuple[str, str]:
     conv, side_lbl = _conviction_and_side(r, six)
 
     line1 = f"🔹 {sym} · 现价 {price_s}"
+
+    # v6.7新增：蓄势待发标识
+    publish_info = _get(r, "publish") or {}
+    is_accumulating = publish_info.get("is_accumulating", False)
+    accumulating_reason = publish_info.get("accumulating_reason", "")
+
     # 不再区分观察/正式，统一为正式信号
     line2 = f"{side_lbl} 概率{conv}% · 有效期{ttl_h}h"
+
+    # 如果是蓄势信号，添加特殊标识
+    if is_accumulating:
+        line2 += f"\n🔍 蓄势待发 · {accumulating_reason}"
+
     return line1, line2
 
 def _six_block(r: Dict[str, Any]) -> str:
@@ -1315,6 +1326,11 @@ def _risk_alerts_block(r: Dict[str, Any]) -> str:
     if soft_filtered:
         reason = publish_info.get("soft_filter_reason", "")
         alerts.append(f"ℹ️ [软约束] {reason}")
+
+    # v6.7新增：蓄势信号的特殊提示
+    is_accumulating = publish_info.get("is_accumulating", False)
+    if is_accumulating:
+        alerts.insert(0, "💡 [蓄势信号] 资金已流入但价格未涨，建议分批建仓，不要急于梭哈")
 
     if alerts:
         return "\n\n🚨 风险提示\n" + "\n".join(alerts)

@@ -864,7 +864,24 @@ def _analyze_symbol_core(
     else:
         prime_strength_threshold = 50  # 成熟币标准阈值（从33提高到50，大幅减少信号80%，只保留最优质信号）
 
-    # Prime判定：使用币种特定阈值
+    # v6.7新增：蓄势待发检测（F优先通道）
+    # 目标：在价格上涨前捕捉信号，而非等趋势确立后才发现
+    # 特征：资金强势流入(C高) + 资金领先价格(F高) + 但趋势未确立(T低)
+    is_accumulating = False
+    accumulating_reason = ""
+
+    if F >= 90 and C >= 60 and T < 40:
+        # 强烈蓄势特征：资金大量流入，但价格还在横盘/初期
+        is_accumulating = True
+        accumulating_reason = "强势蓄势(F≥90+C≥60+T<40)"
+        prime_strength_threshold = 35  # 降低阈值，允许早期捕捉
+    elif F >= 85 and C >= 70 and T < 30 and V < 0:
+        # 深度蓄势特征：资金流入 + 量能萎缩（洗盘完成）+ 价格横盘
+        is_accumulating = True
+        accumulating_reason = "深度蓄势(F≥85+C≥70+V<0+T<30)"
+        prime_strength_threshold = 38  # 稍微提高一点要求
+
+    # Prime判定：使用币种特定阈值（可能被蓄势通道降低）
     is_prime = (prime_strength >= prime_strength_threshold)
     is_watch = False  # 不再发布Watch信号
 
@@ -1078,7 +1095,10 @@ def _analyze_symbol_core(
             "P_threshold": p_min_adjusted,
             "P_above_threshold": not p_below_threshold,
             "soft_filtered": (EV <= 0) or p_below_threshold,
-            "soft_filter_reason": "EV≤0" if EV <= 0 else ("P<p_min" if p_below_threshold else None)
+            "soft_filter_reason": "EV≤0" if EV <= 0 else ("P<p_min" if p_below_threshold else None),
+            # v6.7新增：蓄势待发标识
+            "is_accumulating": is_accumulating,
+            "accumulating_reason": accumulating_reason
         },
 
         # 新币信息（嵌套格式，匹配scanner读取）
