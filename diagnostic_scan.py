@@ -48,19 +48,23 @@ try:
     with open("scripts/realtime_signal_scanner.py", "r") as f:
         content = f.read()
 
-    # 检查 prime_entry_threshold
-    if "prime_entry_threshold=0.55" in content:
-        print("      ✅ prime_entry_threshold = 0.55 (正确)")
+    # 检查 prime_entry_threshold (v6.6: 0.45匹配市场过滤后的概率)
+    if "prime_entry_threshold=0.45" in content:
+        print("      ✅ prime_entry_threshold = 0.45 (正确，v6.6)")
+    elif "prime_entry_threshold=0.55" in content:
+        print("      ❌ prime_entry_threshold = 0.55 (旧版，应为0.45)")
     elif "prime_entry_threshold=0.65" in content:
-        print("      ❌ prime_entry_threshold = 0.65 (旧版，应为0.55)")
+        print("      ❌ prime_entry_threshold = 0.65 (旧版，应为0.45)")
     else:
         print("      ⚠️  找不到 prime_entry_threshold 配置")
 
-    # 检查 prime_maintain_threshold
-    if "prime_maintain_threshold=0.52" in content:
-        print("      ✅ prime_maintain_threshold = 0.52 (正确)")
+    # 检查 prime_maintain_threshold (v6.6: 0.42匹配市场过滤后的概率)
+    if "prime_maintain_threshold=0.42" in content:
+        print("      ✅ prime_maintain_threshold = 0.42 (正确，v6.6)")
+    elif "prime_maintain_threshold=0.52" in content:
+        print("      ❌ prime_maintain_threshold = 0.52 (旧版，应为0.42)")
     elif "prime_maintain_threshold=0.58" in content:
-        print("      ❌ prime_maintain_threshold = 0.58 (旧版，应为0.52)")
+        print("      ❌ prime_maintain_threshold = 0.58 (旧版，应为0.42)")
     else:
         print("      ⚠️  找不到 prime_maintain_threshold 配置")
 
@@ -157,12 +161,12 @@ try:
         print("   2. 数据获取失败")
         print("   3. 评分系统问题")
     else:
-        # 创建 Anti-Jitter 实例用于测试
+        # 创建 Anti-Jitter 实例用于测试 (v6.6: 匹配市场过滤后的实际概率)
         anti_jitter = AntiJitter(
-            prime_entry_threshold=0.55,
-            prime_maintain_threshold=0.52,
-            watch_entry_threshold=0.50,
-            watch_maintain_threshold=0.45,
+            prime_entry_threshold=0.45,      # v6.6: 降低以匹配市场过滤后的概率
+            prime_maintain_threshold=0.42,   # v6.6: 相应降低维持阈值
+            watch_entry_threshold=0.40,      # v6.6: WATCH门槛
+            watch_maintain_threshold=0.37,   # v6.6: 保持滞后性
             confirmation_bars=1,
             total_bars=2,
             cooldown_seconds=60
@@ -208,14 +212,15 @@ try:
                 else:
                     print(f"   拒绝原因:        ❌ {'; '.join(rejection_reason)}")
 
-            # Anti-Jitter 测试
+            # Anti-Jitter 测试 (v6.6: 使用实际scanner配置)
             print(f"\n   Anti-Jitter 测试:")
-            print(f"      配置阈值:")
-            print(f"         prime_entry:    0.55 ({0.55*100:.0f}%)")
-            print(f"         prime_maintain: 0.52 ({0.52*100:.0f}%)")
+            print(f"      配置阈值 (v6.6):")
+            print(f"         prime_entry:    0.45 ({0.45*100:.0f}%)")
+            print(f"         prime_maintain: 0.42 ({0.42*100:.0f}%)")
 
             # 模拟 anti-jitter 检查
-            constraints_passed = not soft_filtered
+            # v6.6修复：constraints_passed应该始终为True（软约束不阻止发布）
+            constraints_passed = True  # 匹配scanner实际逻辑
 
             new_level, should_publish = anti_jitter.update(
                 symbol=symbol,
@@ -225,9 +230,9 @@ try:
             )
 
             print(f"      检查结果:")
-            print(f"         constraints_passed: {constraints_passed}")
+            print(f"         constraints_passed: {constraints_passed} (v6.6: 软约束不阻止)")
             print(f"         EV > 0:             {EV > 0} (EV={EV:.4f})")
-            print(f"         P >= 0.55:          {probability >= 0.55} (P={probability:.4f})")
+            print(f"         P >= 0.45:          {probability >= 0.45} (P={probability:.4f})")
             print(f"         new_level:          {new_level}")
             print(f"         should_publish:     {should_publish}")
 
@@ -247,7 +252,7 @@ try:
 
             if EV <= 0:
                 failed_ev += 1
-            if probability < 0.55:
+            if probability < 0.45:  # v6.6: 使用实际阈值0.45
                 failed_prob += 1
             if new_level != 'PRIME':
                 failed_antijitter += 1
@@ -267,7 +272,7 @@ try:
 
         print(f"\n失败原因统计:")
         print(f"   EV ≤ 0:           {failed_ev} / {len(signals)} ({failed_ev/len(signals)*100:.1f}%)")
-        print(f"   P < 0.55:         {failed_prob} / {len(signals)} ({failed_prob/len(signals)*100:.1f}%)")
+        print(f"   P < 0.45:         {failed_prob} / {len(signals)} ({failed_prob/len(signals)*100:.1f}%)  (v6.6阈值)")
         print(f"   Anti-Jitter拒绝: {failed_antijitter} / {len(signals)} ({failed_antijitter/len(signals)*100:.1f}%)")
 
         # 概率分布统计

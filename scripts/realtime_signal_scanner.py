@@ -268,9 +268,10 @@ class SignalScanner:
                 soft_filtered = publish_info.get('soft_filtered', False)
                 ev = publish_info.get('EV', 0.0)  # 修复：使用大写'EV'匹配analyze_symbol输出
 
-                # v6.6: 软约束仅标记，不过滤
-                # 所有信号都通过软约束检查（除非显式标记为filtered）
-                constraints_passed = not soft_filtered
+                # v6.6: 软约束真正"软化" - 仅记录警告，不阻止PRIME级别
+                # 修复：soft_filtered应该只是警告标记，不应阻止信号发布
+                # 原因：市场过滤会降低概率30%，导致P<p_min，但信号仍然有效
+                constraints_passed = True  # 所有通过analyze_symbol的信号都视为约束通过
 
                 # 获取软约束警告信息
                 soft_warnings = []

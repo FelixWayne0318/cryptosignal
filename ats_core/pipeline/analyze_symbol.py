@@ -641,7 +641,10 @@ def _analyze_symbol_core(
 
     # 软约束2：P < p_min（基于F调制器调整）
     # 计算p_min（动态）
-    base_p_min = publish_cfg.get("prime_prob_min", 0.58)
+    # v6.6修复：降低base_p_min以匹配市场过滤后的实际概率分布
+    # 原因：市场过滤会对逆势信号施加0.70-0.85倍惩罚，导致P下降15-30%
+    # 如果base_p_min=0.58，过滤后P可能降至0.40-0.50，无法通过阈值
+    base_p_min = publish_cfg.get("prime_prob_min", 0.50)  # 从0.58降至0.50
     safety_margin = modulator_output.L_meta.get("safety_margin", 0.005)
     # 修复：使用abs(edge)避免负数除法问题，并限制最大adjustment
     adjustment = safety_margin / (abs(edge) + 1e-6)
@@ -650,7 +653,7 @@ def _analyze_symbol_core(
 
     # 应用F调制器的p_min调整
     p_min_adjusted = p_min + modulator_output.p_min_adj
-    p_min_adjusted = max(0.50, min(0.70, p_min_adjusted))  # 限制在合理范围
+    p_min_adjusted = max(0.45, min(0.65, p_min_adjusted))  # 限制在[0.45, 0.65]，匹配Anti-Jitter
 
     # 检查P是否低于阈值
     p_below_threshold = P_chosen < p_min_adjusted
