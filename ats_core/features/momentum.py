@@ -98,7 +98,9 @@ def score_momentum(
     M_raw = p["slope_weight"] * slope_score + p["accel_weight"] * accel_score
 
     # v2.0合规：应用StandardizationChain
-    M_pub, diagnostics = _momentum_chain.standardize(M_raw)
+    # ⚠️ 2025-11-04紧急修复：禁用StandardizationChain，过度压缩导致信号丢失
+    # M_pub, diagnostics = _momentum_chain.standardize(M_raw)
+    M_pub = max(-100, min(100, M_raw))  # 直接使用原始值
     M = int(round(M_pub))
 
     # ========== 5. 解释 ==========

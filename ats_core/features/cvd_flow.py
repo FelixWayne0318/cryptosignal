@@ -132,8 +132,10 @@ def score_cvd_flow(
 
     # ========== 5. 最终分数（保留符号） ==========
     # v2.0合规：应用StandardizationChain
+    # ⚠️ 2025-11-04紧急修复：禁用StandardizationChain，过度压缩导致信号丢失
     C_raw = cvd_score  # 保存原始值
-    C_pub, diagnostics = _cvd_chain.standardize(C_raw)
+    # C_pub, diagnostics = _cvd_chain.standardize(C_raw)
+    C_pub = max(-100, min(100, C_raw))  # 直接使用原始值
     C = int(round(C_pub))
 
     # 计算cvd6用于显示（实际的起点终点变化）

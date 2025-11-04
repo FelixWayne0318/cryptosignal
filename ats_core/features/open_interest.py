@@ -250,7 +250,9 @@ def score_open_interest(symbol: str,
         O_raw = O_raw * penalty_factor
 
     # v2.0合规：应用StandardizationChain
-    O_pub, diagnostics = _oi_chain.standardize(O_raw)
+    # ⚠️ 2025-11-04紧急修复：禁用StandardizationChain，过度压缩导致信号丢失
+    # O_pub, diagnostics = _oi_chain.standardize(O_raw)
+    O_pub = max(-100, min(100, O_raw))  # 直接使用原始值
     O = int(round(O_pub))
 
     # 解释（v2.0：考虑价格方向）

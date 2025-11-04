@@ -198,7 +198,9 @@ def score_trend(
 
     # v2.0合规：应用StandardizationChain（5步稳健化）
     # 输入T_raw（可能超出±100），输出标准化后的T_pub（稳健压缩到±100）
-    T_pub, diagnostics = _trend_chain.standardize(T_raw)
+    # ⚠️ 2025-11-04紧急修复：禁用StandardizationChain，过度压缩导致大跌时T=0
+    # T_pub, diagnostics = _trend_chain.standardize(T_raw)
+    T_pub = max(-100, min(100, T_raw))  # 直接使用原始值，仅裁剪到±100
 
     # 转换为整数
     T = int(round(T_pub))
