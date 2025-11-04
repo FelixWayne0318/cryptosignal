@@ -743,11 +743,12 @@ def _analyze_symbol_core(
     base_strength = confidence * 0.6
     prime_strength += base_strength
 
-    # 2. 概率加成（40分）- 保持原逻辑
-    # 60%→0分, 75%→40分, >75%截断
+    # 2. 概率加成（40分）- 2025-11-04审计优化：降低阈值从0.60到0.30
+    # 30%→0分, 60%→40分, >60%截断
+    # 原因：熊市时P_chosen普遍在0.32-0.44范围，0.60阈值过高导致无法获得加成
     prob_bonus = 0.0
-    if P_chosen >= 0.60:
-        prob_bonus = min(40.0, (P_chosen - 0.60) / 0.15 * 40.0)
+    if P_chosen >= 0.30:
+        prob_bonus = min(40.0, (P_chosen - 0.30) / 0.30 * 40.0)
         prime_strength += prob_bonus
 
     # 3. ✅ 四门调节影响（乘法调节，可降低0-50%）
