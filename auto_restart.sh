@@ -13,6 +13,12 @@ echo "=========================================="
 echo "📍 步骤1: 停止旧进程..."
 pkill -f "python.*cryptosignal" || echo "   没有运行中的进程"
 pkill -f "deploy_and_run" || true
+pkill -f "full_run_v2" || true
+pkill -f "auto_scan_prime" || true
+
+# 清理旧的screen会话
+echo "   清理旧的screen会话..."
+screen -ls | grep cryptosignal | cut -d. -f1 | awk '{print $1}' | xargs -I {} screen -S {} -X quit 2>/dev/null || true
 sleep 2
 
 # 2. 切换到项目目录

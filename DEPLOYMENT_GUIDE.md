@@ -20,9 +20,11 @@
 
 ## 🚀 开始部署
 
-### 步骤1: 停止所有旧进程
+### 步骤1: 停止所有旧进程和清理旧会话
 
 **说明**: 确保没有旧版本在运行，避免冲突
+
+#### 1.1 停止Python进程
 
 ```bash
 # 停止所有cryptosignal相关进程
@@ -39,6 +41,21 @@ ps aux | grep -E "python.*cryptosignal|deploy_and_run|full_run|auto_scan" | grep
 
 # 如果没有输出 → 停止成功 ✅
 # 如果有输出 → 还有进程在运行，重复上面的pkill命令
+```
+
+#### 1.2 清理旧的Screen会话
+
+```bash
+# 查看所有cryptosignal相关的screen会话
+screen -ls | grep cryptosignal
+
+# 批量清理所有旧的cryptosignal screen会话
+screen -ls | grep cryptosignal | cut -d. -f1 | awk '{print $1}' | xargs -I {} screen -S {} -X quit 2>/dev/null || true
+
+# 验证清理结果
+screen -ls
+
+# 应该看不到cryptosignal会话了 ✅
 ```
 
 ---
