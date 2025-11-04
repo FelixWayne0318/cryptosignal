@@ -630,7 +630,8 @@ def _analyze_symbol_core(
     publish_cfg = params.get("publish", {})
 
     # 计算EV使用调制后的cost
-    EV = P_chosen * edge - (1 - P_chosen) * modulator_output.cost_final
+    # 修复：使用abs(edge)，因为无论做多还是做空，收益都应该是正数
+    EV = P_chosen * abs(edge) - (1 - P_chosen) * modulator_output.cost_final
 
     # 软约束1：EV ≤ 0
     if EV <= 0:
@@ -642,7 +643,8 @@ def _analyze_symbol_core(
     # 计算p_min（动态）
     base_p_min = publish_cfg.get("prime_prob_min", 0.58)
     safety_margin = modulator_output.L_meta.get("safety_margin", 0.005)
-    p_min = base_p_min + safety_margin / (edge + 1e-6)
+    # 修复：使用abs(edge)避免负数除法问题
+    p_min = base_p_min + safety_margin / (abs(edge) + 1e-6)
 
     # 应用F调制器的p_min调整
     p_min_adjusted = p_min + modulator_output.p_min_adj
