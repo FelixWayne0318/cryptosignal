@@ -110,33 +110,50 @@ def _render_rich(data: Dict[str, Any]) -> str:
     # 获取因子贡献（Top 4）
     factor_contribs = data.get("factor_contributions", {})
     if factor_contribs:
-        # v6.6修复：确保contrib是数值类型（防止dict导致abs()错误）
-        # 排序取Top 4
-        def safe_abs(value):
-            if isinstance(value, dict):
-                return 0
-            elif isinstance(value, (int, float)):
-                return abs(value)
-            else:
-                return 0
+        # v6.6修复：过滤掉汇总键，只保留真正的因子
+        # 汇总键列表
+        summary_keys = {"total_weight", "weighted_score", "confidence", "edge"}
+
+        # 过滤出真正的因子（T, M, C, V, O, B, L, S, F, I）
+        real_factors = {
+            k: v for k, v in factor_contribs.items()
+            if k not in summary_keys and isinstance(v, dict)
+        }
+
+        # 按贡献绝对值排序取Top 4
+        def safe_contrib(factor_dict):
+            """安全获取贡献值"""
+            if isinstance(factor_dict, dict):
+                contrib = factor_dict.get("contribution", 0)
+                if isinstance(contrib, (int, float)):
+                    return abs(contrib)
+            return 0
 
         sorted_factors = sorted(
-            factor_contribs.items(),
-            key=lambda x: safe_abs(x[1]),
+            real_factors.items(),
+            key=lambda x: safe_contrib(x[1]),
             reverse=True
         )[:4]
 
         factor_lines = []
-        for name, contrib in sorted_factors:
+        for name, factor_dict in sorted_factors:
             emoji = _get_factor_emoji(name)
-            factor_value = data.get("scores", {}).get(name, 0)
-            # 确保contrib是数值类型
-            if isinstance(contrib, dict):
-                contrib = 0
-            elif not isinstance(contrib, (int, float)):
-                contrib = 0
+
+            # 从factor_dict中提取数据
+            score = factor_dict.get("score", 0)
+            weight_pct = factor_dict.get("weight_pct", 0)
+            contribution = factor_dict.get("contribution", 0)
+
+            # 确保数值类型
+            if not isinstance(score, (int, float)):
+                score = 0
+            if not isinstance(weight_pct, (int, float)):
+                weight_pct = 0
+            if not isinstance(contribution, (int, float)):
+                contribution = 0
+
             factor_lines.append(
-                f"  {emoji} {name}: {factor_value:+3d} (贡献{contrib:+.1f})"
+                f"  {emoji} {name}: {score:+3.0f} ({weight_pct:.1f}%) → {contribution:+.1f}"
             )
 
         factor_detail = f"""
