@@ -147,18 +147,18 @@ class SignalScanner:
         self.initialized = False
         self.scan_count = 0
 
-        # v6.6: 初始化防抖动系统（阈值匹配Sigmoid概率映射实际输出）
+        # v6.6: 初始化防抖动系统（阈值匹配市场过滤后的实际概率分布）
         self.anti_jitter = AntiJitter(
-            prime_entry_threshold=0.55,      # v6.6: 匹配实际概率分布（edge=0.11-0.16 → P=0.53-0.58）
-            prime_maintain_threshold=0.52,   # v6.6: 维持阈值相应降低
-            watch_entry_threshold=0.50,
-            watch_maintain_threshold=0.45,   # v6.6: 调整为0.45保持滞后性
+            prime_entry_threshold=0.45,      # v6.6: 匹配市场过滤后的概率（P=0.45-0.60）
+            prime_maintain_threshold=0.42,   # v6.6: 维持阈值相应降低
+            watch_entry_threshold=0.40,      # v6.6: WATCH门槛
+            watch_maintain_threshold=0.37,   # v6.6: 保持滞后性
             confirmation_bars=1,             # v6.6: 1/2确认即可，更快响应
             total_bars=2,
             cooldown_seconds=60              # v6.6: 更快恢复
         )
 
-        log("✅ v6.6 防抖动系统初始化完成 (K/N=1/2, cooldown=60s, prime_entry=0.55, prime_maintain=0.52)")
+        log("✅ v6.6 防抖动系统初始化完成 (K/N=1/2, cooldown=60s, prime_entry=0.45, prime_maintain=0.42)")
 
         # 加载Telegram配置
         if send_telegram:

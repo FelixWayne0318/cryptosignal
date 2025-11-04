@@ -135,7 +135,7 @@ try:
     print("\n正在扫描（约1-2分钟）...")
     result = asyncio.run(run_scan())
 
-    signals = result.get('signals', [])
+    signals = result.get('results', [])  # 修复：使用'results'键而不是'signals'
 
     print(f"\n扫描完成:")
     print(f"   总币种数: {result.get('total_symbols', 0)}")
