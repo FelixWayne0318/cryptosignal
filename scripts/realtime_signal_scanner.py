@@ -46,7 +46,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from ats_core.pipeline.batch_scan_optimized import OptimizedBatchScanner
-from ats_core.outputs.telegram_fmt_v66 import render_v66_signal
+from ats_core.outputs.telegram_fmt import render_signal
 from ats_core.logging import log, warn, error
 
 # v6.6: 发布防抖动系统
@@ -345,26 +345,8 @@ class SignalScanner:
 
         for i, signal in enumerate(signals, 1):
             try:
-                # 渲染信号（v6.6富媒体模板）
-                message = render_v66_signal(signal, mode='rich')
-
-                # 添加v6.6系统标识
-                soft_info = signal.get('soft_constraints', {})
-                warnings = soft_info.get('warnings', [])
-                warning_emoji = "⚠️" if warnings else "✅"
-
-                footer = f"""
-
-━━━━━━━━━━━━━━━━━━
-🎯 <b>系统版本: v6.6</b>
-📦 6因子系统: T/M/C/V/O/B
-🔧 L/S/F/I调制器: 连续调节
-{warning_emoji} 软约束: {"有警告" if warnings else "无警告"}
-🆕 新币通道: Phase 2完成
-
-⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-                """
-                message = message + footer
+                # 渲染信号（v6.7简洁版：适合非专业人士）
+                message = render_signal(signal, is_watch=False)
 
                 # 发送
                 telegram_send_wrapper(message, self.bot_token, self.chat_id)
