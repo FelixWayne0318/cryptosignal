@@ -85,10 +85,12 @@ class AntiJitter:
 
         # Initialize state if new symbol
         if symbol not in self.states:
+            # v6.6修复：新symbol的last_change_ts设置为远古时间，避免cooldown阻止首次发布
+            # 原因：如果设置为now，则首次检查时time_since_change=0 < cooldown，导致信号被拒绝
             self.states[symbol] = SignalState(
                 current_level='IGNORE',
                 bars_in_state=0,
-                last_change_ts=now
+                last_change_ts=now - self.cooldown - 1  # 确保cooldown已过期
             )
             self.history[symbol] = []
 
