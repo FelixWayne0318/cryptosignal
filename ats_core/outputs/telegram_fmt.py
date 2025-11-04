@@ -1109,7 +1109,7 @@ def _six_block(r: Dict[str, Any]) -> str:
 
     lines = []
 
-    # 主要因子（总是显示的核心维度）
+    # 主要因子（总是显示的核心维度）- 6个核心因子
     lines.append(f"• 趋势 {_emoji_by_score(T)} {T:+4d} —— {_desc_trend(T, Tm)}")
     lines.append(f"• 动量 {_emoji_by_score(M)} {M:+4d} —— {_desc_momentum(M, slope)}")
     lines.append(f"• 资金 {_emoji_by_score(C)} {C:+4d} —— {_desc_cvd_flow(C, is_long, cvd6, cvd_consistency, cvd_is_consistent)}")
@@ -1117,7 +1117,7 @@ def _six_block(r: Dict[str, Any]) -> str:
     lines.append(f"• 成交 {_emoji_by_score(V)} {V:+4d} —— {_desc_volume(V, v5v20)}")
     lines.append(f"• 持仓 {_emoji_by_score(OI)} {OI:+4d} —— {_desc_positions(OI, oi24h_pct)}")
 
-    # 辅助因子（只在有意义时显示）
+    # 辅助因子（只在有意义时显示）- 根据数据可用性
     if L != 0:
         lines.append(f"• 流动 {_emoji_by_score(L)} {L:+4d} —— {_desc_liquidity(L, spread_bps, obi)}")
     if B != 0:
@@ -1364,9 +1364,10 @@ def render_signal(r: Dict[str, Any], is_watch: bool = False) -> str:
     # 7. 标签
     tags = _note_and_tags(r, is_watch)
 
-    # 组装消息
-    body = f"{l1}\n{l2}\n{core_metrics}"
-    body += pricing
+    # 组装消息（v6.7优化：增加空行便于区分各部分）
+    body = f"{l1}\n{l2}\n{core_metrics}\n"  # 盈亏比后面空一行
+    body += pricing  # pricing已包含\n开头
+    body += "\n"  # 止盈后面空一行
     body += position
     body += f"\n\n多维分析\n{factors}"
     body += risk_alerts
