@@ -110,10 +110,19 @@ def _render_rich(data: Dict[str, Any]) -> str:
     # 获取因子贡献（Top 4）
     factor_contribs = data.get("factor_contributions", {})
     if factor_contribs:
+        # v6.6修复：确保contrib是数值类型（防止dict导致abs()错误）
         # 排序取Top 4
+        def safe_abs(value):
+            if isinstance(value, dict):
+                return 0
+            elif isinstance(value, (int, float)):
+                return abs(value)
+            else:
+                return 0
+
         sorted_factors = sorted(
             factor_contribs.items(),
-            key=lambda x: abs(x[1]),
+            key=lambda x: safe_abs(x[1]),
             reverse=True
         )[:4]
 
@@ -121,6 +130,11 @@ def _render_rich(data: Dict[str, Any]) -> str:
         for name, contrib in sorted_factors:
             emoji = _get_factor_emoji(name)
             factor_value = data.get("scores", {}).get(name, 0)
+            # 确保contrib是数值类型
+            if isinstance(contrib, dict):
+                contrib = 0
+            elif not isinstance(contrib, (int, float)):
+                contrib = 0
             factor_lines.append(
                 f"  {emoji} {name}: {factor_value:+3d} (贡献{contrib:+.1f})"
             )
@@ -339,6 +353,12 @@ def _render_compact(data: Dict[str, Any]) -> str:
     symbol = data.get("symbol", "UNKNOWN")
     score = data.get("weighted_score", 0)
 
+    # v6.6修复：确保score是数值类型（防止dict导致abs()错误）
+    if isinstance(score, dict):
+        score = 0
+    elif not isinstance(score, (int, float)):
+        score = 0
+
     direction_emoji = "🟢" if direction == "LONG" else "🔴"
     strength_emoji = _get_strength_emoji(abs(score))
 
@@ -350,6 +370,14 @@ def _render_compact(data: Dict[str, Any]) -> str:
     probability = data.get("probability", 0)
     EV = data.get("publish", {}).get("EV", 0)
 
+    # v6.6修复：确保数值类型
+    if isinstance(edge, dict):
+        edge = 0
+    if isinstance(probability, dict):
+        probability = 0
+    if isinstance(EV, dict):
+        EV = 0
+
     message += f"""📊 **核心**
 评分:{score:+.1f} | Edge:{edge:+.2f} | P:{probability:.0%} | EV:{EV:+.2%}
 
@@ -358,9 +386,18 @@ def _render_compact(data: Dict[str, Any]) -> str:
     # Block 3: 因子Top 3
     factor_contribs = data.get("factor_contributions", {})
     if factor_contribs:
+        # v6.6修复：确保contrib是数值类型（防止dict导致abs()错误）
+        def safe_abs(value):
+            if isinstance(value, dict):
+                return 0
+            elif isinstance(value, (int, float)):
+                return abs(value)
+            else:
+                return 0
+
         sorted_factors = sorted(
             factor_contribs.items(),
-            key=lambda x: abs(x[1]),
+            key=lambda x: safe_abs(x[1]),
             reverse=True
         )[:3]
 
