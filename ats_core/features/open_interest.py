@@ -186,7 +186,10 @@ def score_open_interest(symbol: str,
     """
     # 参数默认
     default_par = {
-        "oi24_scale": 3.0,          # OI 24h变化率缩放系数（3% 给约 69 分）
+        # v2.5++修复（2025-11-05）：调整oi24_scale与C/M因子对齐
+        # 修复前：oi24_scale=3.0 → 2x历史≈87分（相对C/M的76分更陡峭）
+        # 修复后：oi24_scale=2.0 → 2x历史≈96分（与C/M一致，避免不一致的饱和特性）
+        "oi24_scale": 2.0,          # OI 24h变化率缩放系数（原3.0，改为2.0与C/M对齐）
         "align_scale": 4.0,          # 同向次数缩放系数（4次 给约 69 分）
         "oi_weight": 0.7,            # OI 变化率权重
         "align_weight": 0.3,         # 同向权重

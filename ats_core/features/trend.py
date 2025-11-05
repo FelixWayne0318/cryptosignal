@@ -129,9 +129,12 @@ def score_trend(
     atr_period = int(cfg.get("atr_period", 14))
 
     # 软映射参数
-    slope_scale = float(cfg.get("slope_scale", 0.05))
-    ema_bonus = float(cfg.get("ema_bonus", 20.0))  # 优化：15→20（±40分代替±30分）
-    r2_weight = float(cfg.get("r2_weight", 0.3))
+    # v2.5++修复（2025-11-05）：降低组件分数上限，避免T_raw超出±100导致饱和
+    # 修复前：slope_scale=0.05, ema_bonus=20.0, r2_weight=0.3 → T_raw范围-170~+170 → 95%极值
+    # 修复后：slope_scale=0.08, ema_bonus=12.5, r2_weight=0.15 → T_raw范围-100~+100 → 合理分布
+    slope_scale = float(cfg.get("slope_scale", 0.08))  # 原0.05，增大降低映射强度
+    ema_bonus = float(cfg.get("ema_bonus", 12.5))      # 原20.0（±40分），改为12.5（±25分）
+    r2_weight = float(cfg.get("r2_weight", 0.15))      # 原0.3（±30分），改为0.15（±15分）
 
     # ========== 1. EMA 顺序（5/20） ==========
     ema5 = _ema(C, 5)

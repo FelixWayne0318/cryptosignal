@@ -252,8 +252,11 @@ def score_funding_rate(
     funding_weight = params.get('funding_weight', 0.4)
     F_raw = basis_weight * basis_score + funding_weight * funding_score
 
-    # v2.0合规：应用StandardizationChain
-    F_pub, diagnostics = _funding_chain.standardize(F_raw)
+    # v2.5++修复（2025-11-05）：禁用StandardizationChain，改为直接裁剪
+    # 原因：StandardizationChain的EW平滑导致过度压缩（95%的F=-100）
+    # 修复前：F_pub, diagnostics = _funding_chain.standardize(F_raw)
+    # 修复后：直接裁剪到±100（与T/O因子对齐）
+    F_pub = max(-100, min(100, F_raw))
     F = int(round(F_pub))
 
     # 4. 元数据
@@ -263,6 +266,9 @@ def score_funding_rate(
         "funding_bps": round(funding_bps, 2),
         "basis_score": round(basis_score, 1),
         "funding_score": round(funding_score, 1),
+        "F_raw": round(F_raw, 1),                      # v2.5++: 添加诊断信息
+        "F_pub": round(F_pub, 1),                      # v2.5++: 添加诊断信息
+        "standardization_disabled": True,              # v2.5++: 标记已禁用
         "mark_price": round(mark_price, 2),
         "spot_price": round(spot_price, 2),
         "extreme_funding": abs(funding_rate) > 0.0015,  # |funding| > 0.15%
