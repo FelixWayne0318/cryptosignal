@@ -1165,12 +1165,17 @@ def _header_lines(r: Dict[str, Any], is_watch: bool) -> Tuple[str, str]:
 
 def _six_block(r: Dict[str, Any]) -> str:
     """
-    v6.6架构：生成多维因子显示块（简洁版）
+    v6.6架构：生成多维因子显示块（美化简洁版）
 
     显示：
     - 🔵 A层：方向判断（6因子：T/M/C/V/O/B）
     - ⚙️ B层：调制器（4因子：L/S/F/I，仅显示非零）
     - 📊 大盘环境
+
+    优化：
+    - 使用彩色渐变圆形图标（🟢🟡⚪🟠🔴）
+    - 使用独特彩色图标（💧🏗️💰🎯）
+    - 优化对齐和排版
     """
     # 获取v6.6分数
     v66 = _v66_scores(r)
@@ -1200,55 +1205,84 @@ def _six_block(r: Dict[str, Any]) -> str:
     basis_bps = B_meta.get("basis_bps")
     funding_rate = B_meta.get("funding_rate")
 
+    def get_color_emoji(score: int) -> str:
+        """获取彩色渐变圆形图标"""
+        if score >= 70:
+            return "🟢"  # 强正向：绿色
+        elif score >= 40:
+            return "🟡"  # 正向：黄色
+        elif score >= -40:
+            return "⚪"  # 中性：白色
+        elif score >= -70:
+            return "🟠"  # 负向：橙色
+        else:
+            return "🔴"  # 强负向：红色
+
     lines = []
 
     # ========== 🔵 A层：方向判断（6因子） ==========
-    lines.append("🔵 A层（方向）")
-    lines.append(f"• 趋势 {_emoji_by_score(A_scores['T'])} {A_scores['T']:+4d} —— {_desc_trend(A_scores['T'], Tm)}")
-    lines.append(f"• 动量 {_emoji_by_score(A_scores['M'])} {A_scores['M']:+4d} —— {_desc_momentum(A_scores['M'], slope)}")
-    lines.append(f"• 资金 {_emoji_by_score(A_scores['C'])} {A_scores['C']:+4d} —— {_desc_cvd_flow(A_scores['C'], is_long, cvd6, cvd_consistency, cvd_is_consistent)}")
-    lines.append(f"• 量能 {_emoji_by_score(A_scores['V'])} {A_scores['V']:+4d} —— {_desc_volume(A_scores['V'], v5v20)}")
-    lines.append(f"• 持仓 {_emoji_by_score(A_scores['O'])} {A_scores['O']:+4d} —— {_desc_positions(A_scores['O'], oi24h_pct)}")
-    lines.append(f"• 基差 {_emoji_by_score(A_scores['B'])} {A_scores['B']:+4d} —— {_desc_basis_funding(A_scores['B'], basis_bps, funding_rate)}")
+    lines.append("━━━ 🔵 A层：方向判断 ━━━")
+    lines.append("")
 
-    # ========== ⚙️ B层：调制器（4因子，仅显示非零） ==========
+    # A层6因子（使用彩色圆形图标）
+    a_factors = [
+        ("趋势", A_scores['T'], _desc_trend(A_scores['T'], Tm)),
+        ("动量", A_scores['M'], _desc_momentum(A_scores['M'], slope)),
+        ("资金", A_scores['C'], _desc_cvd_flow(A_scores['C'], is_long, cvd6, cvd_consistency, cvd_is_consistent)),
+        ("量能", A_scores['V'], _desc_volume(A_scores['V'], v5v20)),
+        ("持仓", A_scores['O'], _desc_positions(A_scores['O'], oi24h_pct)),
+        ("基差", A_scores['B'], _desc_basis_funding(A_scores['B'], basis_bps, funding_rate))
+    ]
+
+    for name, score, desc in a_factors:
+        emoji = get_color_emoji(score)
+        # 使用固定宽度对齐
+        lines.append(f"{emoji} {name:>2} {score:>4d}  {desc}")
+
+    # ========== ⚙️ B层：调制器（4因子） ==========
     b_displayed = []
 
-    # L流动性调制器
+    # L流动性调制器（💧 水滴图标）
     if B_scores['L'] != 0:
         L_meta = _get(r, "scores_meta.L") or {}
         spread_bps = L_meta.get("spread_bps")
         obi = L_meta.get("obi")
         mod_output = _get(r, "modulator_output") or {}
         position_mult = mod_output.get("position_mult", 1.0)
-        b_displayed.append(f"• 流动性 {B_scores['L']:+d} (仓位{position_mult:.0%}) · {_desc_liquidity(B_scores['L'], spread_bps, obi)}")
+        desc = _desc_liquidity(B_scores['L'], spread_bps, obi)
+        b_displayed.append(f"💧 流动 {B_scores['L']:>4d}  仓位{position_mult:>3.0%} · {desc}")
 
-    # S结构调制器
+    # S结构调制器（🏗️ 建筑图标）
     if B_scores['S'] != 0:
         S_meta = _get(r, "scores_meta.S") or {}
         theta = S_meta.get("theta")
         mod_output = _get(r, "modulator_output") or {}
         Teff_S = mod_output.get("Teff_S", 1.0)
-        b_displayed.append(f"• 结构 {B_scores['S']:+d} (T×{Teff_S:.2f}) · {_desc_structure(B_scores['S'], theta)}")
+        desc = _desc_structure(B_scores['S'], theta)
+        b_displayed.append(f"🏗️ 结构 {B_scores['S']:>4d}  T×{Teff_S:>4.2f} · {desc}")
 
-    # F资金领先调制器
+    # F资金领先调制器（💰 钱袋图标）
     if B_scores['F'] != 0:
         F_meta = _get(r, "scores_meta.F") or {}
         leading_raw = F_meta.get("leading_raw")
         mod_output = _get(r, "modulator_output") or {}
         Teff_F = mod_output.get("Teff_F", 1.0)
-        b_displayed.append(f"• 资金领先 {B_scores['F']:+d} (T×{Teff_F:.2f}) · {_desc_fund_leading(B_scores['F'], leading_raw)}")
+        desc = _desc_fund_leading(B_scores['F'], leading_raw)
+        b_displayed.append(f"💰 资金 {B_scores['F']:>4d}  T×{Teff_F:>4.2f} · {desc}")
 
-    # I独立性调制器
+    # I独立性调制器（🎯 靶心图标）
     if B_scores['I'] != 0:
         I_meta = _get(r, "scores_meta.I") or {}
         beta_sum = I_meta.get("beta_sum")
         mod_output = _get(r, "modulator_output") or {}
         Teff_I = mod_output.get("Teff_I", 1.0)
-        b_displayed.append(f"• 独立性 {B_scores['I']:+d} (T×{Teff_I:.2f}) · {_desc_independence(B_scores['I'], beta_sum)}")
+        desc = _desc_independence(B_scores['I'], beta_sum)
+        b_displayed.append(f"🎯 独立 {B_scores['I']:>4d}  T×{Teff_I:>4.2f} · {desc}")
 
     if b_displayed:
-        lines.append("\n⚙️ B层（调制器）")
+        lines.append("")
+        lines.append("━━━ ⚙️ B层：调制器 ━━━")
+        lines.append("")
         lines.extend(b_displayed)
 
     # ========== 📊 大盘环境 ==========
@@ -1259,10 +1293,13 @@ def _six_block(r: Dict[str, Any]) -> str:
         regime_desc = market_meta.get("regime_desc", "未知")
         btc_trend = market_meta.get("btc_trend", 0)
         eth_trend = market_meta.get("eth_trend", 0)
-        market_emoji = _emoji_by_score(market_regime)
+        market_emoji = get_color_emoji(market_regime)
 
-        lines.append(f"\n📊 大盘环境 {market_emoji} {regime_desc} (市场{market_regime:+d})")
-        lines.append(f"   └─ BTC{btc_trend:+d} · ETH{eth_trend:+d}")
+        lines.append("")
+        lines.append("━━━ 📊 大盘环境 ━━━")
+        lines.append("")
+        lines.append(f"{market_emoji} {regime_desc} (市场{market_regime:>4d})")
+        lines.append(f"   BTC{btc_trend:>4d} · ETH{eth_trend:>4d}")
 
     return "\n".join(lines)
 
