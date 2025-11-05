@@ -43,7 +43,7 @@ def diagnose_cvd_for_symbol(symbol: str, interval: str = "1h", limit: int = 24):
     # 2. 获取现货K线（如果可用）
     print(f"\n2️⃣ 获取现货K线数据...")
     try:
-        from ats_core.sources.spot_api import get_spot_klines
+        from ats_core.sources.binance import get_spot_klines
         spot_klines = get_spot_klines(symbol, interval, limit)
         if spot_klines and len(spot_klines) > 0:
             print(f"   ✅ 获取{len(spot_klines)}根现货K线")
