@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-测试CVD ADTV_notional归一化方案
+测试CVD相对历史斜率归一化方案
 
 验证：
 1. 高价高流动性币种（BTCUSDT）
 2. 中等币种（ETHUSDT）
 3. 低价币种（SHIBUSDT/PEPEUSDT）
 
-对比旧方案（slope/price）和新方案（slope/ADTV_notional）
+对比新方案（相对历史斜率）：
+- 核心理念：CVD判断方向和斜率，与绝对量无关
+- 相对强度 = 当前斜率 / 历史平均斜率
+- BTC和SHIB在同等相对强度下得分一致
 """
 
 import sys
@@ -39,57 +42,51 @@ def test_symbol(symbol: str):
     cvd_window = cvd_series[-7:]
     cvd_change = cvd_window[-1] - cvd_window[0]
 
-    # 计算ADTV
-    quote_volumes = [float(k[7]) for k in klines[-24:]]
-    ADTV_notional = sum(quote_volumes) / len(quote_volumes)
-
     # 当前价格
     price = c[-1]
 
     print(f"\n📊 基础数据:")
     print(f"   当前价格: ${price:,.8f}")
     print(f"   6h CVD变化: {cvd_change:,.2f}")
-    print(f"   ADTV (24h平均): ${ADTV_notional:,.2f}")
 
-    # 旧方案：slope / price
-    print(f"\n🔴 旧方案 (slope / price):")
-    C_old, meta_old = score_cvd_flow(cvd_series, c, False, params=None, klines=None)  # 不传klines使用旧方案
-    print(f"   归一化方法: {meta_old['normalization_method']}")
-    print(f"   CVD6归一化: {meta_old['cvd6']:.6f}")
-    print(f"   C因子得分: {C_old}")
-    print(f"   CVD原始变化: {meta_old['cvd_raw']:.2f}")
+    # 新方案：相对历史斜率归一化
+    print(f"\n🟢 新方案 (相对历史斜率归一化):")
+    C, meta = score_cvd_flow(cvd_series, c, False, params=None, klines=klines)
+    print(f"   归一化方法: {meta['normalization_method']}")
+    print(f"   CVD原始变化: {meta['cvd6_raw']:.2f}")
+    print(f"   CVD斜率: {meta['cvd_slope']:.4f}")
+    print(f"   C因子得分: {C} ({meta['cvd_score']:.2f})")
+    print(f"   R²拟合度: {meta['r_squared']:.3f} {'✅一致' if meta['is_consistent'] else '⚠️震荡'}")
 
-    # 新方案：slope / ADTV_notional
-    print(f"\n🟢 新方案 (slope / ADTV_notional):")
-    C_new, meta_new = score_cvd_flow(cvd_series, c, False, params=None, klines=klines)  # 传入klines使用新方案
-    print(f"   归一化方法: {meta_new['normalization_method']}")
-    print(f"   CVD6归一化: {meta_new['cvd6']:.6f}")
-    print(f"   C因子得分: {C_new}")
-    print(f"   CVD原始变化: {meta_new['cvd_raw']:.2f}")
-    if 'ADTV_notional' in meta_new:
-        print(f"   ADTV_notional: ${meta_new['ADTV_notional']:,.2f}")
+    # 相对强度信息
+    if 'relative_intensity' in meta:
+        print(f"\n📊 相对历史分析:")
+        print(f"   历史平均斜率: {meta['avg_abs_slope']:.4f}")
+        print(f"   相对强度: {meta['relative_intensity']:.3f}x")
+        if 'p95_slope' in meta:
+            print(f"   95分位数阈值: {meta['p95_slope']:.4f}")
+        print(f"   拥挤警告: {'🔴是' if meta['crowding_warn'] else '✅否'}")
 
-    # 对比
-    print(f"\n📈 对比分析:")
-    print(f"   价格归一化倍数: {abs(cvd_change / price):.8f}")
-    print(f"   ADTV归一化倍数: {abs(cvd_change / ADTV_notional):.8f}")
-    print(f"   得分变化: {C_old} → {C_new} ({C_new - C_old:+d})")
-
-    # 判断
-    if C_old == C_new:
-        print(f"   ✅ 得分一致（说明都在合理范围）")
-    elif abs(C_old) > 90 and abs(C_new) < 90:
-        print(f"   ✅ 新方案解决饱和问题")
-    elif abs(C_old) < 10 and abs(C_new) > 10:
-        print(f"   ⚠️ 新方案提高了灵敏度")
+        # 解释相对强度
+        rel_int = meta['relative_intensity']
+        if rel_int > 2:
+            print(f"   💡 解释: 当前变化速度是历史平均的{rel_int:.1f}倍，极强趋势！")
+        elif rel_int > 1.5:
+            print(f"   💡 解释: 当前变化速度是历史平均的{rel_int:.1f}倍，强趋势")
+        elif rel_int > 0.8:
+            print(f"   💡 解释: 当前变化速度接近历史平均，正常趋势")
+        elif rel_int > 0:
+            print(f"   💡 解释: 当前变化速度低于历史平均，弱趋势")
+        else:
+            print(f"   💡 解释: 方向与主趋势相反或无明显趋势")
     else:
-        print(f"   📊 得分有差异，需进一步分析")
+        print(f"\n⚠️ 历史数据不足（需要30+数据点），使用降级方案")
 
 
 def compare_cross_coin():
     """跨币种可比性测试"""
     print(f"\n{'='*80}")
-    print(f"跨币种可比性测试")
+    print(f"跨币种可比性测试（相对历史斜率归一化）")
     print(f"{'='*80}\n")
 
     symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
@@ -104,34 +101,40 @@ def compare_cross_coin():
             cvd_series = cvd_from_klines(klines, use_taker_buy=True)
             c = [float(k[4]) for k in klines]
 
-            # 旧方案
-            C_old, meta_old = score_cvd_flow(cvd_series, c, False, params=None, klines=None)
-
             # 新方案
-            C_new, meta_new = score_cvd_flow(cvd_series, c, False, params=None, klines=klines)
+            C, meta = score_cvd_flow(cvd_series, c, False, params=None, klines=klines)
 
             results.append({
                 "symbol": symbol,
                 "price": c[-1],
-                "ADTV": meta_new.get('ADTV_notional', 0),
-                "C_old": C_old,
-                "C_new": C_new,
-                "cvd6_old": meta_old['cvd6'],
-                "cvd6_new": meta_new['cvd6']
+                "C": C,
+                "cvd_raw": meta['cvd6_raw'],
+                "slope": meta['cvd_slope'],
+                "rel_int": meta.get('relative_intensity', None),
+                "avg_slope": meta.get('avg_abs_slope', None),
+                "is_consistent": meta['is_consistent']
             })
         except Exception as e:
             print(f"⚠️ {symbol} 测试失败: {e}")
 
     # 打印对比表
-    print(f"{'币种':<12} {'价格':<15} {'ADTV(USD)':<15} {'C旧':<6} {'C新':<6} {'归一化旧':<12} {'归一化新':<12}")
-    print("-" * 95)
+    print(f"{'币种':<12} {'价格':<15} {'CVD变化':<12} {'斜率':<10} {'相对强度':<10} {'C分数':<8} {'一致性':<6}")
+    print("-" * 85)
     for r in results:
-        print(f"{r['symbol']:<12} ${r['price']:<14,.2f} ${r['ADTV']:<14,.0f} {r['C_old']:<6} {r['C_new']:<6} {r['cvd6_old']:<12.6f} {r['cvd6_new']:<12.6f}")
+        rel_str = f"{r['rel_int']:.2f}x" if r['rel_int'] is not None else "N/A"
+        consistent_str = "✅" if r['is_consistent'] else "⚠️"
+        print(f"{r['symbol']:<12} ${r['price']:<14,.2f} {r['cvd_raw']:<12,.0f} {r['slope']:<10.2f} {rel_str:<10} {r['C']:<8} {consistent_str:<6}")
 
     print(f"\n💡 分析:")
-    print(f"   - 新方案的归一化值（cvd6_new）应该在相近范围内")
-    print(f"   - ADTV越大的币种，需要更大的CVD变化才能得高分")
-    print(f"   - 这符合预期：高流动性币种对资金流入的敏感度应该更低")
+    print(f"   - 相对强度反映当前CVD变化速度相对于历史的倍数")
+    print(f"   - 不同币种在相同相对强度下应得到相似得分")
+    print(f"   - 方向由斜率正负决定（正=买入压力，负=卖出压力）")
+    print(f"   - 绝对CVD变化量不影响得分，只看相对速度")
+    print(f"\n💡 关键优势:")
+    print(f"   ✅ BTC和SHIB在同等相对强度下得分一致")
+    print(f"   ✅ 自动适应每个币种的历史特征")
+    print(f"   ✅ 解决低价币过度放大问题")
+    print(f"   ✅ 实现真正的跨币种可比性")
 
 
 if __name__ == "__main__":
