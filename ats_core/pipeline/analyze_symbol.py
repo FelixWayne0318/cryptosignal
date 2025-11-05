@@ -52,7 +52,8 @@ from ats_core.features.multi_timeframe import multi_timeframe_coherence
 from ats_core.execution.stop_loss_calculator import ThreeTierStopLoss
 
 # ========== v6.6 因子系统（6因子：T/M/C/V/O/B）==========
-from ats_core.factors_v2.liquidity import calculate_liquidity
+# P2.5: 使用价格带法替代固定档位数
+from ats_core.features.liquidity_priceband import score_liquidity_priceband as calculate_liquidity
 from ats_core.factors_v2.basis_funding import calculate_basis_funding
 from ats_core.factors_v2.independence import calculate_independence
 
@@ -1318,8 +1319,9 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     )
 
     # 获取订单簿数据（L因子）
+    # 注：后续将实现价格带法（±bps聚合）替代固定档位数
     try:
-        orderbook = get_orderbook_snapshot(symbol, limit=20)
+        orderbook = get_orderbook_snapshot(symbol, limit=100)
     except Exception as e:
         from ats_core.logging import warn
         warn(f"获取{symbol}订单簿失败: {e}")

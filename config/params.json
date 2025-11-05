@@ -74,17 +74,16 @@
   },
 
   "liquidity": {
-    "_comment": "v4.0新增：L因子 - 流动性评分",
-    "spread_good_bps": 2.0,
-    "spread_bad_bps": 10.0,
-    "depth_target_usdt": 1000000,
-    "impact_notional_usdt": 100000,
-    "impact_max_pct": 0.01,
-    "orderbook_depth_levels": 10,
-    "spread_weight": 0.3,
-    "depth_weight": 0.3,
-    "impact_weight": 0.3,
-    "obi_weight": 0.1
+    "_comment": "P2.5修复：价格带法（±bps聚合），对齐专家建议和四道闸",
+    "band_bps": 40.0,
+    "impact_notional_usdt": 50000.0,
+    "impact_threshold_bps": 10.0,
+    "obi_threshold": 0.30,
+    "spread_threshold_bps": 25.0,
+    "spread_weight": 0.25,
+    "impact_weight": 0.40,
+    "obi_weight": 0.20,
+    "coverage_weight": 0.15
   },
 
   "basis_funding": {
