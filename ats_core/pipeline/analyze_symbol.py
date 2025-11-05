@@ -1078,6 +1078,7 @@ def _analyze_symbol_core(
 
     # ---- 8. 组装结果（统一±100系统）----
     result = {
+        "success": True,  # P2.1修复：添加success标识
         "symbol": symbol,
         "price": close_now,
         "ema30": _last(ema30),
