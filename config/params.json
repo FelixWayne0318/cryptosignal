@@ -287,12 +287,12 @@
   },
 
   "publish": {
-    "prime_prob_min": 0.58,
+    "prime_prob_min": 0.68,
     "prime_dims_ok_min": 3,
     "prime_dim_threshold": 30,
     "watch_prob_min": 0.52,
-    "watch_prob_max": 0.57,
-    "_comment": "v6.1调整: 降低阈值以增加信号量（保守方案A）"
+    "watch_prob_max": 0.67,
+    "_comment": "v6.7调整: 提高阈值以减少80%信号（用户要求）"
   },
 
   "base": {
@@ -332,11 +332,11 @@
     "phaseB_days": 30,
     "max_days": 30,
     "min_volume_24h": 10000000,
-    "ultra_new_prime_prob_min": 0.70,
+    "ultra_new_prime_prob_min": 0.75,
     "ultra_new_dims_ok_min": 6,
-    "phaseA_prime_prob_min": 0.65,
+    "phaseA_prime_prob_min": 0.72,
     "phaseA_dims_ok_min": 5,
-    "phaseB_prime_prob_min": 0.63,
+    "phaseB_prime_prob_min": 0.70,
     "phaseB_dims_ok_min": 4
   },
 

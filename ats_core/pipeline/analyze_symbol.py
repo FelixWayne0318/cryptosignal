@@ -645,10 +645,9 @@ def _analyze_symbol_core(
 
     # 软约束2：P < p_min（基于F调制器调整）
     # 计算p_min（动态）
-    # v6.6修复：降低base_p_min以匹配市场过滤后的实际概率分布
-    # 原因：市场过滤会对逆势信号施加0.70-0.85倍惩罚，导致P下降15-30%
-    # 如果base_p_min=0.58，过滤后P可能降至0.40-0.50，无法通过阈值
-    base_p_min = publish_cfg.get("prime_prob_min", 0.50)  # 从0.58降至0.50
+    # v6.7修复：使用配置文件的prime_prob_min，取消硬编码0.50
+    # 用户要求减少80%信号，需要提高阈值
+    base_p_min = publish_cfg.get("prime_prob_min", 0.58)  # 使用配置值
     safety_margin = modulator_output.L_meta.get("safety_margin", 0.005)
     # 修复：使用abs(edge)避免负数除法问题，并限制最大adjustment
     adjustment = safety_margin / (abs(edge) + 1e-6)

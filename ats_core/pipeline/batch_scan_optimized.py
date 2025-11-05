@@ -241,7 +241,7 @@ class OptimizedBatchScanner:
             self.funding_rate_cache = {}
 
         # 5.3 批量获取订单簿快照（并发获取，约140次API调用）
-        log("   5.3 批量获取订单簿深度（20档）...")
+        log("   5.3 批量获取订单簿深度（100档，价格带法）...")
         log("       🚀 使用并发模式，预计20-30秒")
 
         orderbook_success = 0
