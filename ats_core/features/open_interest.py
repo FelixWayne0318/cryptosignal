@@ -14,9 +14,13 @@ O（持仓）评分 - 统一±100系统
 P0.3改进（自适应阈值）：
 - 价格方向阈值不再固定为1%
 - 根据历史波动率自适应调整
+
+P1.2改进（Notional OI）：
+- 使用名义持仓量（OI × 价格）而非合约张数
+- 解决跨币种比较不准确问题（BTC vs 山寨币合约乘数差异）
 """
 from statistics import median
-from typing import Dict, Tuple, Any, List
+from typing import Dict, Tuple, Any, List, Optional
 import numpy as np
 from ats_core.sources.oi import fetch_oi_hourly, pct, pct_series
 from ats_core.features.scoring_utils import directional_score  # 保留用于内部计算
@@ -73,6 +77,44 @@ def get_adaptive_oi_price_threshold(
     threshold = np.clip(threshold, 0.003, 0.03)  # 0.3% - 3%
 
     return threshold
+
+
+def calculate_notional_oi(
+    oi_contracts: List[float],
+    prices: List[float],
+    contract_multiplier: float = 1.0
+) -> List[float]:
+    """
+    计算名义持仓量（P1.2修复）
+
+    将合约张数转换为名义价值（USD），解决跨币种比较问题。
+
+    Args:
+        oi_contracts: 持仓合约张数列表
+        prices: 对应的价格列表
+        contract_multiplier: 合约乘数（永续合约通常=1.0）
+
+    Returns:
+        notional_oi: 名义持仓量列表（USD）
+
+    示例：
+        BTC: 10000张合约 × $50000 × 1.0 = $500M
+        山寨币: 10000张合约 × $10 × 1.0 = $100K
+    """
+    if len(oi_contracts) != len(prices):
+        # 长度不匹配，使用最后一个价格填充
+        if len(prices) > 0:
+            prices = list(prices) + [prices[-1]] * (len(oi_contracts) - len(prices))
+        else:
+            # 没有价格数据，返回原始OI
+            return oi_contracts
+
+    notional_oi = []
+    for oi, price in zip(oi_contracts, prices):
+        notional = oi * price * contract_multiplier
+        notional_oi.append(notional)
+
+    return notional_oi
 
 
 def _linreg_r2(y: List[float]) -> Tuple[float, float]:
@@ -144,6 +186,9 @@ def score_open_interest(symbol: str,
         "crowding_p95_penalty": 10,  # 拥挤度惩罚
         "min_oi_samples": 30,        # 最少 OI 数据点
         "adaptive_threshold_mode": "hybrid",  # P0.3: 自适应阈值模式
+        # P1.2: Notional OI参数
+        "use_notional_oi": True,     # 是否使用名义持仓量
+        "contract_multiplier": 1.0,  # 合约乘数（永续通常=1）
     }
     par = dict(default_par)
     if isinstance(params, dict):
@@ -168,6 +213,32 @@ def score_open_interest(symbol: str,
                 oi.append(float(x))
     else:
         oi = fetch_oi_hourly(symbol, limit=200)
+
+    # ========== P1.2: Notional OI转换 ==========
+    oi_type = "contracts"  # 默认为合约张数
+    if par["use_notional_oi"] and len(closes) > 0:
+        # 转换为名义持仓量（OI × 价格）
+        # 需要将closes对齐到oi的长度
+        if len(closes) >= len(oi):
+            # closes足够长，截取最近len(oi)个
+            prices_for_oi = list(closes[-len(oi):])
+        else:
+            # closes不够长，用最后一个价格填充
+            prices_for_oi = list(closes) + [closes[-1]] * (len(oi) - len(closes))
+
+        try:
+            oi_original = oi.copy()  # 保存原始值用于metadata
+            oi = calculate_notional_oi(
+                oi_contracts=oi,
+                prices=prices_for_oi,
+                contract_multiplier=par["contract_multiplier"]
+            )
+            oi_type = "notional_usd"
+        except Exception as e:
+            # 转换失败，使用原始OI
+            from ats_core.logging import warn
+            warn(f"Notional OI转换失败 ({symbol}): {e}，使用原始合约张数")
+
     # 兜底：数据不足时使用 CVD proxy
     if len(oi) < par["min_oi_samples"]:
         # CVD作为代理（已经是带符号的）
@@ -182,7 +253,8 @@ def score_open_interest(symbol: str,
             "data_source": "cvd_fallback",
             "r_squared": 0.0,
             "is_consistent": False,
-            "method": "cvd_fallback"
+            "method": "cvd_fallback",
+            "oi_type": oi_type  # P1.2
         }
 
     den = median(oi[max(0, len(oi) - 168):])
@@ -379,4 +451,6 @@ def score_open_interest(symbol: str,
         # P0.3: 自适应阈值信息
         "price_threshold": round(price_threshold * 100, 3),  # 阈值（%）
         "threshold_source": threshold_source,  # 'adaptive' or 'legacy'
+        # P1.2: Notional OI信息
+        "oi_type": oi_type,  # 'contracts' or 'notional_usd'
     }
