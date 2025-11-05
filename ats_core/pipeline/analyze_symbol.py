@@ -56,6 +56,9 @@ from ats_core.factors_v2.liquidity import calculate_liquidity
 from ats_core.factors_v2.basis_funding import calculate_basis_funding
 from ats_core.factors_v2.independence import calculate_independence
 
+# ========== P2.1: 蓄势待发检测增强 ==========
+from ats_core.features.accumulation_detection import detect_accumulation_v1, detect_accumulation_v2
+
 # ============ 工具函数 ============
 
 def _to_f(x) -> float:
@@ -865,21 +868,57 @@ def _analyze_symbol_core(
         prime_strength_threshold = 50  # 成熟币标准阈值（从33提高到50，大幅减少信号80%，只保留最优质信号）
 
     # v6.7新增：蓄势待发检测（F优先通道）
+    # P2.1增强：使用detect_accumulation_v2，带veto条件
     # 目标：在价格上涨前捕捉信号，而非等趋势确立后才发现
     # 特征：资金强势流入(C高) + 资金领先价格(F高) + 但趋势未确立(T低)
-    is_accumulating = False
-    accumulating_reason = ""
 
-    if F >= 90 and C >= 60 and T < 40:
-        # 强烈蓄势特征：资金大量流入，但价格还在横盘/初期
-        is_accumulating = True
-        accumulating_reason = "强势蓄势(F≥90+C≥60+T<40)"
-        prime_strength_threshold = 35  # 降低阈值，允许早期捕捉
-    elif F >= 85 and C >= 70 and T < 30 and V < 0:
-        # 深度蓄势特征：资金流入 + 量能萎缩（洗盘完成）+ 价格横盘
-        is_accumulating = True
-        accumulating_reason = "深度蓄势(F≥85+C≥70+V<0+T<30)"
-        prime_strength_threshold = 38  # 稍微提高一点要求
+    # 构建因子字典和元数据（用于accumulation detection）
+    accumulation_cfg = params.get("factor_optimization_v2", {}).get("accumulation_detection", {})
+    accumulation_version = accumulation_cfg.get("version", "v1")
+
+    factors_dict = {
+        "T": T, "M": M, "C": C, "V": V, "O": O, "B": B,
+        "F": F, "L": L, "S": S, "I": I
+    }
+
+    meta_dict = {
+        "T": T_meta, "M": M_meta, "C": C_meta, "V": V_meta,
+        "O": O_meta, "B": B_meta, "F": F_meta, "L": L_meta,
+        "S": S_meta, "I": I_meta
+    }
+
+    # 调用对应版本的检测函数
+    try:
+        if accumulation_version == "v2":
+            detection_result = detect_accumulation_v2(factors_dict, meta_dict, accumulation_cfg.get("v2", {}))
+        else:
+            detection_result = detect_accumulation_v1(factors_dict, meta_dict, accumulation_cfg.get("v1", {}))
+
+        is_accumulating = detection_result["is_accumulating"]
+        accumulating_reason = detection_result["reason"]
+        adjusted_threshold = detection_result["adjusted_threshold"]
+
+        # 应用调整后的阈值
+        if is_accumulating:
+            prime_strength_threshold = adjusted_threshold
+
+    except Exception as e:
+        # 降级到原有逻辑（向后兼容）
+        from ats_core.logging import warn
+        warn(f"蓄势检测失败，使用原有逻辑: {e}")
+        is_accumulating = False
+        accumulating_reason = ""
+
+        if F >= 90 and C >= 60 and T < 40:
+            # 强烈蓄势特征：资金大量流入，但价格还在横盘/初期
+            is_accumulating = True
+            accumulating_reason = "强势蓄势(F≥90+C≥60+T<40)"
+            prime_strength_threshold = 35  # 降低阈值，允许早期捕捉
+        elif F >= 85 and C >= 70 and T < 30 and V < 0:
+            # 深度蓄势特征：资金流入 + 量能萎缩（洗盘完成）+ 价格横盘
+            is_accumulating = True
+            accumulating_reason = "深度蓄势(F≥85+C≥70+V<0+T<30)"
+            prime_strength_threshold = 38  # 稍微提高一点要求
 
     # Prime判定：使用币种特定阈值（可能被蓄势通道降低）
     is_prime = (prime_strength >= prime_strength_threshold)

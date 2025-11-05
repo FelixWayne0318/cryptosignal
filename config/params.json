@@ -166,7 +166,118 @@
     "cvd_scale": 0.02,
     "price_scale": 3.0,
     "slope_scale": 0.01,
-    "leading_scale": 20.0
+    "leading_scale": 20.0,
+    "crowding_veto": {
+      "_comment": "P0.4: 过热veto机制，防止追高",
+      "enabled": true,
+      "basis_lookback": 100,
+      "funding_lookback": 100,
+      "percentile": 90,
+      "crowding_penalty": 0.5,
+      "min_data_points": 50
+    }
+  },
+
+  "factor_optimization_v2": {
+    "_comment": "P0-P2因子系统优化配置（2024年专家审查修复）",
+    "_enabled": true,
+    "_issues_fixed": "1.归一化不一致 2.T-M相关性 3.硬编码阈值",
+
+    "adaptive_threshold": {
+      "_comment": "P0.1-P0.3: B/V/O因子自适应阈值",
+      "mode": "hybrid",
+      "_mode_options": "zscore | percentile | legacy | hybrid (推荐)",
+      "min_data_points": 50,
+      "fallback_to_legacy": true
+    },
+
+    "basis_funding_adaptive": {
+      "_comment": "P0.1: B因子自适应阈值配置",
+      "enabled": true,
+      "lookback": 100,
+      "neutral_percentile": 50,
+      "extreme_percentile": 90,
+      "neutral_min_bps": 20.0,
+      "neutral_max_bps": 200.0,
+      "extreme_min_bps": 50.0,
+      "extreme_max_bps": 300.0
+    },
+
+    "volume_adaptive": {
+      "_comment": "P0.2: V因子自适应阈值配置",
+      "enabled": true,
+      "lookback": 20,
+      "percentile": 50,
+      "min_threshold_pct": 0.001,
+      "max_threshold_pct": 0.02
+    },
+
+    "open_interest_adaptive": {
+      "_comment": "P0.3: O因子自适应阈值配置",
+      "enabled": true,
+      "lookback": 12,
+      "percentile": 70,
+      "min_threshold_pct": 0.003,
+      "max_threshold_pct": 0.03
+    },
+
+    "use_notional_oi": {
+      "_comment": "P1.2: 使用名义持仓量（合约数×价格）而非合约数",
+      "enabled": true,
+      "contract_multiplier": 1.0,
+      "fallback_on_error": true
+    },
+
+    "factor_normalizer": {
+      "_comment": "P1.1: 统一因子归一化框架",
+      "enabled": true,
+      "mode": "hybrid",
+      "_mode_options": "zscore | percentile | legacy | hybrid",
+      "window_size": 100,
+      "tanh_scale": 2.0,
+      "min_data_points": 30
+    },
+
+    "tm_correlation": {
+      "_comment": "P1.3: T-M因子相关性管理",
+      "monitor_enabled": true,
+      "correlation_threshold_warning": 0.5,
+      "correlation_threshold_action": 0.7,
+      "action": "log_only",
+      "_action_options": "log_only | reduce_m_weight | orthogonalize",
+      "m_weight_reduced": 10.0,
+      "_note": "当avg_corr≥0.7时，若action=reduce_m_weight，M权重从17%→10%"
+    },
+
+    "accumulation_detection": {
+      "_comment": "P2.1: 蓄势待发检测增强版本",
+      "version": "v2",
+      "_version_options": "v1 (原有逻辑) | v2 (增强veto)",
+      "v1": {
+        "F_threshold": 90,
+        "C_threshold": 60,
+        "T_max": 40,
+        "position_threshold": 35
+      },
+      "v2": {
+        "F_threshold": 85,
+        "C_threshold": 60,
+        "T_min": -10,
+        "T_max": 40,
+        "veto": {
+          "crowding_basis_bps": 150,
+          "crowding_penalty": 0.7,
+          "liquidity_threshold": 50,
+          "liquidity_penalty": 0.85,
+          "momentum_threshold": -50,
+          "momentum_penalty": 0.8,
+          "oi_threshold": -30,
+          "oi_penalty": 0.85,
+          "cancel_threshold": 0.6
+        },
+        "base_position_threshold": 35
+      }
+    }
   },
 
   "publish": {
