@@ -19,16 +19,18 @@ def score_cvd_flow(
     cvd_series: List[float],
     c: List[float],
     side_long: bool,
-    params: Dict[str, Any] = None
+    params: Dict[str, Any] = None,
+    klines: List[list] = None
 ) -> Tuple[int, Dict[str, Any]]:
     """
     C（CVD资金流）维度评分
 
     Args:
         cvd_series: CVD 序列
-        c: 收盘价序列（用于归一化）
+        c: 收盘价序列（用于归一化，旧方案）
         side_long: 是否做多
         params: 参数配置
+        klines: K线数据（用于ADTV_notional归一化，推荐）
 
     Returns:
         (C分数, 元数据)
@@ -36,6 +38,11 @@ def score_cvd_flow(
     改进（v2.1）：
         - 添加拥挤度检测（学习OI的95分位数逻辑）
         - 资金流过于拥挤时降权（避免追高）
+
+    改进（v2.5+）：
+        - 使用ADTV_notional归一化（slope / 平均小时成交额USDT）
+        - 解决低价币过度放大问题（SHIBUSDT等）
+        - 统一"每小时净流强度"概念，跨币可比
     """
     # 默认参数
     default_params = {
@@ -58,8 +65,23 @@ def score_cvd_flow(
         }
 
     # ========== 1. 计算 CVD 6小时变化 ==========
-    # CVD归一化到价格（避免不同币种的CVD量级差异）
-    price = max(1e-12, abs(c[-1]) + 1.0)
+    # 1.1 计算ADTV_notional（平均每小时成交额USDT）- v2.5+新方案
+    use_adtv = (klines is not None and len(klines) >= 24)
+    if use_adtv:
+        # K线第7列是quoteAssetVolume（USDT成交额）
+        recent_klines = klines[-min(24, len(klines)):]  # 最近24小时
+        quote_volumes = [float(k[7]) for k in recent_klines if len(k) > 7]
+        if quote_volumes:
+            ADTV_notional = sum(quote_volumes) / len(quote_volumes)  # 平均每小时USDT成交额
+        else:
+            ADTV_notional = 1e6  # 默认100万USDT
+        ADTV_notional = max(1e6, ADTV_notional)  # 最小100万防止除零
+        normalization_scale = ADTV_notional
+    else:
+        # 1.2 降级方案：使用价格归一化（旧方案，向后兼容）
+        price = max(1e-12, abs(c[-1]) + 1.0)
+        normalization_scale = price
+
     cvd_window = cvd_series[-7:]  # 最近7个数据点（6小时）
     n = len(cvd_window)
 
@@ -84,8 +106,10 @@ def score_cvd_flow(
 
     # ========== 3. 软映射评分（带符号，-100到+100） ==========
     # 使用斜率而非两点比较，避免被单根K线主导
-    # slope_normalized：斜率归一化到价格（每小时平均变化率）
-    slope_normalized = slope / price
+    # slope_normalized：斜率归一化
+    #   - v2.5+新方案：slope / ADTV_notional（每小时净流强度 / 平均成交额）
+    #   - 旧方案：slope / price（向后兼容）
+    slope_normalized = slope / normalization_scale
 
     # 6小时总变化 = 斜率 × 6（更准确反映平均趋势）
     cvd_trend = slope_normalized * (n - 1)
@@ -112,7 +136,7 @@ def score_cvd_flow(
             window = cvd_series[i-6:i+1]
             if len(window) == 7:
                 # 计算这个窗口的CVD变化率（与当前方法一致）
-                delta = (window[-1] - window[0]) / price
+                delta = (window[-1] - window[0]) / normalization_scale
                 hist_cvd_changes.append(abs(delta))  # 使用绝对值（不管多空）
 
         if len(hist_cvd_changes) >= 20:
@@ -122,7 +146,7 @@ def score_cvd_flow(
             p95_cvd = sorted_changes[p95_idx]
 
             # 检测当前CVD变化是否超过95分位数（拥挤）
-            cvd6 = (cvd_window[-1] - cvd_window[0]) / price
+            cvd6 = (cvd_window[-1] - cvd_window[0]) / normalization_scale
             crowding_warn = (abs(cvd6) >= p95_cvd)
 
     # 如果资金流拥挤，降权（避免追高/杀跌）
@@ -139,17 +163,24 @@ def score_cvd_flow(
     C = int(round(C_pub))
 
     # 计算cvd6用于显示（实际的起点终点变化）
-    cvd6 = (cvd_window[-1] - cvd_window[0]) / price
+    cvd6 = (cvd_window[-1] - cvd_window[0]) / normalization_scale
 
     # ========== 6. 返回元数据 ==========
-    return C, {
-        "cvd6": round(cvd6, 6),              # 实际变化（用于显示）
-        "cvd_raw": round(cvd_window[-1] - cvd_window[0], 2),
+    meta = {
+        "cvd6": round(cvd6, 6),              # 归一化后的变化（用于显示）
+        "cvd_raw": round(cvd_window[-1] - cvd_window[0], 2),  # 原始CVD变化
         "cvd_score": cvd_score,
         "slope": round(slope_normalized, 8),  # 斜率（每小时平均变化）
         "r_squared": round(r_squared, 3),     # R²拟合优度（0-1）
         "is_consistent": is_consistent,       # 是否持续（R²>=0.7）
         # v2.1: 拥挤度检测
         "crowding_warn": crowding_warn,       # 是否拥挤
-        "p95_cvd": round(p95_cvd, 6) if p95_cvd is not None else None  # 95分位数阈值
+        "p95_cvd": round(p95_cvd, 6) if p95_cvd is not None else None,  # 95分位数阈值
+        # v2.5+: ADTV_notional归一化信息
+        "normalization_method": "ADTV_notional" if use_adtv else "price",
     }
+
+    if use_adtv:
+        meta["ADTV_notional"] = round(ADTV_notional, 2)  # 平均每小时USDT成交额
+
+    return C, meta

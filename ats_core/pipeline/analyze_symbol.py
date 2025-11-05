@@ -321,7 +321,7 @@ def _analyze_symbol_core(
 
     # CVD资金流（C）：-100（流出）到 +100（流入）
     t0 = time.time()
-    C, C_meta = _calc_cvd_flow(cvd_series, c, params.get("cvd_flow", {}))
+    C, C_meta = _calc_cvd_flow(cvd_series, c, params.get("cvd_flow", {}), klines=k1)  # v2.5+传入klines用于ADTV_notional归一化
     perf['C资金流'] = time.time() - t0
 
     # 结构（S）：-100（差）到 +100（好）
@@ -1451,11 +1451,19 @@ def _calc_momentum(h, l, c, cfg):
         warn(f"⚠️  M因子计算异常: {e}")
         return 0, {"slope_now": 0.0, "accel": 0.0, "error": str(e)}
 
-def _calc_cvd_flow(cvd_series, c, cfg):
-    """CVD资金流打分（±100系统）"""
+def _calc_cvd_flow(cvd_series, c, cfg, klines=None):
+    """
+    CVD资金流打分（±100系统）
+
+    Args:
+        cvd_series: CVD序列
+        c: 收盘价序列
+        cfg: 配置参数
+        klines: K线数据（v2.5+用于ADTV_notional归一化）
+    """
     try:
         from ats_core.features.cvd_flow import score_cvd_flow
-        C, meta = score_cvd_flow(cvd_series, c, False, cfg)  # 保留side_long参数兼容性，传False
+        C, meta = score_cvd_flow(cvd_series, c, False, cfg, klines=klines)  # v2.5+传入klines
         return int(C), meta
     except Exception:
         return 0, {"cvd6": 0.0, "cvd_score": 0}
