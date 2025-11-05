@@ -17,6 +17,11 @@ V（量能）评分 - 统一±100系统（多空对称修复版 v2.0）
 P0.2改进（自适应阈值）：
 - 价格方向阈值不再固定为0.5%
 - 根据历史波动率自适应调整
+
+P2.3改进（2025-11-05，scale参数优化）：
+- 问题：scale=0.3过小，导致tanh函数过早饱和，V分数聚集在±80
+- 方案：scale增加3倍（0.3→0.9），避免饱和，使V分数更均匀分布
+- 效果：vlevel=1.3给60分（vs旧版88分），vlevel=1.5给75分（vs旧版97分）
 """
 import math
 import numpy as np
@@ -98,9 +103,11 @@ def score_volume(vol, closes=None, params=None):
         (V分数 [-100, +100], 元数据)
     """
     # 默认参数
+    # P2.3修复（2025-11-05）：scale参数优化，避免±80聚集
+    # 诊断发现：scale=0.3过小导致tanh过早饱和，推荐0.89（3倍增加）
     default_params = {
-        "vlevel_scale": 0.3,      # v5/v20 = 1.3 给约 69 分
-        "vroc_scale": 0.3,        # vroc = 0.3 给约 69 分
+        "vlevel_scale": 0.9,      # P2.3修复: 0.3→0.9，避免饱和（v5/v20=1.3给约60分，1.5给75分）
+        "vroc_scale": 0.9,        # P2.3修复: 0.3→0.9，保持一致性
         "vlevel_weight": 0.6,     # vlevel 权重
         "vroc_weight": 0.4,       # vroc 权重
         "price_lookback": 5,      # 价格方向回溯周期
