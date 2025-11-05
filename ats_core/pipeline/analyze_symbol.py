@@ -647,7 +647,8 @@ def _analyze_symbol_core(
     # 计算p_min（动态）
     # v6.7修复：使用配置文件的prime_prob_min，取消硬编码0.50
     # 用户要求减少80%信号，需要提高阈值
-    base_p_min = publish_cfg.get("prime_prob_min", 0.58)  # 使用配置值
+    # P2.5++修复（2025-11-05）：提高p_min从0.58→0.68，减少80%信号，保留高质量信号
+    base_p_min = publish_cfg.get("prime_prob_min", 0.68)  # 从0.58提高到0.68
     safety_margin = modulator_output.L_meta.get("safety_margin", 0.005)
     # 修复：使用abs(edge)避免负数除法问题，并限制最大adjustment
     adjustment = safety_margin / (abs(edge) + 1e-6)
@@ -685,10 +686,11 @@ def _analyze_symbol_core(
         watch_prob_min = 0.60
     else:
         # 成熟币种：正常标准
-        prime_prob_min = publish_cfg.get("prime_prob_min", 0.62)
+        # P2.5++修复（2025-11-05）：提高概率门槛，减少80%信号
+        prime_prob_min = publish_cfg.get("prime_prob_min", 0.68)  # 从0.62提高到0.68
         prime_dims_ok_min = publish_cfg.get("prime_dims_ok_min", 4)
         prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
-        watch_prob_min = publish_cfg.get("watch_prob_min", 0.58)
+        watch_prob_min = publish_cfg.get("watch_prob_min", 0.65)  # 从0.58提高到0.65
 
     # ---- Prime评分系统（v4.0 - 基于10维因子系统）----
     # 重大改进：使用10维综合评分替代4维独立评分
@@ -866,7 +868,8 @@ def _analyze_symbol_core(
     elif is_phaseB:
         prime_strength_threshold = new_coin_cfg.get("phaseB_prime_strength_min", 28)
     else:
-        prime_strength_threshold = 40  # P2.5++修复: 从50降至40（原33→50过于激进，导致SHORT信号全部被过滤）
+        # P2.5++修复（2025-11-05）：提高阈值从40→55，减少80%信号，保留高质量信号
+        prime_strength_threshold = 55  # 从40提高到55
 
     # v6.7新增：蓄势待发检测（F优先通道）
     # P2.1增强：使用detect_accumulation_v2，带veto条件
@@ -923,42 +926,62 @@ def _analyze_symbol_core(
 
     # Prime判定：使用币种特定阈值（可能被蓄势通道降低）+ P值硬约束
     # P2.5+信号过滤：加入P值硬约束，必须P>=p_min_adjusted才能发布
-    is_prime = (prime_strength >= prime_strength_threshold) and (P_chosen >= p_min_adjusted)
+    # P2.5++修复（2025-11-05）：添加更多质量门槛，减少80%信号
+
+    # 质量门槛1：基础概率和Prime强度
+    quality_check_1 = (prime_strength >= prime_strength_threshold) and (P_chosen >= p_min_adjusted)
+
+    # 质量门槛2：综合置信度（A层6因子加权）
+    quality_check_2 = confidence >= 70  # 从无要求提高到70
+
+    # 质量门槛3：四门槛综合质量（gate_multiplier）
+    quality_check_3 = gate_multiplier >= 0.88  # 要求至少88%质量
+
+    # 质量门槛4：edge优势边际
+    quality_check_4 = abs(edge) >= 0.75  # 要求edge至少0.75
+
+    # 综合判定：所有质量门槛都要通过
+    is_prime = quality_check_1 and quality_check_2 and quality_check_3 and quality_check_4
     is_watch = False  # 不再发布Watch信号
 
     # v6.3新增：拒绝原因跟踪（专家建议 #5）
     # v6.3.2修复：使用币种特定的prime_strength_threshold
+    # P2.5++修复（2025-11-05）：增加新质量门槛的拒绝原因
     rejection_reason = []
     if not is_prime:
-        if prime_strength < prime_strength_threshold:
-            rejection_reason.append(f"Prime强度不足({prime_strength:.1f} < {prime_strength_threshold}, 币种:{coin_phase})")
-            if base_strength < 15:
-                rejection_reason.append(f"  - 基础强度过低({base_strength:.1f}/60)")
-            if confidence < 25:
-                rejection_reason.append(f"  - 综合置信度低({confidence:.1f}/100)")
-            if prob_bonus < 5:
-                rejection_reason.append(f"  - 概率加成不足({prob_bonus:.1f}/40, P={P_chosen:.3f})")
-        if P_chosen < p_min_adjusted:
-            rejection_reason.append(f"概率过低({P_chosen:.3f} < {p_min_adjusted:.3f})")
-        if dims_ok < prime_dims_ok_min:
-            rejection_reason.append(f"达标维度不足({dims_ok} < {prime_dims_ok_min})")
-        if P_chosen < prime_prob_min:
-            rejection_reason.append(f"概率过低({P_chosen:.3f} < {prime_prob_min:.3f})")
-        # 检查四门得分
-        gates = {
-            "data_qual": min(1.0, len(k1) / 200.0) if k1 else 0.0,
-            "ev_gate": (P_chosen - 0.5) * 2,
-            "execution": (scores.get('L', 0) + 100) / 200,
-            "probability": (P_chosen - 0.5) / 0.45 if P_chosen >= 0.5 else (P_chosen - 0.5) / 0.5,
-        }
-        if gates['data_qual'] < 0.5:
-            rejection_reason.append(f"数据质量不足({gates['data_qual']:.2f} < 0.5)")
-        if gates['ev_gate'] < -0.5:
-            rejection_reason.append(f"EV过低({gates['ev_gate']:.2f} < -0.5)")
-        if gates['execution'] < 0.3:
-            rejection_reason.append(f"执行质量差({gates['execution']:.2f} < 0.3, L={scores.get('L',0):.1f})")
+        # 检查质量门槛1：Prime强度和概率
+        if not quality_check_1:
+            if prime_strength < prime_strength_threshold:
+                rejection_reason.append(f"❌ Prime强度不足({prime_strength:.1f} < {prime_strength_threshold})")
+                if base_strength < 30:
+                    rejection_reason.append(f"  - 基础强度过低({base_strength:.1f}/60)")
+                if confidence < 70:
+                    rejection_reason.append(f"  - 综合置信度低({confidence:.1f}/70)")
+                if prob_bonus < 10:
+                    rejection_reason.append(f"  - 概率加成不足({prob_bonus:.1f}/40, P={P_chosen:.3f})")
+            if P_chosen < p_min_adjusted:
+                rejection_reason.append(f"❌ 概率过低({P_chosen:.3f} < {p_min_adjusted:.3f})")
+
+        # 检查质量门槛2：综合置信度
+        if not quality_check_2:
+            rejection_reason.append(f"❌ 置信度不足({confidence:.1f} < 70)")
+
+        # 检查质量门槛3：gate_multiplier
+        if not quality_check_3:
+            rejection_reason.append(f"❌ 四门槛质量不足(gate_mult={gate_multiplier:.3f} < 0.88)")
+            # 详细说明哪些门槛拖后腿
+            gates_data_qual = _get(r, "gates.data_qual", 1.0) if 'r' in locals() else 1.0
+            gates_execution = 0.5 + L / 200.0 if L else 0.5
+            if gates_data_qual < 0.95:
+                rejection_reason.append(f"  - DataQual低({gates_data_qual:.2%})")
+            if gates_execution < 0.7:
+                rejection_reason.append(f"  - 执行质量差({gates_execution:.2f}, L={L})")
+
+        # 检查质量门槛4：edge
+        if not quality_check_4:
+            rejection_reason.append(f"❌ Edge不足({abs(edge):.2f} < 0.75)")
     else:
-        rejection_reason = ["通过(Prime)"]
+        rejection_reason = [f"✅ 通过所有质量门槛(P={P_chosen:.3f}, Prime={prime_strength:.1f}, Conf={confidence:.1f}, GM={gate_multiplier:.3f}, Edge={abs(edge):.2f})"]
 
     # ---- 6. BTC/ETH市场过滤器（方案B - 独立过滤 + 避免双重惩罚）----
     # 计算市场大盘趋势，避免逆势做单
