@@ -324,7 +324,7 @@ class ModulatorChain:
         逻辑：
         - F正（资金领先价格）：Teff降低（P提升），p_min略降
         - F负（价格领先资金）：Teff升高（P降低），p_min略升
-        - 范围：Teff [0.80, 1.20], p_min_adj [-2%, +2%]
+        - 范围：Teff [0.80, 1.20], p_min_adj [-1%, +1%]  # P2.5++修复: 范围减半
 
         参数：
         - F_score: [-100, +100]
@@ -336,7 +336,7 @@ class ModulatorChain:
         """
         Teff_min = self.F_params.get("Teff_min", 0.80)
         Teff_max = self.F_params.get("Teff_max", 1.20)
-        p_min_adj_range = self.F_params.get("p_min_adj_range", 0.02)
+        p_min_adj_range = self.F_params.get("p_min_adj_range", 0.01)  # P2.5++修复: 0.02→0.01，减半F调制器影响，避免P阈值过高
 
         # 归一化
         normalized_F = F_score / 100.0
@@ -347,7 +347,7 @@ class ModulatorChain:
         Teff_F = max(Teff_min, min(Teff_max, Teff_F))
 
         # p_min调整：F正 → p_min降低（放宽门槛）
-        # F=+100 → -2%, F=0 → 0, F=-100 → +2%
+        # P2.5++修复: F=+100 → -1%, F=0 → 0, F=-100 → +1% (原来±2%)
         p_min_adj = -p_min_adj_range * normalized_F
 
         # 元数据

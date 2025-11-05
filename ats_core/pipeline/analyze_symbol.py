@@ -866,7 +866,7 @@ def _analyze_symbol_core(
     elif is_phaseB:
         prime_strength_threshold = new_coin_cfg.get("phaseB_prime_strength_min", 28)
     else:
-        prime_strength_threshold = 50  # 成熟币标准阈值（从33提高到50，大幅减少信号80%，只保留最优质信号）
+        prime_strength_threshold = 40  # P2.5++修复: 从50降至40（原33→50过于激进，导致SHORT信号全部被过滤）
 
     # v6.7新增：蓄势待发检测（F优先通道）
     # P2.1增强：使用detect_accumulation_v2，带veto条件
