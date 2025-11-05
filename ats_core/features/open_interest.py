@@ -10,9 +10,14 @@ O（持仓）评分 - 统一±100系统
 改进（v2.1）：
 - 使用线性回归+R²（对标CVD）
 - 避免被单根K线异常值误导
+
+P0.3改进（自适应阈值）：
+- 价格方向阈值不再固定为1%
+- 根据历史波动率自适应调整
 """
 from statistics import median
 from typing import Dict, Tuple, Any, List
+import numpy as np
 from ats_core.sources.oi import fetch_oi_hourly, pct, pct_series
 from ats_core.features.scoring_utils import directional_score  # 保留用于内部计算
 from ats_core.utils.outlier_detection import detect_outliers_iqr, apply_outlier_weights
@@ -20,6 +25,54 @@ from ats_core.scoring.scoring_utils import StandardizationChain
 
 # 模块级StandardizationChain实例
 _oi_chain = StandardizationChain(alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5)
+
+
+def get_adaptive_oi_price_threshold(
+    closes: list,
+    lookback: int = 12,
+    mode: str = 'hybrid',
+    min_data_points: int = 50
+) -> float:
+    """
+    计算自适应价格方向阈值（P0.3修复）
+
+    Args:
+        closes: 历史收盘价列表
+        lookback: 计算变化率的回溯周期（默认12，与OI同向统计周期一致）
+        mode: 'adaptive' | 'legacy' | 'hybrid'
+        min_data_points: 最小数据点数（默认50）
+
+    Returns:
+        price_threshold: 价格方向判定阈值（如0.01表示±1%）
+    """
+    # Legacy模式或数据不足时使用固定阈值
+    if mode == 'legacy' or len(closes) < min_data_points:
+        return 0.01  # 固定1%
+
+    # 计算历史价格变化率
+    closes_array = np.array(closes)
+    price_changes = []
+
+    # 计算每个lookback周期的涨跌幅
+    for i in range(lookback, len(closes_array)):
+        price_start = closes_array[i - lookback]
+        price_end = closes_array[i]
+        if price_start != 0:
+            change_pct = (price_end - price_start) / abs(price_start)
+            price_changes.append(change_pct)
+
+    if len(price_changes) < 10:
+        return 0.01  # 数据不足，fallback
+
+    # 使用价格变化的70分位数绝对值作为阈值
+    # （比V因子的50分位更高，因为O因子考察的是12小时周期，更长期）
+    abs_changes = np.abs(price_changes)
+    threshold = float(np.percentile(abs_changes, 70))  # 70分位
+
+    # 边界保护
+    threshold = np.clip(threshold, 0.003, 0.03)  # 0.3% - 3%
+
+    return threshold
 
 
 def _linreg_r2(y: List[float]) -> Tuple[float, float]:
@@ -90,6 +143,7 @@ def score_open_interest(symbol: str,
         "align_weight": 0.3,         # 同向权重
         "crowding_p95_penalty": 10,  # 拥挤度惩罚
         "min_oi_samples": 30,        # 最少 OI 数据点
+        "adaptive_threshold_mode": "hybrid",  # P0.3: 自适应阈值模式
     }
     par = dict(default_par)
     if isinstance(params, dict):
@@ -204,16 +258,30 @@ def score_open_interest(symbol: str,
     # 计算价格趋势（最近12根K线，与up_up/dn_up同周期）
     price_trend_pct = 0.0
     price_direction = 0  # -1=下跌, 0=中性, +1=上涨
+    price_threshold = 0.01  # 默认阈值
+    threshold_source = 'legacy'
 
     if len(closes) >= k + 1:
+        # P0.3: 计算自适应阈值
+        adaptive_mode = par["adaptive_threshold_mode"]
+        if adaptive_mode != 'legacy' and len(closes) >= 50:
+            price_threshold = get_adaptive_oi_price_threshold(
+                closes,
+                lookback=k,
+                mode=adaptive_mode
+            )
+            threshold_source = 'adaptive'
+        else:
+            price_threshold = 0.01  # Fallback到固定阈值
+
         price_start = closes[-(k + 1)]
         price_end = closes[-1]
         price_trend_pct = (price_end - price_start) / max(1e-12, abs(price_start))
 
-        # 判断价格方向（阈值：±1%）
-        if price_trend_pct > 0.01:
+        # 判断价格方向（使用自适应阈值）
+        if price_trend_pct > price_threshold:
             price_direction = 1   # 上涨
-        elif price_trend_pct < -0.01:
+        elif price_trend_pct < -price_threshold:
             price_direction = -1  # 下跌
         else:
             price_direction = 0   # 中性
@@ -308,4 +376,7 @@ def score_open_interest(symbol: str,
         # v2.1: 异常值过滤统计
         "outliers_filtered": outliers_filtered,
         "symmetry_fixed": True,  # v2.0: 标记已修复多空对称性
+        # P0.3: 自适应阈值信息
+        "price_threshold": round(price_threshold * 100, 3),  # 阈值（%）
+        "threshold_source": threshold_source,  # 'adaptive' or 'legacy'
     }

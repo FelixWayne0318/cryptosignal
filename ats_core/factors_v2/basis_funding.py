@@ -38,6 +38,78 @@ def _to_f(x) -> float:
         return 0.0
 
 
+def get_adaptive_basis_thresholds(
+    basis_history: list,
+    mode: str = 'hybrid',
+    min_data_points: int = 50
+) -> Tuple[float, float]:
+    """
+    计算自适应基差阈值（P0.1修复）
+
+    Args:
+        basis_history: 历史基差数据（bps）
+        mode: 'adaptive' | 'legacy' | 'hybrid'
+        min_data_points: 最小数据点数（默认50）
+
+    Returns:
+        (neutral_bps, extreme_bps)
+    """
+    # Legacy模式或数据不足时使用固定阈值
+    if mode == 'legacy' or len(basis_history) < min_data_points:
+        return 50.0, 100.0
+
+    # 计算滚动百分位
+    basis_array = np.array(basis_history)
+    neutral_bps = float(np.percentile(np.abs(basis_array), 50))  # 中位数
+    extreme_bps = float(np.percentile(np.abs(basis_array), 90))  # 90分位
+
+    # 边界保护（防止极端市场）
+    neutral_bps = np.clip(neutral_bps, 20.0, 200.0)
+    extreme_bps = np.clip(extreme_bps, 50.0, 300.0)
+
+    # 确保extreme > neutral
+    if extreme_bps <= neutral_bps:
+        extreme_bps = neutral_bps * 1.5
+
+    return neutral_bps, extreme_bps
+
+
+def get_adaptive_funding_thresholds(
+    funding_history: list,
+    mode: str = 'hybrid',
+    min_data_points: int = 50
+) -> Tuple[float, float]:
+    """
+    计算自适应资金费率阈值（P0.1修复）
+
+    Args:
+        funding_history: 历史资金费率数据
+        mode: 'adaptive' | 'legacy' | 'hybrid'
+        min_data_points: 最小数据点数（默认50）
+
+    Returns:
+        (neutral_rate, extreme_rate)
+    """
+    # Legacy模式或数据不足时使用固定阈值
+    if mode == 'legacy' or len(funding_history) < min_data_points:
+        return 0.001, 0.002
+
+    # 计算滚动百分位
+    funding_array = np.array(funding_history)
+    neutral_rate = float(np.percentile(np.abs(funding_array), 50))
+    extreme_rate = float(np.percentile(np.abs(funding_array), 90))
+
+    # 边界保护
+    neutral_rate = np.clip(neutral_rate, 0.0001, 0.005)
+    extreme_rate = np.clip(extreme_rate, 0.0005, 0.01)
+
+    # 确保extreme > neutral
+    if extreme_rate <= neutral_rate:
+        extreme_rate = neutral_rate * 1.5
+
+    return neutral_rate, extreme_rate
+
+
 def _normalize_basis(
     basis_bps: float,
     neutral_bps: float,
@@ -109,6 +181,7 @@ def calculate_basis_funding(
     spot_price: float,
     funding_rate: float,
     funding_history: Optional[list] = None,
+    basis_history: Optional[list] = None,
     params: Dict[str, Any] = None
 ) -> Tuple[float, Dict[str, Any]]:
     """
@@ -118,7 +191,8 @@ def calculate_basis_funding(
         perp_price: 永续合约价格
         spot_price: 现货价格
         funding_rate: 当前资金费率（如0.001表示0.1%）
-        funding_history: 资金费率历史（可选，用于FWI增强）
+        funding_history: 资金费率历史（可选，用于FWI增强和自适应阈值）
+        basis_history: 基差历史（可选，用于自适应阈值，P0.1新增）
         params: 参数字典，包含:
             - basis_neutral_bps: 中性基差（默认50 bps）
             - basis_extreme_bps: 极端基差（默认100 bps）
@@ -127,6 +201,7 @@ def calculate_basis_funding(
             - basis_weight: 基差权重（默认0.6）
             - funding_weight: 资金费权重（默认0.4）
             - fwi_enabled: 是否启用FWI增强（默认False）
+            - adaptive_threshold_mode: 'adaptive' | 'legacy' | 'hybrid'（默认'hybrid'）
 
     Returns:
         (score, metadata)
@@ -136,11 +211,29 @@ def calculate_basis_funding(
     if params is None:
         params = {}
 
-    # 默认参数
-    basis_neutral = params.get('basis_neutral_bps', 50)
-    basis_extreme = params.get('basis_extreme_bps', 100)
-    funding_neutral = params.get('funding_neutral_rate', 0.001)
-    funding_extreme = params.get('funding_extreme_rate', 0.002)
+    # P0.1: 自适应阈值模式
+    adaptive_mode = params.get('adaptive_threshold_mode', 'hybrid')
+
+    # 计算自适应阈值（如果启用且有历史数据）
+    if adaptive_mode != 'legacy' and basis_history and len(basis_history) >= 50:
+        basis_neutral, basis_extreme = get_adaptive_basis_thresholds(
+            basis_history, mode=adaptive_mode
+        )
+        threshold_source = 'adaptive'
+    else:
+        # Fallback到固定阈值
+        basis_neutral = params.get('basis_neutral_bps', 50)
+        basis_extreme = params.get('basis_extreme_bps', 100)
+        threshold_source = 'legacy'
+
+    if adaptive_mode != 'legacy' and funding_history and len(funding_history) >= 50:
+        funding_neutral, funding_extreme = get_adaptive_funding_thresholds(
+            funding_history, mode=adaptive_mode
+        )
+    else:
+        funding_neutral = params.get('funding_neutral_rate', 0.001)
+        funding_extreme = params.get('funding_extreme_rate', 0.002)
+
     basis_weight = params.get('basis_weight', 0.6)
     funding_weight = params.get('funding_weight', 0.4)
     fwi_enabled = params.get('fwi_enabled', False)
@@ -238,7 +331,13 @@ def calculate_basis_funding(
         'fwi_active': fwi_active,
         'final_score': final_score,
         'sentiment': sentiment,
-        'interpretation': interpretation
+        'interpretation': interpretation,
+        # P0.1: 自适应阈值信息
+        'threshold_source': threshold_source,
+        'basis_neutral_bps': basis_neutral,
+        'basis_extreme_bps': basis_extreme,
+        'funding_neutral_rate': funding_neutral,
+        'funding_extreme_rate': funding_extreme
     }
 
     return final_score, metadata
