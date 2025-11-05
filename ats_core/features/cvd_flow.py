@@ -40,7 +40,7 @@ def score_cvd_flow(
     # 默认参数
     default_params = {
         "lookback_hours": 6,       # CVD回看周期（小时）
-        "cvd_scale": 0.02,         # CVD变化scale
+        "cvd_scale": 0.15,         # P2.4修复: 0.02→0.15，避免饱和（CVD变化scale，7.5倍增加）
         "crowding_p95_penalty": 10,  # 拥挤度惩罚（百分比）
     }
 

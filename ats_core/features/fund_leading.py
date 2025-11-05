@@ -84,7 +84,7 @@ def score_fund_leading(
         "cvd_scale": 0.02,      # CVD 变化 0.02 给约 69 分
         "price_scale": 3.0,     # 价格变化 3% 给约 69 分
         "slope_scale": 0.01,    # 斜率 0.01 给约 69 分
-        "leading_scale": 20.0,  # 领先性的缩放系数
+        "leading_scale": 50.0,  # P2.4修复: 20.0→50.0，避免饱和（领先性的缩放系数）
         # P0.4: Crowding veto参数
         "crowding_veto_enabled": True,   # 是否启用crowding veto
         "crowding_percentile": 90,        # 极端值判定百分位（90分位）
@@ -102,12 +102,13 @@ def score_fund_leading(
     # CVD流入 → 正分，CVD流出 → 负分
     # 量能放大 → 正分，量能萎缩 → 负分
 
-    oi_score = directional_score(oi_change_pct, neutral=0.0, scale=p["oi_scale"])
-    cvd_score = directional_score(cvd_change, neutral=0.0, scale=p["cvd_scale"])
-    vol_score = directional_score(vol_ratio, neutral=1.0, scale=p["vol_scale"])
+    # P2.4修复：使用min_score=0确保对称映射（0-100而非10-100）
+    oi_score = directional_score(oi_change_pct, neutral=0.0, scale=p["oi_scale"], min_score=0.0)
+    cvd_score = directional_score(cvd_change, neutral=0.0, scale=p["cvd_scale"], min_score=0.0)
+    vol_score = directional_score(vol_ratio, neutral=1.0, scale=p["vol_scale"], min_score=0.0)
 
     # 加权平均（返回 -100 到 +100 的带符号分数）
-    # 映射：10-100 → -100到+100
+    # P2.4修复：映射 0-100 → -100到+100（对称映射，避免饱和）
     fund_momentum = (
         p["oi_weight"] * ((oi_score - 50) * 2) +
         p["vol_weight"] * ((vol_score - 50) * 2) +
@@ -118,11 +119,12 @@ def score_fund_leading(
     # 价格上涨 → 正分，价格下跌 → 负分
     # 斜率向上 → 正分，斜率向下 → 负分
 
-    trend_score = directional_score(price_change_pct, neutral=0.0, scale=p["price_scale"])
-    slope_score = directional_score(price_slope, neutral=0.0, scale=p["slope_scale"])
+    # P2.4修复：使用min_score=0确保对称映射
+    trend_score = directional_score(price_change_pct, neutral=0.0, scale=p["price_scale"], min_score=0.0)
+    slope_score = directional_score(price_slope, neutral=0.0, scale=p["slope_scale"], min_score=0.0)
 
     # 加权平均（返回 -100 到 +100 的带符号分数）
-    # 映射：10-100 → -100到+100
+    # P2.4修复：映射 0-100 → -100到+100（对称映射，避免饱和）
     price_momentum = (
         p["trend_weight"] * ((trend_score - 50) * 2) +
         p["slope_weight"] * ((slope_score - 50) * 2)
