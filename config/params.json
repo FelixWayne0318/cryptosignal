@@ -10,11 +10,15 @@
   "accel": {},
 
   "momentum": {
-    "slope_lookback": 12,
+    "_comment": "P2.2修改：短窗口设计，与T因子正交化（降低70.8%→<50%重叠度）",
+    "ema_fast": 3,
+    "ema_slow": 5,
+    "slope_lookback": 6,
     "slope_scale": 1.00,
     "accel_scale": 1.00,
     "slope_weight": 0.6,
-    "accel_weight": 0.4
+    "accel_weight": 0.4,
+    "_p22_rationale": "T因子用EMA5/20捕捉大趋势，M因子用EMA3/5捕捉快速动量→正交化"
   },
 
   "cvd_flow": {
