@@ -1,12 +1,29 @@
 # coding: utf-8
 """
-Telegram message formatting (unified 10-dimension template v6.7)
-- Both watch and trade use the same professional & readable template.
-- Shows 10 dimensions: T/M/C/S/V/O/L/B/Q/I + F regulator
-- Robust to missing fields: falls back to neutral 0 with explanation.
-- Header order: line1 = symbol & price, line2 = status (watch/trade + side + conviction + ttl).
-- v6.0 upgrade: Added L(Liquidity), B(Basis+Funding), Q(Liquidation), I(Independence)
-- v6.7 upgrade: Integrated v66 improvements (type safety, 9-block structure, risk alerts, modulator details)
+Telegram message formatting (v6.6 architecture)
+
+v6.6架构（2025-11-05）：
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔵 A层：方向判断（6因子，权重100%）
+  - T趋势(24%) + M动量(17%) + C资金(24%) + V量能(12%) + O持仓(17%) + B基差(6%)
+
+⚙️ B层：调制器（4因子，权重0%，仅调节执行参数）
+  - L流动性 → position_mult, cost
+  - S结构   → confidence, Teff
+  - F资金领先→ Teff, p_min
+  - I独立性 → Teff, cost
+
+🚪 四门槛：质量控制（gate_multiplier影响Prime强度）
+  - Gate 1: DataQual（数据质量）
+  - Gate 2: EV（期望值）
+  - Gate 3: Execution（执行质量）
+  - Gate 4: Probability（概率门槛）
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+设计原则：
+- 使用不同图标区分三个层次（圆形🔴/齿轮⚙️/门🚪）
+- A层决定方向，B层调节参数，四门槛控制质量
+- 所有约束都是软约束，不硬拒绝信号
 """
 
 from __future__ import annotations
@@ -683,7 +700,7 @@ def _six_scores(r: Dict[str, Any]) -> Tuple[int,int,int,int,int,int,int]:
     return T, S, V, M, OI, E, F  # 返回7维+F（去掉C保持兼容）
 
 def _ten_scores(r: Dict[str, Any]) -> Tuple[int,int,int,int,int,int,int,int,int,int,int]:
-    """v6.0：返回T/M/C/S/V/O/L/B/Q/I/F（10维+调节器）"""
+    """兼容：返回T/M/C/S/V/O/L/B/Q/I/F（10维+调节器）- 保留向后兼容"""
     T  = _score_trend(r)
     M  = _score_momentum(r)
     C  = _score_cvd_flow(r)
@@ -696,6 +713,33 @@ def _ten_scores(r: Dict[str, Any]) -> Tuple[int,int,int,int,int,int,int,int,int,
     I  = _score_independence(r)
     F  = _score_fund_leading(r)
     return T, M, C, S, V, OI, L, B, Q, I, F
+
+def _v66_scores(r: Dict[str, Any]) -> Dict[str, int]:
+    """
+    v6.6架构：A层6因子 + B层4调制器
+
+    Returns:
+        {
+            'A': {'T': int, 'M': int, 'C': int, 'V': int, 'O': int, 'B': int},
+            'B': {'L': int, 'S': int, 'F': int, 'I': int}
+        }
+    """
+    return {
+        'A': {  # A层：方向判断（6因子，权重100%）
+            'T': _score_trend(r),       # 趋势 24%
+            'M': _score_momentum(r),    # 动量 17%
+            'C': _score_cvd_flow(r),    # 资金 24%
+            'V': _score_volume(r),      # 量能 12%
+            'O': _score_positions(r),   # 持仓 17%
+            'B': _score_basis_funding(r) # 基差 6%
+        },
+        'B': {  # B层：调制器（4因子，权重0%）
+            'L': _score_liquidity(r),     # 流动性调制器
+            'S': _score_structure(r),     # 结构调制器
+            'F': _score_fund_leading(r),  # 资金领先调制器
+            'I': _score_independence(r)   # 独立性调制器
+        }
+    }
 
 def _conviction_and_side(r: Dict[str, Any], seven: Tuple[int,int,int,int,int,int,int]) -> Tuple[int, str]:
     # 优先使用概率 P（转换为百分比）
@@ -751,119 +795,107 @@ def format_factor_with_weight(
 
 def render_weights_summary(r: Dict[str, Any]) -> str:
     """
-    渲染权重汇总表（显示所有因子的权重和贡献）
+    v6.6架构：渲染权重汇总表
+
+    显示：
+    - 🔵 A层：方向判断（6因子，权重100%）
+    - ⚙️ B层：调制器（4因子，权重0%）
 
     Returns:
         权重汇总字符串（表格格式）
     """
-    # 获取分数
-    T, M, C, S, V, OI, L, B, Q, I, F = _ten_scores(r)
+    # 获取v6.6分数
+    v66 = _v66_scores(r)
+    A_scores = v66['A']
+    B_scores = v66['B']
 
-    # 获取权重（从结果或使用默认值）
+    # v6.6权重（A层总计100%，B层为0%）
     weights = _get(r, "weights") or {
-        "T": 13.9, "M": 8.3, "C": 11.1, "S": 5.6, "V": 8.3,
-        "O": 11.1, "L": 11.1, "B": 8.3, "Q": 5.6, "I": 6.7, "F": 10.0
+        # A层（方向判断，权重100%）
+        "T": 24.0, "M": 17.0, "C": 24.0, "V": 12.0, "O": 17.0, "B": 6.0,
+        # B层（调制器，权重0%）
+        "L": 0.0, "S": 0.0, "F": 0.0, "I": 0.0
     }
 
     # 计算贡献
     from ats_core.scoring.scorecard import get_factor_contributions
-    scores_dict = {
-        "T": T, "M": M, "C": C, "S": S, "V": V,
-        "O": OI, "L": L, "B": B, "Q": Q, "I": I, "F": F
-    }
+    scores_dict = {**A_scores, **B_scores}
     contributions = get_factor_contributions(scores_dict, weights)
 
     lines = []
-    lines.append("━━━━━ A层：方向因子 ━━━━━")
 
-    # Layer 1: 价格行为层
-    for dim, name in [("T", "趋势"), ("M", "动量"), ("S", "结构"), ("V", "量能")]:
-        if dim in contributions:
-            info = contributions[dim]
-            score = info["score"]
-            weight = info["weight_pct"]
-            contrib = info["contribution"]
-            emoji = _emoji_by_score(score)
-            # 使用现有描述函数
-            if dim == "T":
-                desc = _desc_trend(score, _get(r, "scores_meta.T.Tm"))
-            elif dim == "M":
-                desc = _desc_momentum(score, _get(r, "scores_meta.M.slope_now"))
-            elif dim == "S":
-                desc = _desc_structure(score, _get(r, "scores_meta.S.theta"))
-            elif dim == "V":
-                desc = _desc_volume(score, _get(r, "scores_meta.V.v5v20"))
-            else:
-                desc = ""
+    # ========== A层：方向判断 ==========
+    lines.append("━━━━━ 🔵 A层：方向判断 ━━━━━")
 
-            lines.append(format_factor_with_weight(
-                name, score, weight, contrib, emoji, desc
-            ))
-
-    # Layer 2: 资金流层
-    for dim, name in [("C", "资金流"), ("O", "持仓"), ("F", "资金领先")]:
-        if dim in contributions:
-            info = contributions[dim]
-            score = info["score"]
-            weight = info["weight_pct"]
-            contrib = info["contribution"]
-            emoji = _emoji_by_score(score) if dim != "F" else _emoji_by_fund_leading(score)
-            # 使用现有描述函数
-            if dim == "C":
-                cvd_meta = _get(r, "scores_meta.C") or {}
-                desc = _desc_cvd_flow(
-                    score, True,
-                    cvd_meta.get("cvd6"),
-                    cvd_meta.get("consistency"),
-                    cvd_meta.get("is_consistent")
-                )
-            elif dim == "O":
-                desc = _desc_positions(score, _get(r, "scores_meta.O.oi24h_pct"))
-            elif dim == "F":
-                desc = _desc_fund_leading(score, _get(r, "scores_meta.F.leading_raw"))
-            else:
-                desc = ""
-
-            lines.append(format_factor_with_weight(
-                name, score, weight, contrib, emoji, desc
-            ))
-
-    # Layer 3: 微观结构层
-    for dim, name in [("L", "流动性"), ("B", "基差"), ("Q", "清算")]:
-        if dim in contributions and dim in scores_dict and scores_dict[dim] != 0:
-            info = contributions[dim]
-            score = info["score"]
-            weight = info["weight_pct"]
-            contrib = info["contribution"]
-            emoji = _emoji_by_score(score)
-            # 使用现有描述函数
-            if dim == "L":
-                l_meta = _get(r, "scores_meta.L") or {}
-                desc = _desc_liquidity(score, l_meta.get("spread_bps"), l_meta.get("obi"))
-            elif dim == "B":
-                b_meta = _get(r, "scores_meta.B") or {}
-                desc = _desc_basis_funding(score, b_meta.get("basis_bps"), b_meta.get("funding_rate"))
-            elif dim == "Q":
-                desc = _desc_liquidation(score, _get(r, "scores_meta.Q.lti"))
-            else:
-                desc = ""
-
-            lines.append(format_factor_with_weight(
-                name, score, weight, contrib, emoji, desc
-            ))
-
-    # Layer 4: 市场环境层
-    if "I" in contributions and I != 0:
-        info = contributions["I"]
-        lines.append(format_factor_with_weight(
-            "独立性", info["score"], info["weight_pct"], info["contribution"],
-            _emoji_by_score(info["score"]),
-            _desc_independence(info["score"], _get(r, "scores_meta.I.beta_sum"))
+    # A层6因子（使用圆形图标区分正负）
+    a_factors = [
+        ("T", "趋势", lambda: _desc_trend(A_scores["T"], _get(r, "scores_meta.T.Tm"))),
+        ("M", "动量", lambda: _desc_momentum(A_scores["M"], _get(r, "scores_meta.M.slope_now"))),
+        ("C", "资金", lambda: _desc_cvd_flow(
+            A_scores["C"], True,
+            _get(r, "scores_meta.C.cvd6"),
+            _get(r, "scores_meta.C.consistency"),
+            _get(r, "scores_meta.C.is_consistent")
+        )),
+        ("V", "量能", lambda: _desc_volume(A_scores["V"], _get(r, "scores_meta.V.v5v20"))),
+        ("O", "持仓", lambda: _desc_positions(A_scores["O"], _get(r, "scores_meta.O.oi24h_pct"))),
+        ("B", "基差", lambda: _desc_basis_funding(
+            A_scores["B"],
+            _get(r, "scores_meta.B.basis_bps"),
+            _get(r, "scores_meta.B.funding_rate")
         ))
+    ]
 
-    # 总分
+    for dim, name, desc_fn in a_factors:
+        if dim in contributions:
+            info = contributions[dim]
+            score = info["score"]
+            weight = info["weight_pct"]
+            contrib = info["contribution"]
+
+            # 使用圆形图标（蓝色系）
+            if score > 60:
+                emoji = "🔵"  # 强正向
+            elif score > 20:
+                emoji = "🟦"  # 正向
+            elif score >= -20:
+                emoji = "⚪"  # 中性
+            elif score >= -60:
+                emoji = "🟥"  # 负向
+            else:
+                emoji = "🔴"  # 强负向
+
+            desc = desc_fn()
+            lines.append(format_factor_with_weight(
+                name, score, weight, contrib, emoji, desc
+            ))
+
+    # A层总分
     weighted_score = contributions.get("weighted_score", 0)
-    lines.append(f"\n加权总分: {weighted_score:+d}")
+    lines.append(f"\n💎 加权总分: {weighted_score:+d}")
+
+    # ========== B层：调制器 ==========
+    lines.append("\n━━━━━ ⚙️ B层：调制器 ━━━━━")
+    lines.append("（权重0%，仅调节执行参数）")
+
+    # B层4调制器（使用齿轮/工具图标）
+    b_modulators = [
+        ("L", "流动性", "⚡", lambda: _desc_liquidity(
+            B_scores["L"],
+            _get(r, "scores_meta.L.spread_bps"),
+            _get(r, "scores_meta.L.obi")
+        )),
+        ("S", "结构", "🎯", lambda: _desc_structure(B_scores["S"], _get(r, "scores_meta.S.theta"))),
+        ("F", "资金领先", "🔧", lambda: _desc_fund_leading(B_scores["F"], _get(r, "scores_meta.F.leading_raw"))),
+        ("I", "独立性", "⚙️", lambda: _desc_independence(B_scores["I"], _get(r, "scores_meta.I.beta_sum")))
+    ]
+
+    for dim, name, emoji, desc_fn in b_modulators:
+        score = B_scores[dim]
+        if score != 0:  # 只显示非零的调制器
+            desc = desc_fn()
+            # B层不显示权重和贡献，只显示分数和描述
+            lines.append(f"{emoji} {name} {score:+d}  {desc}")
 
     return "\n".join(lines)
 
@@ -911,111 +943,168 @@ def render_prime_breakdown(r: Dict[str, Any]) -> str:
 
 def render_four_gates(r: Dict[str, Any]) -> str:
     """
-    渲染四门验证状态
+    v6.6架构：渲染四门槛质量控制状态
+
+    显示：
+    - 🚪 Gate 1: DataQual（数据质量）
+    - 💰 Gate 2: EV（期望值）
+    - ⚡ Gate 3: Execution（执行质量）
+    - 🎯 Gate 4: Probability（概率门槛）
 
     Returns:
         四门验证字符串
     """
     lines = []
-    lines.append("━━━━━ D层：四门验证 ━━━━━")
+    lines.append("━━━━━ 🚪 四门槛：质量控制 ━━━━━")
 
-    # Gate 1: DataQual
-    data_qual = _get(r, "data_quality") or _get(r, "DataQual") or 1.0
+    # 获取gate数据
+    gates_data = _get(r, "gates") or {}
+
+    # 🚪 Gate 1: DataQual（数据质量）
+    data_qual = _get(r, "data_quality") or _get(r, "DataQual") or gates_data.get("data_qual", 1.0)
+    gate1_value = data_qual
     gate1_pass = data_qual >= 0.90
-    lines.append(
-        f"{'✅' if gate1_pass else '❌'} Gate1 数据质量: "
-        f"{data_qual:.2%} {'≥' if gate1_pass else '<'} 90%"
-    )
 
-    # Gate 2: EV > 0
-    ev = _get(r, "expected_value") or _get(r, "EV") or 0
+    lines.append(f"\n🚪 Gate 1：数据质量")
+    lines.append(f"   {'✅' if gate1_pass else '❌'} DataQual = {data_qual:.2%} {'≥' if gate1_pass else '<'} 90%")
+    if not gate1_pass:
+        lines.append(f"   ⚠️ 数据质量不足，Prime强度降低")
+
+    # 💰 Gate 2: EV（期望值）
+    ev = _get(r, "expected_value") or _get(r, "EV") or gates_data.get("ev", 0)
     gate2_pass = ev > 0
-    lines.append(
-        f"{'✅' if gate2_pass else '❌'} Gate2 期望值: "
-        f"{ev:+.2%} {'>' if gate2_pass else '≤'} 0"
-    )
 
-    # Gate 3: Execution (Spread/Impact/OBI)
+    lines.append(f"\n💰 Gate 2：期望值")
+    lines.append(f"   {'✅' if gate2_pass else '❌'} EV = {ev:+.2%} {'>' if gate2_pass else '≤'} 0")
+    if not gate2_pass:
+        lines.append(f"   ⚠️ 负期望值，Prime强度最多降低30%")
+
+    # ⚡ Gate 3: Execution（执行质量，基于L流动性）
+    L_score = _get(r, "L") or 0
+    gates_execution = 0.5 + L_score / 200.0  # L映射到[0, 1]
     spread_bps = _get(r, "scores_meta.L.spread_bps") or 0
     impact_bps = _get(r, "slippage_bps") or 0
-    obi = _get(r, "scores_meta.L.obi") or 0
 
-    # 执行门槛（示例）
-    spread_ok = spread_bps < 20  # 20bps
-    impact_ok = impact_bps < 30  # 30bps
-    gate3_pass = spread_ok and impact_ok
+    lines.append(f"\n⚡ Gate 3：执行质量")
+    lines.append(f"   执行评分: {gates_execution:.2f} (基于L={L_score:+d})")
+    lines.append(f"   点差: {spread_bps:.1f}bps, 冲击: {impact_bps:.1f}bps")
+    if gates_execution < 0.5:
+        lines.append(f"   ⚠️ 流动性较差，Prime强度降低{(1-gates_execution)*100:.0f}%")
 
-    lines.append(
-        f"{'✅' if gate3_pass else '❌'} Gate3 执行成本: "
-        f"点差{spread_bps:.1f}bps, 冲击{impact_bps:.1f}bps"
-    )
-
-    # Gate 4: Probability thresholds
+    # 🎯 Gate 4: Probability（概率门槛）
     probability = _get(r, "probability") or 0.5
-    p_min = _get(r, "p_min") or 0.62
-    delta_p = abs(probability - 0.5)
-    delta_p_min = _get(r, "delta_p_min") or 0.12
+    p_min = _get(r, "p_min") or 0.58
+    gates_probability = 2 * probability - 1
 
-    gate4_prob = probability >= p_min
-    gate4_delta = delta_p >= delta_p_min
-    gate4_pass = gate4_prob and gate4_delta
+    lines.append(f"\n🎯 Gate 4：概率门槛")
+    lines.append(f"   概率: P = {probability:.1%}")
+    lines.append(f"   门槛: p_min = {p_min:.1%}")
+    lines.append(f"   概率评分: {gates_probability:.2f}")
+    if probability < p_min:
+        lines.append(f"   ⚠️ 概率低于门槛，Prime强度降低")
 
-    lines.append(
-        f"{'✅' if gate4_prob else '❌'} Gate4a 概率阈值: "
-        f"P={probability:.1%} {'≥' if gate4_prob else '<'} {p_min:.1%}"
-    )
-    lines.append(
-        f"{'✅' if gate4_delta else '❌'} Gate4b 偏离阈值: "
-        f"ΔP={delta_p:.1%} {'≥' if gate4_delta else '<'} {delta_p_min:.1%}"
-    )
+    # gate_multiplier影响（v6.6关键机制）
+    gate_multiplier = _get(r, "gate_multiplier") or 1.0
+    strength_before = _get(r, "prime_breakdown.strength_before_gates") or 0
+    strength_after = _get(r, "prime_breakdown.strength_after_gates") or 0
 
-    # 总体验证状态
-    all_pass = gate1_pass and gate2_pass and gate3_pass and gate4_pass
-    lines.append(
-        f"\n{'🎉 全部通过' if all_pass else '⚠️ 部分未通过'}"
-    )
+    lines.append(f"\n🔗 四门槛综合影响:")
+    lines.append(f"   gate_multiplier = {gate_multiplier:.3f}")
+    if strength_before > 0 and strength_after > 0:
+        impact_pct = (strength_after - strength_before) / strength_before * 100
+        lines.append(f"   Prime强度: {strength_before:.1f} → {strength_after:.1f} ({impact_pct:+.1f}%)")
+    else:
+        lines.append(f"   Prime强度调节: ×{gate_multiplier:.3f}")
+
+    # 总体状态
+    if gate_multiplier >= 0.95:
+        status = "🟢 优秀（几乎无惩罚）"
+    elif gate_multiplier >= 0.85:
+        status = "🟡 良好（轻微惩罚）"
+    elif gate_multiplier >= 0.70:
+        status = "🟠 一般（中度惩罚）"
+    else:
+        status = "🔴 较差（显著惩罚）"
+
+    lines.append(f"\n整体评级: {status}")
 
     return "\n".join(lines)
 
 
 def render_modulators(r: Dict[str, Any]) -> str:
     """
-    渲染调节器详细信息（F资金领先、I独立性）
+    v6.6架构：渲染B层调制器详细信息
+
+    显示所有4个B层调制器（L/S/F/I）及其调制效果：
+    - ⚡ L流动性 → position_mult, cost
+    - 🎯 S结构   → confidence, Teff
+    - 🔧 F资金领先→ Teff, p_min
+    - ⚙️ I独立性 → Teff, cost
 
     Returns:
         调节器信息字符串
     """
     lines = []
-    lines.append("━━━━━ B层：调制器 ━━━━━")
+    lines.append("━━━━━ ⚙️ B层：调制器 ━━━━━")
+    lines.append("（权重0%，仅调节执行参数）\n")
 
-    # F 资金领先
-    F_score = _get(r, "F_score") or _get(r, "F") or 0
-    F_adjustment = _get(r, "F_adjustment") or 1.0
-    f_desc = _desc_fund_leading(F_score)
-    f_emoji = _emoji_by_fund_leading(F_score)
+    # 获取modulator_output（如果有）
+    mod_output = _get(r, "modulator_output") or {}
 
-    lines.append(f"{f_emoji} F资金领先 {F_score:+d}: {f_desc}")
-    lines.append(f"   └─ 概率调整因子: ×{F_adjustment:.2f}")
+    # ⚡ L流动性调制器
+    L_score = _get(r, "L") or 0
+    position_mult = mod_output.get("position_mult", 1.0) if mod_output else 1.0
+    cost_eff_L = mod_output.get("cost_eff_L", 0.0) if mod_output else 0.0
 
-    # F否决警告
-    f_veto_warning = _get(r, "f_veto_warning")
-    if f_veto_warning:
-        lines.append(f"   └─ ⚠️ {f_veto_warning}")
+    l_desc = _desc_liquidity(L_score, _get(r, "scores_meta.L.spread_bps"), _get(r, "scores_meta.L.obi"))
+    lines.append(f"⚡ L流动性 {L_score:+d}: {l_desc}")
+    lines.append(f"   └─ 仓位调节: {position_mult:.0%}")
+    if cost_eff_L != 0:
+        lines.append(f"   └─ 成本调节: {cost_eff_L:+.2%}")
 
-    # I 独立性（如果有）
+    # 🎯 S结构调制器
+    S_score = _get(r, "S") or 0
+    confidence_mult = mod_output.get("confidence_mult", 1.0) if mod_output else 1.0
+    Teff_S = mod_output.get("Teff_S", 1.0) if mod_output else 1.0
+
+    s_desc = _desc_structure(S_score, _get(r, "scores_meta.S.theta"))
+    lines.append(f"\n🎯 S结构 {S_score:+d}: {s_desc}")
+    if confidence_mult != 1.0:
+        lines.append(f"   └─ 信心倍数: ×{confidence_mult:.2f}")
+    if Teff_S != 1.0:
+        lines.append(f"   └─ 温度倍数: ×{Teff_S:.2f}")
+
+    # 🔧 F资金领先调制器
+    F_score = _get(r, "F") or 0
+    Teff_F = mod_output.get("Teff_F", 1.0) if mod_output else 1.0
+    p_min_adj = mod_output.get("p_min_adj", 0.0) if mod_output else 0.0
+
+    f_desc = _desc_fund_leading(F_score, _get(r, "scores_meta.F.leading_raw"))
+    lines.append(f"\n🔧 F资金领先 {F_score:+d}: {f_desc}")
+    if Teff_F != 1.0:
+        lines.append(f"   └─ 温度倍数: ×{Teff_F:.2f}")
+    if p_min_adj != 0:
+        lines.append(f"   └─ p_min调整: {p_min_adj:+.2%}")
+
+    # ⚙️ I独立性调制器
     I_score = _get(r, "I") or 0
-    if I_score != 0:
-        i_desc = _desc_independence(I_score, _get(r, "scores_meta.I.beta_sum"))
-        i_emoji = _emoji_by_score(I_score)
-        p_min_base = 0.62
-        p_min_adjusted = _get(r, "p_min") or p_min_base
-        p_min_delta = p_min_adjusted - p_min_base
+    Teff_I = mod_output.get("Teff_I", 1.0) if mod_output else 1.0
+    cost_eff_I = mod_output.get("cost_eff_I", 0.0) if mod_output else 0.0
 
-        lines.append(f"\n{i_emoji} I独立性 {I_score:+d}: {i_desc}")
-        if p_min_delta != 0:
-            lines.append(f"   └─ p_min调整: {p_min_base:.2%} → {p_min_adjusted:.2%} ({p_min_delta:+.2%})")
-        else:
-            lines.append(f"   └─ p_min: {p_min_base:.2%}（无调整）")
+    i_desc = _desc_independence(I_score, _get(r, "scores_meta.I.beta_sum"))
+    lines.append(f"\n⚙️ I独立性 {I_score:+d}: {i_desc}")
+    if Teff_I != 1.0:
+        lines.append(f"   └─ 温度倍数: ×{Teff_I:.2f}")
+    if cost_eff_I != 0:
+        lines.append(f"   └─ 成本调节: {cost_eff_I:+.2%}")
+
+    # 融合结果（如果有）
+    if mod_output:
+        Teff_final = mod_output.get("Teff_final", 2.0)
+        cost_final = mod_output.get("cost_final", 0.0015)
+        lines.append(f"\n🔗 融合结果:")
+        lines.append(f"   └─ 最终温度: {Teff_final:.3f}")
+        lines.append(f"   └─ 最终成本: {cost_final:.4f} ({cost_final*10000:.1f}bps)")
 
     return "\n".join(lines)
 
