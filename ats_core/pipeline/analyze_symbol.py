@@ -890,13 +890,13 @@ def _analyze_symbol_core(
     # 调用对应版本的检测函数
     try:
         if accumulation_version == "v2":
-            detection_result = detect_accumulation_v2(factors_dict, meta_dict, accumulation_cfg.get("v2", {}))
+            is_accumulating, accumulating_reason, adjusted_threshold = detect_accumulation_v2(
+                factors_dict, meta_dict, accumulation_cfg.get("v2", {})
+            )
         else:
-            detection_result = detect_accumulation_v1(factors_dict, meta_dict, accumulation_cfg.get("v1", {}))
-
-        is_accumulating = detection_result["is_accumulating"]
-        accumulating_reason = detection_result["reason"]
-        adjusted_threshold = detection_result["adjusted_threshold"]
+            is_accumulating, accumulating_reason, adjusted_threshold = detect_accumulation_v1(
+                factors_dict, meta_dict, accumulation_cfg.get("v1", {})
+            )
 
         # 应用调整后的阈值
         if is_accumulating:
