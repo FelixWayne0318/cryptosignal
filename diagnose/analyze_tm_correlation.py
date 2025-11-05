@@ -28,17 +28,64 @@ from typing import List, Dict, Tuple
 from datetime import datetime, timedelta
 
 
-def load_factor_history(symbol: str, factor_name: str, days: int = 30) -> List[float]:
+def load_factor_history(symbol: str, factor_name: str, days: int = 30, use_realtime: bool = False) -> List[float]:
     """
     加载历史因子数据
 
-    注意：这是一个占位实现，实际需要从系统日志或数据库中读取
+    Args:
+        symbol: 交易对符号
+        factor_name: 因子名称（'T' 或 'M'）
+        days: 天数
+        use_realtime: 是否使用实时计算（调用analyze_symbol）
+
+    注意：
+    - use_realtime=False: 使用模拟数据（默认，用于测试）
+    - use_realtime=True: 调用analyze_symbol实时计算（慢，但使用真实数据）
+    - 生产环境建议：从日志文件或时序数据库读取历史因子值
+
+    实际生产实现建议：
+    1. 从Redis/InfluxDB等时序数据库读取历史因子值
+    2. 从系统日志文件中解析因子值
+    3. 从专门的因子存储表中查询
     """
-    # TODO: 实际实现需要从系统中读取历史因子数据
-    # 这里提供一个模拟实现用于测试
 
-    print(f"  [警告] 当前为模拟数据，实际使用需要实现从日志/数据库读取")
+    if use_realtime:
+        # 实时计算选项：调用analyze_symbol获取当前因子值
+        # 注意：这只能获取当前快照，无法获取历史序列
+        # 如需历史序列，需要实现专门的存储机制
+        try:
+            from ats_core.pipeline.analyze_symbol import analyze_symbol
+            result = analyze_symbol(symbol)
+            if result.get('success') and factor_name in result:
+                # 只能获取单个点，无法构建历史序列
+                # 返回重复值作为占位（实际应该有历史存储）
+                current_value = result[factor_name]
+                print(f"  [实时] {symbol} 当前{factor_name}={current_value}")
+                print(f"  [警告] 实时模式只能获取当前值，历史序列仍为模拟数据")
+                # 生成模拟历史，但最新值使用真实值
+                history = _generate_simulated_history(symbol, factor_name, days)
+                history[-1] = current_value  # 最后一个点使用真实值
+                return history
+        except Exception as e:
+            print(f"  [错误] 实时计算失败: {e}，降级到模拟数据")
 
+    # 模拟数据模式（默认）
+    print(f"  [模拟] {symbol} {factor_name}因子使用模拟数据")
+    return _generate_simulated_history(symbol, factor_name, days)
+
+
+def _generate_simulated_history(symbol: str, factor_name: str, days: int) -> List[float]:
+    """
+    生成模拟历史数据（用于测试）
+
+    Args:
+        symbol: 交易对符号
+        factor_name: 因子名称
+        days: 天数
+
+    Returns:
+        模拟的历史因子值列表
+    """
     # 模拟数据：生成相关性约0.6的T和M
     np.random.seed(hash(symbol) % 2**32)
     n = days * 24  # 假设每小时一个数据点
@@ -50,7 +97,7 @@ def load_factor_history(symbol: str, factor_name: str, days: int = 30) -> List[f
         return list(T)
     elif factor_name == 'M':
         # M因子：动量，与T有一定相关但不完全一致
-        T = load_factor_history(symbol, 'T', days)
+        T = _generate_simulated_history(symbol, 'T', days)
         noise = np.random.randn(len(T)) * 30
         M = 0.6 * np.array(T) + 0.4 * noise  # 模拟0.6左右的相关性
         M = np.clip(M, -100, 100)
