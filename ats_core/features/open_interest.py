@@ -18,6 +18,13 @@ P0.3改进（自适应阈值）：
 P1.2改进（Notional OI）：
 - 使用名义持仓量（OI × 价格）而非合约张数
 - 解决跨币种比较不准确问题（BTC vs 山寨币合约乘数差异）
+
+v2.5++最终方案（2025-11-05）：
+- 使用相对历史归一化（与CVD/M一致）
+- 核心理念：判断OI变化方向和速度，与绝对持仓量无关
+- 相对强度 = 当前OI斜率 / 历史平均OI斜率
+- 自动适应不同币种的持仓规模特征
+- 解决不同持仓规模币种的跨币种可比性问题
 """
 from statistics import median
 from typing import Dict, Tuple, Any, List, Optional
@@ -264,6 +271,9 @@ def score_open_interest(symbol: str,
     r_squared = 0.0
     is_consistent = False
     outliers_filtered = 0
+    normalization_method = "median_fallback"  # v2.5++: 默认归一化方法
+    avg_abs_oi_slope = None  # v2.5++: 历史平均斜率
+    slope = 0.0  # v2.5++: 当前斜率
 
     # 旧方法：oi24 = pct(oi[-1], oi[-25], den)  # 简单两点比较
     # 新方法：线性回归斜率 + R²验证 + 异常值过滤
@@ -285,11 +295,38 @@ def score_open_interest(symbol: str,
         # 线性回归分析
         slope, r_squared = _linreg_r2(oi_window)
 
-        # 归一化斜率（除以中位数，避免量级差异）
-        slope_normalized = slope / max(1e-12, den)
+        # ========== v2.5++: 相对历史归一化（与CVD/M一致） ==========
+        # 计算历史所有24小时窗口的斜率
+        use_historical_norm = (len(oi) >= 50)  # 至少50个数据点（约2天历史）
+        if use_historical_norm:
+            hist_oi_slopes = []
+            for i in range(25, len(oi)):
+                window = oi[i-24:i+1]
+                if len(window) == 25:
+                    s, _ = _linreg_r2(window)
+                    hist_oi_slopes.append(s)
 
-        # 24小时总变化 = 斜率 × 24（平均每小时 × 小时数）
-        oi24_trend = slope_normalized * 24
+            # 计算历史平均绝对斜率
+            if len(hist_oi_slopes) >= 10:
+                avg_abs_oi_slope = sum(abs(s) for s in hist_oi_slopes) / len(hist_oi_slopes)
+                avg_abs_oi_slope = max(1e-12, avg_abs_oi_slope)
+
+                # 相对强度归一化
+                slope_normalized = slope / avg_abs_oi_slope
+                oi24_trend = slope_normalized * 2.0  # scale调整（相对强度范围不同）
+                normalization_method = "relative_historical"
+            else:
+                # Fallback: 中位数归一化
+                slope_normalized = slope / max(1e-12, den)
+                oi24_trend = slope_normalized * 24
+                normalization_method = "median_fallback"
+                avg_abs_oi_slope = None
+        else:
+            # Fallback: 中位数归一化（历史数据不足）
+            slope_normalized = slope / max(1e-12, den)
+            oi24_trend = slope_normalized * 24
+            normalization_method = "median_fallback"
+            avg_abs_oi_slope = None
 
         # R²持续性验证（与CVD一致）
         is_consistent = (r_squared >= 0.7)
@@ -427,7 +464,8 @@ def score_open_interest(symbol: str,
         else:
             interpretation = "持仓大幅减少"
 
-    return O, {
+    # 构建元数据
+    meta = {
         "oi1h_pct": round(oi1h, 2) if oi1h is not None else None,
         "oi24h_pct": round(oi24, 2) if oi24 is not None else None,
         "upup12": up_up,
@@ -453,4 +491,13 @@ def score_open_interest(symbol: str,
         "threshold_source": threshold_source,  # 'adaptive' or 'legacy'
         # P1.2: Notional OI信息
         "oi_type": oi_type,  # 'contracts' or 'notional_usd'
+        # v2.5++: 相对历史归一化信息
+        "normalization_method": normalization_method,
     }
+
+    # 添加相对强度信息（如果使用历史归一化）
+    if avg_abs_oi_slope is not None:
+        meta["avg_abs_oi_slope"] = round(avg_abs_oi_slope, 6)
+        meta["relative_oi_intensity"] = round(slope / avg_abs_oi_slope, 3)
+
+    return O, meta

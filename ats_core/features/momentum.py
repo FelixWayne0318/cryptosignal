@@ -13,6 +13,13 @@ P2.2改进（2025-11-05）：
 - 问题：T-M因子信息重叠度70.8%（P1.3分析结果）
 - 方案C：M改用短窗口（EMA3/5），T保持长窗口（EMA5/20）
 - 目标：降低重叠度至<50%，实现正交化
+
+v2.5++最终方案（2025-11-05）：
+- 使用相对历史归一化（与CVD一致）
+- 核心理念：判断动量方向和变化速度，与绝对量无关
+- 相对强度 = 当前斜率/加速度 / 历史平均值
+- 自动适应每个币种的历史波动特征
+- 解决不同波动率币种的跨币种可比性问题
 """
 from typing import List, Tuple, Dict, Any
 from .ta_core import ema, atr
@@ -47,15 +54,16 @@ def score_momentum(
     """
     # 默认参数
     # P2.2修改：使用短窗口EMA与T因子正交化
+    # v2.5++: 相对历史归一化，scale需要调整（相对强度范围不同）
     default_params = {
         "ema_fast": 3,             # P2.2新增：超短期EMA（vs T的EMA5）
         "ema_slow": 5,             # P2.2新增：短期EMA（vs T的EMA20）
         "slope_lookback": 6,       # P2.2修改：12→6，减少窗口长度
-        "slope_scale": 1.00,       # 斜率scale（修复：0.01→0.30→1.00，避免过度饱和）
-        "accel_scale": 1.00,       # 加速度scale（修复：0.005→0.30→1.00，避免过度饱和）
+        "slope_scale": 2.00,       # v2.5++修改：1.00→2.00（相对强度用更大scale）
+        "accel_scale": 2.00,       # v2.5++修改：1.00→2.00（相对强度用更大scale）
         "slope_weight": 0.6,       # 斜率权重
         "accel_weight": 0.4,       # 加速度权重
-        "atr_period": 14,          # ATR周期
+        "atr_period": 14,          # ATR周期（降级方案使用）
     }
 
     p = dict(default_params)
@@ -88,12 +96,71 @@ def score_momentum(
     # 加速度 = 动量的变化（EMA差值的变化）
     accel = momentum_now - momentum_prev
 
-    # ========== 2. 归一化到真实ATR ==========
-    # 使用真实ATR而非价格代理（修复：原来的atr_proxy导致M分数被低估50-70%）
-    atr_values = atr(h, l, c, p["atr_period"])
-    atr_val = atr_values[-1] if atr_values else 1.0
-    slope_normalized = slope_now / max(1e-9, atr_val)
-    accel_normalized = accel / max(1e-9, atr_val)
+    # ========== 2. 归一化方案选择 ==========
+    # v2.5++最终方案：相对历史归一化（与CVD一致）
+    # 核心理念：判断动量方向和变化速度，与绝对量无关
+
+    use_historical_norm = (len(c) >= 30)  # 至少30个数据点
+    if use_historical_norm:
+        # 2.1 计算历史所有slope和accel
+        hist_slopes = []
+        hist_accels = []
+
+        for i in range(lookback * 2, len(ema_fast_values)):
+            # 历史每个窗口的斜率
+            s = (ema_fast_values[i] - ema_fast_values[i - lookback]) / (lookback - 1)
+            hist_slopes.append(s)
+
+            # 历史每个窗口的加速度（如果有足够数据）
+            if i >= lookback * 3:
+                # 当前动量
+                mom_now = sum(ema_fast_values[i-j] - ema_slow_values[i-j]
+                             for j in range(0, lookback)) / lookback
+                # 前期动量
+                mom_prev = sum(ema_fast_values[i-lookback-j] - ema_slow_values[i-lookback-j]
+                              for j in range(0, lookback)) / lookback
+                a = mom_now - mom_prev
+                hist_accels.append(a)
+
+        # 2.2 计算历史平均绝对值（代表"正常"变化速度）
+        if len(hist_slopes) >= 10:
+            avg_abs_slope = sum(abs(s) for s in hist_slopes) / len(hist_slopes)
+            avg_abs_slope = max(1e-8, avg_abs_slope)
+        else:
+            avg_abs_slope = None
+
+        if len(hist_accels) >= 10:
+            avg_abs_accel = sum(abs(a) for a in hist_accels) / len(hist_accels)
+            avg_abs_accel = max(1e-8, avg_abs_accel)
+        else:
+            avg_abs_accel = None
+    else:
+        avg_abs_slope = None
+        avg_abs_accel = None
+
+    # 2.3 归一化：相对强度 or ATR fallback
+    if avg_abs_slope is not None:
+        # 相对强度归一化
+        slope_normalized = slope_now / avg_abs_slope
+        normalization_method = "relative_historical"
+    else:
+        # 降级方案：ATR归一化（历史数据不足时）
+        atr_values = atr(h, l, c, p["atr_period"])
+        atr_val = atr_values[-1] if atr_values else 1.0
+        slope_normalized = slope_now / max(1e-9, atr_val)
+        normalization_method = "atr_fallback"
+
+    if avg_abs_accel is not None:
+        # 相对强度归一化
+        accel_normalized = accel / avg_abs_accel
+    else:
+        # 降级方案：ATR归一化
+        if normalization_method == "atr_fallback":
+            atr_val = atr_values[-1] if atr_values else 1.0
+        else:
+            atr_values = atr(h, l, c, p["atr_period"])
+            atr_val = atr_values[-1] if atr_values else 1.0
+        accel_normalized = accel / max(1e-9, atr_val)
 
     # ========== 3. 软映射评分（±100系统）==========
     # directional_score 返回 10-100，需要映射到 -100到+100
@@ -135,7 +202,7 @@ def score_momentum(
         interpretation = "强势下跌"
 
     # ========== 6. 返回元数据 ==========
-    return M, {
+    meta = {
         "slope_now": round(slope_now, 6),
         "slope_prev": round(slope_prev, 6),
         "accel": round(accel, 6),
@@ -147,5 +214,17 @@ def score_momentum(
         "accel_score": int(accel_score),
         "interpretation": interpretation,
         "p22_version": "short_window",               # P2.2版本标识
-        "ema_config": f"EMA{p['ema_fast']}/{p['ema_slow']}"  # EMA配置
+        "ema_config": f"EMA{p['ema_fast']}/{p['ema_slow']}",  # EMA配置
+        # v2.5++: 相对历史归一化信息
+        "normalization_method": normalization_method,
     }
+
+    # 添加相对强度信息（如果使用历史归一化）
+    if avg_abs_slope is not None:
+        meta["avg_abs_slope"] = round(avg_abs_slope, 6)
+        meta["relative_slope_intensity"] = round(slope_now / avg_abs_slope, 3)
+    if avg_abs_accel is not None:
+        meta["avg_abs_accel"] = round(avg_abs_accel, 6)
+        meta["relative_accel_intensity"] = round(accel / avg_abs_accel, 3)
+
+    return M, meta
