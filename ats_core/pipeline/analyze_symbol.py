@@ -656,7 +656,8 @@ def _analyze_symbol_core(
 
     # 应用F调制器的p_min调整
     p_min_adjusted = p_min + modulator_output.p_min_adj
-    p_min_adjusted = max(0.45, min(0.65, p_min_adjusted))  # 限制在[0.45, 0.65]，匹配Anti-Jitter
+    # P2.5+信号过滤：移除0.65上限，提高到0.75以减少80%信号
+    p_min_adjusted = max(0.50, min(0.75, p_min_adjusted))  # 限制在[0.50, 0.75]
 
     # 检查P是否低于阈值
     p_below_threshold = P_chosen < p_min_adjusted
@@ -920,8 +921,9 @@ def _analyze_symbol_core(
             accumulating_reason = "深度蓄势(F≥85+C≥70+V<0+T<30)"
             prime_strength_threshold = 38  # 稍微提高一点要求
 
-    # Prime判定：使用币种特定阈值（可能被蓄势通道降低）
-    is_prime = (prime_strength >= prime_strength_threshold)
+    # Prime判定：使用币种特定阈值（可能被蓄势通道降低）+ P值硬约束
+    # P2.5+信号过滤：加入P值硬约束，必须P>=p_min_adjusted才能发布
+    is_prime = (prime_strength >= prime_strength_threshold) and (P_chosen >= p_min_adjusted)
     is_watch = False  # 不再发布Watch信号
 
     # v6.3新增：拒绝原因跟踪（专家建议 #5）
@@ -936,6 +938,8 @@ def _analyze_symbol_core(
                 rejection_reason.append(f"  - 综合置信度低({confidence:.1f}/100)")
             if prob_bonus < 5:
                 rejection_reason.append(f"  - 概率加成不足({prob_bonus:.1f}/40, P={P_chosen:.3f})")
+        if P_chosen < p_min_adjusted:
+            rejection_reason.append(f"概率过低({P_chosen:.3f} < {p_min_adjusted:.3f})")
         if dims_ok < prime_dims_ok_min:
             rejection_reason.append(f"达标维度不足({dims_ok} < {prime_dims_ok_min})")
         if P_chosen < prime_prob_min:
@@ -987,7 +991,8 @@ def _analyze_symbol_core(
                 P_short = P_chosen
 
             prime_strength = prime_strength_filtered
-            is_prime = (prime_strength >= prime_strength_threshold)  # v6.3.2: 使用币种特定阈值
+            # P2.5+: 重新判定is_prime，加入P值硬约束
+            is_prime = (prime_strength >= prime_strength_threshold) and (P_chosen >= p_min_adjusted)
 
         penalty_reason = market_adjustment_reason
 

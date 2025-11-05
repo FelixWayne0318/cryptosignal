@@ -84,7 +84,7 @@ def score_fund_leading(
         "cvd_scale": 0.02,      # CVD 变化 0.02 给约 69 分
         "price_scale": 3.0,     # 价格变化 3% 给约 69 分
         "slope_scale": 0.01,    # 斜率 0.01 给约 69 分
-        "leading_scale": 50.0,  # P2.4修复: 20.0→50.0，避免饱和（领先性的缩放系数）
+        "leading_scale": 100.0,  # P2.5+修复: 50.0→100.0，进一步避免饱和（leading_raw范围±200）
         # P0.4: Crowding veto参数
         "crowding_veto_enabled": True,   # 是否启用crowding veto
         "crowding_percentile": 90,        # 极端值判定百分位（90分位）
