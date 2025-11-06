@@ -1,9 +1,9 @@
-# CryptoSignal v6.4 Phase 2
+# CryptoSignal v6.7
 
-> **加密货币信号分析系统 - 9+2因子体系**
-> v6.4 Phase 2: 新币数据流架构改造完成
+> **加密货币信号分析系统 - 6因子+4调制器架构**
+> v6.7: P2.2权重优化 - 基于T-M相关性分析
 >
-> **因子系统**: A层9因子(T/M/C/S/V/O/L/B/Q) + B层2调制器(F/I)
+> **因子系统**: A层6因子(T/M/C/V/O/B) + B层4调制器(L/S/F/I)
 
 ---
 
@@ -13,16 +13,13 @@
 
 ```bash
 cd ~/cryptosignal
-git fetch origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
-git checkout claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
-git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
-./deploy_and_run.sh  # 全自动：检测环境、安装依赖、部署、启动
+./setup.sh  # 全自动：检测环境、安装依赖、部署、启动
 ```
 
 **功能**:
-- ✅ 自动环境检测
+- ✅ 自动环境检测（Python、pip、git、screen）
 - ✅ 自动依赖安装
-- ✅ 首次部署引导
+- ✅ 自动配置检查
 - ✅ 自动启动系统
 
 详细文档见: [standards/deployment/DEPLOYMENT_GUIDE.md](standards/deployment/DEPLOYMENT_GUIDE.md)
@@ -31,7 +28,7 @@ git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 
 ## 📚 规范文档体系
 
-> ⚠️ **重要**: 所有规范文档已重组并统一到 `standards/` 目录
+> ⚠️ **重要**: 所有规范文档已统一到 `standards/` 目录
 
 ### 快速导航
 
@@ -50,19 +47,22 @@ git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 
 ## 🎯 系统版本
 
-**当前版本**: v6.4 Phase 2
-**更新日期**: 2025-11-02
+**当前版本**: v6.7
+**更新日期**: 2025-11-05
 
-### 版本历史
+### v6.7 核心改进
 
-| 版本 | 日期 | 关键特性 | 合规度 |
-|------|------|---------|--------|
-| v6.0 | 2025-10-30 | 10+1维因子系统 | - |
-| v6.1 | 2025-11-01 | I因子架构修正 | - |
-| v6.2 | 2025-11-02 | 4个Critical Bug修复 | - |
-| v6.3 | 2025-11-02 | 解决0信号困境 | - |
-| v6.3.2 | 2025-11-02 | 新币逻辑冲突修复 | 12.8% |
-| **v6.4** | **2025-11-02** | **新币数据流架构改造** | **40%** |
+✅ **P2.2权重优化**
+- 降低M因子权重（17%→10%）减少与T因子信息重叠（相关性66.4%）
+- 强化资金流分析：C因子（24%→27%）、O因子（17%→21%）
+
+✅ **6+4因子架构**
+- A层6因子: T/M/C/V/O/B（权重总和100%，方向评分）
+- B层4调制器: L/S/F/I（权重0%，仅调节执行参数）
+
+✅ **软约束系统**
+- EV≤0和P<p_min标记但不拒绝信号
+- 仅DataQual≥0.90为硬门槛
 
 详见: [standards/03_VERSION_HISTORY.md](standards/03_VERSION_HISTORY.md)
 
@@ -70,32 +70,14 @@ git pull origin claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
 
 ## 📦 主要功能
 
-### v6.4 Phase 2 核心改进
-
-✅ **新币数据流分离**
-- 数据获取前快速预判
-- 新币使用1m/5m/15m数据（vs 成熟币1h/4h）
-- AVWAP锚点计算
-
-✅ **WebSocket实时订阅**
-- kline_1m/5m/15m实时流
-- 指数回退重连
-- 心跳监控与DataQual降级
-
-✅ **架构性改进**
-- 解决数据获取顺序倒置问题
-- 为Phase 3新币专用因子做准备
-
-详见: [standards/specifications/NEWCOIN.md](standards/specifications/NEWCOIN.md)
-
 ### 核心系统
 
-- **9+2因子系统**
-  - A层9因子: T/M/C/S/V/O/L/B/Q (权重总和100%)
-  - B层2调制器: F/I (权重0%，仅调节参数)
+- **6+4因子系统**
+  - A层6因子: T/M/C/V/O/B (权重总和100%，方向评分)
+  - B层4调制器: L/S/F/I (权重0%，调节position/Teff/cost/confidence)
 - **四门系统** (DataQual/EV/Execution/Probability)
-- **防抖动机制** (入场/确认/冷却)
-- **新币通道** (Phase 2已实现数据流，Phase 3-4待完成)
+- **防抖动机制** (K/N=1/2入场确认)
+- **三层止损** (结构>订单簿>ATR)
 
 ---
 
@@ -135,25 +117,24 @@ python3 scripts/realtime_signal_scanner.py --interval 300
 - **`config/telegram.json`** - Telegram通知配置
 - **`config/binance_credentials.json`** - Binance API凭证
 
-### 修改权重
+### 当前权重配置（v6.7 P2.2）
 
-**实际生效权重** (v6.1 - I因子架构修复版):
 ```json
 {
   "weights": {
-    "T": 18.0, "M": 12.0, "C": 18.0, "S": 10.0,
-    "V": 10.0, "O": 12.0, "L": 12.0, "B": 4.0,
-    "Q": 4.0, "F": 0.0, "I": 0.0
+    "T": 24.0,  "M": 10.0,  "C": 27.0,
+    "V": 12.0,  "O": 21.0,  "B": 6.0,
+    "L": 0.0,   "S": 0.0,   "F": 0.0,   "I": 0.0
   }
 }
 ```
 
-**要求**: A层9因子总和必须=100.0%，B层调制器(F/I)=0%
+**要求**: A层6因子总和必须=100.0%，B层调制器(L/S/F/I)=0%
 
 **权重分层**:
-- Layer 1 (价格行为 50%): T(18%) + M(12%) + S(10%) + V(10%)
-- Layer 2 (资金流 30%): C(18%) + O(12%)
-- Layer 3 (微观结构 20%): L(12%) + B(4%) + Q(4%)
+- Layer 1 (价格行为 46%): T(24%) + M(10%) + V(12%)
+- Layer 2 (资金流 48%): C(27%) + O(21%)
+- Layer 3 (微观结构 6%): B(6%)
 
 详见: [standards/configuration/PARAMS_SPEC.md](standards/configuration/PARAMS_SPEC.md)
 
@@ -178,32 +159,41 @@ cryptosignal/
 ├── ats_core/                    # 核心代码
 │   ├── pipeline/                # 分析流水线
 │   ├── factors_v2/              # 因子计算
+│   ├── modulators/              # 调制器
 │   ├── gates/                   # 四门系统
 │   ├── publishing/              # 发布系统
-│   └── data_feeds/              # 数据获取（Phase 2新增）
+│   └── outputs/                 # 输出格式化
 │
 ├── config/                      # 配置文件
 │   ├── params.json
 │   ├── telegram.json
 │   └── binance_credentials.json
 │
-├── deploy_and_run.sh            # ⭐ 一键部署脚本
-└── test_phase2.py               # Phase 2测试脚本
+├── tests/                       # 测试文件
+├── diagnose/                    # 诊断工具
+├── docs/                        # 文档
+│   ├── analysis/               # 分析报告
+│   └── archive/                # 历史文档
+│
+├── setup.sh                     # ⭐ 一键部署脚本
+└── deploy_and_run.sh            # 部署并运行脚本
 ```
 
 ---
 
 ## 🔬 测试
 
-### Phase 2测试
+### 快速测试
 
 ```bash
-# 测试新币数据获取
-python3 test_phase2.py BTCUSDT
+# 测试10个币种
+python3 scripts/realtime_signal_scanner.py --max-symbols 10 --no-telegram
 
-# 测试新币vs成熟币
-python3 test_phase2.py BTCUSDT ETHUSDT
+# 运行诊断
+python3 diagnose/diagnostic_scan.py
 ```
+
+详见: [tests/README.md](tests/README.md)
 
 ---
 
@@ -212,7 +202,7 @@ python3 test_phase2.py BTCUSDT ETHUSDT
 ### 新用户
 
 1. 阅读: [01_SYSTEM_OVERVIEW.md](standards/01_SYSTEM_OVERVIEW.md)
-2. 部署: `./deploy_and_run.sh`
+2. 部署: `./setup.sh`
 3. 配置: [deployment/TELEGRAM_SETUP.md](standards/deployment/TELEGRAM_SETUP.md)
 
 ### 开发人员
@@ -220,34 +210,16 @@ python3 test_phase2.py BTCUSDT ETHUSDT
 1. 系统概览: [01_SYSTEM_OVERVIEW.md](standards/01_SYSTEM_OVERVIEW.md)
 2. 架构设计: [02_ARCHITECTURE.md](standards/02_ARCHITECTURE.md)
 3. 因子规范: [specifications/FACTOR_SYSTEM.md](standards/specifications/FACTOR_SYSTEM.md)
-4. 新币规范: [specifications/NEWCOIN.md](standards/specifications/NEWCOIN.md)
-5. 开发流程: [development/WORKFLOW.md](standards/development/WORKFLOW.md)
-
----
-
-## 📈 下一步计划
-
-### Phase 3: 新币专用因子与模型（v6.5）
-
-**目标**: 合规度40% → 65%
-
-**待实现**:
-- T_new/M_new/S_new因子（基于ZLEMA_1m/5m）
-- 点火-成势-衰竭模型
-- 新币专用权重配置
-
-**工作量**: 4-6天
-
-详见: [specifications/NEWCOIN.md § 9](standards/specifications/NEWCOIN.md#9-实施进度phase-2-phase-4)
+4. 开发流程: [development/WORKFLOW.md](standards/development/WORKFLOW.md)
 
 ---
 
 ## ⚠️ 注意事项
 
 1. **规范文档**：所有规范已统一到 `standards/` 目录
-2. **版本**: 当前为v6.4 Phase 2，合规度40%
+2. **版本**: 当前为v6.7 P2.2（权重优化版本）
 3. **主入口**: `scripts/realtime_signal_scanner.py`
-4. **部署脚本**: `deploy_and_run.sh`
+4. **部署脚本**: `setup.sh` → `deploy_and_run.sh`
 5. **配置**: 修改 `config/params.json` 后需清除缓存
 
 ---
@@ -260,6 +232,6 @@ python3 test_phase2.py BTCUSDT ETHUSDT
 
 ---
 
-**版本**: v6.4 Phase 2
-**最后更新**: 2025-11-02
-**分支**: claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ
+**版本**: v6.7 P2.2
+**最后更新**: 2025-11-05
+**分支**: claude/reorganize-repo-structure-011CUrZaXUMTBXApc3jvsqTh

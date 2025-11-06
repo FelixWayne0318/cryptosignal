@@ -1,7 +1,7 @@
 # CryptoSignal 规范文档索引
 
-**当前版本**: v6.6
-**最后更新**: 2025-11-03
+**当前版本**: v6.7
+**最后更新**: 2025-11-05
 **文档类型**: 总索引（系统工程入口）
 
 ---
@@ -120,7 +120,7 @@
 ## 🔗 外部资源
 
 - **项目仓库**: https://github.com/FelixWayne0318/cryptosignal
-- **当前分支**: `claude/review-system-overview-011CUhLQjByWuXC1bySJCHKQ`
+- **当前分支**: `claude/reorganize-repo-structure-011CUrZaXUMTBXApc3jvsqTh`
 - **问题追踪**: GitHub Issues
 
 ---
@@ -135,6 +135,6 @@
 
 ---
 
-**文档版本**: v6.6
-**生效日期**: 2025-11-03
+**文档版本**: v6.7
+**生效日期**: 2025-11-05
 **维护责任**: 系统架构师
