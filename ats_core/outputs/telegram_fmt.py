@@ -1212,7 +1212,7 @@ def _six_block(r: Dict[str, Any]) -> str:
         elif score >= 40:
             return "🟡"  # 正向：黄色
         elif score >= -40:
-            return "⚪"  # 中性：白色
+            return "🔵"  # 中性：浅蓝色（替代⚪白色，更清晰）
         elif score >= -70:
             return "🟠"  # 负向：橙色
         else:
@@ -1220,8 +1220,8 @@ def _six_block(r: Dict[str, Any]) -> str:
 
     lines = []
 
-    # ========== 🔵 A层：方向判断（6因子） ==========
-    lines.append("━━━ 🔵 A层：方向判断 ━━━")
+    # ========== 📊 A层：方向判断（6因子） ==========
+    lines.append("━━━ 📊 A层：方向判断 ━━━")
     lines.append("")
 
     # A层6因子（使用彩色圆形图标）
@@ -1248,7 +1248,8 @@ def _six_block(r: Dict[str, Any]) -> str:
         spread_bps = L_meta.get("spread_bps")
         obi = L_meta.get("obi")
         mod_output = _get(r, "modulator_output") or {}
-        position_mult = mod_output.get("position_mult", 1.0)
+        # 修复：从嵌套结构中提取position_mult（如果有）
+        position_mult = mod_output.get("L", {}).get("position_mult", mod_output.get("position_mult", 1.0))
         desc = _desc_liquidity(B_scores['L'], spread_bps, obi)
         b_displayed.append(f"💧 流动 {B_scores['L']:>4d}  仓位{position_mult:>3.0%} · {desc}")
 
@@ -1257,7 +1258,8 @@ def _six_block(r: Dict[str, Any]) -> str:
         S_meta = _get(r, "scores_meta.S") or {}
         theta = S_meta.get("theta")
         mod_output = _get(r, "modulator_output") or {}
-        Teff_S = mod_output.get("Teff_S", 1.0)
+        # 修复：从嵌套结构中提取Teff值
+        Teff_S = mod_output.get("S", {}).get("Teff_mult", 1.0)
         desc = _desc_structure(B_scores['S'], theta)
         b_displayed.append(f"🏗️ 结构 {B_scores['S']:>4d}  T×{Teff_S:>4.2f} · {desc}")
 
@@ -1266,7 +1268,8 @@ def _six_block(r: Dict[str, Any]) -> str:
         F_meta = _get(r, "scores_meta.F") or {}
         leading_raw = F_meta.get("leading_raw")
         mod_output = _get(r, "modulator_output") or {}
-        Teff_F = mod_output.get("Teff_F", 1.0)
+        # 修复：从嵌套结构中提取Teff值
+        Teff_F = mod_output.get("F", {}).get("Teff_mult", 1.0)
         desc = _desc_fund_leading(B_scores['F'], leading_raw)
         b_displayed.append(f"💰 资金 {B_scores['F']:>4d}  T×{Teff_F:>4.2f} · {desc}")
 
@@ -1275,7 +1278,8 @@ def _six_block(r: Dict[str, Any]) -> str:
         I_meta = _get(r, "scores_meta.I") or {}
         beta_sum = I_meta.get("beta_sum")
         mod_output = _get(r, "modulator_output") or {}
-        Teff_I = mod_output.get("Teff_I", 1.0)
+        # 修复：从嵌套结构中提取Teff值
+        Teff_I = mod_output.get("I", {}).get("Teff_mult", 1.0)
         desc = _desc_independence(B_scores['I'], beta_sum)
         b_displayed.append(f"🎯 独立 {B_scores['I']:>4d}  T×{Teff_I:>4.2f} · {desc}")
 
@@ -1299,7 +1303,10 @@ def _six_block(r: Dict[str, Any]) -> str:
         lines.append("━━━ 📊 大盘环境 ━━━")
         lines.append("")
         lines.append(f"{market_emoji} {regime_desc} (市场{market_regime:>4d})")
-        lines.append(f"   BTC{btc_trend:>4d} · ETH{eth_trend:>4d}")
+        # 给BTC和ETH添加图标
+        btc_emoji = get_color_emoji(btc_trend)
+        eth_emoji = get_color_emoji(eth_trend)
+        lines.append(f"   {btc_emoji} BTC{btc_trend:>4d} · {eth_emoji} ETH{eth_trend:>4d}")
 
     return "\n".join(lines)
 
