@@ -20,6 +20,7 @@ from ats_core.execution.binance_futures_client import get_binance_client
 from ats_core.data.realtime_kline_cache import get_kline_cache
 from ats_core.pipeline.analyze_symbol import analyze_symbol_with_preloaded_klines
 from ats_core.logging import log, warn, error
+from ats_core.analysis.scan_statistics import get_global_stats, reset_global_stats
 
 
 class OptimizedBatchScanner:
@@ -393,6 +394,9 @@ class OptimizedBatchScanner:
         log(f"   最低分数: {min_score}")
         log("=" * 60)
 
+        # 重置全局统计（v6.8: 扫描后自动分析并发送到Telegram）
+        reset_global_stats()
+
         # ═══════════════════════════════════════════════════════════
         # Phase 1: 三层智能数据更新
         # ═══════════════════════════════════════════════════════════
@@ -612,6 +616,10 @@ class OptimizedBatchScanner:
 
                 log(f"  └─ 分析完成（耗时{analysis_time:.1f}秒）")
 
+                # v6.8: 收集统计数据（用于扫描后自动分析）
+                stats = get_global_stats()
+                stats.add_symbol_result(symbol, result)
+
                 # 筛选Prime信号（只添加is_prime=True的币种）
                 is_prime = result.get('publish', {}).get('prime', False)
                 prime_strength = result.get('publish', {}).get('prime_strength', 0)
@@ -688,6 +696,28 @@ class OptimizedBatchScanner:
         log(f"   缓存命中率: {cache_stats['hit_rate']}")
         log(f"   内存占用: {cache_stats['memory_estimate_mb']:.1f}MB")
         log("=" * 60)
+
+        # v6.8: 生成统计分析报告并发送到Telegram
+        try:
+            stats = get_global_stats()
+            report = stats.generate_statistics_report()
+
+            # 打印到日志
+            log("\n" + report)
+
+            # 发送到Telegram（如果配置了）
+            try:
+                from ats_core.notification.telegram import get_telegram_bot
+                telegram_bot = get_telegram_bot()
+                if telegram_bot and telegram_bot.enabled:
+                    stats.send_to_telegram(report, telegram_bot)
+                    log("✅ 统计报告已发送到Telegram")
+                else:
+                    log("⚠️  Telegram未配置，跳过发送统计报告")
+            except Exception as e:
+                warn(f"⚠️  发送Telegram统计报告失败: {e}")
+        except Exception as e:
+            warn(f"⚠️  生成统计报告失败: {e}")
 
         return {
             'results': results,

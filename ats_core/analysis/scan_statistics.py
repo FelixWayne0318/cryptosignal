@@ -1,0 +1,360 @@
+"""
+扫描统计分析模块
+每次批量扫描后自动收集数据、分析分布、发送到Telegram
+帮助快速定位问题：阈值设置、因子分布、拒绝原因等
+"""
+
+import json
+import numpy as np
+from typing import Dict, List, Any
+from datetime import datetime
+
+
+class ScanStatistics:
+    """扫描统计分析器"""
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        """重置统计数据"""
+        self.symbols_data = []  # 所有币种的详细数据
+        self.signals = []  # 发出的信号
+        self.rejections = {}  # 拒绝原因统计
+
+    def add_symbol_result(self, symbol: str, result: Dict[str, Any]):
+        """
+        添加单个币种的分析结果
+
+        Args:
+            symbol: 币种名称
+            result: analyze_symbol返回的完整结果
+        """
+        if not result:
+            return
+
+        # 提取关键数据
+        scores = result.get('scores', {})
+        modulation = result.get('modulation', {})
+        publish_info = result.get('publish', {})
+        gates_info = result.get('gates', {})
+        prime_breakdown = publish_info.get('prime_breakdown', {})
+
+        data = {
+            'symbol': symbol,
+            # 10因子（6核心+4调制器）
+            'T': scores.get('T', 0),
+            'M': scores.get('M', 0),
+            'C': scores.get('C', 0),
+            'V': scores.get('V', 0),
+            'O': scores.get('O', 0),
+            'B': scores.get('B', 0),
+            'F': modulation.get('F', 0),
+            'L': modulation.get('L', 0),
+            'S': modulation.get('S', 0),
+            'I': modulation.get('I', 0),
+            # 综合指标
+            'confidence': result.get('confidence', 0),
+            'prime_strength': publish_info.get('prime_strength', 0),
+            'edge': result.get('edge', 0),
+            'gate_multiplier': gates_info.get('gate_multiplier', 0),
+            'P_chosen': prime_breakdown.get('P_chosen', 0),
+            'p_min_adjusted': result.get('p_min_adjusted', 0),
+            # 信号状态
+            'is_prime': publish_info.get('prime', False),
+            'rejection_reason': publish_info.get('rejection_reason', []),
+            # 数据质量
+            'bars': result.get('bars', 0),
+            'coin_age_hours': result.get('coin_age_hours', 0),
+        }
+
+        self.symbols_data.append(data)
+
+        # 统计信号
+        if data['is_prime']:
+            self.signals.append(data)
+        else:
+            # 统计拒绝原因
+            for reason in data['rejection_reason']:
+                if isinstance(reason, str) and '❌' in reason:
+                    # 提取主要原因（去掉具体数值）
+                    key_reason = reason.split('(')[0].strip()
+                    self.rejections[key_reason] = self.rejections.get(key_reason, 0) + 1
+
+    def generate_statistics_report(self) -> str:
+        """
+        生成统计分析报告（Telegram格式）
+
+        Returns:
+            格式化的统计报告文本
+        """
+        if not self.symbols_data:
+            return "❌ 无数据可分析"
+
+        report = []
+        report.append("=" * 50)
+        report.append("📊 全市场扫描统计分析报告")
+        report.append("=" * 50)
+        report.append(f"🕐 时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        report.append(f"📈 扫描币种: {len(self.symbols_data)} 个")
+        report.append(f"✅ 信号数量: {len(self.signals)} 个")
+        report.append(f"📉 过滤数量: {len(self.symbols_data) - len(self.signals)} 个")
+        report.append("")
+
+        # 1. 信号列表
+        if self.signals:
+            report.append("🎯 【发出的信号】")
+            for sig in sorted(self.signals, key=lambda x: x['edge'], reverse=True)[:10]:
+                report.append(
+                    f"  {sig['symbol']}: "
+                    f"Edge={sig['edge']:.2f}, "
+                    f"Conf={sig['confidence']:.1f}, "
+                    f"Prime={sig['prime_strength']:.1f}, "
+                    f"P={sig['P_chosen']:.3f}"
+                )
+            if len(self.signals) > 10:
+                report.append(f"  ... 还有{len(self.signals) - 10}个信号")
+            report.append("")
+
+        # 2. 接近阈值的币种（最有价值的分析！）
+        report.append("🔍 【接近阈值的币种】（需要调整阈值的证据）")
+        close_coins = self._find_close_to_threshold()
+        if close_coins:
+            for coin in close_coins[:15]:
+                report.append(f"  {coin['desc']}")
+            if len(close_coins) > 15:
+                report.append(f"  ... 还有{len(close_coins) - 15}个币种接近阈值")
+        else:
+            report.append("  ✅ 无币种接近阈值（阈值设置合理）")
+        report.append("")
+
+        # 3. 拒绝原因统计
+        if self.rejections:
+            report.append("❌ 【拒绝原因分布】")
+            sorted_rejections = sorted(self.rejections.items(), key=lambda x: x[1], reverse=True)
+            for reason, count in sorted_rejections[:8]:
+                pct = count / len(self.symbols_data) * 100
+                report.append(f"  {reason}: {count}个 ({pct:.1f}%)")
+            report.append("")
+
+        # 4. 因子分布统计
+        report.append("📊 【10因子分布统计】")
+        factors = ['T', 'M', 'C', 'V', 'O', 'B', 'F', 'L', 'S', 'I']
+        for factor in factors:
+            stats = self._calc_distribution(factor)
+            report.append(
+                f"  {factor}: "
+                f"Min={stats['min']:.1f}, "
+                f"P25={stats['p25']:.1f}, "
+                f"中位={stats['p50']:.1f}, "
+                f"P75={stats['p75']:.1f}, "
+                f"Max={stats['max']:.1f}"
+            )
+        report.append("")
+
+        # 5. 综合指标分布
+        report.append("📊 【综合指标分布】")
+        metrics = [
+            ('confidence', '置信度'),
+            ('prime_strength', 'Prime强度'),
+            ('edge', 'Edge优势'),
+            ('gate_multiplier', '四门槛'),
+        ]
+        for metric_key, metric_name in metrics:
+            stats = self._calc_distribution(metric_key)
+            report.append(
+                f"  {metric_name}: "
+                f"Min={stats['min']:.2f}, "
+                f"P25={stats['p25']:.2f}, "
+                f"中位={stats['p50']:.2f}, "
+                f"P75={stats['p75']:.2f}, "
+                f"Max={stats['max']:.2f}"
+            )
+        report.append("")
+
+        # 6. 数据质量分布
+        report.append("📊 【数据质量分布】")
+        bars_list = [d['bars'] for d in self.symbols_data if d['bars'] > 0]
+        if bars_list:
+            report.append(f"  K线数量: Min={min(bars_list)}, 中位={int(np.median(bars_list))}, Max={max(bars_list)}")
+
+        age_hours = [d['coin_age_hours'] for d in self.symbols_data if d['coin_age_hours'] > 0]
+        if age_hours:
+            report.append(f"  币龄(小时): Min={min(age_hours):.1f}, 中位={np.median(age_hours):.1f}, Max={max(age_hours):.1f}")
+
+        new_coins = len([d for d in self.symbols_data if d['coin_age_hours'] < 168])  # <7天
+        report.append(f"  新币数量: {new_coins} 个 (<7天)")
+        report.append("")
+
+        # 7. 阈值建议
+        report.append("💡 【阈值调整建议】")
+        suggestions = self._generate_threshold_suggestions()
+        if suggestions:
+            for suggestion in suggestions:
+                report.append(f"  {suggestion}")
+        else:
+            report.append("  ✅ 当前阈值设置合理，无需调整")
+
+        report.append("=" * 50)
+
+        return "\n".join(report)
+
+    def _calc_distribution(self, field: str) -> Dict[str, float]:
+        """计算某个字段的分布统计"""
+        values = [d[field] for d in self.symbols_data if field in d]
+        if not values:
+            return {'min': 0, 'p25': 0, 'p50': 0, 'p75': 0, 'max': 0}
+
+        return {
+            'min': min(values),
+            'p25': np.percentile(values, 25),
+            'p50': np.percentile(values, 50),
+            'p75': np.percentile(values, 75),
+            'max': max(values),
+        }
+
+    def _find_close_to_threshold(self) -> List[Dict[str, Any]]:
+        """
+        找到接近阈值的币种（最关键的分析！）
+
+        Returns:
+            接近阈值的币种列表，按缺口从小到大排序
+        """
+        # 当前阈值（需要和analyze_symbol.py保持一致）
+        THRESHOLDS = {
+            'confidence': 45,
+            'edge': 0.48,
+            'prime_strength': 54,
+            'gate_multiplier': 0.87,
+        }
+
+        close_coins = []
+
+        for data in self.symbols_data:
+            if data['is_prime']:
+                continue  # 已经通过的不看
+
+            gaps = []
+
+            # 检查每个阈值的缺口
+            if data['confidence'] < THRESHOLDS['confidence']:
+                gap = THRESHOLDS['confidence'] - data['confidence']
+                if gap <= 5:  # 差距<=5
+                    gaps.append(('Conf', gap, data['confidence'], THRESHOLDS['confidence']))
+
+            if abs(data['edge']) < THRESHOLDS['edge']:
+                gap = THRESHOLDS['edge'] - abs(data['edge'])
+                if gap <= 0.10:  # 差距<=0.10
+                    gaps.append(('Edge', gap, abs(data['edge']), THRESHOLDS['edge']))
+
+            if data['prime_strength'] < THRESHOLDS['prime_strength']:
+                gap = THRESHOLDS['prime_strength'] - data['prime_strength']
+                if gap <= 5:  # 差距<=5
+                    gaps.append(('Prime', gap, data['prime_strength'], THRESHOLDS['prime_strength']))
+
+            if data['gate_multiplier'] < THRESHOLDS['gate_multiplier']:
+                gap = THRESHOLDS['gate_multiplier'] - data['gate_multiplier']
+                if gap <= 0.05:  # 差距<=0.05
+                    gaps.append(('Gate', gap, data['gate_multiplier'], THRESHOLDS['gate_multiplier']))
+
+            # 如果有接近阈值的指标，记录
+            if gaps:
+                # 找到最小缺口
+                min_gap = min(gaps, key=lambda x: x[1])
+                metric_name, gap, current, threshold = min_gap
+
+                close_coins.append({
+                    'symbol': data['symbol'],
+                    'metric': metric_name,
+                    'gap': gap,
+                    'current': current,
+                    'threshold': threshold,
+                    'desc': f"{data['symbol']}: {metric_name}={current:.2f} (阈值{threshold:.2f}, 缺口{gap:.2f})"
+                })
+
+        # 按缺口从小到大排序
+        return sorted(close_coins, key=lambda x: x['gap'])
+
+    def _generate_threshold_suggestions(self) -> List[str]:
+        """基于数据分布生成阈值调整建议"""
+        suggestions = []
+
+        close_coins = self._find_close_to_threshold()
+
+        if not close_coins:
+            return suggestions
+
+        # 统计各指标的接近情况
+        metric_counts = {}
+        for coin in close_coins[:20]:  # 只看TOP 20最接近的
+            metric = coin['metric']
+            metric_counts[metric] = metric_counts.get(metric, 0) + 1
+
+        # 如果某个指标有5个以上币种接近，建议降低
+        for metric, count in sorted(metric_counts.items(), key=lambda x: x[1], reverse=True):
+            if count >= 5:
+                suggestions.append(f"⚠️ {metric}阈值可能偏高：{count}个币种非常接近但未通过，建议降低阈值")
+
+        # 如果信号数为0，强烈建议
+        if len(self.signals) == 0 and len(close_coins) >= 10:
+            suggestions.append(f"🔴 当前0个信号，但有{len(close_coins)}个币种接近阈值，强烈建议降低阈值！")
+
+        return suggestions
+
+    def send_to_telegram(self, report: str, telegram_bot) -> bool:
+        """
+        发送报告到Telegram
+
+        Args:
+            report: 报告文本
+            telegram_bot: TelegramBot实例
+
+        Returns:
+            是否发送成功
+        """
+        try:
+            # 分段发送（Telegram有4096字符限制）
+            max_length = 4000
+            if len(report) <= max_length:
+                telegram_bot.send_message(report)
+            else:
+                # 分段发送
+                parts = []
+                lines = report.split('\n')
+                current_part = []
+                current_length = 0
+
+                for line in lines:
+                    line_length = len(line) + 1  # +1 for \n
+                    if current_length + line_length > max_length:
+                        parts.append('\n'.join(current_part))
+                        current_part = [line]
+                        current_length = line_length
+                    else:
+                        current_part.append(line)
+                        current_length += line_length
+
+                if current_part:
+                    parts.append('\n'.join(current_part))
+
+                for i, part in enumerate(parts, 1):
+                    telegram_bot.send_message(f"【第{i}/{len(parts)}部分】\n{part}")
+
+            return True
+        except Exception as e:
+            print(f"❌ 发送Telegram失败: {e}")
+            return False
+
+
+# 全局单例
+_global_stats = ScanStatistics()
+
+
+def get_global_stats() -> ScanStatistics:
+    """获取全局统计实例"""
+    return _global_stats
+
+
+def reset_global_stats():
+    """重置全局统计"""
+    _global_stats.reset()
