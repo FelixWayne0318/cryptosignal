@@ -1077,14 +1077,18 @@ def render_modulators(r: Dict[str, Any]) -> str:
     # 🔧 F资金领先调制器
     F_score = _get(r, "F") or 0
     Teff_F = mod_output.get("Teff_F", 1.0) if mod_output else 1.0
-    p_min_adj = mod_output.get("p_min_adj", 0.0) if mod_output else 0.0
+
+    # v6.7++: 使用FIModulator的统一阈值信息
+    fi_thresholds = _get(r, "fi_thresholds") or {}
+    adj_F = fi_thresholds.get("adj_F", 0.0)  # F的p_min调整量
+    adj_I = fi_thresholds.get("adj_I", 0.0)  # I的p_min调整量
 
     f_desc = _desc_fund_leading(F_score, _get(r, "scores_meta.F.leading_raw"))
     lines.append(f"\n🔧 F资金领先 {F_score:+d}: {f_desc}")
     if Teff_F != 1.0:
         lines.append(f"   └─ 温度倍数: ×{Teff_F:.2f}")
-    if p_min_adj != 0:
-        lines.append(f"   └─ p_min调整: {p_min_adj:+.2%}")
+    if adj_F != 0:
+        lines.append(f"   └─ p_min调整(F): {adj_F:+.3f}")
 
     # ⚙️ I独立性调制器
     I_score = _get(r, "I") or 0
@@ -1097,6 +1101,8 @@ def render_modulators(r: Dict[str, Any]) -> str:
         lines.append(f"   └─ 温度倍数: ×{Teff_I:.2f}")
     if cost_eff_I != 0:
         lines.append(f"   └─ 成本调节: {cost_eff_I:+.2%}")
+    if adj_I != 0:
+        lines.append(f"   └─ p_min调整(I): {adj_I:+.3f}")
 
     # 融合结果（如果有）
     if mod_output:
@@ -1105,6 +1111,15 @@ def render_modulators(r: Dict[str, Any]) -> str:
         lines.append(f"\n🔗 融合结果:")
         lines.append(f"   └─ 最终温度: {Teff_final:.3f}")
         lines.append(f"   └─ 最终成本: {cost_final:.4f} ({cost_final*10000:.1f}bps)")
+
+        # v6.7++: 添加统一后的p_min信息
+        if fi_thresholds:
+            p_min_base = fi_thresholds.get("p_min_base", 0.0)
+            p_min_final = fi_thresholds.get("p_min_adjusted", 0.0)
+            total_adj = adj_F + adj_I
+            safety_adj = fi_thresholds.get("safety_adjustment", 0.0)
+            if p_min_final > 0:
+                lines.append(f"   └─ 概率阈值: {p_min_base:.3f} + F{adj_F:+.3f} + I{adj_I:+.3f} + 安全{safety_adj:+.3f} = {p_min_final:.3f}")
 
     return "\n".join(lines)
 

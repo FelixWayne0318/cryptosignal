@@ -46,6 +46,7 @@ from ats_core.scoring.adaptive_weights import (
 
 # ========== v6.6 统一调制器系统 ==========
 from ats_core.modulators.modulator_chain import ModulatorChain
+from ats_core.modulators.fi_modulators import get_fi_modulator  # v6.7: 统一p_min计算
 from ats_core.features.multi_timeframe import multi_timeframe_coherence
 
 # ========== v6.6 三层止损系统 ==========
@@ -643,24 +644,34 @@ def _analyze_symbol_core(
         # 返回success=True但publish=False
         pass  # 允许继续，但后续会标记为不发布
 
-    # 软约束2：P < p_min（基于F调制器调整）
-    # 计算p_min（动态）
-    # v6.7修复：使用配置文件的prime_prob_min，取消硬编码0.50
-    # 用户要求减少80%信号，需要提高阈值
-    # P2.5++修复（2025-11-05）：提高p_min从0.58→0.68，减少80%信号，保留高质量信号
-    # P2.5+++修复（2025-11-06）：方案1保守型，进一步提高到0.72，减少90%信号
-    # P2.5++++调整（2025-11-06）：方案1.5折中方案，0.72→0.70，平衡信号量
-    base_p_min = publish_cfg.get("prime_prob_min", 0.70)  # 从0.72降低到0.70
-    safety_margin = modulator_output.L_meta.get("safety_margin", 0.005)
-    # 修复：使用abs(edge)避免负数除法问题，并限制最大adjustment
-    adjustment = safety_margin / (abs(edge) + 1e-6)
-    adjustment = min(adjustment, 0.02)  # 限制最大调整为0.02，避免过度惩罚小edge信号
-    p_min = base_p_min + adjustment
+    # 软约束2：P < p_min（基于F/I调制器调整）
+    # v6.7++修复（2025-11-06）：统一p_min计算到FIModulator
+    # 问题：之前使用ModulatorChain.p_min_adj（仅考虑F），现在统一到FIModulator（完整F+I）
+    #
+    # 归一化F和I到[0, 1]范围（FIModulator需要）
+    F_normalized = (F + 100.0) / 200.0  # [-100, 100] → [0, 1]
+    I_normalized = (I + 100.0) / 200.0  # [-100, 100] → [0, 1]
 
-    # 应用F调制器的p_min调整
-    p_min_adjusted = p_min + modulator_output.p_min_adj
-    # P2.5+信号过滤：移除0.65上限，提高到0.75以减少80%信号
-    p_min_adjusted = max(0.50, min(0.75, p_min_adjusted))  # 限制在[0.50, 0.75]
+    # 使用FIModulator计算完整的p_min（包含F和I双重调制）
+    fi_modulator = get_fi_modulator()
+    p_min_modulated, delta_p_min, threshold_details = fi_modulator.calculate_thresholds(
+        F_raw=F_normalized,
+        I_raw=I_normalized,
+        symbol=symbol
+    )
+
+    # FIModulator公式: p_min = p0 + θF·max(0, gF) + θI·min(0, gI)
+    # 其中: p0=0.58, θF=0.03, θI=-0.02, range=[0.50, 0.75]
+    #
+    # 为了保持信号量控制，叠加安全边际调整
+    safety_margin = modulator_output.L_meta.get("safety_margin", 0.005)
+    adjustment = safety_margin / (abs(edge) + 1e-6)
+    adjustment = min(adjustment, 0.02)  # 限制最大调整
+
+    # 最终p_min = FIModulator计算值 + 安全边际
+    p_min_adjusted = p_min_modulated + adjustment
+    # 限制在合理范围
+    p_min_adjusted = max(0.50, min(0.75, p_min_adjusted))
 
     # 检查P是否低于阈值
     p_below_threshold = P_chosen < p_min_adjusted
@@ -1143,6 +1154,20 @@ def _analyze_symbol_core(
         "position_mult": modulator_output.position_mult,  # 仓位倍数 [0.30, 1.00]
         "Teff_final": modulator_output.Teff_final,  # 最终温度（融合后）
         "cost_modulated": modulator_output.cost_final,  # 调制后成本
+
+        # v6.7++: FIModulator阈值计算（统一p_min）
+        "fi_thresholds": {
+            "p_min_base": threshold_details.get("p_min", 0.0),  # FIModulator基础p_min
+            "p_min_adjusted": p_min_adjusted,  # 加上安全边际后的最终p_min
+            "delta_p_min": delta_p_min,
+            "F_normalized": F_normalized,
+            "I_normalized": I_normalized,
+            "g_F": threshold_details.get("g_F", 0.0),
+            "g_I": threshold_details.get("g_I", 0.0),
+            "adj_F": threshold_details.get("adj_F", 0.0),  # F的调整量
+            "adj_I": threshold_details.get("adj_I", 0.0),  # I的调整量
+            "safety_adjustment": adjustment  # 安全边际调整
+        },
 
         # Scorecard结果
         "weighted_score": weighted_score,  # -100 到 +100
