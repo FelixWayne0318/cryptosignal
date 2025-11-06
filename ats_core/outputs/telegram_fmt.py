@@ -1212,16 +1212,16 @@ def _six_block(r: Dict[str, Any]) -> str:
         elif score >= 40:
             return "🟡"  # 正向：黄色
         elif score >= -40:
-            return "🔵"  # 中性：浅蓝色（替代⚪白色，更清晰）
+            return "🟠"  # 中性：橙色（黄橙之间，更清晰）
         elif score >= -70:
-            return "🟠"  # 负向：橙色
+            return "🔴"  # 负向：红色
         else:
-            return "🔴"  # 强负向：红色
+            return "🔵"  # 强负向：深蓝色
 
     lines = []
 
-    # ========== 📊 A层：方向判断（6因子） ==========
-    lines.append("━━━ 📊 A层：方向判断 ━━━")
+    # ========== 🎯 A层：方向判断（6因子） ==========
+    lines.append("━━━ 🎯 A层：方向判断 ━━━")
     lines.append("")
 
     # A层6因子（使用彩色圆形图标）
@@ -1303,10 +1303,10 @@ def _six_block(r: Dict[str, Any]) -> str:
         lines.append("━━━ 📊 大盘环境 ━━━")
         lines.append("")
         lines.append(f"{market_emoji} {regime_desc} (市场{market_regime:>4d})")
-        # 给BTC和ETH添加图标
+        # 给BTC和ETH添加图标和└─前缀
         btc_emoji = get_color_emoji(btc_trend)
         eth_emoji = get_color_emoji(eth_trend)
-        lines.append(f"   {btc_emoji} BTC{btc_trend:>4d} · {eth_emoji} ETH{eth_trend:>4d}")
+        lines.append(f"   └─ {btc_emoji} BTC{btc_trend:>4d} · {eth_emoji} ETH{eth_trend:>4d}")
 
     return "\n".join(lines)
 
