@@ -10,11 +10,15 @@
   "accel": {},
 
   "momentum": {
-    "slope_lookback": 12,
+    "_comment": "P2.2修改：短窗口设计，与T因子正交化（降低70.8%→<50%重叠度）",
+    "ema_fast": 3,
+    "ema_slow": 5,
+    "slope_lookback": 6,
     "slope_scale": 1.00,
     "accel_scale": 1.00,
     "slope_weight": 0.6,
-    "accel_weight": 0.4
+    "accel_weight": 0.4,
+    "_p22_rationale": "T因子用EMA5/20捕捉大趋势，M因子用EMA3/5捕捉快速动量→正交化"
   },
 
   "cvd_flow": {
@@ -70,17 +74,16 @@
   },
 
   "liquidity": {
-    "_comment": "v4.0新增：L因子 - 流动性评分",
-    "spread_good_bps": 2.0,
-    "spread_bad_bps": 10.0,
-    "depth_target_usdt": 1000000,
-    "impact_notional_usdt": 100000,
-    "impact_max_pct": 0.01,
-    "orderbook_depth_levels": 10,
-    "spread_weight": 0.3,
-    "depth_weight": 0.3,
-    "impact_weight": 0.3,
-    "obi_weight": 0.1
+    "_comment": "P2.5修复：价格带法（±bps聚合），对齐专家建议和四道闸",
+    "band_bps": 40.0,
+    "impact_notional_usdt": 50000.0,
+    "impact_threshold_bps": 10.0,
+    "obi_threshold": 0.30,
+    "spread_threshold_bps": 25.0,
+    "spread_weight": 0.25,
+    "impact_weight": 0.40,
+    "obi_weight": 0.20,
+    "coverage_weight": 0.15
   },
 
   "basis_funding": {
@@ -126,31 +129,34 @@
   },
 
   "weights": {
-    "_comment": "v6.6 - A层6因子权重（总和=100.0%），B层4调制器（L/S/F/I权重=0），Q因子完全移除",
+    "_comment": "v6.7 - P2.2权重调整：降低M权重减少与T的信息重叠（T-M相关度66.4%）",
     "T": 24.0,
-    "M": 17.0,
-    "C": 24.0,
+    "M": 10.0,
+    "C": 27.0,
     "V": 12.0,
-    "O": 17.0,
+    "O": 21.0,
     "B": 6.0,
     "_b_layer": "以下为B层调制器，不参与评分",
     "L": 0.0,
     "S": 0.0,
     "F": 0.0,
     "I": 0.0,
-    "E": 0.0
+    "E": 0.0,
+    "_p22_adjustment": "M: 17%→10% (T-M相关66.4%), 空余7%分配: C+3%, O+4%"
   },
   "weights_comment": {
-    "_version": "v6.6 - 统一调制器架构（6因子A层 + 4调制器B层）",
+    "_version": "v6.7 - P2.2权重调整（基于T-M相关性分析）",
     "_total_weight": "100%（A层6因子权重百分比系统）",
-    "_layer1_price_action": "Layer 1 价格行为层（53%）: T(24%) + M(17%) + V(12%)",
-    "_layer2_capital_flow": "Layer 2 资金流层（41%）: C(24%) + O(17%)",
+    "_layer1_price_action": "Layer 1 价格行为层（46%）: T(24%) + M(10%) + V(12%)",
+    "_layer2_capital_flow": "Layer 2 资金流层（48%）: C(27%) + O(21%)",
     "_layer3_microstructure": "Layer 3 微观结构层（6%）: B(6%)",
     "_layer_b_modulators": "B层调制器（不评分）: L(流动性) + S(结构) + F(资金领先) + I(独立性)",
     "_modulator_role": "L/S/F/I仅调制position/Teff/cost/confidence，不修改方向分数",
     "_deprecated": "E(0) - 环境因子已废弃",
     "_removed_v6.6": "Q因子完全移除（数据不可靠收益低），L/S移至B层调制器",
     "_change_log_v6.6": "权重再分配（S的11% + Q的4%）: T+4%, M+3%, C+4%, V+1%, O+3%",
+    "_change_log_v6.7_p22": "M权重降低（P1.3分析：T-M相关66.4%）: M-7% (17%→10%), C+3% (24%→27%), O+4% (17%→21%)",
+    "_p22_rationale": "降低M权重减少与T的信息重叠，提升C/O强化资金流分析能力",
     "_rationale": "L/S是质量指标非方向指标，整合为调制器实现连续仓位调整，消除硬拒绝门槛",
     "_soft_constraints": "仅DataQual≥0.90为硬门槛，EV和P改为软约束（不拒绝信号，仅不发布）"
   },
@@ -166,16 +172,127 @@
     "cvd_scale": 0.02,
     "price_scale": 3.0,
     "slope_scale": 0.01,
-    "leading_scale": 20.0
+    "leading_scale": 20.0,
+    "crowding_veto": {
+      "_comment": "P0.4: 过热veto机制，防止追高",
+      "enabled": true,
+      "basis_lookback": 100,
+      "funding_lookback": 100,
+      "percentile": 90,
+      "crowding_penalty": 0.5,
+      "min_data_points": 50
+    }
+  },
+
+  "factor_optimization_v2": {
+    "_comment": "P0-P2因子系统优化配置（2024年专家审查修复）",
+    "_enabled": true,
+    "_issues_fixed": "1.归一化不一致 2.T-M相关性 3.硬编码阈值",
+
+    "adaptive_threshold": {
+      "_comment": "P0.1-P0.3: B/V/O因子自适应阈值",
+      "mode": "hybrid",
+      "_mode_options": "zscore | percentile | legacy | hybrid (推荐)",
+      "min_data_points": 50,
+      "fallback_to_legacy": true
+    },
+
+    "basis_funding_adaptive": {
+      "_comment": "P0.1: B因子自适应阈值配置",
+      "enabled": true,
+      "lookback": 100,
+      "neutral_percentile": 50,
+      "extreme_percentile": 90,
+      "neutral_min_bps": 20.0,
+      "neutral_max_bps": 200.0,
+      "extreme_min_bps": 50.0,
+      "extreme_max_bps": 300.0
+    },
+
+    "volume_adaptive": {
+      "_comment": "P0.2: V因子自适应阈值配置",
+      "enabled": true,
+      "lookback": 20,
+      "percentile": 50,
+      "min_threshold_pct": 0.001,
+      "max_threshold_pct": 0.02
+    },
+
+    "open_interest_adaptive": {
+      "_comment": "P0.3: O因子自适应阈值配置",
+      "enabled": true,
+      "lookback": 12,
+      "percentile": 70,
+      "min_threshold_pct": 0.003,
+      "max_threshold_pct": 0.03
+    },
+
+    "use_notional_oi": {
+      "_comment": "P1.2: 使用名义持仓量（合约数×价格）而非合约数",
+      "enabled": true,
+      "contract_multiplier": 1.0,
+      "fallback_on_error": true
+    },
+
+    "factor_normalizer": {
+      "_comment": "P1.1: 统一因子归一化框架",
+      "enabled": true,
+      "mode": "hybrid",
+      "_mode_options": "zscore | percentile | legacy | hybrid",
+      "window_size": 100,
+      "tanh_scale": 2.0,
+      "min_data_points": 30
+    },
+
+    "tm_correlation": {
+      "_comment": "P1.3: T-M因子相关性管理",
+      "monitor_enabled": true,
+      "correlation_threshold_warning": 0.5,
+      "correlation_threshold_action": 0.7,
+      "action": "log_only",
+      "_action_options": "log_only | reduce_m_weight | orthogonalize",
+      "m_weight_reduced": 10.0,
+      "_note": "当avg_corr≥0.7时，若action=reduce_m_weight，M权重从17%→10%"
+    },
+
+    "accumulation_detection": {
+      "_comment": "P2.1: 蓄势待发检测增强版本",
+      "version": "v2",
+      "_version_options": "v1 (原有逻辑) | v2 (增强veto)",
+      "v1": {
+        "F_threshold": 90,
+        "C_threshold": 60,
+        "T_max": 40,
+        "position_threshold": 35
+      },
+      "v2": {
+        "F_threshold": 85,
+        "C_threshold": 60,
+        "T_min": -10,
+        "T_max": 40,
+        "veto": {
+          "crowding_basis_bps": 150,
+          "crowding_penalty": 0.7,
+          "liquidity_threshold": 50,
+          "liquidity_penalty": 0.85,
+          "momentum_threshold": -50,
+          "momentum_penalty": 0.8,
+          "oi_threshold": -30,
+          "oi_penalty": 0.85,
+          "cancel_threshold": 0.6
+        },
+        "base_position_threshold": 35
+      }
+    }
   },
 
   "publish": {
-    "prime_prob_min": 0.58,
+    "prime_prob_min": 0.68,
     "prime_dims_ok_min": 3,
     "prime_dim_threshold": 30,
     "watch_prob_min": 0.52,
-    "watch_prob_max": 0.57,
-    "_comment": "v6.1调整: 降低阈值以增加信号量（保守方案A）"
+    "watch_prob_max": 0.67,
+    "_comment": "v6.7调整: 提高阈值以减少80%信号（用户要求）"
   },
 
   "base": {
@@ -215,11 +332,11 @@
     "phaseB_days": 30,
     "max_days": 30,
     "min_volume_24h": 10000000,
-    "ultra_new_prime_prob_min": 0.70,
+    "ultra_new_prime_prob_min": 0.75,
     "ultra_new_dims_ok_min": 6,
-    "phaseA_prime_prob_min": 0.65,
+    "phaseA_prime_prob_min": 0.72,
     "phaseA_dims_ok_min": 5,
-    "phaseB_prime_prob_min": 0.63,
+    "phaseB_prime_prob_min": 0.70,
     "phaseB_dims_ok_min": 4
   },
 

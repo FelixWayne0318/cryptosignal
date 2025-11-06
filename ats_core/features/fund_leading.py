@@ -17,6 +17,11 @@ F = f(资金动量 - 价格动量)
 - F <= -30：价格温和领先资金（追高风险）⚠️
 - F <= -60：价格强势领先资金（风险很大）❌
 
+P0.4改进（crowding veto）：
+- 检测市场过热（basis或funding极端）
+- 在crowding时降低F因子分数（防止追高）
+- 应用惩罚而非硬拒绝（保持连续性）
+
 输入：
 - oi_change_pct: OI 24小时变化率（%）
 - vol_ratio: v5/v20 量能比值
@@ -24,9 +29,10 @@ F = f(资金动量 - 价格动量)
 - price_change_pct: 价格 24小时变化率（%）
 - price_slope: 价格斜率（EMA30的斜率）
 """
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional, List
 from ats_core.features.scoring_utils import directional_score
 import math
+import numpy as np
 
 
 def score_fund_leading(
@@ -35,14 +41,20 @@ def score_fund_leading(
     cvd_change: float,
     price_change_pct: float,
     price_slope: float,
-    params: Dict[str, Any]
+    params: Dict[str, Any],
+    basis_history: Optional[List[float]] = None,
+    funding_history: Optional[List[float]] = None
 ) -> Tuple[int, Dict[str, Any]]:
     """
-    F（资金领先性）评分 - 移除circular dependency
+    F（资金领先性）评分 - 移除circular dependency + P0.4 crowding veto
 
     计算资金动量与价格动量的差值（带符号）：
     - F > 0: 资金偏多（OI上升、CVD流入、价格上涨但不强）→ 看多信号
     - F < 0: 资金偏空（OI下降、CVD流出、价格下跌但不强）→ 看空信号
+
+    P0.4新增：
+    - 检测市场crowding（basis或funding极端）
+    - 应用惩罚系数降低F分数（防止追高）
 
     Args:
         oi_change_pct: OI 24小时变化率（%），如 +3.5 表示上升 3.5%
@@ -51,6 +63,8 @@ def score_fund_leading(
         price_change_pct: 价格 24小时变化率（%）
         price_slope: 价格斜率（EMA30 的斜率/ATR）
         params: 参数配置
+        basis_history: 历史basis数据（bps），用于crowding检测（P0.4新增）
+        funding_history: 历史funding rate数据，用于crowding检测（P0.4新增）
 
     Returns:
         (F分数 [-100, +100], 元数据)
@@ -70,7 +84,12 @@ def score_fund_leading(
         "cvd_scale": 0.02,      # CVD 变化 0.02 给约 69 分
         "price_scale": 3.0,     # 价格变化 3% 给约 69 分
         "slope_scale": 0.01,    # 斜率 0.01 给约 69 分
-        "leading_scale": 20.0,  # 领先性的缩放系数
+        "leading_scale": 200.0,  # P2.5++修复: 50→100→200，彻底解决饱和问题（leading_raw理论极限±200, tanh(1)≈0.76）
+        # P0.4: Crowding veto参数
+        "crowding_veto_enabled": True,   # 是否启用crowding veto
+        "crowding_percentile": 90,        # 极端值判定百分位（90分位）
+        "crowding_penalty": 0.5,          # 惩罚系数（0.5 = 50%折扣）
+        "crowding_min_data": 100,         # 最少历史数据点
     }
 
     # 合并参数
@@ -83,12 +102,13 @@ def score_fund_leading(
     # CVD流入 → 正分，CVD流出 → 负分
     # 量能放大 → 正分，量能萎缩 → 负分
 
-    oi_score = directional_score(oi_change_pct, neutral=0.0, scale=p["oi_scale"])
-    cvd_score = directional_score(cvd_change, neutral=0.0, scale=p["cvd_scale"])
-    vol_score = directional_score(vol_ratio, neutral=1.0, scale=p["vol_scale"])
+    # P2.4修复：使用min_score=0确保对称映射（0-100而非10-100）
+    oi_score = directional_score(oi_change_pct, neutral=0.0, scale=p["oi_scale"], min_score=0.0)
+    cvd_score = directional_score(cvd_change, neutral=0.0, scale=p["cvd_scale"], min_score=0.0)
+    vol_score = directional_score(vol_ratio, neutral=1.0, scale=p["vol_scale"], min_score=0.0)
 
     # 加权平均（返回 -100 到 +100 的带符号分数）
-    # 映射：10-100 → -100到+100
+    # P2.4修复：映射 0-100 → -100到+100（对称映射，避免饱和）
     fund_momentum = (
         p["oi_weight"] * ((oi_score - 50) * 2) +
         p["vol_weight"] * ((vol_score - 50) * 2) +
@@ -99,11 +119,12 @@ def score_fund_leading(
     # 价格上涨 → 正分，价格下跌 → 负分
     # 斜率向上 → 正分，斜率向下 → 负分
 
-    trend_score = directional_score(price_change_pct, neutral=0.0, scale=p["price_scale"])
-    slope_score = directional_score(price_slope, neutral=0.0, scale=p["slope_scale"])
+    # P2.4修复：使用min_score=0确保对称映射
+    trend_score = directional_score(price_change_pct, neutral=0.0, scale=p["price_scale"], min_score=0.0)
+    slope_score = directional_score(price_slope, neutral=0.0, scale=p["slope_scale"], min_score=0.0)
 
     # 加权平均（返回 -100 到 +100 的带符号分数）
-    # 映射：10-100 → -100到+100
+    # P2.4修复：映射 0-100 → -100到+100（对称映射，避免饱和）
     price_momentum = (
         p["trend_weight"] * ((trend_score - 50) * 2) +
         p["slope_weight"] * ((slope_score - 50) * 2)
@@ -120,10 +141,44 @@ def score_fund_leading(
     # 正数 = 资金领先价格（蓄势待发）
     # 负数 = 价格领先资金（追高风险）
     normalized = math.tanh(leading_raw / p["leading_scale"])
-    F = 100.0 * normalized
-    F = int(round(max(-100.0, min(100.0, F))))
+    F_raw = 100.0 * normalized
 
-    # ========== 4. 元数据 ==========
+    # ========== 4. P0.4 Crowding Veto检测 ==========
+    veto_penalty = 1.0
+    veto_reasons = []
+    veto_applied = False
+
+    if p["crowding_veto_enabled"]:
+        min_data = p["crowding_min_data"]
+        percentile = p["crowding_percentile"]
+
+        # Veto 1: Basis极端检测
+        if basis_history and len(basis_history) >= min_data:
+            basis_array = np.abs(basis_history)  # 使用绝对值
+            basis_threshold = np.percentile(basis_array, percentile)
+            current_basis = abs(basis_history[-1])
+
+            if current_basis > basis_threshold:
+                veto_penalty *= p["crowding_penalty"]
+                veto_reasons.append(f"basis过热({current_basis:.1f} > q{percentile}={basis_threshold:.1f}bps)")
+                veto_applied = True
+
+        # Veto 2: Funding极端检测
+        if funding_history and len(funding_history) >= min_data:
+            funding_array = np.abs(funding_history)  # 使用绝对值
+            funding_threshold = np.percentile(funding_array, percentile)
+            current_funding = abs(funding_history[-1])
+
+            if current_funding > funding_threshold:
+                veto_penalty *= p["crowding_penalty"]
+                veto_reasons.append(f"funding极端({current_funding:.4f} > q{percentile}={funding_threshold:.4f})")
+                veto_applied = True
+
+    # 应用veto惩罚
+    F_final = F_raw * veto_penalty
+    F = int(round(max(-100.0, min(100.0, F_final))))
+
+    # ========== 5. 元数据 ==========
     meta = {
         "fund_momentum": round(fund_momentum, 1),
         "price_momentum": round(price_momentum, 1),
@@ -139,6 +194,11 @@ def score_fund_leading(
         "cvd_change": round(cvd_change, 4),
         "price_change_pct": round(price_change_pct, 2),
         "price_slope": round(price_slope, 4),
+        # P0.4: Crowding veto信息
+        "F_raw": round(F_raw, 1),
+        "veto_penalty": round(veto_penalty, 3),
+        "veto_applied": veto_applied,
+        "veto_reasons": veto_reasons if veto_reasons else None,
     }
 
     return F, meta

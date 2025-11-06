@@ -228,15 +228,16 @@ def get_funding_hist(
 
 # ------------------------- 订单簿深度 -------------------------
 
-def get_orderbook_snapshot(symbol: str, limit: int = 20) -> Dict[str, Any]:
+def get_orderbook_snapshot(symbol: str, limit: int = 100) -> Dict[str, Any]:
     """
-    获取订单簿快照
+    获取订单簿快照（默认100档，为价格带法提供足够深度）
 
     /fapi/v1/depth
 
     Args:
         symbol: 交易对符号
-        limit: 深度档位 (5, 10, 20, 50, 100, 500, 1000)
+        limit: 深度档位 (5, 10, 20, 50, 100, 500, 1000)，默认1000
+               专家建议：L因子需要深度数据，20档不足以准确评估流动性
 
     Returns:
         {
@@ -244,6 +245,12 @@ def get_orderbook_snapshot(symbol: str, limit: int = 20) -> Dict[str, Any]:
             "bids": [["price", "qty"], ...],  # 买单（价格从高到低）
             "asks": [["price", "qty"], ...]   # 卖单（价格从低到高）
         }
+
+    API权重:
+        - limit ≤ 50: 2
+        - limit = 100: 5
+        - limit = 500: 10
+        - limit = 1000: 20（推荐，用于准确的流动性分析）
     """
     symbol = symbol.upper()
     # 限制在合法范围

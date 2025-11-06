@@ -241,7 +241,7 @@ class OptimizedBatchScanner:
             self.funding_rate_cache = {}
 
         # 5.3 批量获取订单簿快照（并发获取，约140次API调用）
-        log("   5.3 批量获取订单簿深度（20档）...")
+        log("   5.3 批量获取订单簿深度（100档，价格带法）...")
         log("       🚀 使用并发模式，预计20-30秒")
 
         orderbook_success = 0
@@ -253,9 +253,10 @@ class OptimizedBatchScanner:
             try:
                 # 在线程池中运行同步函数，避免阻塞事件循环
                 loop = asyncio.get_event_loop()
+                # 注：使用足够深度供价格带法分析
                 orderbook = await loop.run_in_executor(
                     None,  # 使用默认线程池
-                    lambda: get_orderbook_snapshot(symbol, limit=20)
+                    lambda: get_orderbook_snapshot(symbol, limit=100)
                 )
                 return symbol, orderbook, None
             except Exception as e:

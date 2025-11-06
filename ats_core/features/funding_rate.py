@@ -19,14 +19,102 @@
 3. FWI (资金费窗口指数):
    - 在资金费结算前30分钟内检测挤兑风险
    - 如果价格、OI、资金费方向一致 → 警告
+
+P0.1改进（自适应阈值）：
+- 基差和资金费阈值不再固定
+- 根据历史分布的50/90分位数自适应调整
+- 避免固定阈值在不同市场环境下失效
 """
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 import math
 import time
+import numpy as np
 from ats_core.scoring.scoring_utils import StandardizationChain
 
 # 模块级StandardizationChain实例
 _funding_chain = StandardizationChain(alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5)
+
+
+def get_adaptive_basis_thresholds(
+    basis_history: List[float],
+    neutral_percentile: int = 50,
+    extreme_percentile: int = 90,
+    min_neutral_bps: float = 20.0,
+    max_neutral_bps: float = 200.0,
+    min_extreme_bps: float = 50.0,
+    max_extreme_bps: float = 300.0
+) -> Tuple[float, float]:
+    """
+    计算自适应基差阈值（P0.1修复）
+
+    Args:
+        basis_history: 历史基差数据（bps）
+        neutral_percentile: 中性阈值百分位数（默认50）
+        extreme_percentile: 极端阈值百分位数（默认90）
+        min_neutral_bps: 中性阈值下限（默认20bps）
+        max_neutral_bps: 中性阈值上限（默认200bps）
+        min_extreme_bps: 极端阈值下限（默认50bps）
+        max_extreme_bps: 极端阈值上限（默认300bps）
+
+    Returns:
+        (neutral_threshold_bps, extreme_threshold_bps)
+    """
+    if len(basis_history) < 10:
+        # 数据不足，返回固定值
+        return 50.0, 100.0
+
+    # 使用绝对值的百分位数
+    abs_basis = np.abs(basis_history)
+
+    neutral_threshold = float(np.percentile(abs_basis, neutral_percentile))
+    extreme_threshold = float(np.percentile(abs_basis, extreme_percentile))
+
+    # 边界保护
+    neutral_threshold = np.clip(neutral_threshold, min_neutral_bps, max_neutral_bps)
+    extreme_threshold = np.clip(extreme_threshold, min_extreme_bps, max_extreme_bps)
+
+    return neutral_threshold, extreme_threshold
+
+
+def get_adaptive_funding_thresholds(
+    funding_history: List[float],
+    neutral_percentile: int = 50,
+    extreme_percentile: int = 90,
+    min_neutral_rate: float = 0.0001,
+    max_neutral_rate: float = 0.002,
+    min_extreme_rate: float = 0.0005,
+    max_extreme_rate: float = 0.003
+) -> Tuple[float, float]:
+    """
+    计算自适应资金费率阈值（P0.1修复）
+
+    Args:
+        funding_history: 历史资金费率数据
+        neutral_percentile: 中性阈值百分位数（默认50）
+        extreme_percentile: 极端阈值百分位数（默认90）
+        min_neutral_rate: 中性阈值下限
+        max_neutral_rate: 中性阈值上限
+        min_extreme_rate: 极端阈值下限
+        max_extreme_rate: 极端阈值上限
+
+    Returns:
+        (neutral_threshold_rate, extreme_threshold_rate)
+    """
+    if len(funding_history) < 10:
+        # 数据不足，返回固定值
+        return 0.001, 0.002
+
+    # 使用绝对值的百分位数
+    abs_funding = np.abs(funding_history)
+
+    neutral_threshold = float(np.percentile(abs_funding, neutral_percentile))
+    extreme_threshold = float(np.percentile(abs_funding, extreme_percentile))
+
+    # 边界保护
+    neutral_threshold = np.clip(neutral_threshold, min_neutral_rate, max_neutral_rate)
+    extreme_threshold = np.clip(extreme_threshold, min_extreme_rate, max_extreme_rate)
+
+    return neutral_threshold, extreme_threshold
 
 
 def directional_score(
@@ -57,43 +145,84 @@ def score_funding_rate(
     mark_price: float,
     spot_price: float,
     funding_rate: float,
-    params: dict = None
+    params: dict = None,
+    basis_history: List[float] = None,
+    funding_history: List[float] = None
 ) -> Tuple[int, dict]:
     """
-    F（资金费与基差）评分
+    F（资金费与基差）评分 - P0.1自适应阈值
 
     Args:
         mark_price: 永续合约标记价格
         spot_price: 现货价格
         funding_rate: 资金费率（8小时）
         params: 参数配置（可选）
+        basis_history: 历史基差数据（bps），用于自适应阈值（P0.1新增）
+        funding_history: 历史资金费率数据，用于自适应阈值（P0.1新增）
 
     Returns:
         (F分数 [-100, +100], 元数据)
 
     评分逻辑:
-        1. 基差分数（50%权重）:
+        1. 基差分数（60%权重）:
            - Basis (bps) = (永续 - 现货) / 现货 × 10000
            - Basis正 → 永续溢价 → 看多情绪 → 正分
-           - scale = 50bps（正常波动范围）
+           - P0.1: scale = 50th percentile of |basis_history|（自适应）
 
-        2. 资金费分数（50%权重）:
+        2. 资金费分数（40%权重）:
            - Funding正 → 多头支付空头 → 过度看多 → 负分（反向指标）
            - Funding负 → 空头支付多头 → 过度看空 → 正分（反向指标）
-           - scale = 0.01%（10bps，正常波动范围）
+           - P0.1: scale = 50th percentile of |funding_history|（自适应）
 
         3. 综合分数:
-           F = 0.5 × 基差分数 + 0.5 × 资金费分数
+           F = 0.6 × 基差分数 + 0.4 × 资金费分数
 
     风险警告:
-        - |funding_rate| > 0.15%: 极端资金费警告
+        - |funding_rate| > 极端阈值: 极端资金费警告
     """
     if params is None:
         params = {}
 
-    # 默认参数
+    # P0.1参数：自适应阈值配置
+    adaptive_config = params.get('basis_funding_adaptive', {})
+    adaptive_enabled = adaptive_config.get('enabled', True)
+    adaptive_mode = params.get('adaptive_threshold_mode', 'hybrid')
+    min_data_points = adaptive_config.get('lookback', 50)
+
+    # 默认固定阈值（legacy模式）
     basis_scale = params.get('basis_scale', 50.0)  # 基差缩放系数（bps）
     funding_scale = params.get('funding_scale', 10.0)  # 资金费缩放系数（bps）
+    threshold_source = 'legacy'
+
+    # P0.1: 自适应阈值计算
+    if adaptive_enabled and adaptive_mode != 'legacy':
+        # Basis自适应阈值
+        if basis_history and len(basis_history) >= min_data_points:
+            neutral_bps, extreme_bps = get_adaptive_basis_thresholds(
+                basis_history,
+                neutral_percentile=adaptive_config.get('neutral_percentile', 50),
+                extreme_percentile=adaptive_config.get('extreme_percentile', 90),
+                min_neutral_bps=adaptive_config.get('neutral_min_bps', 20.0),
+                max_neutral_bps=adaptive_config.get('neutral_max_bps', 200.0),
+                min_extreme_bps=adaptive_config.get('extreme_min_bps', 50.0),
+                max_extreme_bps=adaptive_config.get('extreme_max_bps', 300.0)
+            )
+            basis_scale = neutral_bps
+            threshold_source = 'adaptive'
+
+        # Funding自适应阈值
+        if funding_history and len(funding_history) >= min_data_points:
+            neutral_rate, extreme_rate = get_adaptive_funding_thresholds(
+                funding_history,
+                neutral_percentile=adaptive_config.get('neutral_percentile', 50),
+                extreme_percentile=adaptive_config.get('extreme_percentile', 90),
+                min_neutral_rate=adaptive_config.get('funding_neutral_rate', 0.001),
+                max_neutral_rate=0.002,
+                min_extreme_rate=adaptive_config.get('funding_extreme_rate', 0.002),
+                max_extreme_rate=0.003
+            )
+            funding_scale = neutral_rate * 10000  # 转换为bps
+            threshold_source = 'adaptive'
 
     # 1. 计算基差（bps）
     if spot_price > 0:
@@ -118,11 +247,16 @@ def score_funding_rate(
         scale=funding_scale
     )
 
-    # 3. 综合评分（50% 基差 + 50% 资金费）
-    F_raw = 0.5 * basis_score + 0.5 * funding_score
+    # 3. 综合评分（60% 基差 + 40% 资金费）
+    basis_weight = params.get('basis_weight', 0.6)
+    funding_weight = params.get('funding_weight', 0.4)
+    F_raw = basis_weight * basis_score + funding_weight * funding_score
 
-    # v2.0合规：应用StandardizationChain
-    F_pub, diagnostics = _funding_chain.standardize(F_raw)
+    # v2.5++修复（2025-11-05）：禁用StandardizationChain，改为直接裁剪
+    # 原因：StandardizationChain的EW平滑导致过度压缩（95%的F=-100）
+    # 修复前：F_pub, diagnostics = _funding_chain.standardize(F_raw)
+    # 修复后：直接裁剪到±100（与T/O因子对齐）
+    F_pub = max(-100, min(100, F_raw))
     F = int(round(F_pub))
 
     # 4. 元数据
@@ -132,9 +266,16 @@ def score_funding_rate(
         "funding_bps": round(funding_bps, 2),
         "basis_score": round(basis_score, 1),
         "funding_score": round(funding_score, 1),
+        "F_raw": round(F_raw, 1),                      # v2.5++: 添加诊断信息
+        "F_pub": round(F_pub, 1),                      # v2.5++: 添加诊断信息
+        "standardization_disabled": True,              # v2.5++: 标记已禁用
         "mark_price": round(mark_price, 2),
         "spot_price": round(spot_price, 2),
-        "extreme_funding": abs(funding_rate) > 0.0015  # |funding| > 0.15%
+        "extreme_funding": abs(funding_rate) > 0.0015,  # |funding| > 0.15%
+        # P0.1: 自适应阈值信息
+        "basis_scale": round(basis_scale, 2),
+        "funding_scale": round(funding_scale, 2),
+        "threshold_source": threshold_source,  # 'adaptive' or 'legacy'
     }
 
     return F, meta

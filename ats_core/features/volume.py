@@ -13,13 +13,71 @@ V（量能）评分 - 统一±100系统（多空对称修复版 v2.0）
 - 放量本身不代表方向，需要结合价格
 - 下跌放量（恐慌盘、止损盘、抄底盘）= 做空信号
 - 上涨放量（追涨盘、突破盘、FOMO盘）= 做多信号
+
+P0.2改进（自适应阈值）：
+- 价格方向阈值不再固定为0.5%
+- 根据历史波动率自适应调整
+
+P2.3改进（2025-11-05，scale参数优化）：
+- 问题：scale=0.3过小，导致tanh函数过早饱和，V分数聚集在±80
+- 方案：scale增加3倍（0.3→0.9），避免饱和，使V分数更均匀分布
+- 效果：vlevel=1.3给60分（vs旧版88分），vlevel=1.5给75分（vs旧版97分）
 """
 import math
+import numpy as np
 from ats_core.features.scoring_utils import directional_score  # 保留用于内部计算
 from ats_core.scoring.scoring_utils import StandardizationChain
 
 # 模块级StandardizationChain实例
 _volume_chain = StandardizationChain(alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5)
+
+
+def get_adaptive_price_threshold(
+    closes: list,
+    lookback: int = 20,
+    mode: str = 'hybrid',
+    min_data_points: int = 50
+) -> float:
+    """
+    计算自适应价格方向阈值（P0.2修复）
+
+    Args:
+        closes: 历史收盘价列表
+        lookback: 计算变化率的回溯周期（默认20）
+        mode: 'adaptive' | 'legacy' | 'hybrid'
+        min_data_points: 最小数据点数（默认50）
+
+    Returns:
+        price_threshold: 价格方向判定阈值（如0.005表示±0.5%）
+    """
+    # Legacy模式或数据不足时使用固定阈值
+    if mode == 'legacy' or len(closes) < min_data_points:
+        return 0.005  # 固定0.5%
+
+    # 计算历史价格变化率
+    closes_array = np.array(closes)
+    price_changes = []
+
+    # 计算每个lookback周期的涨跌幅
+    for i in range(lookback, len(closes_array)):
+        price_start = closes_array[i - lookback]
+        price_end = closes_array[i]
+        if price_start != 0:
+            change_pct = (price_end - price_start) / abs(price_start)
+            price_changes.append(change_pct)
+
+    if len(price_changes) < 10:
+        return 0.005  # 数据不足，fallback
+
+    # 使用价格变化的中位数绝对值作为阈值
+    abs_changes = np.abs(price_changes)
+    threshold = float(np.percentile(abs_changes, 50))  # 中位数
+
+    # 边界保护
+    threshold = np.clip(threshold, 0.001, 0.02)  # 0.1% - 2%
+
+    return threshold
+
 
 def score_volume(vol, closes=None, params=None):
     """
@@ -45,12 +103,15 @@ def score_volume(vol, closes=None, params=None):
         (V分数 [-100, +100], 元数据)
     """
     # 默认参数
+    # P2.3修复（2025-11-05）：scale参数优化，避免±80聚集
+    # 诊断发现：scale=0.3过小导致tanh过早饱和，推荐0.89（3倍增加）
     default_params = {
-        "vlevel_scale": 0.3,      # v5/v20 = 1.3 给约 69 分
-        "vroc_scale": 0.3,        # vroc = 0.3 给约 69 分
+        "vlevel_scale": 0.9,      # P2.3修复: 0.3→0.9，避免饱和（v5/v20=1.3给约60分，1.5给75分）
+        "vroc_scale": 0.9,        # P2.3修复: 0.3→0.9，保持一致性
         "vlevel_weight": 0.6,     # vlevel 权重
         "vroc_weight": 0.4,       # vroc 权重
         "price_lookback": 5,      # 价格方向回溯周期
+        "adaptive_threshold_mode": "hybrid",  # P0.2: 自适应阈值模式
     }
 
     p = dict(default_params)
@@ -87,8 +148,22 @@ def score_volume(vol, closes=None, params=None):
     # 计算价格趋势（最近N根K线的涨跌幅）
     price_trend_pct = 0.0
     price_direction = 0  # -1=下跌, 0=中性, +1=上涨
+    price_threshold = 0.005  # 默认阈值
+    threshold_source = 'legacy'
 
     if closes is not None and len(closes) >= p["price_lookback"] + 1:
+        # P0.2: 计算自适应阈值
+        adaptive_mode = p["adaptive_threshold_mode"]
+        if adaptive_mode != 'legacy' and len(closes) >= 50:
+            price_threshold = get_adaptive_price_threshold(
+                closes,
+                lookback=p["price_lookback"],
+                mode=adaptive_mode
+            )
+            threshold_source = 'adaptive'
+        else:
+            price_threshold = 0.005  # Fallback到固定阈值
+
         # 使用最近5根K线（或配置的回溯周期）
         lookback = p["price_lookback"]
         price_start = closes[-(lookback + 1)]
@@ -97,10 +172,10 @@ def score_volume(vol, closes=None, params=None):
         # 计算涨跌幅
         price_trend_pct = (price_end - price_start) / max(1e-12, abs(price_start))
 
-        # 判断价格方向（阈值：±0.5%）
-        if price_trend_pct > 0.005:
+        # 判断价格方向（使用自适应阈值）
+        if price_trend_pct > price_threshold:
             price_direction = 1   # 上涨
-        elif price_trend_pct < -0.005:
+        elif price_trend_pct < -price_threshold:
             price_direction = -1  # 下跌
         else:
             price_direction = 0   # 中性（小幅波动）
@@ -186,4 +261,7 @@ def score_volume(vol, closes=None, params=None):
         "price_direction": price_direction,  # v2.0: 价格方向（-1/0/+1）
         "interpretation": interpretation,
         "symmetry_fixed": True,  # v2.0: 标记已修复多空对称性
+        # P0.2: 自适应阈值信息
+        "price_threshold": round(price_threshold * 100, 3),  # 阈值（%）
+        "threshold_source": threshold_source,  # 'adaptive' or 'legacy'
     }

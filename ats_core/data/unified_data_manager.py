@@ -314,13 +314,14 @@ class UnifiedDataManager:
         return await self._fetch_oi_rest(symbol, interval, limit)
 
 
-    async def get_orderbook(self, symbol: str, limit: int = 20) -> Optional[Dict]:
+    async def get_orderbook(self, symbol: str, limit: int = 100) -> Optional[Dict]:
         """
         获取订单簿快照（优先WebSocket，降级REST）
+        默认100档，为价格带法提供足够深度
 
         Args:
             symbol: 交易对
-            limit: 深度档位
+            limit: 深度档位，默认1000（L因子需要深度数据）
 
         Returns:
             {'bids': [[price, qty], ...], 'asks': [[price, qty], ...], 'timestamp': ...}

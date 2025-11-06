@@ -52,9 +52,13 @@ from ats_core.features.multi_timeframe import multi_timeframe_coherence
 from ats_core.execution.stop_loss_calculator import ThreeTierStopLoss
 
 # ========== v6.6 因子系统（6因子：T/M/C/V/O/B）==========
-from ats_core.factors_v2.liquidity import calculate_liquidity
+# P2.5: 使用价格带法替代固定档位数
+from ats_core.features.liquidity_priceband import score_liquidity_priceband as calculate_liquidity
 from ats_core.factors_v2.basis_funding import calculate_basis_funding
 from ats_core.factors_v2.independence import calculate_independence
+
+# ========== P2.1: 蓄势待发检测增强 ==========
+from ats_core.features.accumulation_detection import detect_accumulation_v1, detect_accumulation_v2
 
 # ============ 工具函数 ============
 
@@ -317,7 +321,7 @@ def _analyze_symbol_core(
 
     # CVD资金流（C）：-100（流出）到 +100（流入）
     t0 = time.time()
-    C, C_meta = _calc_cvd_flow(cvd_series, c, params.get("cvd_flow", {}))
+    C, C_meta = _calc_cvd_flow(cvd_series, c, params.get("cvd_flow", {}), klines=k1)  # v2.5+传入klines用于ADTV_notional归一化
     perf['C资金流'] = time.time() - t0
 
     # 结构（S）：-100（差）到 +100（好）
@@ -641,10 +645,12 @@ def _analyze_symbol_core(
 
     # 软约束2：P < p_min（基于F调制器调整）
     # 计算p_min（动态）
-    # v6.6修复：降低base_p_min以匹配市场过滤后的实际概率分布
-    # 原因：市场过滤会对逆势信号施加0.70-0.85倍惩罚，导致P下降15-30%
-    # 如果base_p_min=0.58，过滤后P可能降至0.40-0.50，无法通过阈值
-    base_p_min = publish_cfg.get("prime_prob_min", 0.50)  # 从0.58降至0.50
+    # v6.7修复：使用配置文件的prime_prob_min，取消硬编码0.50
+    # 用户要求减少80%信号，需要提高阈值
+    # P2.5++修复（2025-11-05）：提高p_min从0.58→0.68，减少80%信号，保留高质量信号
+    # P2.5+++修复（2025-11-06）：方案1保守型，进一步提高到0.72，减少90%信号
+    # P2.5++++调整（2025-11-06）：方案1.5折中方案，0.72→0.70，平衡信号量
+    base_p_min = publish_cfg.get("prime_prob_min", 0.70)  # 从0.72降低到0.70
     safety_margin = modulator_output.L_meta.get("safety_margin", 0.005)
     # 修复：使用abs(edge)避免负数除法问题，并限制最大adjustment
     adjustment = safety_margin / (abs(edge) + 1e-6)
@@ -653,7 +659,8 @@ def _analyze_symbol_core(
 
     # 应用F调制器的p_min调整
     p_min_adjusted = p_min + modulator_output.p_min_adj
-    p_min_adjusted = max(0.45, min(0.65, p_min_adjusted))  # 限制在[0.45, 0.65]，匹配Anti-Jitter
+    # P2.5+信号过滤：移除0.65上限，提高到0.75以减少80%信号
+    p_min_adjusted = max(0.50, min(0.75, p_min_adjusted))  # 限制在[0.50, 0.75]
 
     # 检查P是否低于阈值
     p_below_threshold = P_chosen < p_min_adjusted
@@ -681,10 +688,11 @@ def _analyze_symbol_core(
         watch_prob_min = 0.60
     else:
         # 成熟币种：正常标准
-        prime_prob_min = publish_cfg.get("prime_prob_min", 0.62)
+        # P2.5++修复（2025-11-05）：提高概率门槛，减少80%信号
+        prime_prob_min = publish_cfg.get("prime_prob_min", 0.68)  # 从0.62提高到0.68
         prime_dims_ok_min = publish_cfg.get("prime_dims_ok_min", 4)
         prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
-        watch_prob_min = publish_cfg.get("watch_prob_min", 0.58)
+        watch_prob_min = publish_cfg.get("watch_prob_min", 0.65)  # 从0.58提高到0.65
 
     # ---- Prime评分系统（v4.0 - 基于10维因子系统）----
     # 重大改进：使用10维综合评分替代4维独立评分
@@ -862,60 +870,134 @@ def _analyze_symbol_core(
     elif is_phaseB:
         prime_strength_threshold = new_coin_cfg.get("phaseB_prime_strength_min", 28)
     else:
-        prime_strength_threshold = 50  # 成熟币标准阈值（从33提高到50，大幅减少信号80%，只保留最优质信号）
+        # P2.5++修复（2025-11-05）：提高阈值从40→55，减少80%信号，保留高质量信号
+        # P2.5+++修复（2025-11-06）：方案1保守型，进一步提高到60，减少90%信号
+        # P2.5++++调整（2025-11-06）：方案1.5折中方案，60→57，平衡信号量
+        # P2.5+++++调整（2025-11-06）：方案1.8数据驱动，57→54，基于实际日志(SSVUSDT 56.5等)
+        prime_strength_threshold = 54  # 从57降低到54
 
     # v6.7新增：蓄势待发检测（F优先通道）
+    # P2.1增强：使用detect_accumulation_v2，带veto条件
     # 目标：在价格上涨前捕捉信号，而非等趋势确立后才发现
     # 特征：资金强势流入(C高) + 资金领先价格(F高) + 但趋势未确立(T低)
-    is_accumulating = False
-    accumulating_reason = ""
 
-    if F >= 90 and C >= 60 and T < 40:
-        # 强烈蓄势特征：资金大量流入，但价格还在横盘/初期
-        is_accumulating = True
-        accumulating_reason = "强势蓄势(F≥90+C≥60+T<40)"
-        prime_strength_threshold = 35  # 降低阈值，允许早期捕捉
-    elif F >= 85 and C >= 70 and T < 30 and V < 0:
-        # 深度蓄势特征：资金流入 + 量能萎缩（洗盘完成）+ 价格横盘
-        is_accumulating = True
-        accumulating_reason = "深度蓄势(F≥85+C≥70+V<0+T<30)"
-        prime_strength_threshold = 38  # 稍微提高一点要求
+    # 构建因子字典和元数据（用于accumulation detection）
+    accumulation_cfg = params.get("factor_optimization_v2", {}).get("accumulation_detection", {})
+    accumulation_version = accumulation_cfg.get("version", "v1")
 
-    # Prime判定：使用币种特定阈值（可能被蓄势通道降低）
-    is_prime = (prime_strength >= prime_strength_threshold)
+    factors_dict = {
+        "T": T, "M": M, "C": C, "V": V, "O": O, "B": B,
+        "F": F, "L": L, "S": S, "I": I
+    }
+
+    meta_dict = {
+        "T": T_meta, "M": M_meta, "C": C_meta, "V": V_meta,
+        "O": O_meta, "B": B_meta, "F": F_meta, "L": L_meta,
+        "S": S_meta, "I": I_meta
+    }
+
+    # 调用对应版本的检测函数
+    try:
+        if accumulation_version == "v2":
+            is_accumulating, accumulating_reason, adjusted_threshold = detect_accumulation_v2(
+                factors_dict, meta_dict, accumulation_cfg.get("v2", {})
+            )
+        else:
+            is_accumulating, accumulating_reason, adjusted_threshold = detect_accumulation_v1(
+                factors_dict, meta_dict, accumulation_cfg.get("v1", {})
+            )
+
+        # 应用调整后的阈值
+        if is_accumulating:
+            prime_strength_threshold = adjusted_threshold
+
+    except Exception as e:
+        # 降级到原有逻辑（向后兼容）
+        from ats_core.logging import warn
+        warn(f"蓄势检测失败，使用原有逻辑: {e}")
+        is_accumulating = False
+        accumulating_reason = ""
+
+        if F >= 90 and C >= 60 and T < 40:
+            # 强烈蓄势特征：资金大量流入，但价格还在横盘/初期
+            is_accumulating = True
+            accumulating_reason = "强势蓄势(F≥90+C≥60+T<40)"
+            prime_strength_threshold = 35  # 降低阈值，允许早期捕捉
+        elif F >= 85 and C >= 70 and T < 30 and V < 0:
+            # 深度蓄势特征：资金流入 + 量能萎缩（洗盘完成）+ 价格横盘
+            is_accumulating = True
+            accumulating_reason = "深度蓄势(F≥85+C≥70+V<0+T<30)"
+            prime_strength_threshold = 38  # 稍微提高一点要求
+
+    # Prime判定：使用币种特定阈值（可能被蓄势通道降低）+ P值硬约束
+    # P2.5+信号过滤：加入P值硬约束，必须P>=p_min_adjusted才能发布
+    # P2.5++修复（2025-11-05）：添加更多质量门槛，减少80%信号
+
+    # 质量门槛1：基础概率和Prime强度
+    quality_check_1 = (prime_strength >= prime_strength_threshold) and (P_chosen >= p_min_adjusted)
+
+    # 质量门槛2：综合置信度（A层6因子加权）
+    # P2.5+++修复（2025-11-06）：方案1保守型，从70提高到75
+    # P2.5++++调整（2025-11-06）：方案1.5折中方案，75→72，平衡信号量
+    # P2.5+++++调整（2025-11-06）：方案1.8数据驱动，72→60，适应实际分布(25-45普遍)
+    # P2.5++++++调整（2025-11-06）：方案2.0最终平衡，60→48，让ARUSDT(54)等高分通过
+    quality_check_2 = confidence >= 48  # 从60降低到48，基于实际分布40-54
+
+    # 质量门槛3：四门槛综合质量（gate_multiplier）
+    # P2.5+++修复（2025-11-06）：方案1保守型，从0.88提高到0.90
+    # P2.5++++调整（2025-11-06）：方案1.5折中方案，0.90→0.89，平衡信号量
+    # P2.5+++++调整（2025-11-06）：方案1.8数据驱动，0.89→0.87，轻微放宽
+    quality_check_3 = gate_multiplier >= 0.87  # 从0.89降低到0.87
+
+    # 质量门槛4：edge优势边际
+    # P2.5+++修复（2025-11-06）：方案1保守型，从0.75提高到0.80
+    # P2.5++++调整（2025-11-06）：方案1.5折中方案，0.80→0.77，平衡信号量
+    # P2.5+++++调整（2025-11-06）：方案1.8数据驱动，0.77→0.70，让GMTUSDT等高分通过
+    # P2.5++++++调整（2025-11-06）：方案2.0最终平衡，0.70→0.55，让PROMUSDT(0.45)等通过
+    quality_check_4 = abs(edge) >= 0.55  # 从0.70降低到0.55，基于实际分布0.45
+
+    # 综合判定：所有质量门槛都要通过
+    is_prime = quality_check_1 and quality_check_2 and quality_check_3 and quality_check_4
     is_watch = False  # 不再发布Watch信号
 
     # v6.3新增：拒绝原因跟踪（专家建议 #5）
     # v6.3.2修复：使用币种特定的prime_strength_threshold
+    # P2.5++修复（2025-11-05）：增加新质量门槛的拒绝原因
     rejection_reason = []
     if not is_prime:
-        if prime_strength < prime_strength_threshold:
-            rejection_reason.append(f"Prime强度不足({prime_strength:.1f} < {prime_strength_threshold}, 币种:{coin_phase})")
-            if base_strength < 15:
-                rejection_reason.append(f"  - 基础强度过低({base_strength:.1f}/60)")
-            if confidence < 25:
-                rejection_reason.append(f"  - 综合置信度低({confidence:.1f}/100)")
-            if prob_bonus < 5:
-                rejection_reason.append(f"  - 概率加成不足({prob_bonus:.1f}/40, P={P_chosen:.3f})")
-        if dims_ok < prime_dims_ok_min:
-            rejection_reason.append(f"达标维度不足({dims_ok} < {prime_dims_ok_min})")
-        if P_chosen < prime_prob_min:
-            rejection_reason.append(f"概率过低({P_chosen:.3f} < {prime_prob_min:.3f})")
-        # 检查四门得分
-        gates = {
-            "data_qual": min(1.0, len(k1) / 200.0) if k1 else 0.0,
-            "ev_gate": (P_chosen - 0.5) * 2,
-            "execution": (scores.get('L', 0) + 100) / 200,
-            "probability": (P_chosen - 0.5) / 0.45 if P_chosen >= 0.5 else (P_chosen - 0.5) / 0.5,
-        }
-        if gates['data_qual'] < 0.5:
-            rejection_reason.append(f"数据质量不足({gates['data_qual']:.2f} < 0.5)")
-        if gates['ev_gate'] < -0.5:
-            rejection_reason.append(f"EV过低({gates['ev_gate']:.2f} < -0.5)")
-        if gates['execution'] < 0.3:
-            rejection_reason.append(f"执行质量差({gates['execution']:.2f} < 0.3, L={scores.get('L',0):.1f})")
+        # 检查质量门槛1：Prime强度和概率
+        if not quality_check_1:
+            if prime_strength < prime_strength_threshold:
+                rejection_reason.append(f"❌ Prime强度不足({prime_strength:.1f} < {prime_strength_threshold})")
+                if base_strength < 30:
+                    rejection_reason.append(f"  - 基础强度过低({base_strength:.1f}/60)")
+                if confidence < 48:
+                    rejection_reason.append(f"  - 综合置信度低({confidence:.1f}/48)")
+                if prob_bonus < 10:
+                    rejection_reason.append(f"  - 概率加成不足({prob_bonus:.1f}/40, P={P_chosen:.3f})")
+            if P_chosen < p_min_adjusted:
+                rejection_reason.append(f"❌ 概率过低({P_chosen:.3f} < {p_min_adjusted:.3f})")
+
+        # 检查质量门槛2：综合置信度
+        if not quality_check_2:
+            rejection_reason.append(f"❌ 置信度不足({confidence:.1f} < 48)")
+
+        # 检查质量门槛3：gate_multiplier
+        if not quality_check_3:
+            rejection_reason.append(f"❌ 四门槛质量不足(gate_mult={gate_multiplier:.3f} < 0.87)")
+            # 详细说明哪些门槛拖后腿
+            gates_data_qual = _get(r, "gates.data_qual", 1.0) if 'r' in locals() else 1.0
+            gates_execution = 0.5 + L / 200.0 if L else 0.5
+            if gates_data_qual < 0.95:
+                rejection_reason.append(f"  - DataQual低({gates_data_qual:.2%})")
+            if gates_execution < 0.7:
+                rejection_reason.append(f"  - 执行质量差({gates_execution:.2f}, L={L})")
+
+        # 检查质量门槛4：edge
+        if not quality_check_4:
+            rejection_reason.append(f"❌ Edge不足({abs(edge):.2f} < 0.55)")
     else:
-        rejection_reason = ["通过(Prime)"]
+        rejection_reason = [f"✅ 通过所有质量门槛(P={P_chosen:.3f}, Prime={prime_strength:.1f}, Conf={confidence:.1f}, GM={gate_multiplier:.3f}, Edge={abs(edge):.2f})"]
 
     # ---- 6. BTC/ETH市场过滤器（方案B - 独立过滤 + 避免双重惩罚）----
     # 计算市场大盘趋势，避免逆势做单
@@ -948,7 +1030,8 @@ def _analyze_symbol_core(
                 P_short = P_chosen
 
             prime_strength = prime_strength_filtered
-            is_prime = (prime_strength >= prime_strength_threshold)  # v6.3.2: 使用币种特定阈值
+            # P2.5+: 重新判定is_prime，加入P值硬约束
+            is_prime = (prime_strength >= prime_strength_threshold) and (P_chosen >= p_min_adjusted)
 
         penalty_reason = market_adjustment_reason
 
@@ -1039,6 +1122,7 @@ def _analyze_symbol_core(
 
     # ---- 8. 组装结果（统一±100系统）----
     result = {
+        "success": True,  # P2.1修复：添加success标识
         "symbol": symbol,
         "price": close_now,
         "ema30": _last(ema30),
@@ -1278,8 +1362,9 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     )
 
     # 获取订单簿数据（L因子）
+    # 注：后续将实现价格带法（±bps聚合）替代固定档位数
     try:
-        orderbook = get_orderbook_snapshot(symbol, limit=20)
+        orderbook = get_orderbook_snapshot(symbol, limit=100)
     except Exception as e:
         from ats_core.logging import warn
         warn(f"获取{symbol}订单簿失败: {e}")
@@ -1405,11 +1490,19 @@ def _calc_momentum(h, l, c, cfg):
         warn(f"⚠️  M因子计算异常: {e}")
         return 0, {"slope_now": 0.0, "accel": 0.0, "error": str(e)}
 
-def _calc_cvd_flow(cvd_series, c, cfg):
-    """CVD资金流打分（±100系统）"""
+def _calc_cvd_flow(cvd_series, c, cfg, klines=None):
+    """
+    CVD资金流打分（±100系统）
+
+    Args:
+        cvd_series: CVD序列
+        c: 收盘价序列
+        cfg: 配置参数
+        klines: K线数据（v2.5+用于ADTV_notional归一化）
+    """
     try:
         from ats_core.features.cvd_flow import score_cvd_flow
-        C, meta = score_cvd_flow(cvd_series, c, False, cfg)  # 保留side_long参数兼容性，传False
+        C, meta = score_cvd_flow(cvd_series, c, False, cfg, klines=klines)  # v2.5+传入klines
         return int(C), meta
     except Exception:
         return 0, {"cvd6": 0.0, "cvd_score": 0}
