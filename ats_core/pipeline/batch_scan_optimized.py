@@ -88,8 +88,8 @@ class OptimizedBatchScanner:
         self.client = get_binance_client()
         await self.client.initialize()
 
-        # 2. 获取高流动性USDT合约币种（TOP 200，v6.1优化）
-        log("\n2️⃣  获取高流动性USDT合约币种...")
+        # 2. 获取高流动性USDT合约币种（全市场扫描，v6.8优化）
+        log("\n2️⃣  获取币安USDT合约币种（全市场扫描）...")
 
         # 获取交易所信息
         exchange_info = await self.client.get_exchange_info()
@@ -125,25 +125,18 @@ class OptimizedBatchScanner:
         ]
         log(f"   流动性过滤后: {len(filtered_symbols)} 个币种（24h成交额>3M USDT）")
 
-        # 多空对称选币：波动率优先 + 流动性保障
-        # 设计原理：abs(涨跌幅)确保多空对称，避免只选上涨币
-        max_volume = max(ticker_map.get(s, {}).get('volume', 1) for s in filtered_symbols)
+        # 全市场扫描：分析所有流动性合格的币种
+        # 设计原理：不预先按波动率筛选，避免漏掉"蓄势待发"的币
+        # 系统有4道质量门槛（DataQual/EV/Execution/Probability）会自动过滤低质量信号
 
-        def calc_score(symbol):
-            """综合评分：波动率70% + 流动性30%"""
-            data = ticker_map.get(symbol, {})
-            volatility = abs(data.get('change_pct', 0))  # 多空对称（绝对值）
-            liquidity = data.get('volume', 0) / max_volume  # 归一化到[0,1]
-            return volatility * 0.7 + liquidity * 0.3 * 100  # 波动率占主导
-
-        # 按综合评分排序，取TOP 200
+        # 按流动性排序（保证扫描顺序稳定）
         symbols = sorted(
             filtered_symbols,
-            key=calc_score,
+            key=lambda s: ticker_map.get(s, {}).get('volume', 0),
             reverse=True
-        )[:200]
+        )
 
-        log(f"   ✅ 筛选出 {len(symbols)} 个高波动币种（多空对称选币）")
+        log(f"   ✅ 全市场扫描: {len(symbols)} 个币种（不限波动率，发现蓄势潜力股）")
 
         # 验证是否成功获取到币种
         if not symbols:
@@ -155,19 +148,19 @@ class OptimizedBatchScanner:
                 "   请检查网络连接并重试。"
             )
 
-        # 显示选中的币种信息
-        log(f"   TOP 5: {', '.join(symbols[:5])}")
+        # 显示流动性TOP 5
+        log(f"   流动性TOP 5: {', '.join(symbols[:5])}")
 
-        # 统计多空分布
+        # 统计多空分布（24h涨跌情况）
         up_count = sum(1 for s in symbols if ticker_map.get(s, {}).get('change_pct', 0) > 0)
         down_count = len(symbols) - up_count
-        log(f"   多空分布: 上涨{up_count}个 / 下跌{down_count}个（做多做空机会均衡）")
+        flat_count = len(symbols) - up_count - down_count
+        log(f"   多空分布: 上涨{up_count}个 / 下跌{down_count}个 / 横盘{flat_count}个")
 
-        # 显示波动率和成交额范围
-        top_data = ticker_map.get(symbols[0], {})
-        last_data = ticker_map.get(symbols[-1], {})
-        log(f"   波动率范围: {abs(top_data.get('change_pct', 0)):.1f}% ~ {abs(last_data.get('change_pct', 0)):.1f}%")
-        log(f"   成交额范围: {top_data.get('volume', 0)/1e6:.1f}M ~ {last_data.get('volume', 0)/1e6:.1f}M USDT")
+        # 显示成交额范围
+        top_volume = ticker_map.get(symbols[0], {}).get('volume', 0)
+        last_volume = ticker_map.get(symbols[-1], {}).get('volume', 0)
+        log(f"   成交额范围: {top_volume/1e6:.1f}M ~ {last_volume/1e6:.1f}M USDT")
 
         # 保存初始化的币种列表
         self.symbols = symbols
