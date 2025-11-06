@@ -10,7 +10,7 @@ import os
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from ats_core.pipeline.analyze_symbol import analyze_symbol_v6
+from ats_core.pipeline.analyze_symbol import analyze_symbol_with_preloaded_klines
 from ats_core.outputs.telegram_fmt import render_signal_detailed
 from ats_core.data.unified_data_manager import get_klines
 import json
@@ -36,13 +36,12 @@ def test_symbol(symbol: str):
 
     # 2. 运行分析
     print("\n🔍 运行分析...")
-    result = analyze_symbol_v6(
+    result = analyze_symbol_with_preloaded_klines(
         symbol=symbol,
         klines_1h=klines_1h,
         klines_4h=klines_4h,
         klines_15m=klines_15m,
-        klines_1d=klines_1d,
-        verbose=True
+        klines_1d=klines_1d
     )
 
     if not result:
