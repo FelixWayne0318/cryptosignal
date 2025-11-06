@@ -707,10 +707,27 @@ class OptimizedBatchScanner:
 
             # 发送到Telegram（如果配置了）
             try:
-                from ats_core.notification.telegram import get_telegram_bot
-                telegram_bot = get_telegram_bot()
-                if telegram_bot and telegram_bot.enabled:
-                    stats.send_to_telegram(report, telegram_bot)
+                from pathlib import Path
+                import json
+                import os
+
+                # 尝试加载Telegram配置
+                config_file = Path(__file__).parent.parent.parent / 'config' / 'telegram.json'
+                bot_token = None
+                chat_id = None
+
+                if config_file.exists():
+                    with open(config_file, 'r') as f:
+                        config = json.load(f)
+                        bot_token = config.get('bot_token')
+                        chat_id = config.get('chat_id')
+                else:
+                    # 从环境变量读取
+                    bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+                    chat_id = os.getenv('TELEGRAM_CHAT_ID')
+
+                if bot_token and chat_id:
+                    stats.send_to_telegram(report, bot_token, chat_id)
                     log("✅ 统计报告已发送到Telegram")
                 else:
                     log("⚠️  Telegram未配置，跳过发送统计报告")

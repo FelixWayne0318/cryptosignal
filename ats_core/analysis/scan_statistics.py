@@ -301,25 +301,31 @@ class ScanStatistics:
 
         return suggestions
 
-    def send_to_telegram(self, report: str, telegram_bot) -> bool:
+    def send_to_telegram(self, report: str, bot_token: str, chat_id: str) -> bool:
         """
         发送报告到Telegram
 
         Args:
             report: 报告文本
-            telegram_bot: TelegramBot实例
+            bot_token: Telegram bot token
+            chat_id: Telegram chat ID
 
         Returns:
             是否发送成功
         """
         try:
+            import urllib.request
+            import urllib.parse
+            import json
+
             # 分段发送（Telegram有4096字符限制）
             max_length = 4000
+            parts = []
+
             if len(report) <= max_length:
-                telegram_bot.send_message(report)
+                parts = [report]
             else:
                 # 分段发送
-                parts = []
                 lines = report.split('\n')
                 current_part = []
                 current_length = 0
@@ -337,12 +343,34 @@ class ScanStatistics:
                 if current_part:
                     parts.append('\n'.join(current_part))
 
-                for i, part in enumerate(parts, 1):
-                    telegram_bot.send_message(f"【第{i}/{len(parts)}部分】\n{part}")
+            # 发送每个分段
+            api = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+
+            for i, part in enumerate(parts, 1):
+                text = part
+                if len(parts) > 1:
+                    text = f"【第{i}/{len(parts)}部分】\n{part}"
+
+                payload = {
+                    'chat_id': chat_id,
+                    'text': text,
+                    'parse_mode': 'HTML'
+                }
+
+                data = urllib.parse.urlencode(payload).encode('utf-8')
+                req = urllib.request.Request(api, data=data, method='POST')
+
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    result = json.loads(response.read().decode('utf-8'))
+                    if not result.get('ok'):
+                        print(f"❌ Telegram API错误: {result}")
+                        return False
 
             return True
         except Exception as e:
             print(f"❌ 发送Telegram失败: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
 
