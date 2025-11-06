@@ -649,7 +649,8 @@ def _analyze_symbol_core(
     # 用户要求减少80%信号，需要提高阈值
     # P2.5++修复（2025-11-05）：提高p_min从0.58→0.68，减少80%信号，保留高质量信号
     # P2.5+++修复（2025-11-06）：方案1保守型，进一步提高到0.72，减少90%信号
-    base_p_min = publish_cfg.get("prime_prob_min", 0.72)  # 从0.68提高到0.72
+    # P2.5++++调整（2025-11-06）：方案1.5折中方案，0.72→0.70，平衡信号量
+    base_p_min = publish_cfg.get("prime_prob_min", 0.70)  # 从0.72降低到0.70
     safety_margin = modulator_output.L_meta.get("safety_margin", 0.005)
     # 修复：使用abs(edge)避免负数除法问题，并限制最大adjustment
     adjustment = safety_margin / (abs(edge) + 1e-6)
@@ -871,7 +872,8 @@ def _analyze_symbol_core(
     else:
         # P2.5++修复（2025-11-05）：提高阈值从40→55，减少80%信号，保留高质量信号
         # P2.5+++修复（2025-11-06）：方案1保守型，进一步提高到60，减少90%信号
-        prime_strength_threshold = 60  # 从55提高到60
+        # P2.5++++调整（2025-11-06）：方案1.5折中方案，60→57，平衡信号量
+        prime_strength_threshold = 57  # 从60降低到57
 
     # v6.7新增：蓄势待发检测（F优先通道）
     # P2.1增强：使用detect_accumulation_v2，带veto条件
@@ -935,15 +937,18 @@ def _analyze_symbol_core(
 
     # 质量门槛2：综合置信度（A层6因子加权）
     # P2.5+++修复（2025-11-06）：方案1保守型，从70提高到75
-    quality_check_2 = confidence >= 75  # 从70提高到75
+    # P2.5++++调整（2025-11-06）：方案1.5折中方案，75→72，平衡信号量
+    quality_check_2 = confidence >= 72  # 从75降低到72
 
     # 质量门槛3：四门槛综合质量（gate_multiplier）
     # P2.5+++修复（2025-11-06）：方案1保守型，从0.88提高到0.90
-    quality_check_3 = gate_multiplier >= 0.90  # 从0.88提高到0.90
+    # P2.5++++调整（2025-11-06）：方案1.5折中方案，0.90→0.89，平衡信号量
+    quality_check_3 = gate_multiplier >= 0.89  # 从0.90降低到0.89
 
     # 质量门槛4：edge优势边际
     # P2.5+++修复（2025-11-06）：方案1保守型，从0.75提高到0.80
-    quality_check_4 = abs(edge) >= 0.80  # 从0.75提高到0.80
+    # P2.5++++调整（2025-11-06）：方案1.5折中方案，0.80→0.77，平衡信号量
+    quality_check_4 = abs(edge) >= 0.77  # 从0.80降低到0.77
 
     # 综合判定：所有质量门槛都要通过
     is_prime = quality_check_1 and quality_check_2 and quality_check_3 and quality_check_4
@@ -960,8 +965,8 @@ def _analyze_symbol_core(
                 rejection_reason.append(f"❌ Prime强度不足({prime_strength:.1f} < {prime_strength_threshold})")
                 if base_strength < 30:
                     rejection_reason.append(f"  - 基础强度过低({base_strength:.1f}/60)")
-                if confidence < 75:
-                    rejection_reason.append(f"  - 综合置信度低({confidence:.1f}/75)")
+                if confidence < 72:
+                    rejection_reason.append(f"  - 综合置信度低({confidence:.1f}/72)")
                 if prob_bonus < 10:
                     rejection_reason.append(f"  - 概率加成不足({prob_bonus:.1f}/40, P={P_chosen:.3f})")
             if P_chosen < p_min_adjusted:
@@ -969,11 +974,11 @@ def _analyze_symbol_core(
 
         # 检查质量门槛2：综合置信度
         if not quality_check_2:
-            rejection_reason.append(f"❌ 置信度不足({confidence:.1f} < 75)")
+            rejection_reason.append(f"❌ 置信度不足({confidence:.1f} < 72)")
 
         # 检查质量门槛3：gate_multiplier
         if not quality_check_3:
-            rejection_reason.append(f"❌ 四门槛质量不足(gate_mult={gate_multiplier:.3f} < 0.90)")
+            rejection_reason.append(f"❌ 四门槛质量不足(gate_mult={gate_multiplier:.3f} < 0.89)")
             # 详细说明哪些门槛拖后腿
             gates_data_qual = _get(r, "gates.data_qual", 1.0) if 'r' in locals() else 1.0
             gates_execution = 0.5 + L / 200.0 if L else 0.5
@@ -984,7 +989,7 @@ def _analyze_symbol_core(
 
         # 检查质量门槛4：edge
         if not quality_check_4:
-            rejection_reason.append(f"❌ Edge不足({abs(edge):.2f} < 0.80)")
+            rejection_reason.append(f"❌ Edge不足({abs(edge):.2f} < 0.77)")
     else:
         rejection_reason = [f"✅ 通过所有质量门槛(P={P_chosen:.3f}, Prime={prime_strength:.1f}, Conf={confidence:.1f}, GM={gate_multiplier:.3f}, Edge={abs(edge):.2f})"]
 
