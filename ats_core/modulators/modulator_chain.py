@@ -11,11 +11,16 @@ v6.6 统一调制器链 - L/S/F/I四调制器系统
 - S=-100 → confidence降低但不拒绝
 - F/I只调整Teff和cost，无阈值门槛
 
+⚠️ v6.7++重要变更（2025-11-06）：
+- p_min_adj 已弃用：改用FIModulator.calculate_thresholds()统一计算p_min
+- p_min_adj 保留用于向后兼容，但analyze_symbol.py不再使用
+- 新代码应使用 ats_core.modulators.fi_modulators.get_fi_modulator()
+
 架构：
 ┌─────────────────────────────────────────┐
 │  L(流动性) → position_mult, cost_eff_L  │
 │  S(结构)   → confidence_mult, Teff_S    │
-│  F(资金领先)→ Teff_F, p_min_adj         │
+│  F(资金领先)→ Teff_F, [p_min_adj已弃用] │
 │  I(独立性) → Teff_I, cost_eff_I         │
 └─────────────────────────────────────────┘
               ↓ 融合
@@ -24,11 +29,12 @@ v6.6 统一调制器链 - L/S/F/I四调制器系统
 │         Teff_I  (乘法)                   │
 │  cost = cost_base + cost_L + cost_I     │
 │         (加法)                           │
+│  p_min = 使用FIModulator (F+I双重调制)  │
 └─────────────────────────────────────────┘
 
 作者：Claude (Sonnet 4.5)
 日期：2025-11-03
-版本：v6.6
+版本：v6.6 (更新v6.7++: 2025-11-06)
 """
 
 from typing import Dict, Any, Optional, Tuple
@@ -51,7 +57,7 @@ class ModulatorOutput:
 
         # F调制器输出
         self.Teff_F = 1.0      # 温度倍数 [0.80, 1.20]
-        self.p_min_adj = 0.0   # p_min调整 [-0.02, +0.02]
+        self.p_min_adj = 0.0   # ⚠️ DEPRECATED v6.7++: 改用FIModulator.calculate_thresholds()
         self.F_meta = {}
 
         # I调制器输出
@@ -321,6 +327,11 @@ class ModulatorChain:
         """
         F调制器：资金领先 → 温度倍数 + p_min调整
 
+        ⚠️ DEPRECATED (v6.7++): p_min_adj 已弃用
+        - 新代码应使用 FIModulator.calculate_thresholds() 计算完整的p_min（包含F+I）
+        - 此函数保留p_min_adj仅用于向后兼容
+        - analyze_symbol.py 已迁移到 FIModulator
+
         逻辑：
         - F正（资金领先价格）：Teff降低（P提升），p_min略降
         - F负（价格领先资金）：Teff升高（P降低），p_min略升
@@ -331,7 +342,7 @@ class ModulatorChain:
 
         返回：
         - Teff_F: [0.80, 1.20]
-        - p_min_adj: [-0.02, +0.02]
+        - p_min_adj: [-0.02, +0.02] ⚠️ DEPRECATED
         - meta: 元数据字典
         """
         Teff_min = self.F_params.get("Teff_min", 0.80)
