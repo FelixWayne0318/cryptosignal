@@ -952,7 +952,8 @@ def _analyze_symbol_core(
     # P2.5++++调整（2025-11-06）：方案1.5折中方案，75→72，平衡信号量
     # P2.5+++++调整（2025-11-06）：方案1.8数据驱动，72→60，适应实际分布(25-45普遍)
     # P2.5++++++调整（2025-11-06）：方案2.0最终平衡，60→48，让ARUSDT(54)等高分通过
-    quality_check_2 = confidence >= 48  # 从60降低到48，基于实际分布40-54
+    # P2.5+++++++调整（2025-11-06）：方案2.1全市场扫描校准，48→45，基于405币实测(COTIUSDT 47等)
+    quality_check_2 = confidence >= 45  # 从48降低到45，基于全市场扫描实测分布
 
     # 质量门槛3：四门槛综合质量（gate_multiplier）
     # P2.5+++修复（2025-11-06）：方案1保守型，从0.88提高到0.90
@@ -965,7 +966,8 @@ def _analyze_symbol_core(
     # P2.5++++调整（2025-11-06）：方案1.5折中方案，0.80→0.77，平衡信号量
     # P2.5+++++调整（2025-11-06）：方案1.8数据驱动，0.77→0.70，让GMTUSDT等高分通过
     # P2.5++++++调整（2025-11-06）：方案2.0最终平衡，0.70→0.55，让PROMUSDT(0.45)等通过
-    quality_check_4 = abs(edge) >= 0.55  # 从0.70降低到0.55，基于实际分布0.45
+    # P2.5+++++++调整（2025-11-06）：方案2.1全市场扫描校准，0.55→0.48，基于405币实测(KNCUSDT 0.54, GMXUSDT 0.52, ACTUSDT 0.50等)
+    quality_check_4 = abs(edge) >= 0.48  # 从0.55降低到0.48，基于全市场扫描实测高质量分布
 
     # 综合判定：所有质量门槛都要通过
     is_prime = quality_check_1 and quality_check_2 and quality_check_3 and quality_check_4
@@ -982,8 +984,8 @@ def _analyze_symbol_core(
                 rejection_reason.append(f"❌ Prime强度不足({prime_strength:.1f} < {prime_strength_threshold})")
                 if base_strength < 30:
                     rejection_reason.append(f"  - 基础强度过低({base_strength:.1f}/60)")
-                if confidence < 48:
-                    rejection_reason.append(f"  - 综合置信度低({confidence:.1f}/48)")
+                if confidence < 45:
+                    rejection_reason.append(f"  - 综合置信度低({confidence:.1f}/45)")
                 if prob_bonus < 10:
                     rejection_reason.append(f"  - 概率加成不足({prob_bonus:.1f}/40, P={P_chosen:.3f})")
             if P_chosen < p_min_adjusted:
@@ -991,7 +993,7 @@ def _analyze_symbol_core(
 
         # 检查质量门槛2：综合置信度
         if not quality_check_2:
-            rejection_reason.append(f"❌ 置信度不足({confidence:.1f} < 48)")
+            rejection_reason.append(f"❌ 置信度不足({confidence:.1f} < 45)")
 
         # 检查质量门槛3：gate_multiplier
         if not quality_check_3:
@@ -1006,7 +1008,7 @@ def _analyze_symbol_core(
 
         # 检查质量门槛4：edge
         if not quality_check_4:
-            rejection_reason.append(f"❌ Edge不足({abs(edge):.2f} < 0.55)")
+            rejection_reason.append(f"❌ Edge不足({abs(edge):.2f} < 0.48)")
     else:
         rejection_reason = [f"✅ 通过所有质量门槛(P={P_chosen:.3f}, Prime={prime_strength:.1f}, Conf={confidence:.1f}, GM={gate_multiplier:.3f}, Edge={abs(edge):.2f})"]
 
