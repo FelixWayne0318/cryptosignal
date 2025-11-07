@@ -980,7 +980,8 @@ def _analyze_symbol_core(
     # P2.5+++修复（2025-11-06）：方案1保守型，从0.88提高到0.90
     # P2.5++++调整（2025-11-06）：方案1.5折中方案，0.90→0.89，平衡信号量
     # P2.5+++++调整（2025-11-06）：方案1.8数据驱动，0.89→0.87，轻微放宽
-    quality_check_3 = gate_multiplier >= 0.87  # 从0.89降低到0.87
+    # P2.5++++++调整（2025-11-07）：方案2.2全市场扫描校准2，0.87→0.84，基于405币实测(16个币种0.86-0.87接近阈值)
+    quality_check_3 = gate_multiplier >= 0.84  # 从0.87降低到0.84，解锁0.85-0.86区间的高质量币种
 
     # 质量门槛4：edge优势边际
     # P2.5+++修复（2025-11-06）：方案1保守型，从0.75提高到0.80
@@ -1018,7 +1019,7 @@ def _analyze_symbol_core(
 
         # 检查质量门槛3：gate_multiplier
         if not quality_check_3:
-            rejection_reason.append(f"❌ 四门槛质量不足(gate_mult={gate_multiplier:.3f} < 0.87)")
+            rejection_reason.append(f"❌ 四门槛质量不足(gate_mult={gate_multiplier:.3f} < 0.84)")
             # 详细说明哪些门槛拖后腿
             gates_data_qual = _get(r, "gates.data_qual", 1.0) if 'r' in locals() else 1.0
             gates_execution = 0.5 + L / 200.0 if L else 0.5
@@ -1241,6 +1242,8 @@ def _analyze_symbol_core(
         },
         # 向后兼容（保留旧键名）
         "coin_age_days": round(coin_age_days, 1),
+        "coin_age_hours": round(coin_age_hours, 1),  # v6.8: 添加以支持统计分析
+        "bars": bars_1h,  # v6.8: 添加以支持统计分析
         "coin_phase": coin_phase,
         "is_new_coin": is_new_coin,
 

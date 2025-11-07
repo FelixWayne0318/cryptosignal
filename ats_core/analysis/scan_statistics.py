@@ -225,7 +225,7 @@ class ScanStatistics:
             'confidence': 45,
             'edge': 0.48,
             'prime_strength': 54,
-            'gate_multiplier': 0.87,
+            'gate_multiplier': 0.84,  # P2.2: 从0.87降低到0.84
         }
 
         close_coins = []
