@@ -734,6 +734,34 @@ class OptimizedBatchScanner:
                 for key, path in files.items():
                     log(f"   - {key}: {path}")
 
+                # v6.9+: 自动提交并推送到Git仓库
+                log("\n🔄 自动提交报告到Git仓库...")
+                import subprocess
+                from pathlib import Path
+                auto_commit_script = Path(__file__).parent.parent.parent / 'scripts' / 'auto_commit_reports.sh'
+
+                if auto_commit_script.exists():
+                    try:
+                        result = subprocess.run(
+                            ['bash', str(auto_commit_script)],
+                            capture_output=True,
+                            text=True,
+                            timeout=60
+                        )
+                        if result.returncode == 0:
+                            log("✅ 报告已自动推送到远程仓库")
+                            for line in result.stdout.strip().split('\n'):
+                                if line:
+                                    log(f"   {line}")
+                        else:
+                            warn(f"⚠️  自动提交失败: {result.stderr}")
+                    except subprocess.TimeoutExpired:
+                        warn("⚠️  自动提交超时（60秒）")
+                    except Exception as e:
+                        warn(f"⚠️  自动提交异常: {e}")
+                else:
+                    log(f"⚠️  自动提交脚本不存在: {auto_commit_script}")
+
             except Exception as e:
                 warn(f"⚠️  写入仓库失败: {e}")
                 import traceback
