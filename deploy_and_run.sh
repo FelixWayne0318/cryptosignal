@@ -42,6 +42,26 @@ fi
 
 cd ~/cryptosignal
 
+# ==========================================
+# -1.0 配置GitHub访问权限
+# ==========================================
+echo ""
+echo "0️⃣ 配置GitHub访问权限..."
+
+if [ -f "scripts/configure_github.sh" ]; then
+    chmod +x scripts/configure_github.sh
+    if bash scripts/configure_github.sh; then
+        echo -e "${GREEN}✅ GitHub访问权限配置完成${NC}"
+    else
+        echo -e "${YELLOW}⚠️  GitHub配置失败，可能影响自动推送功能${NC}"
+        echo "   继续部署...（可稍后手动配置）"
+    fi
+    echo ""
+else
+    echo -e "${YELLOW}⚠️  配置脚本不存在，跳过GitHub配置${NC}"
+    echo ""
+fi
+
 # 检测是否在 git 仓库中
 if [ ! -d .git ]; then
     echo -e "${RED}❌ 不在 git 仓库中${NC}"

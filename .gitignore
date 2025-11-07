@@ -24,6 +24,10 @@ config/binance_credentials.json
 config/*credentials*.json
 config/*secret*.json
 
+# GitHub配置文件（包含Token，不应提交）
+.cryptosignal-github.env
+.git-credentials
+
 # 注意：reports/ 现在被跟踪（用于自动分析），但history/子目录除外
 
 # --- Data / Cache ---
