@@ -23,6 +23,7 @@ logs/
 config/binance_credentials.json
 config/*credentials*.json
 config/*secret*.json
+config/telegram.json
 
 # GitHub配置文件（包含Token，不应提交）
 .cryptosignal-github.env
