@@ -697,13 +697,47 @@ class OptimizedBatchScanner:
         log(f"   内存占用: {cache_stats['memory_estimate_mb']:.1f}MB")
         log("=" * 60)
 
-        # v6.8: 生成统计分析报告并发送到Telegram
+        # v6.8: 生成统计分析报告并写入仓库
         try:
             stats = get_global_stats()
             report = stats.generate_statistics_report()
 
             # 打印到日志
             log("\n" + report)
+
+            # v6.8+: 写入仓库（JSON + Markdown）
+            try:
+                from ats_core.analysis.report_writer import get_report_writer
+                writer = get_report_writer()
+
+                # 生成数据
+                summary_data = stats.generate_summary_data()
+                detail_data = stats.generate_detail_data()
+
+                # 添加扫描性能信息到summary
+                summary_data['performance'] = {
+                    'total_time_sec': round(scan_elapsed, 2),
+                    'speed_coins_per_sec': round(len(symbols) / scan_elapsed, 2),
+                    'api_calls': 0,
+                    'cache_hit_rate': cache_stats.get('hit_rate', 'N/A'),
+                    'memory_mb': cache_stats.get('memory_estimate_mb', 0)
+                }
+
+                # 写入文件
+                files = writer.write_scan_report(
+                    summary=summary_data,
+                    detail=detail_data,
+                    text_report=report
+                )
+
+                log("✅ 报告已写入仓库:")
+                for key, path in files.items():
+                    log(f"   - {key}: {path}")
+
+            except Exception as e:
+                warn(f"⚠️  写入仓库失败: {e}")
+                import traceback
+                traceback.print_exc()
 
             # 发送到Telegram（如果配置了）
             try:

@@ -19,11 +19,12 @@ pip-wheel-metadata/
 .venv/
 venv/
 logs/
-reports/
 *.log
 config/binance_credentials.json
 config/*credentials*.json
 config/*secret*.json
+
+# 注意：reports/ 现在被跟踪（用于自动分析），但history/子目录除外
 
 # --- Data / Cache ---
 data/cache/

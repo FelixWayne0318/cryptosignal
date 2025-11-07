@@ -1,0 +1,8 @@
+# 只跟踪最新结果和趋势，不跟踪所有历史记录（避免太多commits）
+history/*
+!history/.gitkeep
+
+# 跟踪的文件：
+# - latest/* （最新扫描结果）
+# - trends.json （趋势汇总）
+# - README.md （说明文档）

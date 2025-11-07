@@ -81,6 +81,83 @@ class ScanStatistics:
                     key_reason = reason.split('(')[0].strip()
                     self.rejections[key_reason] = self.rejections.get(key_reason, 0) + 1
 
+    def generate_summary_data(self) -> dict:
+        """
+        生成摘要数据（JSON格式，用于写入仓库）
+
+        Returns:
+            摘要数据字典
+        """
+        if not self.symbols_data:
+            return {"error": "无数据可分析"}
+
+        # 计算平均值
+        avg_edge = np.mean([abs(d['edge']) for d in self.symbols_data if d['edge'] != 0])
+        avg_confidence = np.mean([d['confidence'] for d in self.symbols_data if d['confidence'] > 0])
+
+        # 新币统计
+        new_coins = [d for d in self.symbols_data if d['coin_age_hours'] < 168]
+
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "scan_info": {
+                "total_symbols": len(self.symbols_data),
+                "signals_found": len(self.signals),
+                "filtered": len(self.symbols_data) - len(self.signals)
+            },
+            "signals": [
+                {
+                    "symbol": s['symbol'],
+                    "edge": round(s['edge'], 3),
+                    "confidence": round(s['confidence'], 1),
+                    "prime_strength": round(s['prime_strength'], 1),
+                    "P_chosen": round(s['P_chosen'], 3)
+                }
+                for s in sorted(self.signals, key=lambda x: abs(x['edge']), reverse=True)
+            ],
+            "rejection_reasons": self.rejections,
+            "close_to_threshold": [
+                {
+                    "symbol": c['symbol'],
+                    "metric": c['metric'],
+                    "gap": round(c['gap'], 3),
+                    "current": round(c['current'], 3),
+                    "threshold": round(c['threshold'], 3)
+                }
+                for c in self._find_close_to_threshold()[:20]
+            ],
+            "market_stats": {
+                "avg_edge": round(avg_edge, 3),
+                "avg_confidence": round(avg_confidence, 1),
+                "new_coins_count": len(new_coins),
+                "new_coins_pct": round(len(new_coins) / len(self.symbols_data) * 100, 1)
+            },
+            "factor_distribution": {
+                factor: {
+                    "min": round(self._calc_distribution(factor)['min'], 1),
+                    "p25": round(self._calc_distribution(factor)['p25'], 1),
+                    "median": round(self._calc_distribution(factor)['p50'], 1),
+                    "p75": round(self._calc_distribution(factor)['p75'], 1),
+                    "max": round(self._calc_distribution(factor)['max'], 1)
+                }
+                for factor in ['T', 'M', 'C', 'V', 'O', 'B', 'F', 'L', 'S', 'I']
+            },
+            "threshold_recommendations": self._generate_threshold_suggestions()
+        }
+
+    def generate_detail_data(self) -> dict:
+        """
+        生成详细数据（所有币种的完整信息）
+
+        Returns:
+            详细数据字典
+        """
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "total_symbols": len(self.symbols_data),
+            "symbols": self.symbols_data
+        }
+
     def generate_statistics_report(self) -> str:
         """
         生成统计分析报告（Telegram格式）
