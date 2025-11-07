@@ -11,7 +11,18 @@
 
 set -e
 
-REPO_DIR="/home/user/cryptosignal"
+# 自动检测仓库目录（支持不同的部署路径）
+if [ -d "/home/user/cryptosignal" ]; then
+    REPO_DIR="/home/user/cryptosignal"
+elif [ -d "/home/cryptosignal/cryptosignal" ]; then
+    REPO_DIR="/home/cryptosignal/cryptosignal"
+elif [ -d "~/cryptosignal" ]; then
+    REPO_DIR="~/cryptosignal"
+else
+    echo "❌ 找不到cryptosignal仓库目录"
+    exit 1
+fi
+
 cd "$REPO_DIR"
 
 # 时间戳文件，记录上次提交时间

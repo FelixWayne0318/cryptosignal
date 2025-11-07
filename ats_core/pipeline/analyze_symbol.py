@@ -561,8 +561,8 @@ def _analyze_symbol_core(
         "cost_base": 0.0015,
         "L_params": {"min_position": 0.30, "safety_margin": 0.005},
         "S_params": {"confidence_min": 0.70, "confidence_max": 1.30},
-        "F_params": {"Teff_min": 0.80, "Teff_max": 1.20},
-        "I_params": {"Teff_min": 0.85, "Teff_max": 1.15}
+        "F_params": {"Teff_min": 0.60, "Teff_max": 1.50},  # v7.2++增强
+        "I_params": {"Teff_min": 0.70, "Teff_max": 1.30}   # v7.2++增强
     })
 
     # 准备L_components（从L_meta提取）
