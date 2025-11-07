@@ -353,8 +353,8 @@ class ScanStatistics:
 
                 payload = {
                     'chat_id': chat_id,
-                    'text': text,
-                    'parse_mode': 'HTML'
+                    'text': text
+                    # 不使用parse_mode，纯文本模式（避免<>等字符被误解析为HTML）
                 }
 
                 data = urllib.parse.urlencode(payload).encode('utf-8')

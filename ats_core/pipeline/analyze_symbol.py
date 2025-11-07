@@ -226,13 +226,34 @@ def _analyze_symbol_core(
 
     # 判断是否为新币（按照规范 § 1）
     if data_limited:
-        # 数据受限（≥200根K线），无法确定真实币龄，默认成熟币
-        is_new_coin = False
-        coin_phase = "mature(data_limited)"
-        # 兼容旧分级变量
-        is_ultra_new = False
-        is_phaseA = False
-        is_phaseB = False
+        # 数据受限（≥200根K线），使用coin_age_hours推测币龄并分级
+        # 修复：之前强制按mature处理导致bars=300 (12.5天)的币用阈值54（过高）
+        # 现在：根据实际币龄使用合理阈值（phaseB用28-40）
+        if coin_age_hours < 24:  # < 1天
+            is_new_coin = True
+            coin_phase = "newcoin_ultra(data_limited)"
+            is_ultra_new = True
+            is_phaseA = False
+            is_phaseB = False
+        elif coin_age_hours < 168:  # < 7天
+            is_new_coin = True
+            coin_phase = "newcoin_phaseA(data_limited)"
+            is_ultra_new = False
+            is_phaseA = True
+            is_phaseB = False
+        elif coin_age_hours < 400:  # < 16.7天
+            is_new_coin = True
+            coin_phase = "newcoin_phaseB(data_limited)"
+            is_ultra_new = False
+            is_phaseA = False
+            is_phaseB = True
+        else:
+            # 真正的成熟币（>16.7天）
+            is_new_coin = False
+            coin_phase = "mature(data_limited)"
+            is_ultra_new = False
+            is_phaseA = False
+            is_phaseB = False
     elif bars_1h < newcoin_bars_threshold:
         # 规范条件1: bars_1h < 400 → 新币
         is_new_coin = True

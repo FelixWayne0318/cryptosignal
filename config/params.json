@@ -334,10 +334,13 @@
     "min_volume_24h": 10000000,
     "ultra_new_prime_prob_min": 0.75,
     "ultra_new_dims_ok_min": 6,
+    "ultra_new_prime_strength_min": 45,
     "phaseA_prime_prob_min": 0.72,
     "phaseA_dims_ok_min": 5,
+    "phaseA_prime_strength_min": 40,
     "phaseB_prime_prob_min": 0.70,
-    "phaseB_dims_ok_min": 4
+    "phaseB_dims_ok_min": 4,
+    "phaseB_prime_strength_min": 35
   },
 
   "limits": {
