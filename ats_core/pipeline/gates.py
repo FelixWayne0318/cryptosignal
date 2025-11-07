@@ -42,12 +42,15 @@ class FourGatesFilter:
             # Gate 1: 数据质量
             "min_bars": 100,                # 最少K线数量
 
-            # Gate 2: F闸门
+            # Gate 2: F闸门 - v7.2++增强
+            "extreme_F_threshold": -80,     # 极端F值硬拦截阈值
             "F_threshold": -15,             # F方向值阈值（比v7.1的-20更宽松）
 
-            # Gate 3: 市场闸门
-            "I_threshold": 30,              # 独立性阈值
-            "market_threshold": 30,         # 市场趋势阈值（±30为强势）
+            # Gate 3: 市场闸门 - v7.2++增强
+            "I_low_threshold": 30,          # 低独立性阈值（必须顺势）
+            "I_med_threshold": 50,          # 中等独立性阈值（不能强逆势）
+            "market_threshold": 30,         # 普通逆势阈值（±30）
+            "market_strong_threshold": 50,  # 强逆势阈值（±50）
 
             # Gate 4: 成本闸门
             "min_EV": 0.0,                  # 最小期望值
@@ -124,20 +127,29 @@ class FourGatesFilter:
 
     def _gate_fund_support(self, data: Dict[str, Any]) -> Tuple[bool, str]:
         """
-        Gate 2: F闸门（资金支撑）
+        Gate 2: F闸门（资金支撑）- v7.2++增强
 
         理论：价格运动必须有资金支撑
 
-        检查：
-        - 做多时：F_dir < threshold → 拒绝（价格领先资金，追涨）
-        - 做空时：F_dir < threshold → 拒绝（价格领先资金，追跌）
+        检查（三层拦截）：
+        1. F ≤ -80：极端追高/派发，硬拦截（任何方向）
+        2. 做多时：F_dir < threshold → 拒绝（价格领先资金，追涨）
+        3. 做空时：F_dir < threshold → 拒绝（价格领先资金，追跌）
 
         其中 F_dir = F × (1 if 做多 else -1)
         """
         F = data.get('F_score', 0)
         side_long = data.get('side_long', True)
 
-        # 方向相关的F
+        # v7.2++: 第1层 - 极端F值硬拦截
+        # F=-100表示价格大涨但资金大量流出（派发阶段）
+        # 或价格大跌但资金大量流入（恐慌抄底）
+        extreme_F_threshold = self.params.get("extreme_F_threshold", -80)
+        if F <= extreme_F_threshold:
+            phase = "派发阶段" if F <= -90 else "追高风险"
+            return False, f"extreme_fund_divergence(F={F:.1f}≤{extreme_F_threshold}, {phase})"
+
+        # 第2层 - 方向相关的F检查
         F_directional = F if side_long else -F
 
         # 阈值（可配置）
@@ -147,43 +159,68 @@ class FourGatesFilter:
             direction = "做多" if side_long else "做空"
             return False, f"fund_lagging({direction}, F_dir={F_directional:.1f}<{F_threshold})"
 
-        return True, f"fund_ok(F_dir={F_directional:.1f})"
+        return True, f"fund_ok(F={F:.1f}, F_dir={F_directional:.1f})"
 
     def _gate_market_risk(self, data: Dict[str, Any]) -> Tuple[bool, str]:
         """
-        Gate 3: 市场闸门（系统性风险）
+        Gate 3: 市场闸门（系统性风险）- v7.2++增强
 
         理论：
-        - 高独立性币种：可以逆势
-        - 低独立性币种：不能逆势（会跟随大盘）
+        - 高独立性币种(I>50)：可以逆势，有自己的Alpha
+        - 中等独立性(30<I≤50)：小幅逆势可以，大幅逆势拒绝
+        - 低独立性币种(I≤30)：必须顺势，跟随大盘
 
-        检查：
-        - I < threshold 且 逆势 → 拒绝
+        检查（分级策略）：
+        1. I ≤ 30（高相关性）且 逆势 → 硬拒绝（跟随大盘）
+        2. 30 < I ≤ 50 且 强逆势(|market|>50) → 拒绝
+        3. I > 50（高独立性）→ 允许逆势
         """
         I = data.get('independence', 50)
         market_regime = data.get('market_regime', 0)
         side_long = data.get('side_long', True)
 
         # 阈值
-        I_threshold = self.params.get("I_threshold", self.defaults["I_threshold"])
-        market_threshold = self.params.get("market_threshold", self.defaults["market_threshold"])
+        I_low_threshold = self.params.get("I_low_threshold", 30)      # 低独立性阈值
+        I_med_threshold = self.params.get("I_med_threshold", 50)      # 中等独立性阈值
+        market_threshold = self.params.get("market_threshold", 30)    # 普通逆势阈值
+        market_strong_threshold = self.params.get("market_strong_threshold", 50)  # 强逆势阈值
 
-        # 判断是否逆势
-        # 做多 & 市场 < -30 → 逆势
-        # 做空 & 市场 > +30 → 逆势
-        adverse = (market_regime < -market_threshold and side_long) or \
-                  (market_regime > +market_threshold and not side_long)
+        # 判断市场趋势强度
+        # market > +50: 强势上涨
+        # market > +30: 温和上涨
+        # |market| < 30: 震荡
+        # market < -30: 温和下跌
+        # market < -50: 强势下跌
 
-        # 低独立性 + 逆势 → 拒绝
-        if I < I_threshold and adverse:
-            direction = "做多" if side_long else "做空"
-            return False, f"low_independence_adverse({direction}, I={I:.0f}<{I_threshold}, market={market_regime:.0f})"
+        # 判断逆势程度
+        is_adverse = (market_regime < -market_threshold and side_long) or \
+                     (market_regime > +market_threshold and not side_long)
 
-        # 通过
-        if adverse:
-            return True, f"market_ok(逆势但高独立性, I={I:.0f})"
+        is_strong_adverse = (market_regime < -market_strong_threshold and side_long) or \
+                           (market_regime > +market_strong_threshold and not side_long)
+
+        # v7.2++: 三级拦截策略
+        if I <= I_low_threshold:
+            # 第1级：低独立性（高相关性）- 必须顺势
+            if is_adverse:
+                direction = "做多" if side_long else "做空"
+                market_trend = "下跌" if market_regime < 0 else "上涨"
+                return False, f"high_correlation_adverse({direction}信号但大盘{market_trend}, I={I:.0f}≤{I_low_threshold}, market={market_regime:.0f})"
+
+        elif I <= I_med_threshold:
+            # 第2级：中等独立性 - 不能强逆势
+            if is_strong_adverse:
+                direction = "做多" if side_long else "做空"
+                return False, f"moderate_independence_strong_adverse({direction}, I={I:.0f}, market={market_regime:.0f})"
+
+        # 第3级：高独立性（I > 50）- 允许逆势
+
+        # 通过检查
+        if is_adverse:
+            return True, f"market_ok(逆势但独立性足够, I={I:.0f}>{I_med_threshold})"
         else:
-            return True, f"market_ok(顺势, market={market_regime:.0f})"
+            market_direction = "顺势" if not is_adverse else "震荡"
+            return True, f"market_ok({market_direction}, I={I:.0f}, market={market_regime:.0f})"
 
     def _gate_execution_cost(self, data: Dict[str, Any]) -> Tuple[bool, str]:
         """
