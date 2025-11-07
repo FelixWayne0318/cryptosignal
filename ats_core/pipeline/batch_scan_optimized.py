@@ -767,34 +767,9 @@ class OptimizedBatchScanner:
                 import traceback
                 traceback.print_exc()
 
-            # 发送到Telegram（如果配置了）
-            try:
-                from pathlib import Path
-                import json
-                import os
+            # 注：统计报告已写入仓库，不再发送到Telegram
+            log("✅ 统计分析已完成并写入仓库: reports/latest/")
 
-                # 尝试加载Telegram配置
-                config_file = Path(__file__).parent.parent.parent / 'config' / 'telegram.json'
-                bot_token = None
-                chat_id = None
-
-                if config_file.exists():
-                    with open(config_file, 'r') as f:
-                        config = json.load(f)
-                        bot_token = config.get('bot_token')
-                        chat_id = config.get('chat_id')
-                else:
-                    # 从环境变量读取
-                    bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
-                    chat_id = os.getenv('TELEGRAM_CHAT_ID')
-
-                if bot_token and chat_id:
-                    stats.send_to_telegram(report, bot_token, chat_id)
-                    log("✅ 统计报告已发送到Telegram")
-                else:
-                    log("⚠️  Telegram未配置，跳过发送统计报告")
-            except Exception as e:
-                warn(f"⚠️  发送Telegram统计报告失败: {e}")
         except Exception as e:
             warn(f"⚠️  生成统计报告失败: {e}")
 

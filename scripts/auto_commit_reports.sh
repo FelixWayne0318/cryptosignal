@@ -1,22 +1,24 @@
 #!/bin/bash
 #
-# 自动提交扫描报告到仓库
+# 智能提交扫描报告到仓库
 #
-# 使用场景：扫描完成后自动调用，将reports/目录的变化提交并推送
+# 提交策略：
+# - 有信号：立即提交推送
+# - 无信号：每小时提交一次（避免频繁提交）
 #
-# 安全性：
-# - 只提交reports/目录的变化
-# - 不提交其他文件
-# - 使用--no-gpg-sign避免签名问题
+# 使用场景：扫描完成后自动调用
+#
 
 set -e
 
 REPO_DIR="/home/user/cryptosignal"
 cd "$REPO_DIR"
 
+# 时间戳文件，记录上次提交时间
+LAST_COMMIT_FILE="$REPO_DIR/.last_report_commit"
+
 # 检查reports目录是否有变化
 if ! git diff --quiet reports/ || ! git diff --cached --quiet reports/ || git ls-files --others --exclude-standard reports/ | grep -q .; then
-    echo "📝 发现扫描报告变化，准备提交..."
 
     # 添加reports目录的所有变化
     git add reports/latest/ reports/trends.json 2>/dev/null || true
@@ -27,33 +29,84 @@ if ! git diff --quiet reports/ || ! git diff --cached --quiet reports/ || git ls
         exit 0
     fi
 
-    # 生成提交消息
+    # 读取扫描结果
     TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-    SIGNALS=$(grep -o '"signals_found": [0-9]*' reports/latest/scan_summary.json 2>/dev/null | grep -o '[0-9]*' || echo "N/A")
+    SIGNALS=$(grep -o '"signals_found": [0-9]*' reports/latest/scan_summary.json 2>/dev/null | grep -o '[0-9]*' || echo "0")
     TOTAL=$(grep -o '"total_symbols": [0-9]*' reports/latest/scan_summary.json 2>/dev/null | grep -o '[0-9]*' || echo "N/A")
 
-    COMMIT_MSG="scan: $TIMESTAMP - $TOTAL币种, $SIGNALS信号
+    # 判断是否需要提交
+    SHOULD_COMMIT=false
+    COMMIT_REASON=""
 
-自动扫描报告提交
+    # 策略1：有信号立即提交
+    if [ "$SIGNALS" != "0" ] && [ "$SIGNALS" != "N/A" ]; then
+        SHOULD_COMMIT=true
+        COMMIT_REASON="发现信号"
+        echo "📝 发现 $SIGNALS 个信号，立即提交..."
+    else
+        # 策略2：无信号时，检查距离上次提交的时间
+        CURRENT_TIME=$(date +%s)
+
+        if [ -f "$LAST_COMMIT_FILE" ]; then
+            LAST_COMMIT_TIME=$(cat "$LAST_COMMIT_FILE")
+            TIME_DIFF=$((CURRENT_TIME - LAST_COMMIT_TIME))
+
+            # 60分钟 = 3600秒
+            if [ $TIME_DIFF -ge 3600 ]; then
+                SHOULD_COMMIT=true
+                COMMIT_REASON="定期更新"
+                HOURS=$((TIME_DIFF / 3600))
+                echo "📝 距上次提交已过 ${HOURS}小时，定期提交..."
+            else
+                MINUTES=$((TIME_DIFF / 60))
+                echo "⏳ 无信号，距上次提交 ${MINUTES}分钟，暂不提交（每小时提交一次）"
+            fi
+        else
+            # 首次运行，直接提交
+            SHOULD_COMMIT=true
+            COMMIT_REASON="首次扫描"
+            echo "📝 首次扫描报告，提交..."
+        fi
+    fi
+
+    # 执行提交
+    if [ "$SHOULD_COMMIT" = true ]; then
+        # 生成提交消息
+        if [ "$SIGNALS" != "0" ] && [ "$SIGNALS" != "N/A" ]; then
+            # 有信号：详细信息
+            COMMIT_MSG="scan: $TIMESTAMP - $TOTAL币种, $SIGNALS信号 ⚡
+
+自动扫描报告（$COMMIT_REASON）
 - 扫描时间: $TIMESTAMP
 - 扫描币种: $TOTAL
-- 发现信号: $SIGNALS
+- 发现信号: $SIGNALS ⚡
+- 提交原因: $COMMIT_REASON
 
 文件: reports/latest/scan_summary.json"
+        else
+            # 无信号：简洁信息
+            COMMIT_MSG="scan: $TIMESTAMP - $TOTAL币种, 无信号
 
-    # 提交（不签名）
-    git commit --no-gpg-sign -m "$COMMIT_MSG"
+定期扫描报告更新（$COMMIT_REASON）"
+        fi
 
-    # 推送到远程
-    BRANCH=$(git rev-parse --abbrev-ref HEAD)
+        # 提交（不签名）
+        git commit --no-gpg-sign -m "$COMMIT_MSG"
 
-    echo "🚀 推送到远程仓库..."
-    if git push origin "$BRANCH" 2>&1; then
-        echo "✅ 扫描报告已成功推送到仓库"
-        echo "📊 查看: reports/latest/scan_summary.json"
-    else
-        echo "❌ 推送失败（可能网络问题），但本地已提交"
-        exit 1
+        # 推送到远程
+        BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+        echo "🚀 推送到远程仓库..."
+        if git push origin "$BRANCH" 2>&1; then
+            echo "✅ 扫描报告已成功推送到仓库"
+            echo "📊 查看: reports/latest/scan_summary.json"
+
+            # 记录提交时间
+            date +%s > "$LAST_COMMIT_FILE"
+        else
+            echo "❌ 推送失败（可能网络问题），但本地已提交"
+            exit 1
+        fi
     fi
 else
     echo "✅ 没有新的扫描报告需要提交"
