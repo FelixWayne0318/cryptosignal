@@ -1,0 +1,13 @@
+{
+  "timestamp": "2025-11-07T01:50:00",
+  "total_symbols": 10,
+  "symbols": [
+    {
+      "symbol": "BTCUSDT",
+      "edge": 0.65,
+      "confidence": 78.5,
+      "T": 85,
+      "M": 72
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "signals_count": [
+    0
+  ],
+  "avg_edge": [
+    0
+  ],
+  "avg_confidence": [
+    0
+  ],
+  "scan_times": [
+    "2025-11-07T01:50:00"
+  ],
+  "rejection_reasons_history": [
+    {
+      "Edge不足": 5,
+      "置信度不足": 3
+    }
+  ]
+}

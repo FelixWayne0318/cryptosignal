@@ -1,0 +1,29 @@
+{
+  "timestamp": "2025-11-07T01:50:00",
+  "scan_info": {
+    "total_symbols": 10,
+    "signals_found": 2,
+    "filtered": 8
+  },
+  "signals": [
+    {
+      "symbol": "BTCUSDT",
+      "edge": 0.65,
+      "confidence": 78.5,
+      "prime_strength": 85.2,
+      "P_chosen": 0.82
+    }
+  ],
+  "rejection_reasons": {
+    "Edge不足": 5,
+    "置信度不足": 3
+  },
+  "market_stats": {
+    "avg_edge": 0.35,
+    "avg_confidence": 42.1
+  },
+  "performance": {
+    "total_time_sec": 25.5,
+    "speed_coins_per_sec": 0.39
+  }
+}

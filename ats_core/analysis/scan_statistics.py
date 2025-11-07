@@ -5,7 +5,7 @@
 """
 
 import json
-import numpy as np
+import statistics
 from typing import Dict, List, Any
 from datetime import datetime
 
@@ -92,8 +92,10 @@ class ScanStatistics:
             return {"error": "无数据可分析"}
 
         # 计算平均值
-        avg_edge = np.mean([abs(d['edge']) for d in self.symbols_data if d['edge'] != 0])
-        avg_confidence = np.mean([d['confidence'] for d in self.symbols_data if d['confidence'] > 0])
+        edge_values = [abs(d['edge']) for d in self.symbols_data if d['edge'] != 0]
+        conf_values = [d['confidence'] for d in self.symbols_data if d['confidence'] > 0]
+        avg_edge = statistics.mean(edge_values) if edge_values else 0
+        avg_confidence = statistics.mean(conf_values) if conf_values else 0
 
         # 新币统计
         new_coins = [d for d in self.symbols_data if d['coin_age_hours'] < 168]
@@ -253,11 +255,11 @@ class ScanStatistics:
         report.append("📊 【数据质量分布】")
         bars_list = [d['bars'] for d in self.symbols_data if d['bars'] > 0]
         if bars_list:
-            report.append(f"  K线数量: Min={min(bars_list)}, 中位={int(np.median(bars_list))}, Max={max(bars_list)}")
+            report.append(f"  K线数量: Min={min(bars_list)}, 中位={int(statistics.median(bars_list))}, Max={max(bars_list)}")
 
         age_hours = [d['coin_age_hours'] for d in self.symbols_data if d['coin_age_hours'] > 0]
         if age_hours:
-            report.append(f"  币龄(小时): Min={min(age_hours):.1f}, 中位={np.median(age_hours):.1f}, Max={max(age_hours):.1f}")
+            report.append(f"  币龄(小时): Min={min(age_hours):.1f}, 中位={statistics.median(age_hours):.1f}, Max={max(age_hours):.1f}")
 
         new_coins = len([d for d in self.symbols_data if d['coin_age_hours'] < 168])  # <7天
         report.append(f"  新币数量: {new_coins} 个 (<7天)")
@@ -282,13 +284,21 @@ class ScanStatistics:
         if not values:
             return {'min': 0, 'p25': 0, 'p50': 0, 'p75': 0, 'max': 0}
 
-        return {
-            'min': min(values),
-            'p25': np.percentile(values, 25),
-            'p50': np.percentile(values, 50),
-            'p75': np.percentile(values, 75),
-            'max': max(values),
-        }
+        # 使用statistics.quantiles计算分位数
+        # quantiles(data, n=4) 返回 [p25, p50, p75]
+        try:
+            quantiles = statistics.quantiles(values, n=4)  # 返回 [25%, 50%, 75%]
+            return {
+                'min': min(values),
+                'p25': quantiles[0],
+                'p50': quantiles[1],
+                'p75': quantiles[2],
+                'max': max(values),
+            }
+        except statistics.StatisticsError:
+            # 数据太少时（<2个），返回默认值
+            val = values[0] if values else 0
+            return {'min': val, 'p25': val, 'p50': val, 'p75': val, 'max': val}
 
     def _find_close_to_threshold(self) -> List[Dict[str, Any]]:
         """
