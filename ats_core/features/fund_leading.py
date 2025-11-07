@@ -204,6 +204,121 @@ def score_fund_leading(
     return F, meta
 
 
+def score_fund_leading_v2(
+    cvd_series: List[float],
+    oi_data: List,
+    klines: List,
+    atr_now: float,
+    params: Dict[str, Any] = None
+) -> Tuple[int, Dict[str, Any]]:
+    """
+    F因子v2（v7.2阶段1）：精确的资金领先性
+
+    理论：资金流入速度 vs 价格上涨速度
+    公式：F = (资金动量 - 价格动量) × 归一化因子
+
+    优势：
+    - 精确定义，可操作
+    - 直接使用原始数据，不需要预处理
+    - 归一化到ATR，适应不同波动率
+
+    Args:
+        cvd_series: CVD序列（现货+永续合成）
+        oi_data: OI历史数据 [[timestamp, oi_value], ...]
+        klines: K线数据（至少7根）
+        atr_now: 当前ATR值
+        params: 参数配置
+
+    Returns:
+        (F分数 [-100, +100], 元数据)
+    """
+    if params is None:
+        params = {}
+
+    # 默认参数
+    default_params = {
+        "cvd_weight": 0.6,      # CVD权重（主导）
+        "oi_weight": 0.4,       # OI权重（辅助）
+        "window_hours": 6,      # 时间窗口（6小时）
+        "scale": 2.0,           # tanh缩放因子
+    }
+    p = {**default_params, **params}
+
+    # === 1. 数据验证 ===
+    if len(klines) < 7:
+        return 0, {"error": "insufficient_klines", "bars": len(klines)}
+
+    if atr_now <= 0:
+        atr_now = 1.0
+
+    closes = [float(k[4]) for k in klines]
+    close_now = closes[-1]
+
+    # === 2. 价格变化（6h，约6根K线）===
+    price_6h_ago = closes[-7] if len(closes) >= 7 else closes[0]
+    price_change_6h = close_now - price_6h_ago
+    price_change_pct = price_change_6h / price_6h_ago
+
+    # === 3. CVD变化（6h）===
+    if len(cvd_series) >= 7:
+        cvd_6h_ago = cvd_series[-7]
+        cvd_now = cvd_series[-1]
+        cvd_change_6h = cvd_now - cvd_6h_ago
+        # 归一化到价格（CVD是累积成交量，需要转为相对价格的比例）
+        cvd_change_norm = cvd_change_6h / max(1e-9, abs(price_6h_ago))
+    else:
+        cvd_change_norm = 0.0
+
+    # === 4. OI变化（6h，名义化）===
+    if oi_data and len(oi_data) >= 7:
+        try:
+            oi_now = float(oi_data[-1][1])
+            oi_6h_ago = float(oi_data[-7][1])
+
+            # OI名义值（OI × Price）
+            oi_notional_now = oi_now * close_now
+            oi_notional_6h = oi_6h_ago * price_6h_ago
+
+            # 名义化变化率
+            oi_change_6h = (oi_notional_now - oi_notional_6h) / max(1e-9, abs(oi_notional_6h))
+        except (ValueError, IndexError, TypeError):
+            oi_change_6h = 0.0
+    else:
+        oi_change_6h = 0.0
+
+    # === 5. 资金动量（CVD + OI，加权）===
+    # 归一化到ATR（使资金动量和价格动量可比）
+    atr_norm_factor = atr_now / close_now  # ATR相对价格的比例
+
+    fund_momentum_raw = p["cvd_weight"] * cvd_change_norm + p["oi_weight"] * oi_change_6h
+    fund_momentum = fund_momentum_raw / atr_norm_factor
+
+    # === 6. 价格动量（归一化到ATR）===
+    price_momentum = price_change_pct / atr_norm_factor
+
+    # === 7. F原始值（资金 - 价格）===
+    F_raw = fund_momentum - price_momentum
+
+    # === 8. 映射到±100（tanh平滑）===
+    F_normalized = math.tanh(F_raw / p["scale"])
+    F_score = 100.0 * F_normalized
+    F_score = int(round(max(-100.0, min(100.0, F_score))))
+
+    # === 9. 元数据 ===
+    meta = {
+        "fund_momentum": round(fund_momentum, 4),
+        "price_momentum": round(price_momentum, 4),
+        "F_raw": round(F_raw, 4),
+        "cvd_6h_norm": round(cvd_change_norm, 4),
+        "oi_6h_pct": round(oi_change_6h, 4),
+        "price_6h_pct": round(price_change_pct * 100, 2),
+        "atr_norm": round(atr_norm_factor, 4),
+        "version": "v2_simplified"
+    }
+
+    return F_score, meta
+
+
 def interpret_F(F_score: int) -> str:
     """
     解释 F 分数的含义
