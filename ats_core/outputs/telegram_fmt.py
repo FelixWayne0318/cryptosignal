@@ -44,7 +44,11 @@ __all__ = [
     'render_five_piece_report',
     # v6.7新增：整合v66特性
     'render_v67_rich',
-    'render_v67_compact'
+    'render_v67_compact',
+    # v7.2新增：规则增强版
+    'render_signal_v72',
+    'render_watch_v72',
+    'render_trade_v72'
 ]
 
 # ---------- small utils ----------
@@ -2196,3 +2200,240 @@ def _get_factor_desc_v67(r: Dict[str, Any], factor_name: str, score: int) -> str
         return _desc_fund_leading(score, leading_raw)
     else:
         return ""
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# v7.2 Telegram Message Rendering
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
+    """
+    v7.2信号消息模板（规则增强版）
+
+    v7.2架构（阶段1）：
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━
+    🎯 核心改进：
+      1. F因子v2：精确资金领先性
+      2. 因子分组：TC/VOM/B三组
+      3. 统计校准：confidence → 真实胜率
+      4. 四道闸门：数据/资金/市场/成本
+      5. EV驱动：基于校准概率的期望值
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    消息结构：
+    1. 头部：Symbol, Price, Side
+    2. 核心指标：P(校准), EV, RR
+    3. v7.2因子：F因子v2 + 因子分组
+    4. 四道闸门：Gate状态
+    5. 执行参数：Entry, TP, SL, Position
+    6. 技术细节：原始因子（折叠）
+    """
+    # ========== 1. 头部 ==========
+    sym = _get(r, "symbol") or "—"
+    price = _get(r, "price") or _get(r, "last")
+    price_s = _fmt_price(price)
+
+    side = (_get(r, "side") or "").lower()
+    if side in ("long", "buy", "bull", "多", "做多"):
+        side_icon = "🟢"
+        side_lbl = "做多"
+    elif side in ("short", "sell", "bear", "空", "做空"):
+        side_icon = "🔴"
+        side_lbl = "做空"
+    else:
+        side_icon = "⚪"
+        side_lbl = "中性"
+
+    signal_type = "📍 观察信号" if is_watch else "🚀 交易信号"
+
+    header = f"{signal_type}\n"
+    header += f"━━━━━━━━━━━━━━━━━━━━\n"
+    header += f"币种：{sym}\n"
+    header += f"现价：{price_s}\n"
+    header += f"方向：{side_icon} {side_lbl}"
+
+    # ========== 2. 核心指标（v7.2增强）==========
+    # 获取v72_enhancements数据
+    v72 = _get(r, "v72_enhancements") or {}
+
+    # 校准概率
+    P_calibrated = _get(v72, "P_calibrated")
+    if P_calibrated is None:
+        P_calibrated = _get(r, "probability") or 0.5
+    P_pct = P_calibrated * 100
+
+    # 期望值
+    EV_net = _get(v72, "EV_net")
+    if EV_net is None:
+        EV_net = _get(r, "expected_value") or _get(r, "EV") or 0
+
+    # 盈亏比
+    TP_pct = _get(r, "tp_pct") or _get(r, "TP") or 0.03
+    SL_pct = _get(r, "sl_pct") or _get(r, "SL") or 0.015
+    RR = TP_pct / SL_pct if SL_pct > 0 else 2.0
+
+    # Confidence（v7.2分组后的）
+    confidence_v72 = _get(v72, "confidence_v72")
+    if confidence_v72 is None:
+        confidence_v72 = abs(_get(r, "weighted_score") or 0)
+
+    core = f"\n\n📊 核心指标\n"
+    core += f"━━━━━━━━━━━━━━━━━━━━\n"
+    core += f"胜率(校准)：{P_pct:.1f}%\n"
+    core += f"期望值EV：{EV_net:+.2%}\n"
+    core += f"盈亏比RR：{RR:.2f}:1\n"
+    core += f"信心度：{confidence_v72:.1f}/100"
+
+    # ========== 3. v7.2因子分析 ==========
+    factors_section = f"\n\n🔬 v7.2因子分析\n"
+    factors_section += f"━━━━━━━━━━━━━━━━━━━━\n"
+
+    # F因子v2
+    F_v2 = _get(v72, "F_v2")
+    if F_v2 is not None:
+        F_v2_int = int(round(F_v2))
+        if F_v2_int > 30:
+            F_desc = "💪 资金强势领先"
+        elif F_v2_int > 0:
+            F_desc = "✅ 资金温和领先"
+        elif F_v2_int > -15:
+            F_desc = "⚠️ 资金轻微落后"
+        else:
+            F_desc = "❌ 资金严重落后"
+        factors_section += f"F资金领先：{F_v2_int} {F_desc}\n"
+
+    # 因子分组
+    group_scores = _get(v72, "group_scores") or {}
+    TC_score = group_scores.get("TC")
+    VOM_score = group_scores.get("VOM")
+    B_score = group_scores.get("B")
+
+    if TC_score is not None:
+        TC_int = int(round(TC_score))
+        factors_section += f"TC组(50%)：{TC_int} [趋势+资金流]\n"
+
+    if VOM_score is not None:
+        VOM_int = int(round(VOM_score))
+        factors_section += f"VOM组(35%)：{VOM_int} [量能+持仓+动量]\n"
+
+    if B_score is not None:
+        B_int = int(round(B_score))
+        factors_section += f"B组(15%)：{B_int} [基差]\n"
+
+    # 原始因子（折叠）
+    scores = _get(r, "scores") or {}
+    T = _as_int_score(scores.get("T"), 0)
+    M = _as_int_score(scores.get("M"), 0)
+    C = _as_int_score(scores.get("C"), 0)
+    V = _as_int_score(scores.get("V"), 0)
+    O = _as_int_score(scores.get("O"), 0)
+    B = _as_int_score(scores.get("B"), 0)
+
+    factors_section += f"\n原始因子：\n"
+    factors_section += f"  T趋势={T} M动量={M} C资金={C}\n"
+    factors_section += f"  V量能={V} O持仓={O} B基差={B}"
+
+    # ========== 4. 四道闸门 ==========
+    gates = f"\n\n🚪 四道闸门\n"
+    gates += f"━━━━━━━━━━━━━━━━━━━━\n"
+
+    gate_results = _get(v72, "gate_results") or {}
+    gate1 = gate_results.get("gate1", {})
+    gate2 = gate_results.get("gate2", {})
+    gate3 = gate_results.get("gate3", {})
+    gate4 = gate_results.get("gate4", {})
+
+    # Gate 1: 数据质量
+    g1_pass = gate1.get("pass", True)
+    g1_icon = "✅" if g1_pass else "❌"
+    bars = gate1.get("bars", 0)
+    gates += f"{g1_icon} Gate1 数据质量：{bars}根K线\n"
+
+    # Gate 2: F闸门
+    g2_pass = gate2.get("pass", True)
+    g2_icon = "✅" if g2_pass else "❌"
+    F_dir = gate2.get("F_directional", F_v2 or 0)
+    gates += f"{g2_icon} Gate2 资金支撑：F_dir={F_dir:.0f}\n"
+
+    # Gate 3: 市场闸门
+    g3_pass = gate3.get("pass", True)
+    g3_icon = "✅" if g3_pass else "❌"
+    independence = _get(r, "scores", {}).get("I", 50)
+    gates += f"{g3_icon} Gate3 市场环境：独立性={independence:.0f}\n"
+
+    # Gate 4: 成本闸门
+    g4_pass = gate4.get("pass", True)
+    g4_icon = "✅" if g4_pass else "❌"
+    gates += f"{g4_icon} Gate4 执行成本：EV={EV_net:+.2%}"
+
+    # 总体判定
+    all_pass = g1_pass and g2_pass and g3_pass and g4_pass
+    if all_pass:
+        gates += f"\n\n✅ 全部通过，可发布"
+    else:
+        gates += f"\n\n⚠️ 部分闸门未通过"
+
+    # ========== 5. 执行参数 ==========
+    execution = f"\n\n💰 执行参数\n"
+    execution += f"━━━━━━━━━━━━━━━━━━━━\n"
+
+    # 入场价
+    entry = price
+    entry_s = _fmt_price(entry)
+    execution += f"入场：{entry_s}\n"
+
+    # 止盈
+    if side in ("long", "buy", "bull", "多", "做多"):
+        tp_price = entry * (1 + TP_pct)
+    else:
+        tp_price = entry * (1 - TP_pct)
+    tp_s = _fmt_price(tp_price)
+    execution += f"止盈：{tp_s} (+{TP_pct*100:.1f}%)\n"
+
+    # 止损
+    if side in ("long", "buy", "bull", "多", "做多"):
+        sl_price = entry * (1 - SL_pct)
+    else:
+        sl_price = entry * (1 + SL_pct)
+    sl_s = _fmt_price(sl_price)
+    execution += f"止损：{sl_s} (-{SL_pct*100:.1f}%)\n"
+
+    # 仓位
+    position_base = _get(r, "position_size") or 0.05
+    position_pct = position_base * 100
+    execution += f"仓位：{position_pct:.1f}%"
+
+    # ========== 6. 元数据 ==========
+    ttl_h = int(_ttl_hours(r))
+    timestamp = _get(r, "timestamp") or 0
+
+    footer = f"\n\n⏱ 有效期：{ttl_h}小时\n"
+    footer += f"📅 时间：{_format_timestamp(timestamp)}\n"
+    footer += f"🏷 版本：v7.2 Stage1"
+
+    # ========== 组装完整消息 ==========
+    message = header + core + factors_section + gates + execution + footer
+
+    return message
+
+
+def render_watch_v72(r: Dict[str, Any]) -> str:
+    """v7.2观察信号"""
+    return render_signal_v72(r, is_watch=True)
+
+
+def render_trade_v72(r: Dict[str, Any]) -> str:
+    """v7.2交易信号"""
+    return render_signal_v72(r, is_watch=False)
+
+
+def _format_timestamp(ts: float) -> str:
+    """格式化时间戳"""
+    if not ts:
+        return "—"
+    try:
+        from datetime import datetime
+        dt = datetime.fromtimestamp(ts / 1000 if ts > 1e12 else ts)
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return "—"
