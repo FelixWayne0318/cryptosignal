@@ -189,7 +189,7 @@ class RealtimeSignalScannerV72:
         log("=" * 60)
 
         # 执行批量扫描
-        results = await self.scanner.scan_batch(max_symbols=max_symbols)
+        results = await self.scanner.scan(max_symbols=max_symbols)
 
         if not results:
             warn("扫描无结果")
