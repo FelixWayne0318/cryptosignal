@@ -8,6 +8,71 @@ Where:
 - P: Probability of winning (from probability_v2.py)
 - μ_win, μ_loss: Historical conditional mean returns (from backtested stats)
 - cost_eff: Effective cost from F/I modulators
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 IMPORTANT: Data Source and Units
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. UNITS (统一量纲)
+   ─────────────────
+   All μ values are in PERCENTAGE TERMS (百分比形式):
+   - μ_win = 0.052  → 5.2% average return when winning
+   - μ_loss = -0.010 → -1.0% average return when losing
+   - cost_eff = 0.002 → 0.2% effective cost (2 bps = 0.02%)
+
+   EV output is also in percentage:
+   - EV = 0.03 → Expected 3% return per trade
+
+2. DATA SOURCE (数据来源)
+   ──────────────────────
+   Current Status: BOOTSTRAP / PLACEHOLDER VALUES
+
+   ⚠️  The DEFAULT_STATS below are ESTIMATED values based on:
+   - Industry average for crypto futures (50-85% win rate range)
+   - Conservative risk/reward assumptions
+   - NOT from actual backtest of this system
+
+   TODO: Replace with ACTUAL backtest results:
+   - Run historical backtest over 6-12 months
+   - Stratify by probability bins [0.50-0.55, 0.55-0.60, ...]
+   - Calculate true μ_win, μ_loss, sample_count for each bin
+   - Save to data/ev_stats.json
+   - Update this module to load from that file
+
+3. CALIBRATION (校准要求)
+   ─────────────────────
+   For production use, you MUST:
+
+   a) Run backtest and collect:
+      - Entry price, exit price, side (long/short)
+      - Predicted probability P at entry
+      - Actual outcome (win/loss)
+      - Return% = (exit - entry) / entry
+
+   b) Bin by probability:
+      - [0.50-0.55]: μ_win = mean(returns | win), μ_loss = mean(returns | loss)
+      - [0.55-0.60]: ...
+      - ... (10 bins total)
+
+   c) Save to JSON:
+      {
+        "default": [...],
+        "BTCUSDT": [...],  // Optional: symbol-specific
+        "ETHUSDT": [...]
+      }
+
+   d) Load via:
+      ev_calc = EVCalculator(stats_file="data/ev_stats.json")
+
+4. VALIDATION (验证方法)
+   ─────────────────────
+   To verify EV accuracy:
+   - Compare predicted EV vs actual returns over 100+ trades
+   - Calculate Brier score for probability calibration
+   - Check if EV > 0 signals actually profitable
+   - Adjust μ values if systematic bias detected
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
 
 import json
@@ -42,19 +107,46 @@ class EVCalculator:
     Uses historical backtested data to estimate conditional mean returns.
     """
 
-    # Default statistics (simplified bootstrap values)
-    # In production, these should come from historical backtest
+    # ⚠️  BOOTSTRAP / PLACEHOLDER VALUES - Replace with actual backtest data!
+    # These are ESTIMATED values, NOT from real backtest of this system.
+    # samples=0 indicates no historical data backing these numbers.
+    #
+    # Assumptions used for bootstrap:
+    # - Higher P → Higher μ_win (as signal quality improves, wins get bigger)
+    # - Higher P → Lower |μ_loss| (better signals = smaller losses via better stops)
+    # - Risk/Reward improves with probability (roughly 2:1 to 50:1 at extremes)
+    #
+    # Units: All values in PERCENTAGE (e.g., 0.052 = 5.2%)
     DEFAULT_STATS = {
         "default": [
+            # P ∈ [0.50, 0.55]: Near 50/50, conservative R:R ~0.9:1
             {"p_min": 0.50, "p_max": 0.55, "mu_win": 0.018, "mu_loss": -0.020, "samples": 0},
+
+            # P ∈ [0.55, 0.60]: Slight edge, R:R ~1.2:1
             {"p_min": 0.55, "p_max": 0.60, "mu_win": 0.022, "mu_loss": -0.018, "samples": 0},
+
+            # P ∈ [0.60, 0.65]: Moderate edge, R:R ~1.75:1
             {"p_min": 0.60, "p_max": 0.65, "mu_win": 0.028, "mu_loss": -0.016, "samples": 0},
+
+            # P ∈ [0.65, 0.70]: Good edge, R:R ~2.4:1
             {"p_min": 0.65, "p_max": 0.70, "mu_win": 0.034, "mu_loss": -0.014, "samples": 0},
+
+            # P ∈ [0.70, 0.75]: Strong edge, R:R ~3.5:1
             {"p_min": 0.70, "p_max": 0.75, "mu_win": 0.042, "mu_loss": -0.012, "samples": 0},
+
+            # P ∈ [0.75, 0.80]: Very strong, R:R ~5.2:1
             {"p_min": 0.75, "p_max": 0.80, "mu_win": 0.052, "mu_loss": -0.010, "samples": 0},
+
+            # P ∈ [0.80, 0.85]: Excellent, R:R ~8:1
             {"p_min": 0.80, "p_max": 0.85, "mu_win": 0.065, "mu_loss": -0.008, "samples": 0},
+
+            # P ∈ [0.85, 0.90]: Rare quality, R:R ~13:1
             {"p_min": 0.85, "p_max": 0.90, "mu_win": 0.082, "mu_loss": -0.006, "samples": 0},
+
+            # P ∈ [0.90, 0.95]: Exceptional, R:R ~26:1
             {"p_min": 0.90, "p_max": 0.95, "mu_win": 0.105, "mu_loss": -0.004, "samples": 0},
+
+            # P ∈ [0.95, 1.00]: Near-certain, R:R ~67:1
             {"p_min": 0.95, "p_max": 1.00, "mu_win": 0.135, "mu_loss": -0.002, "samples": 0},
         ]
     }
@@ -75,10 +167,17 @@ class EVCalculator:
                 self._load_stats(stats_path)
                 logger.info(f"Loaded EV stats from {stats_file}")
             else:
-                logger.warning(f"EV stats file not found: {stats_file}, using defaults")
+                logger.warning(
+                    f"EV stats file not found: {stats_file}, using bootstrap defaults. "
+                    f"⚠️  For production, calibrate with actual backtest data!"
+                )
                 self._load_default_stats()
         else:
-            logger.info("Using default EV statistics (bootstrap values)")
+            logger.warning(
+                "Using default EV statistics (bootstrap/placeholder values). "
+                "⚠️  These are NOT from actual backtest! "
+                "For production use, run backtest and save to data/ev_stats.json"
+            )
             self._load_default_stats()
 
     def _load_stats(self, stats_path: Path) -> None:

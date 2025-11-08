@@ -11,11 +11,16 @@ v6.6 统一调制器链 - L/S/F/I四调制器系统
 - S=-100 → confidence降低但不拒绝
 - F/I只调整Teff和cost，无阈值门槛
 
+⚠️ v6.7++重要变更（2025-11-06）：
+- p_min_adj 已弃用：改用FIModulator.calculate_thresholds()统一计算p_min
+- p_min_adj 保留用于向后兼容，但analyze_symbol.py不再使用
+- 新代码应使用 ats_core.modulators.fi_modulators.get_fi_modulator()
+
 架构：
 ┌─────────────────────────────────────────┐
 │  L(流动性) → position_mult, cost_eff_L  │
 │  S(结构)   → confidence_mult, Teff_S    │
-│  F(资金领先)→ Teff_F, p_min_adj         │
+│  F(资金领先)→ Teff_F, [p_min_adj已弃用] │
 │  I(独立性) → Teff_I, cost_eff_I         │
 └─────────────────────────────────────────┘
               ↓ 融合
@@ -24,11 +29,12 @@ v6.6 统一调制器链 - L/S/F/I四调制器系统
 │         Teff_I  (乘法)                   │
 │  cost = cost_base + cost_L + cost_I     │
 │         (加法)                           │
+│  p_min = 使用FIModulator (F+I双重调制)  │
 └─────────────────────────────────────────┘
 
 作者：Claude (Sonnet 4.5)
 日期：2025-11-03
-版本：v6.6
+版本：v6.6 (更新v6.7++: 2025-11-06)
 """
 
 from typing import Dict, Any, Optional, Tuple
@@ -51,7 +57,7 @@ class ModulatorOutput:
 
         # F调制器输出
         self.Teff_F = 1.0      # 温度倍数 [0.80, 1.20]
-        self.p_min_adj = 0.0   # p_min调整 [-0.02, +0.02]
+        self.p_min_adj = 0.0   # ⚠️ DEPRECATED v6.7++: 改用FIModulator.calculate_thresholds()
         self.F_meta = {}
 
         # I调制器输出
@@ -321,33 +327,38 @@ class ModulatorChain:
         """
         F调制器：资金领先 → 温度倍数 + p_min调整
 
+        ⚠️ DEPRECATED (v6.7++): p_min_adj 已弃用
+        - 新代码应使用 FIModulator.calculate_thresholds() 计算完整的p_min（包含F+I）
+        - 此函数保留p_min_adj仅用于向后兼容
+        - analyze_symbol.py 已迁移到 FIModulator
+
         逻辑：
         - F正（资金领先价格）：Teff降低（P提升），p_min略降
         - F负（价格领先资金）：Teff升高（P降低），p_min略升
-        - 范围：Teff [0.80, 1.20], p_min_adj [-1%, +1%]  # P2.5++修复: 范围减半
+        - 范围：Teff [0.60, 1.50], p_min_adj [-2%, +2%]  # v7.2++增强: 扩大影响范围
 
         参数：
         - F_score: [-100, +100]
 
         返回：
-        - Teff_F: [0.80, 1.20]
-        - p_min_adj: [-0.02, +0.02]
+        - Teff_F: [0.60, 1.50]  # v7.2++增强: 从[0.80,1.20]扩大到[0.60,1.50]
+        - p_min_adj: [-0.02, +0.02] ⚠️ DEPRECATED
         - meta: 元数据字典
         """
-        Teff_min = self.F_params.get("Teff_min", 0.80)
-        Teff_max = self.F_params.get("Teff_max", 1.20)
-        p_min_adj_range = self.F_params.get("p_min_adj_range", 0.01)  # P2.5++修复: 0.02→0.01，减半F调制器影响，避免P阈值过高
+        Teff_min = self.F_params.get("Teff_min", 0.60)  # v7.2++: 0.80→0.60
+        Teff_max = self.F_params.get("Teff_max", 1.50)  # v7.2++: 1.20→1.50
+        p_min_adj_range = self.F_params.get("p_min_adj_range", 0.02)  # v7.2++: 0.01→0.02，增强影响
 
         # 归一化
         normalized_F = F_score / 100.0
 
         # 温度倍数：F正 → Teff降低（P提升）
-        # F=+100 → 0.80, F=0 → 1.00, F=-100 → 1.20
-        Teff_F = 1.0 - 0.20 * normalized_F
+        # v7.2++: F=+100 → 0.60, F=0 → 1.00, F=-100 → 1.50 (增强50%)
+        Teff_F = 1.0 - 0.40 * normalized_F  # v7.2++: 0.20→0.40
         Teff_F = max(Teff_min, min(Teff_max, Teff_F))
 
         # p_min调整：F正 → p_min降低（放宽门槛）
-        # P2.5++修复: F=+100 → -1%, F=0 → 0, F=-100 → +1% (原来±2%)
+        # v7.2++: F=+100 → -2%, F=0 → 0, F=-100 → +2% (恢复原始强度)
         p_min_adj = -p_min_adj_range * normalized_F
 
         # 元数据
@@ -355,7 +366,7 @@ class ModulatorChain:
             "F_score": F_score,
             "Teff_F": Teff_F,
             "p_min_adj": p_min_adj,
-            "note": "F正→Teff降低+P提升+p_min放宽, F负→Teff升高+P降低+p_min收紧"
+            "note": "v7.2++增强: F正→Teff大降+P大提升, F负→Teff大升+P大降低"
         }
 
         return Teff_F, p_min_adj, meta
@@ -370,30 +381,30 @@ class ModulatorChain:
         逻辑：
         - I正（独立性高）：Teff降低（P提升），cost略降
         - I负（跟随性强）：Teff升高（P降低），cost略升
-        - 范围：Teff [0.85, 1.15], cost_eff [-0.15, +0.15]
+        - 范围：Teff [0.70, 1.30], cost_eff [-0.20, +0.20]  # v7.2++增强: 扩大影响范围
 
         参数：
         - I_score: [-100, +100]
 
         返回：
-        - Teff_I: [0.85, 1.15]
-        - cost_eff: [-0.15, +0.15]
+        - Teff_I: [0.70, 1.30]  # v7.2++增强: 从[0.85,1.15]扩大到[0.70,1.30]
+        - cost_eff: [-0.20, +0.20]  # v7.2++增强: 从[-0.15,0.15]扩大到[-0.20,0.20]
         - meta: 元数据字典
         """
-        Teff_min = self.I_params.get("Teff_min", 0.85)
-        Teff_max = self.I_params.get("Teff_max", 1.15)
-        cost_eff_range = self.I_params.get("cost_eff_range", 0.15)
+        Teff_min = self.I_params.get("Teff_min", 0.70)  # v7.2++: 0.85→0.70
+        Teff_max = self.I_params.get("Teff_max", 1.30)  # v7.2++: 1.15→1.30
+        cost_eff_range = self.I_params.get("cost_eff_range", 0.20)  # v7.2++: 0.15→0.20
 
         # 归一化
         normalized_I = I_score / 100.0
 
         # 温度倍数：I正 → Teff降低（P提升）
-        # I=+100 → 0.85, I=0 → 1.00, I=-100 → 1.15
-        Teff_I = 1.0 - 0.15 * normalized_I
+        # v7.2++: I=+100 → 0.70, I=0 → 1.00, I=-100 → 1.30 (增强2倍)
+        Teff_I = 1.0 - 0.30 * normalized_I  # v7.2++: 0.15→0.30
         Teff_I = max(Teff_min, min(Teff_max, Teff_I))
 
         # 成本调整：I正 → cost降低
-        # I=+100 → -0.15, I=0 → 0, I=-100 → +0.15
+        # v7.2++: I=+100 → -0.20, I=0 → 0, I=-100 → +0.20 (增强33%)
         cost_eff = -cost_eff_range * normalized_I
 
         # 元数据
@@ -401,7 +412,7 @@ class ModulatorChain:
             "I_score": I_score,
             "Teff_I": Teff_I,
             "cost_eff": cost_eff,
-            "note": "I正→Teff降低+P提升+cost降低, I负→Teff升高+P降低+cost升高"
+            "note": "v7.2++增强: I正→Teff大降+P大提升+cost降低, I负→Teff大升+P大降低+cost升高"
         }
 
         return Teff_I, cost_eff, meta

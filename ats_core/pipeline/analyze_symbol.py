@@ -46,6 +46,7 @@ from ats_core.scoring.adaptive_weights import (
 
 # ========== v6.6 统一调制器系统 ==========
 from ats_core.modulators.modulator_chain import ModulatorChain
+from ats_core.modulators.fi_modulators import get_fi_modulator  # v6.7: 统一p_min计算
 from ats_core.features.multi_timeframe import multi_timeframe_coherence
 
 # ========== v6.6 三层止损系统 ==========
@@ -225,13 +226,34 @@ def _analyze_symbol_core(
 
     # 判断是否为新币（按照规范 § 1）
     if data_limited:
-        # 数据受限（≥200根K线），无法确定真实币龄，默认成熟币
-        is_new_coin = False
-        coin_phase = "mature(data_limited)"
-        # 兼容旧分级变量
-        is_ultra_new = False
-        is_phaseA = False
-        is_phaseB = False
+        # 数据受限（≥200根K线），使用coin_age_hours推测币龄并分级
+        # 修复：之前强制按mature处理导致bars=300 (12.5天)的币用阈值54（过高）
+        # 现在：根据实际币龄使用合理阈值（phaseB用28-40）
+        if coin_age_hours < 24:  # < 1天
+            is_new_coin = True
+            coin_phase = "newcoin_ultra(data_limited)"
+            is_ultra_new = True
+            is_phaseA = False
+            is_phaseB = False
+        elif coin_age_hours < 168:  # < 7天
+            is_new_coin = True
+            coin_phase = "newcoin_phaseA(data_limited)"
+            is_ultra_new = False
+            is_phaseA = True
+            is_phaseB = False
+        elif coin_age_hours < 400:  # < 16.7天
+            is_new_coin = True
+            coin_phase = "newcoin_phaseB(data_limited)"
+            is_ultra_new = False
+            is_phaseA = False
+            is_phaseB = True
+        else:
+            # 真正的成熟币（>16.7天）
+            is_new_coin = False
+            coin_phase = "mature(data_limited)"
+            is_ultra_new = False
+            is_phaseA = False
+            is_phaseB = False
     elif bars_1h < newcoin_bars_threshold:
         # 规范条件1: bars_1h < 400 → 新币
         is_new_coin = True
@@ -539,8 +561,8 @@ def _analyze_symbol_core(
         "cost_base": 0.0015,
         "L_params": {"min_position": 0.30, "safety_margin": 0.005},
         "S_params": {"confidence_min": 0.70, "confidence_max": 1.30},
-        "F_params": {"Teff_min": 0.80, "Teff_max": 1.20},
-        "I_params": {"Teff_min": 0.85, "Teff_max": 1.15}
+        "F_params": {"Teff_min": 0.60, "Teff_max": 1.50},  # v7.2++增强
+        "I_params": {"Teff_min": 0.70, "Teff_max": 1.30}   # v7.2++增强
     })
 
     # 准备L_components（从L_meta提取）
@@ -643,24 +665,34 @@ def _analyze_symbol_core(
         # 返回success=True但publish=False
         pass  # 允许继续，但后续会标记为不发布
 
-    # 软约束2：P < p_min（基于F调制器调整）
-    # 计算p_min（动态）
-    # v6.7修复：使用配置文件的prime_prob_min，取消硬编码0.50
-    # 用户要求减少80%信号，需要提高阈值
-    # P2.5++修复（2025-11-05）：提高p_min从0.58→0.68，减少80%信号，保留高质量信号
-    # P2.5+++修复（2025-11-06）：方案1保守型，进一步提高到0.72，减少90%信号
-    # P2.5++++调整（2025-11-06）：方案1.5折中方案，0.72→0.70，平衡信号量
-    base_p_min = publish_cfg.get("prime_prob_min", 0.70)  # 从0.72降低到0.70
-    safety_margin = modulator_output.L_meta.get("safety_margin", 0.005)
-    # 修复：使用abs(edge)避免负数除法问题，并限制最大adjustment
-    adjustment = safety_margin / (abs(edge) + 1e-6)
-    adjustment = min(adjustment, 0.02)  # 限制最大调整为0.02，避免过度惩罚小edge信号
-    p_min = base_p_min + adjustment
+    # 软约束2：P < p_min（基于F/I调制器调整）
+    # v6.7++修复（2025-11-06）：统一p_min计算到FIModulator
+    # 问题：之前使用ModulatorChain.p_min_adj（仅考虑F），现在统一到FIModulator（完整F+I）
+    #
+    # 归一化F和I到[0, 1]范围（FIModulator需要）
+    F_normalized = (F + 100.0) / 200.0  # [-100, 100] → [0, 1]
+    I_normalized = (I + 100.0) / 200.0  # [-100, 100] → [0, 1]
 
-    # 应用F调制器的p_min调整
-    p_min_adjusted = p_min + modulator_output.p_min_adj
-    # P2.5+信号过滤：移除0.65上限，提高到0.75以减少80%信号
-    p_min_adjusted = max(0.50, min(0.75, p_min_adjusted))  # 限制在[0.50, 0.75]
+    # 使用FIModulator计算完整的p_min（包含F和I双重调制）
+    fi_modulator = get_fi_modulator()
+    p_min_modulated, delta_p_min, threshold_details = fi_modulator.calculate_thresholds(
+        F_raw=F_normalized,
+        I_raw=I_normalized,
+        symbol=symbol
+    )
+
+    # FIModulator公式: p_min = p0 + θF·max(0, gF) + θI·min(0, gI)
+    # 其中: p0=0.58, θF=0.03, θI=-0.02, range=[0.50, 0.75]
+    #
+    # 为了保持信号量控制，叠加安全边际调整
+    safety_margin = modulator_output.L_meta.get("safety_margin", 0.005)
+    adjustment = safety_margin / (abs(edge) + 1e-6)
+    adjustment = min(adjustment, 0.02)  # 限制最大调整
+
+    # 最终p_min = FIModulator计算值 + 安全边际
+    p_min_adjusted = p_min_modulated + adjustment
+    # 限制在合理范围
+    p_min_adjusted = max(0.50, min(0.75, p_min_adjusted))
 
     # 检查P是否低于阈值
     p_below_threshold = P_chosen < p_min_adjusted
@@ -941,20 +973,23 @@ def _analyze_symbol_core(
     # P2.5++++调整（2025-11-06）：方案1.5折中方案，75→72，平衡信号量
     # P2.5+++++调整（2025-11-06）：方案1.8数据驱动，72→60，适应实际分布(25-45普遍)
     # P2.5++++++调整（2025-11-06）：方案2.0最终平衡，60→48，让ARUSDT(54)等高分通过
-    quality_check_2 = confidence >= 48  # 从60降低到48，基于实际分布40-54
+    # P2.5+++++++调整（2025-11-06）：方案2.1全市场扫描校准，48→45，基于405币实测(COTIUSDT 47等)
+    quality_check_2 = confidence >= 45  # 从48降低到45，基于全市场扫描实测分布
 
     # 质量门槛3：四门槛综合质量（gate_multiplier）
     # P2.5+++修复（2025-11-06）：方案1保守型，从0.88提高到0.90
     # P2.5++++调整（2025-11-06）：方案1.5折中方案，0.90→0.89，平衡信号量
     # P2.5+++++调整（2025-11-06）：方案1.8数据驱动，0.89→0.87，轻微放宽
-    quality_check_3 = gate_multiplier >= 0.87  # 从0.89降低到0.87
+    # P2.5++++++调整（2025-11-07）：方案2.2全市场扫描校准2，0.87→0.84，基于405币实测(16个币种0.86-0.87接近阈值)
+    quality_check_3 = gate_multiplier >= 0.84  # 从0.87降低到0.84，解锁0.85-0.86区间的高质量币种
 
     # 质量门槛4：edge优势边际
     # P2.5+++修复（2025-11-06）：方案1保守型，从0.75提高到0.80
     # P2.5++++调整（2025-11-06）：方案1.5折中方案，0.80→0.77，平衡信号量
     # P2.5+++++调整（2025-11-06）：方案1.8数据驱动，0.77→0.70，让GMTUSDT等高分通过
     # P2.5++++++调整（2025-11-06）：方案2.0最终平衡，0.70→0.55，让PROMUSDT(0.45)等通过
-    quality_check_4 = abs(edge) >= 0.55  # 从0.70降低到0.55，基于实际分布0.45
+    # P2.5+++++++调整（2025-11-06）：方案2.1全市场扫描校准，0.55→0.48，基于405币实测(KNCUSDT 0.54, GMXUSDT 0.52, ACTUSDT 0.50等)
+    quality_check_4 = abs(edge) >= 0.48  # 从0.55降低到0.48，基于全市场扫描实测高质量分布
 
     # 综合判定：所有质量门槛都要通过
     is_prime = quality_check_1 and quality_check_2 and quality_check_3 and quality_check_4
@@ -971,8 +1006,8 @@ def _analyze_symbol_core(
                 rejection_reason.append(f"❌ Prime强度不足({prime_strength:.1f} < {prime_strength_threshold})")
                 if base_strength < 30:
                     rejection_reason.append(f"  - 基础强度过低({base_strength:.1f}/60)")
-                if confidence < 48:
-                    rejection_reason.append(f"  - 综合置信度低({confidence:.1f}/48)")
+                if confidence < 45:
+                    rejection_reason.append(f"  - 综合置信度低({confidence:.1f}/45)")
                 if prob_bonus < 10:
                     rejection_reason.append(f"  - 概率加成不足({prob_bonus:.1f}/40, P={P_chosen:.3f})")
             if P_chosen < p_min_adjusted:
@@ -980,11 +1015,11 @@ def _analyze_symbol_core(
 
         # 检查质量门槛2：综合置信度
         if not quality_check_2:
-            rejection_reason.append(f"❌ 置信度不足({confidence:.1f} < 48)")
+            rejection_reason.append(f"❌ 置信度不足({confidence:.1f} < 45)")
 
         # 检查质量门槛3：gate_multiplier
         if not quality_check_3:
-            rejection_reason.append(f"❌ 四门槛质量不足(gate_mult={gate_multiplier:.3f} < 0.87)")
+            rejection_reason.append(f"❌ 四门槛质量不足(gate_mult={gate_multiplier:.3f} < 0.84)")
             # 详细说明哪些门槛拖后腿
             gates_data_qual = _get(r, "gates.data_qual", 1.0) if 'r' in locals() else 1.0
             gates_execution = 0.5 + L / 200.0 if L else 0.5
@@ -995,7 +1030,7 @@ def _analyze_symbol_core(
 
         # 检查质量门槛4：edge
         if not quality_check_4:
-            rejection_reason.append(f"❌ Edge不足({abs(edge):.2f} < 0.55)")
+            rejection_reason.append(f"❌ Edge不足({abs(edge):.2f} < 0.48)")
     else:
         rejection_reason = [f"✅ 通过所有质量门槛(P={P_chosen:.3f}, Prime={prime_strength:.1f}, Conf={confidence:.1f}, GM={gate_multiplier:.3f}, Edge={abs(edge):.2f})"]
 
@@ -1144,6 +1179,20 @@ def _analyze_symbol_core(
         "Teff_final": modulator_output.Teff_final,  # 最终温度（融合后）
         "cost_modulated": modulator_output.cost_final,  # 调制后成本
 
+        # v6.7++: FIModulator阈值计算（统一p_min）
+        "fi_thresholds": {
+            "p_min_base": threshold_details.get("p_min", 0.0),  # FIModulator基础p_min
+            "p_min_adjusted": p_min_adjusted,  # 加上安全边际后的最终p_min
+            "delta_p_min": delta_p_min,
+            "F_normalized": F_normalized,
+            "I_normalized": I_normalized,
+            "g_F": threshold_details.get("g_F", 0.0),
+            "g_I": threshold_details.get("g_I", 0.0),
+            "adj_F": threshold_details.get("adj_F", 0.0),  # F的调整量
+            "adj_I": threshold_details.get("adj_I", 0.0),  # I的调整量
+            "safety_adjustment": adjustment  # 安全边际调整
+        },
+
         # Scorecard结果
         "weighted_score": weighted_score,  # -100 到 +100
         "confidence": confidence,  # 0-100（绝对值）
@@ -1193,6 +1242,8 @@ def _analyze_symbol_core(
         },
         # 向后兼容（保留旧键名）
         "coin_age_days": round(coin_age_days, 1),
+        "coin_age_hours": round(coin_age_hours, 1),  # v6.8: 添加以支持统计分析
+        "bars": bars_1h,  # v6.8: 添加以支持统计分析
         "coin_phase": coin_phase,
         "is_new_coin": is_new_coin,
 

@@ -49,8 +49,9 @@ from ats_core.pipeline.batch_scan_optimized import OptimizedBatchScanner
 from ats_core.outputs.telegram_fmt import render_signal
 from ats_core.logging import log, warn, error
 
-# v6.6: 发布防抖动系统
+# v6.7: 统一防抖动配置系统
 from ats_core.publishing.anti_jitter import AntiJitter
+from ats_core.config.anti_jitter_config import get_config
 
 
 def load_telegram_config():
@@ -147,18 +148,20 @@ class SignalScanner:
         self.initialized = False
         self.scan_count = 0
 
-        # v6.6: 初始化防抖动系统（阈值匹配市场过滤后的实际概率分布）
-        self.anti_jitter = AntiJitter(
-            prime_entry_threshold=0.45,      # v6.6: 匹配市场过滤后的概率（P=0.45-0.60）
-            prime_maintain_threshold=0.42,   # v6.6: 维持阈值相应降低
-            watch_entry_threshold=0.40,      # v6.6: WATCH门槛
-            watch_maintain_threshold=0.37,   # v6.6: 保持滞后性
-            confirmation_bars=1,             # v6.6: 1/2确认即可，更快响应
-            total_bars=2,
-            cooldown_seconds=60              # v6.6: 更快恢复
-        )
+        # v6.7: 使用统一防抖配置系统（15m标准配置）
+        aj_config = get_config("15m")
+        self.anti_jitter = AntiJitter(config=aj_config)
 
-        log("✅ v6.6 防抖动系统初始化完成 (K/N=1/2, cooldown=60s, prime_entry=0.45, prime_maintain=0.42)")
+        # 验证配置一致性
+        is_valid, warnings = aj_config.validate_consistency()
+        if warnings:
+            for w in warnings:
+                warn(w)
+
+        log(f"✅ v6.7 防抖动系统初始化完成")
+        log(f"   配置: {aj_config.kline_period} K线, 扫描间隔 {aj_config.scan_interval_seconds}s")
+        log(f"   K/N: {aj_config.confirmation_bars}/{aj_config.total_bars}, Cooldown: {aj_config.cooldown_bars} bars = {aj_config.cooldown_seconds}s")
+        log(f"   阈值: PRIME {aj_config.prime_entry_threshold}/{aj_config.prime_maintain_threshold}, WATCH {aj_config.watch_entry_threshold}/{aj_config.watch_maintain_threshold}")
 
         # 加载Telegram配置
         if send_telegram:

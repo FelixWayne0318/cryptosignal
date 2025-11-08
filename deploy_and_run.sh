@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==========================================
-# CryptoSignal v6.6 全自动部署并运行脚本
+# CryptoSignal v7.2 全自动部署并运行脚本
 # 适用于：首次部署、更新部署、全新服务器
 # 自动处理：git冲突、依赖缺失、所有错误
 # ==========================================
@@ -12,7 +12,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 echo "=============================================="
-echo "🚀 CryptoSignal v6.6 全自动部署并运行"
+echo "🚀 CryptoSignal v7.2 全自动部署并运行"
 echo "=============================================="
 echo ""
 echo "📋 脚本功能："
@@ -41,6 +41,26 @@ if [ ! -d ~/cryptosignal ]; then
 fi
 
 cd ~/cryptosignal
+
+# ==========================================
+# -1.0 配置GitHub访问权限
+# ==========================================
+echo ""
+echo "0️⃣ 配置GitHub访问权限..."
+
+if [ -f "scripts/configure_github.sh" ]; then
+    chmod +x scripts/configure_github.sh
+    if bash scripts/configure_github.sh; then
+        echo -e "${GREEN}✅ GitHub访问权限配置完成${NC}"
+    else
+        echo -e "${YELLOW}⚠️  GitHub配置失败，可能影响自动推送功能${NC}"
+        echo "   继续部署...（可稍后手动配置）"
+    fi
+    echo ""
+else
+    echo -e "${YELLOW}⚠️  配置脚本不存在，跳过GitHub配置${NC}"
+    echo ""
+fi
 
 # 检测是否在 git 仓库中
 if [ ! -d .git ]; then
@@ -322,7 +342,7 @@ else
 fi
 
 echo ""
-echo "2️⃣ 验证权重配置（v6.6 - 6因子系统）..."
+echo "2️⃣ 验证权重配置（v7.2 - 规则增强版）..."
 python3 -c "
 import json
 
@@ -339,7 +359,7 @@ factors_total = sum(factor_weights[k] for k in core_factors if k in factor_weigh
 modulators = ['L', 'S', 'F', 'I']
 
 print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-print('权重配置验证 (v6.6 - 6因子系统)')
+print('权重配置验证 (v7.2 - 规则增强版)')
 print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
 print(f'核心6因子总和: {factors_total}%')
 for k in core_factors:
@@ -353,7 +373,7 @@ for k in modulators:
 print()
 
 # 验证发布阈值
-print('发布阈值 (v6.6软约束):')
+print('发布阈值 (v7.2软约束):')
 print(f'  prime_prob_min: {publish[\"prime_prob_min\"]} (软约束)')
 print(f'  prime_dims_ok_min: {publish[\"prime_dims_ok_min\"]}')
 print(f'  prime_dim_threshold: {publish[\"prime_dim_threshold\"]}')
@@ -364,7 +384,7 @@ assert abs(factors_total - 100.0) < 0.01, f'错误: 核心因子权重={factors_
 if all(k in weights for k in modulators):
     assert all(weights[k] == 0.0 for k in modulators), '错误: 调制器权重必须为0.0'
 
-print('✅ v6.6 权重配置验证通过')
+print('✅ v7.2 权重配置验证通过')
 print('✅ 类型安全检查通过')
 " || {
     echo -e "${RED}❌ 配置验证失败${NC}"
@@ -443,7 +463,7 @@ echo "=============================================="
 cd ~/cryptosignal
 
 echo "启动测试（10秒后自动终止）..."
-timeout 10 python3 scripts/realtime_signal_scanner.py --max-symbols 10 --no-telegram 2>&1 | tail -50 || {
+timeout 10 python3 scripts/realtime_signal_scanner_v72.py --max-symbols 10 --no-telegram 2>&1 | tail -50 || {
     EXIT_CODE=$?
     if [ $EXIT_CODE -eq 124 ]; then
         echo ""
@@ -464,9 +484,9 @@ echo ""
 echo "📍 第 7 步：自动启动生产环境"
 echo "=============================================="
 echo ""
-echo -e "${GREEN}✅ v6.6 部署验证完成！${NC}"
+echo -e "${GREEN}✅ v7.2 部署验证完成！${NC}"
 echo ""
-echo "🚀 正在启动生产环境（每5分钟扫描一次，200个币种）..."
+echo "🚀 正在启动生产环境（v7.2规则增强版 + 数据采集）..."
 echo ""
 
 # 创建 logs 目录
@@ -497,7 +517,7 @@ if command -v screen &> /dev/null; then
         sleep 3
 
         # 启动 screen 会话（前台）
-        screen -S cryptosignal python3 scripts/realtime_signal_scanner.py --interval 300
+        screen -S cryptosignal python3 scripts/realtime_signal_scanner_v72.py --interval 300
     else
         # 无交互式terminal（如从cron/nohup调用），使用detached模式
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -511,7 +531,7 @@ if command -v screen &> /dev/null; then
         LOG_FILE="logs/scanner_$(date +%Y%m%d_%H%M%S).log"
 
         # 启动 screen 会话（detached模式，带日志）
-        screen -dmS cryptosignal bash -c "python3 scripts/realtime_signal_scanner.py --interval 300 2>&1 | tee $LOG_FILE"
+        screen -dmS cryptosignal bash -c "python3 scripts/realtime_signal_scanner_v72.py --interval 300 2>&1 | tee $LOG_FILE"
 
         sleep 2
 
@@ -529,7 +549,7 @@ if command -v screen &> /dev/null; then
             echo "  停止会话: screen -S cryptosignal -X quit"
         else
             echo -e "${YELLOW}⚠️ Screen启动可能失败，回退到nohup模式${NC}"
-            nohup python3 scripts/realtime_signal_scanner.py --interval 300 > "$LOG_FILE" 2>&1 &
+            nohup python3 scripts/realtime_signal_scanner_v72.py --interval 300 > "$LOG_FILE" 2>&1 &
             PID=$!
             echo ""
             echo -e "${GREEN}✅ 已启动（nohup模式），PID: $PID${NC}"
@@ -542,7 +562,7 @@ else
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     LOG_FILE="logs/scanner_$(date +%Y%m%d_%H%M%S).log"
 
-    nohup python3 scripts/realtime_signal_scanner.py --interval 300 > "$LOG_FILE" 2>&1 &
+    nohup python3 scripts/realtime_signal_scanner_v72.py --interval 300 > "$LOG_FILE" 2>&1 &
     PID=$!
 
     echo ""
@@ -557,22 +577,19 @@ else
     echo -e "${GREEN}✅ 部署并运行完成！${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "📊 v6.6 系统特性"
+    echo "📊 v7.2 系统特性（阶段1：规则增强）"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "✅ 6+4因子架构（6核心因子+4调制器）"
-    echo "✅ 核心因子: T/M/C/V/O/B（权重总和100%）"
-    echo "✅ 调制器: L/S/F/I（权重0%，调节执行参数）"
-    echo "✅ 权重优化：T24% M17% C24% V12% O17% B6%"
-    echo "✅ M因子修复：scale=1.00，消除tanh饱和"
-    echo "✅ 软约束系统：EV≤0和P<p_min标记但不拒绝"
-    echo "✅ 三层止损：结构>订单簿>ATR"
-    echo "✅ 新币数据流：1m/5m/15m粒度自动判断"
+    echo "✅ F因子v2：精确资金主导判断"
+    echo "✅ 因子分组：TC(50%) + VOM(35%) + B(15%)"
+    echo "✅ 统计校准：Bootstrap模式P计算"
+    echo "✅ 四重门控：数据质量+资金支撑+市场风险+执行成本"
+    echo "✅ 数据采集：自动记录所有信号到SQLite数据库"
+    echo "✅ v7.2消息格式：显示F_v2、分组得分、门控状态"
     echo ""
-    echo "预期效果："
-    echo "  • M因子范围：-100 ~ +100（不再恒定）"
-    echo "  • 信号质量：更精准的动量识别"
-    echo "  • 新币支持：自动检测上币时间"
-    echo "  • 响应速度：K/N=1/2防抖动"
+    echo "数据采集进度："
+    echo "  • 目标：500+样本（1-2周）"
+    echo "  • 数据库位置：data/trade_history.db"
+    echo "  • 查看统计：python3 -c 'from ats_core.data.trade_recorder import TradeRecorder; print(TradeRecorder().get_statistics())'"
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 fi

@@ -11,13 +11,13 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "1️⃣  检查进程状态"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-PROCESS_COUNT=$(ps aux | grep "realtime_signal_scanner.py" | grep -v grep | wc -l)
+PROCESS_COUNT=$(ps aux | grep "realtime_signal_scanner" | grep -v grep | wc -l)
 
 if [ "$PROCESS_COUNT" -gt 0 ]; then
     echo "✅ 系统正在运行！"
     echo ""
     echo "进程信息："
-    ps aux | grep "realtime_signal_scanner.py" | grep -v grep | awk '{printf "  PID: %s\n  用户: %s\n  CPU: %s%%\n  内存: %s%%\n  启动时间: %s %s\n  运行时长: %s\n  命令: %s %s %s %s %s\n", $2, $1, $3, $4, $9, $10, $11, $12, $13, $14, $15, $16}'
+    ps aux | grep "realtime_signal_scanner" | grep -v grep | awk '{printf "  PID: %s\n  用户: %s\n  CPU: %s%%\n  内存: %s%%\n  启动时间: %s %s\n  运行时长: %s\n  命令: %s %s %s %s %s\n", $2, $1, $3, $4, $9, $10, $11, $12, $13, $14, $15, $16}'
     echo ""
 else
     echo "❌ 系统未运行"
@@ -84,7 +84,7 @@ echo "查看实时日志："
 echo "  ./view_logs.sh"
 echo ""
 echo "停止系统："
-echo "  pkill -f realtime_signal_scanner.py"
+echo "  pkill -f realtime_signal_scanner"
 echo ""
 echo "重新启动："
 echo "  ./run_production.sh"

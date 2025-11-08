@@ -61,6 +61,7 @@ from ats_core.gates.integrated_gates import FourGatesChecker
 from ats_core.execution.metrics_estimator import ExecutionMetricsEstimator
 from ats_core.data.quality import DataQualMonitor
 from ats_core.publishing.anti_jitter import AntiJitter
+from ats_core.config.anti_jitter_config import get_config
 from ats_core.logging import log, warn, error
 
 
@@ -119,15 +120,11 @@ class ShadowRunner:
         self.gate_checker = FourGatesChecker()
         self.metrics_estimator = ExecutionMetricsEstimator()
         self.quality_monitor = DataQualMonitor()
-        self.anti_jitter = AntiJitter(
-            prime_entry_threshold=0.80,
-            prime_maintain_threshold=0.70,
-            watch_entry_threshold=0.50,
-            watch_maintain_threshold=0.40,
-            confirmation_bars=2,
-            total_bars=3,
-            cooldown_seconds=90
-        )
+
+        # v6.7: 使用统一防抖配置（1h标准配置，更适合shadow测试）
+        aj_config = get_config("1h")
+        self.anti_jitter = AntiJitter(config=aj_config)
+        log(f"   防抖配置: {aj_config.kline_period} K线, K/N={aj_config.confirmation_bars}/{aj_config.total_bars}, cooldown={aj_config.cooldown_bars} bars")
 
         # Data collection buffers
         self.signal_records = []

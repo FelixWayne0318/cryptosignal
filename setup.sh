@@ -92,21 +92,65 @@ else
 fi
 
 # 添加执行权限
-chmod +x auto_restart.sh deploy_and_run.sh setup.sh 2>/dev/null || true
+chmod +x auto_restart.sh deploy_and_run.sh setup.sh scripts/init_databases.py start_live.sh 2>/dev/null || true
 
-# 启动系统
+# 初始化数据库
 echo ""
-echo "🚀 启动系统..."
+echo "🗄️  初始化数据库..."
 echo "=============================================="
-./deploy_and_run.sh
+python3 scripts/init_databases.py || {
+    echo -e "${RED}❌ 数据库初始化失败${NC}"
+    echo "这不会影响系统运行，数据库会在首次使用时自动创建"
+}
 
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}✅ 部署完成！${NC}"
+echo -e "${GREEN}✅ 环境准备完成！${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo "📊 系统状态:"
-echo "  查看日志: tail -f ~/cryptosignal/logs/scanner_*.log"
-echo "  重连会话: screen -r cryptosignal"
-echo "  手动重启: ~/cryptosignal/auto_restart.sh"
+echo "🚀 正在启动 v7.2 扫描器（后台模式 + 实时日志）..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
+
+# 停止旧进程
+pkill -f realtime_signal_scanner_v72.py 2>/dev/null || true
+sleep 1
+
+# 创建日志文件名
+LOG_FILE=~/cryptosignal_$(date +%Y%m%d_%H%M%S).log
+
+# 后台启动扫描器
+echo "📝 后台启动扫描器..."
+nohup python3 scripts/realtime_signal_scanner_v72.py --interval 300 > "$LOG_FILE" 2>&1 &
+PID=$!
+
+sleep 2
+
+# 验证启动
+if ps -p $PID > /dev/null 2>&1; then
+    echo -e "${GREEN}✅ 扫描器已启动（PID: $PID）${NC}"
+    echo "   日志文件: $LOG_FILE"
+    echo "   ✅ SSH断开后继续运行"
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "📋 管理命令:"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "  查看状态: ~/cryptosignal/check_v72_status.sh"
+    echo "  重新启动: ~/cryptosignal/auto_restart.sh"
+    echo "  停止程序: pkill -f realtime_signal_scanner_v72.py"
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${GREEN}🟢 正在显示实时日志（按 Ctrl+C 退出查看，程序继续运行）${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    # 等待日志文件生成
+    sleep 2
+
+    # 显示实时日志（用户按Ctrl+C只是退出查看，不影响后台程序）
+    tail -f "$LOG_FILE"
+else
+    echo -e "${RED}❌ 启动失败${NC}"
+    echo "请查看日志: cat $LOG_FILE"
+    exit 1
+fi

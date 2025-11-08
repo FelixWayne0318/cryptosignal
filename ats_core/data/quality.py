@@ -7,6 +7,40 @@ DataQual = 1 - (w_h·miss + w_o·ooOrder + w_d·drift + w_m·mismatch)
 Quality gates:
 - DataQual ≥ 0.90: Allow Prime signals
 - DataQual < 0.88: Degrade to Watch-only
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 DataQual Calculation Modes
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. WebSocket Mode (Real-time streaming)
+   ────────────────────────────────────
+   When WebSocket data is available, DataQual is calculated from:
+   - miss_rate: (expected - received) / expected
+   - oo_order_rate: out-of-order messages / total
+   - drift_rate: messages with |ts_exch - ts_srv| > 300ms / total
+   - mismatch_rate: order book mismatches / total
+
+   Formula:
+   DataQual = 1 - (0.35·miss + 0.15·oo_order + 0.20·drift + 0.30·mismatch)
+
+   Rolling window: 5 minutes (300 seconds)
+
+2. REST Mode (Periodic polling)
+   ─────────────────────────────
+   When using REST API (no WebSocket), DataQual is based on cache freshness:
+   - Age ≤ 30s → 1.00 (perfect)
+   - Age ≤ 60s → 0.95 (slightly old)
+   - Age ≤ 180s → 0.90 (moderately old)
+   - Age ≤ 300s → 0.85 (old)
+   - Age > 300s → 0.70 (stale)
+
+3. Hybrid Mode (Current default)
+   ──────────────────────────────
+   - Priority: Use WebSocket quality if available
+   - Fallback: Use REST cache freshness
+   - Reason: System currently uses REST polling for K-lines
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
 
 import time
@@ -275,7 +309,8 @@ class DataQualMonitor:
     def can_publish_prime(
         self,
         symbol: str,
-        kline_cache=None  # 新增：K线缓存，用于REST模式
+        kline_cache=None,  # K线缓存，用于REST模式
+        verbose: bool = False  # 是否输出详细日志
     ) -> Tuple[bool, float, str]:
         """
         Check if symbol's data quality allows Prime signal publishing.
@@ -283,6 +318,7 @@ class DataQualMonitor:
         Args:
             symbol: Trading symbol
             kline_cache: K线缓存管理器（REST模式下必须提供）
+            verbose: 是否输出详细日志（默认False）
 
         Returns:
             Tuple of (allowed, dataqual_score, reason)
@@ -293,19 +329,43 @@ class DataQualMonitor:
         # 如果有WebSocket事件记录，使用WebSocket质量
         if symbol in self.metrics and self.metrics[symbol].total_received > 0:
             dataqual = quality.dataqual
-            reason_suffix = " (WebSocket mode)"
+            mode = "WebSocket"
+
+            # 构建详细原因
+            metrics = self.metrics[symbol]
+            details = (
+                f"miss={metrics.miss_rate:.1%}, "
+                f"oo_order={metrics.oo_order_rate:.1%}, "
+                f"drift={metrics.drift_rate:.1%}, "
+                f"mismatch={metrics.mismatch_rate:.1%}"
+            )
+            reason_suffix = f" (WebSocket: {details})"
+
+            if verbose:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(
+                    f"[DataQual-WS] {symbol}: {dataqual:.3f} | "
+                    f"received={metrics.total_received}, {details}"
+                )
         else:
             # REST模式：检查缓存新鲜度
             dataqual, cache_reason = self.check_cache_freshness(symbol, kline_cache)
-            reason_suffix = f" (REST mode: {cache_reason})"
+            mode = "REST"
+            reason_suffix = f" (REST: {cache_reason})"
+
+            if verbose:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"[DataQual-REST] {symbol}: {dataqual:.3f} | {cache_reason}")
 
         if dataqual >= self.ALLOW_PRIME_THRESHOLD:
-            return True, dataqual, "Quality sufficient for Prime" + reason_suffix
+            return True, dataqual, f"✅ Quality sufficient for Prime ({mode})" + reason_suffix
 
         if dataqual < self.DEGRADE_THRESHOLD:
-            return False, dataqual, f"Quality degraded: {dataqual:.3f} < {self.DEGRADE_THRESHOLD}" + reason_suffix
+            return False, dataqual, f"❌ Quality degraded: {dataqual:.3f} < {self.DEGRADE_THRESHOLD} ({mode})" + reason_suffix
 
-        return False, quality.dataqual, f"Quality below Prime threshold: {quality.dataqual:.3f} < {self.ALLOW_PRIME_THRESHOLD}"
+        return False, dataqual, f"⚠️  Quality below Prime: {dataqual:.3f} < {self.ALLOW_PRIME_THRESHOLD} ({mode})" + reason_suffix
 
     def get_all_qualities(self) -> Dict[str, float]:
         """

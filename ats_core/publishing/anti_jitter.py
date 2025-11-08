@@ -4,11 +4,14 @@ Implements PUBLISHING.md § 4.3 triple defense.
 
 Author: CryptoSignal v2.0 Compliance Team
 Date: 2025-11-01
+Updated: 2025-11-06 v6.7 - Unified configuration system
 """
 
 import time
-from typing import Optional, Literal
+from typing import Optional, Literal, Union
 from dataclasses import dataclass
+
+from ats_core.config.anti_jitter_config import AntiJitterConfig
 
 @dataclass
 class SignalState:
@@ -24,37 +27,77 @@ class AntiJitter:
     1. Hysteresis: Different thresholds for entry/exit
     2. Persistence: K/N bars confirmation
     3. Cooldown: Minimum time between state changes
+
+    v6.7 Update: Now supports unified configuration via AntiJitterConfig.
     """
 
     def __init__(
         self,
-        prime_entry_threshold: float = 0.80,
-        prime_maintain_threshold: float = 0.70,
-        watch_entry_threshold: float = 0.50,
-        watch_maintain_threshold: float = 0.40,
-        confirmation_bars: int = 2,
-        total_bars: int = 3,
-        cooldown_seconds: int = 90
+        config: Optional[AntiJitterConfig] = None,
+        # Legacy parameters (for backward compatibility)
+        prime_entry_threshold: Optional[float] = None,
+        prime_maintain_threshold: Optional[float] = None,
+        watch_entry_threshold: Optional[float] = None,
+        watch_maintain_threshold: Optional[float] = None,
+        confirmation_bars: Optional[int] = None,
+        total_bars: Optional[int] = None,
+        cooldown_seconds: Optional[int] = None
     ):
         """
-        Initialize anti-jitter controller with PUBLISHING.md parameters.
+        Initialize anti-jitter controller.
 
         Args:
-            prime_entry_threshold: Probability to enter PRIME (0.80)
-            prime_maintain_threshold: Probability to stay in PRIME (0.70)
-            watch_entry_threshold: Probability to enter WATCH (0.50)
-            watch_maintain_threshold: Probability to stay in WATCH (0.40)
-            confirmation_bars: K bars required (2)
-            total_bars: N total bars window (3)
-            cooldown_seconds: Minimum seconds between changes (90)
+            config: AntiJitterConfig instance (recommended, v6.7+)
+
+            Legacy parameters (for backward compatibility):
+            prime_entry_threshold: Probability to enter PRIME
+            prime_maintain_threshold: Probability to stay in PRIME
+            watch_entry_threshold: Probability to enter WATCH
+            watch_maintain_threshold: Probability to stay in WATCH
+            confirmation_bars: K bars required
+            total_bars: N total bars window
+            cooldown_seconds: Minimum seconds between changes
+
+        Examples:
+            # New way (recommended):
+            >>> from ats_core.config.anti_jitter_config import get_config
+            >>> aj = AntiJitter(config=get_config("15m"))
+
+            # Old way (still works):
+            >>> aj = AntiJitter(confirmation_bars=2, total_bars=3, cooldown_seconds=90)
         """
-        self.prime_entry = prime_entry_threshold
-        self.prime_maintain = prime_maintain_threshold
-        self.watch_entry = watch_entry_threshold
-        self.watch_maintain = watch_maintain_threshold
-        self.K = confirmation_bars
-        self.N = total_bars
-        self.cooldown = cooldown_seconds
+        # Use config if provided, otherwise create from legacy parameters
+        if config is not None:
+            self.config = config
+        else:
+            # Create config from legacy parameters (backward compatibility)
+            from ats_core.config.anti_jitter_config import get_config_default
+            default = get_config_default()
+
+            self.config = AntiJitterConfig(
+                kline_period=default.kline_period,
+                scan_interval_seconds=default.scan_interval_seconds,
+                confirmation_bars=confirmation_bars if confirmation_bars is not None else default.confirmation_bars,
+                total_bars=total_bars if total_bars is not None else default.total_bars,
+                cooldown_bars=default.cooldown_bars,
+                prime_entry_threshold=prime_entry_threshold if prime_entry_threshold is not None else default.prime_entry_threshold,
+                prime_maintain_threshold=prime_maintain_threshold if prime_maintain_threshold is not None else default.prime_maintain_threshold,
+                watch_entry_threshold=watch_entry_threshold if watch_entry_threshold is not None else default.watch_entry_threshold,
+                watch_maintain_threshold=watch_maintain_threshold if watch_maintain_threshold is not None else default.watch_maintain_threshold
+            )
+
+            # Override cooldown_seconds if provided (legacy)
+            if cooldown_seconds is not None:
+                self.config.cooldown_seconds = cooldown_seconds
+
+        # Extract parameters from config
+        self.prime_entry = self.config.prime_entry_threshold
+        self.prime_maintain = self.config.prime_maintain_threshold
+        self.watch_entry = self.config.watch_entry_threshold
+        self.watch_maintain = self.config.watch_maintain_threshold
+        self.K = self.config.confirmation_bars
+        self.N = self.config.total_bars
+        self.cooldown = self.config.cooldown_seconds
 
         # Per-symbol state tracking
         self.states = {}  # symbol -> SignalState

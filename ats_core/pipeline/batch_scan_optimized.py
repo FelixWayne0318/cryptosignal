@@ -20,6 +20,7 @@ from ats_core.execution.binance_futures_client import get_binance_client
 from ats_core.data.realtime_kline_cache import get_kline_cache
 from ats_core.pipeline.analyze_symbol import analyze_symbol_with_preloaded_klines
 from ats_core.logging import log, warn, error
+from ats_core.analysis.scan_statistics import get_global_stats, reset_global_stats
 
 
 class OptimizedBatchScanner:
@@ -88,8 +89,8 @@ class OptimizedBatchScanner:
         self.client = get_binance_client()
         await self.client.initialize()
 
-        # 2. 获取高流动性USDT合约币种（TOP 200，v6.1优化）
-        log("\n2️⃣  获取高流动性USDT合约币种...")
+        # 2. 获取高流动性USDT合约币种（全市场扫描，v6.8优化）
+        log("\n2️⃣  获取币安USDT合约币种（全市场扫描）...")
 
         # 获取交易所信息
         exchange_info = await self.client.get_exchange_info()
@@ -125,25 +126,18 @@ class OptimizedBatchScanner:
         ]
         log(f"   流动性过滤后: {len(filtered_symbols)} 个币种（24h成交额>3M USDT）")
 
-        # 多空对称选币：波动率优先 + 流动性保障
-        # 设计原理：abs(涨跌幅)确保多空对称，避免只选上涨币
-        max_volume = max(ticker_map.get(s, {}).get('volume', 1) for s in filtered_symbols)
+        # 全市场扫描：分析所有流动性合格的币种
+        # 设计原理：不预先按波动率筛选，避免漏掉"蓄势待发"的币
+        # 系统有4道质量门槛（DataQual/EV/Execution/Probability）会自动过滤低质量信号
 
-        def calc_score(symbol):
-            """综合评分：波动率70% + 流动性30%"""
-            data = ticker_map.get(symbol, {})
-            volatility = abs(data.get('change_pct', 0))  # 多空对称（绝对值）
-            liquidity = data.get('volume', 0) / max_volume  # 归一化到[0,1]
-            return volatility * 0.7 + liquidity * 0.3 * 100  # 波动率占主导
-
-        # 按综合评分排序，取TOP 200
+        # 按流动性排序（保证扫描顺序稳定）
         symbols = sorted(
             filtered_symbols,
-            key=calc_score,
+            key=lambda s: ticker_map.get(s, {}).get('volume', 0),
             reverse=True
-        )[:200]
+        )
 
-        log(f"   ✅ 筛选出 {len(symbols)} 个高波动币种（多空对称选币）")
+        log(f"   ✅ 全市场扫描: {len(symbols)} 个币种（不限波动率，发现蓄势潜力股）")
 
         # 验证是否成功获取到币种
         if not symbols:
@@ -155,19 +149,19 @@ class OptimizedBatchScanner:
                 "   请检查网络连接并重试。"
             )
 
-        # 显示选中的币种信息
-        log(f"   TOP 5: {', '.join(symbols[:5])}")
+        # 显示流动性TOP 5
+        log(f"   流动性TOP 5: {', '.join(symbols[:5])}")
 
-        # 统计多空分布
+        # 统计多空分布（24h涨跌情况）
         up_count = sum(1 for s in symbols if ticker_map.get(s, {}).get('change_pct', 0) > 0)
         down_count = len(symbols) - up_count
-        log(f"   多空分布: 上涨{up_count}个 / 下跌{down_count}个（做多做空机会均衡）")
+        flat_count = len(symbols) - up_count - down_count
+        log(f"   多空分布: 上涨{up_count}个 / 下跌{down_count}个 / 横盘{flat_count}个")
 
-        # 显示波动率和成交额范围
-        top_data = ticker_map.get(symbols[0], {})
-        last_data = ticker_map.get(symbols[-1], {})
-        log(f"   波动率范围: {abs(top_data.get('change_pct', 0)):.1f}% ~ {abs(last_data.get('change_pct', 0)):.1f}%")
-        log(f"   成交额范围: {top_data.get('volume', 0)/1e6:.1f}M ~ {last_data.get('volume', 0)/1e6:.1f}M USDT")
+        # 显示成交额范围
+        top_volume = ticker_map.get(symbols[0], {}).get('volume', 0)
+        last_volume = ticker_map.get(symbols[-1], {}).get('volume', 0)
+        log(f"   成交额范围: {top_volume/1e6:.1f}M ~ {last_volume/1e6:.1f}M USDT")
 
         # 保存初始化的币种列表
         self.symbols = symbols
@@ -400,6 +394,9 @@ class OptimizedBatchScanner:
         log(f"   最低分数: {min_score}")
         log("=" * 60)
 
+        # 重置全局统计（v6.8: 扫描后自动分析并发送到Telegram）
+        reset_global_stats()
+
         # ═══════════════════════════════════════════════════════════
         # Phase 1: 三层智能数据更新
         # ═══════════════════════════════════════════════════════════
@@ -619,6 +616,10 @@ class OptimizedBatchScanner:
 
                 log(f"  └─ 分析完成（耗时{analysis_time:.1f}秒）")
 
+                # v6.8: 收集统计数据（用于扫描后自动分析）
+                stats = get_global_stats()
+                stats.add_symbol_result(symbol, result)
+
                 # 筛选Prime信号（只添加is_prime=True的币种）
                 is_prime = result.get('publish', {}).get('prime', False)
                 prime_strength = result.get('publish', {}).get('prime_strength', 0)
@@ -651,6 +652,17 @@ class OptimizedBatchScanner:
                 if is_prime and prime_strength >= min_score:
                     results.append(result)
                     log(f"✅ {symbol}: Prime强度={prime_strength}, 置信度={confidence:.0f}")
+
+                    # v7.2: 写入Prime信号到数据库（信号级别完整数据）
+                    try:
+                        if not hasattr(self, '_analysis_db_batch'):
+                            from ats_core.data.analysis_db import get_analysis_db
+                            self._analysis_db_batch = get_analysis_db()
+                        # 写入6个表：market_data, factor_scores, signal_analysis, gate_evaluation, modulator_effects
+                        self._analysis_db_batch.write_complete_signal(result)
+                    except Exception as e:
+                        # 不影响主流程，只记录警告
+                        warn(f"⚠️  {symbol} 写入数据库失败: {e}")
 
                     # 实时回调：立即处理新发现的信号
                     if on_signal_found:
@@ -695,6 +707,91 @@ class OptimizedBatchScanner:
         log(f"   缓存命中率: {cache_stats['hit_rate']}")
         log(f"   内存占用: {cache_stats['memory_estimate_mb']:.1f}MB")
         log("=" * 60)
+
+        # v6.8: 生成统计分析报告并写入仓库
+        try:
+            stats = get_global_stats()
+            report = stats.generate_statistics_report()
+
+            # 打印到日志
+            log("\n" + report)
+
+            # v6.8+: 写入仓库（JSON + Markdown）
+            try:
+                from ats_core.analysis.report_writer import get_report_writer
+                writer = get_report_writer()
+
+                # 生成数据
+                summary_data = stats.generate_summary_data()
+                detail_data = stats.generate_detail_data()
+
+                # 添加扫描性能信息到summary
+                summary_data['performance'] = {
+                    'total_time_sec': round(scan_elapsed, 2),
+                    'speed_coins_per_sec': round(len(symbols) / scan_elapsed, 2),
+                    'api_calls': 0,
+                    'cache_hit_rate': cache_stats.get('hit_rate', 'N/A'),
+                    'memory_mb': cache_stats.get('memory_estimate_mb', 0)
+                }
+
+                # 写入文件
+                files = writer.write_scan_report(
+                    summary=summary_data,
+                    detail=detail_data,
+                    text_report=report
+                )
+
+                log("✅ 报告已写入仓库:")
+                for key, path in files.items():
+                    log(f"   - {key}: {path}")
+
+                # v7.2+: 写入数据库（历史统计）
+                try:
+                    from ats_core.data.analysis_db import get_analysis_db
+                    analysis_db = get_analysis_db()
+                    record_id = analysis_db.write_scan_statistics(summary_data)
+                    log(f"✅ 扫描统计已写入数据库（记录ID: {record_id}）")
+                except Exception as e:
+                    warn(f"⚠️  写入数据库失败: {e}")
+
+                # v6.9+: 自动提交并推送到Git仓库
+                log("\n🔄 自动提交报告到Git仓库...")
+                import subprocess
+                from pathlib import Path
+                auto_commit_script = Path(__file__).parent.parent.parent / 'scripts' / 'auto_commit_reports.sh'
+
+                if auto_commit_script.exists():
+                    try:
+                        result = subprocess.run(
+                            ['bash', str(auto_commit_script)],
+                            capture_output=True,
+                            text=True,
+                            timeout=60
+                        )
+                        if result.returncode == 0:
+                            log("✅ 报告已自动推送到远程仓库")
+                            for line in result.stdout.strip().split('\n'):
+                                if line:
+                                    log(f"   {line}")
+                        else:
+                            warn(f"⚠️  自动提交失败: {result.stderr}")
+                    except subprocess.TimeoutExpired:
+                        warn("⚠️  自动提交超时（60秒）")
+                    except Exception as e:
+                        warn(f"⚠️  自动提交异常: {e}")
+                else:
+                    log(f"⚠️  自动提交脚本不存在: {auto_commit_script}")
+
+            except Exception as e:
+                warn(f"⚠️  写入仓库失败: {e}")
+                import traceback
+                traceback.print_exc()
+
+            # 注：统计报告已写入仓库，不再发送到Telegram
+            log("✅ 统计分析已完成并写入仓库: reports/latest/")
+
+        except Exception as e:
+            warn(f"⚠️  生成统计报告失败: {e}")
 
         return {
             'results': results,
