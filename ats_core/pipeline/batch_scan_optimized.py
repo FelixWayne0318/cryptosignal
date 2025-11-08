@@ -754,8 +754,7 @@ class OptimizedBatchScanner:
                 except Exception as e:
                     warn(f"⚠️  写入数据库失败: {e}")
 
-                # v6.9+: 自动提交并推送到Git仓库
-                log("\n🔄 自动提交报告到Git仓库...")
+                # v6.9+: 自动提交并推送到Git仓库（静默模式）
                 import subprocess
                 from pathlib import Path
                 auto_commit_script = Path(__file__).parent.parent.parent / 'scripts' / 'auto_commit_reports.sh'
@@ -769,10 +768,11 @@ class OptimizedBatchScanner:
                             timeout=60
                         )
                         if result.returncode == 0:
-                            log("✅ 报告已自动推送到远程仓库")
+                            # 只显示脚本输出的成功消息（✅开头的行）
                             for line in result.stdout.strip().split('\n'):
-                                if line:
-                                    log(f"   {line}")
+                                if line.startswith('✅'):
+                                    log(line)
+                                    break
                         else:
                             warn(f"⚠️  自动提交失败: {result.stderr}")
                     except subprocess.TimeoutExpired:

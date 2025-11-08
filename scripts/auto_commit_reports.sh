@@ -116,16 +116,14 @@ if ! git diff --quiet reports/ || ! git diff --cached --quiet reports/ || git ls
 定期扫描报告更新（$COMMIT_REASON）"
         fi
 
-        # 提交（不签名）
-        git commit --no-gpg-sign -m "$COMMIT_MSG"
+        # 提交（不签名，静默模式）
+        git commit --no-gpg-sign --quiet -m "$COMMIT_MSG"
 
-        # 推送到远程
+        # 推送到远程（静默模式）
         BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
-        echo "🚀 推送到远程仓库..."
-        if git push origin "$BRANCH" 2>&1; then
-            echo "✅ 扫描报告已成功推送到仓库"
-            echo "📊 查看: reports/latest/scan_summary.json"
+        if git push --quiet origin "$BRANCH" 2>/dev/null; then
+            echo "✅ 扫描报告已推送到仓库 (${TOTAL}币种, ${SIGNALS}信号)"
 
             # 记录提交时间
             date +%s > "$LAST_COMMIT_FILE"
