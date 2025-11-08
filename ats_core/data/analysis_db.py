@@ -15,6 +15,7 @@
 4. gate_evaluation - 四道闸门评估结果
 5. modulator_effects - 调制器影响效果
 6. signal_outcomes - 信号实际结果（需人工或自动跟踪）
+7. scan_statistics - 扫描统计数据（历史扫描记录）
 """
 
 import sqlite3
@@ -341,6 +342,55 @@ class AnalysisDB:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_outcome_timestamp ON signal_outcomes(timestamp)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_outcome_outcome ON signal_outcomes(outcome)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_outcome_executed ON signal_outcomes(executed)")
+
+        # ========================================
+        # 表7: 扫描统计数据（新增v7.2）
+        # ========================================
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS scan_statistics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp INTEGER NOT NULL,
+            scan_date TEXT,
+
+            -- 扫描基本信息
+            total_symbols INTEGER,
+            signals_found INTEGER,
+            filtered INTEGER,
+
+            -- 市场统计
+            avg_edge REAL,
+            avg_confidence REAL,
+            new_coins_count INTEGER,
+            new_coins_pct REAL,
+
+            -- 性能统计
+            scan_duration_sec REAL,
+            scan_speed_coins_per_sec REAL,
+            cache_hit_rate REAL,
+            memory_mb REAL,
+
+            -- 拒绝原因统计（JSON）
+            rejection_reasons TEXT,
+
+            -- 因子分布统计（JSON）
+            factor_distribution TEXT,
+
+            -- 接近阈值的币种（JSON）
+            close_to_threshold TEXT,
+
+            -- 阈值建议（JSON）
+            threshold_recommendations TEXT,
+
+            -- 发出的信号列表（JSON）
+            signals_list TEXT,
+
+            -- 备注
+            notes TEXT
+        )
+        """)
+
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_scan_timestamp ON scan_statistics(timestamp)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_scan_date ON scan_statistics(scan_date)")
 
         conn.commit()
         conn.close()
@@ -858,6 +908,123 @@ class AnalysisDB:
             'avg_total_p_change_pct': row[2] or 0,
             'avg_total_ev_change': row[3] or 0
         }
+
+    def write_scan_statistics(self, summary_data: Dict[str, Any]) -> int:
+        """
+        写入扫描统计数据
+
+        Args:
+            summary_data: 扫描摘要数据（来自ScanStatistics.generate_summary_data()）
+
+        Returns:
+            record_id: 记录ID
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            # 提取数据
+            scan_info = summary_data.get('scan_info', {})
+            market_stats = summary_data.get('market_stats', {})
+            performance = summary_data.get('performance', {})
+
+            # 获取时间戳
+            timestamp_str = summary_data.get('timestamp', '')
+            try:
+                from datetime import datetime
+                dt = datetime.fromisoformat(timestamp_str)
+                timestamp = int(dt.timestamp() * 1000)
+                scan_date = dt.strftime('%Y-%m-%d')
+            except:
+                timestamp = int(time.time() * 1000)
+                from datetime import datetime
+                scan_date = datetime.now().strftime('%Y-%m-%d')
+
+            cursor.execute("""
+            INSERT INTO scan_statistics (
+                timestamp, scan_date,
+                total_symbols, signals_found, filtered,
+                avg_edge, avg_confidence, new_coins_count, new_coins_pct,
+                scan_duration_sec, scan_speed_coins_per_sec, cache_hit_rate, memory_mb,
+                rejection_reasons, factor_distribution, close_to_threshold,
+                threshold_recommendations, signals_list, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                timestamp,
+                scan_date,
+                scan_info.get('total_symbols', 0),
+                scan_info.get('signals_found', 0),
+                scan_info.get('filtered', 0),
+                market_stats.get('avg_edge', 0),
+                market_stats.get('avg_confidence', 0),
+                market_stats.get('new_coins_count', 0),
+                market_stats.get('new_coins_pct', 0),
+                performance.get('total_time_sec', 0),
+                performance.get('speed_coins_per_sec', 0),
+                performance.get('cache_hit_rate', 0),
+                performance.get('memory_mb', 0),
+                json.dumps(summary_data.get('rejection_reasons', {})),
+                json.dumps(summary_data.get('factor_distribution', {})),
+                json.dumps(summary_data.get('close_to_threshold', [])),
+                json.dumps(summary_data.get('threshold_recommendations', [])),
+                json.dumps(summary_data.get('signals', [])),
+                None
+            ))
+
+            record_id = cursor.lastrowid
+            conn.commit()
+            return record_id
+
+        except Exception as e:
+            conn.rollback()
+            raise Exception(f"写入扫描统计失败: {e}")
+        finally:
+            conn.close()
+
+    def get_scan_history(self, days: int = 7) -> List[Dict[str, Any]]:
+        """
+        获取最近N天的扫描历史
+
+        Args:
+            days: 查询天数
+
+        Returns:
+            扫描记录列表
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        # 计算起始时间戳
+        from datetime import datetime, timedelta
+        start_time = datetime.now() - timedelta(days=days)
+        start_ts = int(start_time.timestamp() * 1000)
+
+        cursor.execute("""
+        SELECT
+            timestamp, scan_date, total_symbols, signals_found, filtered,
+            avg_edge, avg_confidence, scan_duration_sec, scan_speed_coins_per_sec
+        FROM scan_statistics
+        WHERE timestamp >= ?
+        ORDER BY timestamp DESC
+        """, (start_ts,))
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        return [
+            {
+                'timestamp': r[0],
+                'scan_date': r[1],
+                'total_symbols': r[2],
+                'signals_found': r[3],
+                'filtered': r[4],
+                'avg_edge': r[5],
+                'avg_confidence': r[6],
+                'scan_duration_sec': r[7],
+                'scan_speed_coins_per_sec': r[8]
+            }
+            for r in rows
+        ]
 
     # ========================================
     # 工具方法

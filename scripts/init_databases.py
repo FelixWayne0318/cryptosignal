@@ -64,13 +64,14 @@ def init_analysis_db():
         print(f"   ✅ analysis.db 初始化成功")
         print(f"      - 已记录信号: {stats['total_signals']}个")
         print(f"      - 路径: data/analysis.db")
-        print(f"      - 表结构: 6个专业表")
+        print(f"      - 表结构: 7个专业表")
         print(f"        * market_data: 市场原始数据")
         print(f"        * factor_scores: 因子计算结果")
         print(f"        * signal_analysis: 信号分析数据")
         print(f"        * gate_evaluation: 闸门评估结果")
         print(f"        * modulator_effects: 调制器影响")
         print(f"        * signal_outcomes: 实际结果跟踪")
+        print(f"        * scan_statistics: 扫描历史统计 (v7.2)")
         return True
 
     except Exception as e:

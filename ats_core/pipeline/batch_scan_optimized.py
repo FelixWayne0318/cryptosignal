@@ -734,6 +734,15 @@ class OptimizedBatchScanner:
                 for key, path in files.items():
                     log(f"   - {key}: {path}")
 
+                # v7.2+: 写入数据库（历史统计）
+                try:
+                    from ats_core.data.analysis_db import get_analysis_db
+                    analysis_db = get_analysis_db()
+                    record_id = analysis_db.write_scan_statistics(summary_data)
+                    log(f"✅ 扫描统计已写入数据库（记录ID: {record_id}）")
+                except Exception as e:
+                    warn(f"⚠️  写入数据库失败: {e}")
+
                 # v6.9+: 自动提交并推送到Git仓库
                 log("\n🔄 自动提交报告到Git仓库...")
                 import subprocess

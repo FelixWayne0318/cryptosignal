@@ -76,6 +76,14 @@ if stats['total_signals'] > 0:
     for i in range(1, 5):
         rate = stats.get(f'gate{i}_pass_rate', 0)
         print(f'   - 闸门{i}通过率: {int(rate*100)}%')
+
+# v7.2: 显示扫描历史统计
+scan_history = db.get_scan_history(days=7)
+if scan_history:
+    print(f'   - 近7天扫描: {len(scan_history)}次')
+    if len(scan_history) > 0:
+        latest = scan_history[0]
+        print(f'   - 最近扫描: {latest[\"scan_date\"]} ({latest[\"signals_found\"]}个信号)')
 " 2>/dev/null || echo "   ⚠️  无法读取统计信息"
 else
     echo -e "${YELLOW}⚠️  analysis.db 不存在${NC}"
