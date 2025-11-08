@@ -1,8 +1,8 @@
 #!/bin/bash
 # ==========================================
-# CryptoSignal 一键部署脚本
-# 用途：检测环境、安装依赖、启动系统
-# 特点：自动检测分支、配置存在则跳过
+# CryptoSignal v7.2 一键部署脚本
+# 用途：拉取代码、检测环境、安装依赖、启动系统
+# 特点：自动更新代码、清理缓存、验证结构
 # ==========================================
 
 set -e
@@ -13,7 +13,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 echo "=============================================="
-echo "🚀 CryptoSignal 一键部署"
+echo "🚀 CryptoSignal v7.2 一键部署"
 echo "=============================================="
 echo ""
 
@@ -28,6 +28,56 @@ cd ~/cryptosignal 2>/dev/null || {
 # 自动检测当前分支
 CURRENT_BRANCH=$(git branch --show-current)
 echo -e "${GREEN}✅ 当前分支: $CURRENT_BRANCH${NC}"
+echo ""
+
+# ==========================================
+# 第0步：拉取最新代码
+# ==========================================
+echo "📥 拉取最新代码..."
+echo "=============================================="
+
+# 0.1 保存本地修改（如果有）
+if ! git diff --quiet || ! git diff --cached --quiet; then
+    echo -e "${YELLOW}⚠️  检测到本地修改，正在保存...${NC}"
+    BACKUP_NAME="自动备份_$(date +%Y%m%d_%H%M%S)"
+    git stash save "$BACKUP_NAME" 2>/dev/null || true
+    echo -e "${GREEN}✅ 本地修改已备份: $BACKUP_NAME${NC}"
+    echo "   恢复方法: git stash pop"
+fi
+
+# 0.2 拉取远程代码
+echo "正在从远程拉取最新代码..."
+if git fetch origin && git pull origin "$CURRENT_BRANCH" 2>/dev/null; then
+    echo -e "${GREEN}✅ 代码已更新到最新版本${NC}"
+else
+    echo -e "${YELLOW}⚠️  代码拉取失败（可能网络问题），继续使用本地版本...${NC}"
+fi
+
+# 0.3 清理Python缓存（重要！确保新代码生效）
+echo ""
+echo "🧹 清理Python缓存..."
+find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+find . -name "*.pyc" -delete 2>/dev/null || true
+echo -e "${GREEN}✅ Python缓存已清理${NC}"
+
+# 0.4 验证重组后的目录结构（v7.2特性）
+echo ""
+echo "🔍 验证v7.2目录结构..."
+TEST_FILES=$(ls tests/*.py 2>/dev/null | wc -l)
+DIAGNOSE_FILES=$(ls diagnose/*.py 2>/dev/null | wc -l)
+DOC_FILES=$(ls docs/*.md 2>/dev/null | wc -l)
+
+if [ "$TEST_FILES" -gt 0 ] && [ "$DIAGNOSE_FILES" -gt 0 ]; then
+    echo -e "${GREEN}✅ v7.2目录结构正确${NC}"
+    echo "   - tests/: $TEST_FILES 个测试文件"
+    echo "   - diagnose/: $DIAGNOSE_FILES 个诊断文件"
+    echo "   - docs/: $DOC_FILES 个文档文件"
+else
+    echo -e "${YELLOW}⚠️  目录结构可能不是v7.2版本${NC}"
+fi
+
+echo ""
+echo "=============================================="
 echo ""
 
 # 检测Python
@@ -138,6 +188,22 @@ if ps -p $PID > /dev/null 2>&1; then
     echo "  查看状态: ~/cryptosignal/check_v72_status.sh"
     echo "  重新启动: ~/cryptosignal/auto_restart.sh"
     echo "  停止程序: pkill -f realtime_signal_scanner_v72.py"
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "⚙️  v7.2 新特性:"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "  环境变量控制自动提交："
+    echo "    - 默认启用自动提交（服务器运行）"
+    echo "    - 手动测试禁用: export AUTO_COMMIT_REPORTS=false"
+    echo ""
+    echo "  目录结构已重组："
+    echo "    - tests/     测试文件"
+    echo "    - diagnose/  诊断文件"
+    echo "    - docs/      文档文件"
+    echo ""
+    echo "  详细文档："
+    echo "    - REORGANIZATION_SUMMARY.md  重组总结"
+    echo "    - standards/00_INDEX.md      规范索引"
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo -e "${GREEN}🟢 正在显示实时日志（按 Ctrl+C 退出查看，程序继续运行）${NC}"

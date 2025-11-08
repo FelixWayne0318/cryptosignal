@@ -34,14 +34,22 @@ claude/reorganize-repo-structure-011CUrZaXUMTBXApc3jvsqTh
 
 ## 🚀 快速部署（一键执行）
 
-### 方式1：使用专用部署脚本（推荐）⭐
+### 统一入口：setup.sh（唯一推荐）⭐
 
 ```bash
 cd /home/user/cryptosignal
-./DEPLOY_V72_REORGANIZED.sh
+./setup.sh
 ```
 
-### 方式2：手动执行步骤
+**setup.sh 自动执行**：
+1. ✅ 拉取最新代码（git fetch + pull）
+2. ✅ 清理Python缓存
+3. ✅ 验证v7.2目录结构
+4. ✅ 检测环境和依赖
+5. ✅ 初始化数据库
+6. ✅ 启动v7.2扫描器
+
+### 手动执行步骤（不推荐）
 
 ```bash
 cd /home/user/cryptosignal
