@@ -108,47 +108,49 @@ echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━
 echo -e "${GREEN}✅ 环境准备完成！${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🚀 选择启动模式："
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-echo -e "${GREEN}1. 实时日志模式（推荐）${NC}"
-echo "   • 显示滚动日志，方便监控"
-echo "   • 按 Ctrl+C 停止"
-echo "   • 关闭SSH窗口程序停止"
-echo "   启动命令: ./start_live.sh"
-echo ""
-echo -e "${YELLOW}2. 后台运行模式${NC}"
-echo "   • 静默后台运行"
-echo "   • SSH断开后继续运行"
-echo "   • 需要手动查看日志"
-echo "   启动命令: ./auto_restart.sh"
-echo ""
+echo "🚀 正在启动 v7.2 扫描器（后台模式 + 实时日志）..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# 等待用户选择
-read -p "请选择启动模式 [1/2] (默认:1): " choice
-choice=${choice:-1}
+# 停止旧进程
+pkill -f realtime_signal_scanner_v72.py 2>/dev/null || true
+sleep 1
 
-echo ""
-if [ "$choice" = "1" ]; then
-    echo -e "${GREEN}🟢 启动实时日志模式...${NC}"
-    echo ""
-    ./start_live.sh
-else
-    echo -e "${YELLOW}🔵 启动后台运行模式...${NC}"
-    echo ""
-    ./auto_restart.sh
+# 创建日志文件名
+LOG_FILE=~/cryptosignal_$(date +%Y%m%d_%H%M%S).log
+
+# 后台启动扫描器
+echo "📝 后台启动扫描器..."
+nohup python3 scripts/realtime_signal_scanner_v72.py --interval 300 > "$LOG_FILE" 2>&1 &
+PID=$!
+
+sleep 2
+
+# 验证启动
+if ps -p $PID > /dev/null 2>&1; then
+    echo -e "${GREEN}✅ 扫描器已启动（PID: $PID）${NC}"
+    echo "   日志文件: $LOG_FILE"
+    echo "   ✅ SSH断开后继续运行"
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "✅ 后台启动完成"
+    echo "📋 管理命令:"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo ""
-    echo "📊 管理命令:"
-    echo "  查看日志: tail -f ~/cryptosignal_*.log"
     echo "  查看状态: ~/cryptosignal/check_v72_status.sh"
     echo "  重新启动: ~/cryptosignal/auto_restart.sh"
-    echo "  查看实时: ~/cryptosignal/start_live.sh"
+    echo "  停止程序: pkill -f realtime_signal_scanner_v72.py"
     echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${GREEN}🟢 正在显示实时日志（按 Ctrl+C 退出查看，程序继续运行）${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    # 等待日志文件生成
+    sleep 2
+
+    # 显示实时日志（用户按Ctrl+C只是退出查看，不影响后台程序）
+    tail -f "$LOG_FILE"
+else
+    echo -e "${RED}❌ 启动失败${NC}"
+    echo "请查看日志: cat $LOG_FILE"
+    exit 1
 fi
