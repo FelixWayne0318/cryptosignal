@@ -133,11 +133,8 @@ class RealtimeSignalScannerV72:
         # v6.7: 防抖动系统
         if send_telegram:
             anti_jitter_config = get_config()
-            self.anti_jitter = AntiJitter(
-                cooldown_seconds=anti_jitter_config['cooldown_seconds'],
-                max_signals_per_symbol=anti_jitter_config['max_signals_per_symbol']
-            )
-            log(f"✅ 防抖动系统已启用: {anti_jitter_config['cooldown_seconds']}秒冷却期")
+            self.anti_jitter = AntiJitter(config=anti_jitter_config)
+            log(f"✅ 防抖动系统已启用: {anti_jitter_config.cooldown_seconds}秒冷却期")
 
         # 数据记录器
         if record_data:
