@@ -1,87 +1,94 @@
 {
-  "timestamp": "2025-11-08T01:42:09.332726",
+  "timestamp": "2025-11-08T01:48:59.370628",
   "scan_info": {
     "total_symbols": 459,
-    "signals_found": 396,
-    "filtered": 63
+    "signals_found": 395,
+    "filtered": 64
   },
   "signals": [
     {
       "symbol": "XPLUSDT",
       "edge": 0.558,
       "confidence": 56,
-      "prime_strength": 80,
-      "P_chosen": 0.795
+      "prime_strength": 79,
+      "P_chosen": 0.796
     },
     {
       "symbol": "IOTAUSDT",
-      "edge": 0.549,
-      "confidence": 55,
-      "prime_strength": 79,
-      "P_chosen": 0.792
+      "edge": 0.543,
+      "confidence": 54,
+      "prime_strength": 78,
+      "P_chosen": 0.789
     },
     {
       "symbol": "AUSDT",
-      "edge": 0.547,
-      "confidence": 55,
-      "prime_strength": 79,
-      "P_chosen": 0.815
+      "edge": 0.543,
+      "confidence": 54,
+      "prime_strength": 77,
+      "P_chosen": 0.813
     },
     {
       "symbol": "1000RATSUSDT",
       "edge": 0.541,
       "confidence": 54,
       "prime_strength": 76,
-      "P_chosen": 0.774
+      "P_chosen": 0.775
+    },
+    {
+      "symbol": "ZILUSDT",
+      "edge": 0.522,
+      "confidence": 52,
+      "prime_strength": 75,
+      "P_chosen": 0.769
     },
     {
       "symbol": "LISTAUSDT",
-      "edge": 0.511,
-      "confidence": 51,
-      "prime_strength": 75,
-      "P_chosen": 0.789
+      "edge": 0.505,
+      "confidence": 50,
+      "prime_strength": 74,
+      "P_chosen": 0.786
     },
     {
       "symbol": "MAGICUSDT",
-      "edge": 0.51,
-      "confidence": 51,
+      "edge": 0.505,
+      "confidence": 50,
+      "prime_strength": 74,
+      "P_chosen": 0.756
+    },
+    {
+      "symbol": "ALGOUSDT",
+      "edge": 0.501,
+      "confidence": 50,
       "prime_strength": 75,
-      "P_chosen": 0.759
-    },
-    {
-      "symbol": "IMXUSDT",
-      "edge": 0.506,
-      "confidence": 51,
-      "prime_strength": 77,
-      "P_chosen": 0.796
-    },
-    {
-      "symbol": "PROVEUSDT",
-      "edge": 0.498,
-      "confidence": 50,
-      "prime_strength": 67,
-      "P_chosen": 0.761
-    },
-    {
-      "symbol": "APEUSDT",
-      "edge": 0.496,
-      "confidence": 50,
-      "prime_strength": 77,
-      "P_chosen": 0.775
+      "P_chosen": 0.77
     },
     {
       "symbol": "ONEUSDT",
       "edge": 0.493,
       "confidence": 49,
       "prime_strength": 72,
-      "P_chosen": 0.776
+      "P_chosen": 0.778
     },
     {
-      "symbol": "IDUSDT",
-      "edge": 0.488,
+      "symbol": "APEUSDT",
+      "edge": 0.493,
       "confidence": 49,
-      "prime_strength": 74,
-      "P_chosen": 0.759
+      "prime_strength": 75,
+      "P_chosen": 0.773
+    },
+    {
+      "symbol": "IMXUSDT",
+      "edge": 0.49,
+      "confidence": 49,
+      "prime_strength": 75,
+      "P_chosen": 0.787
+    },
+    {
+      "symbol": "PROVEUSDT",
+      "edge": 0.486,
+      "confidence": 49,
+      "prime_strength": 67,
+      "P_chosen": 0.758
     },
     {
       "symbol": "PTBUSDT",
@@ -91,389 +98,396 @@
       "P_chosen": 0.763
     },
     {
+      "symbol": "IDUSDT",
+      "edge": 0.479,
+      "confidence": 48,
+      "prime_strength": 74,
+      "P_chosen": 0.755
+    },
+    {
+      "symbol": "MOVEUSDT",
+      "edge": 0.474,
+      "confidence": 47,
+      "prime_strength": 73,
+      "P_chosen": 0.756
+    },
+    {
       "symbol": "HOTUSDT",
       "edge": 0.471,
       "confidence": 47,
       "prime_strength": 72,
-      "P_chosen": 0.776
+      "P_chosen": 0.774
     },
     {
       "symbol": "TOWNSUSDT",
-      "edge": 0.465,
-      "confidence": 46,
-      "prime_strength": 70,
-      "P_chosen": 0.737
-    },
-    {
-      "symbol": "VIRTUALUSDT",
-      "edge": 0.459,
-      "confidence": 46,
-      "prime_strength": 66,
-      "P_chosen": 0.729
+      "edge": 0.466,
+      "confidence": 47,
+      "prime_strength": 71,
+      "P_chosen": 0.738
     },
     {
       "symbol": "STXUSDT",
-      "edge": 0.455,
-      "confidence": 45,
+      "edge": 0.457,
+      "confidence": 46,
       "prime_strength": 73,
-      "P_chosen": 0.721
+      "P_chosen": 0.722
     },
     {
-      "symbol": "MANAUSDT",
-      "edge": 0.453,
+      "symbol": "ICPUSDT",
+      "edge": 0.452,
       "confidence": 45,
-      "prime_strength": 73,
-      "P_chosen": 0.768
+      "prime_strength": 72,
+      "P_chosen": 0.777
     },
     {
-      "symbol": "NOTUSDT",
-      "edge": 0.448,
+      "symbol": "VIRTUALUSDT",
+      "edge": 0.45,
       "confidence": 45,
-      "prime_strength": 73,
-      "P_chosen": 0.759
+      "prime_strength": 72,
+      "P_chosen": 0.725
     },
     {
       "symbol": "YALAUSDT",
-      "edge": 0.446,
+      "edge": 0.447,
       "confidence": 45,
       "prime_strength": 69,
-      "P_chosen": 0.711
+      "P_chosen": 0.712
     },
     {
-      "symbol": "1000LUNCUSDT",
-      "edge": 0.443,
+      "symbol": "MANAUSDT",
+      "edge": 0.446,
+      "confidence": 45,
+      "prime_strength": 72,
+      "P_chosen": 0.765
+    },
+    {
+      "symbol": "NOTUSDT",
+      "edge": 0.444,
       "confidence": 44,
       "prime_strength": 71,
-      "P_chosen": 0.751
-    },
-    {
-      "symbol": "QTUMUSDT",
-      "edge": 0.443,
-      "confidence": 44,
-      "prime_strength": 64,
-      "P_chosen": 0.766
+      "P_chosen": 0.757
     },
     {
       "symbol": "ORDIUSDT",
       "edge": 0.437,
       "confidence": 44,
-      "prime_strength": 73,
-      "P_chosen": 0.735
+      "prime_strength": 71,
+      "P_chosen": 0.733
     },
     {
-      "symbol": "TRXUSDT",
-      "edge": 0.436,
+      "symbol": "1000LUNCUSDT",
+      "edge": 0.437,
       "confidence": 44,
-      "prime_strength": 73,
-      "P_chosen": 0.712
+      "prime_strength": 71,
+      "P_chosen": 0.749
     },
     {
       "symbol": "CFXUSDT",
-      "edge": 0.436,
-      "confidence": 44,
-      "prime_strength": 73,
-      "P_chosen": 0.754
-    },
-    {
-      "symbol": "MOVEUSDT",
-      "edge": 0.433,
+      "edge": 0.435,
       "confidence": 43,
-      "prime_strength": 70,
-      "P_chosen": 0.738
-    },
-    {
-      "symbol": "MOCAUSDT",
-      "edge": 0.433,
-      "confidence": 43,
-      "prime_strength": 68,
-      "P_chosen": 0.754
-    },
-    {
-      "symbol": "ICPUSDT",
-      "edge": 0.428,
-      "confidence": 43,
-      "prime_strength": 72,
-      "P_chosen": 0.763
-    },
-    {
-      "symbol": "BTCUSDT",
-      "edge": 0.428,
-      "confidence": 43,
-      "prime_strength": 72,
-      "P_chosen": 0.716
-    },
-    {
-      "symbol": "CRVUSDT",
-      "edge": 0.427,
-      "confidence": 43,
-      "prime_strength": 72,
-      "P_chosen": 0.731
-    },
-    {
-      "symbol": "JTOUSDT",
-      "edge": 0.426,
-      "confidence": 43,
-      "prime_strength": 72,
-      "P_chosen": 0.735
-    },
-    {
-      "symbol": "ZEREBROUSDT",
-      "edge": 0.426,
-      "confidence": 43,
-      "prime_strength": 70,
-      "P_chosen": 0.751
-    },
-    {
-      "symbol": "TRBUSDT",
-      "edge": 0.425,
-      "confidence": 42,
       "prime_strength": 71,
-      "P_chosen": 0.757
-    },
-    {
-      "symbol": "ZILUSDT",
-      "edge": 0.424,
-      "confidence": 42,
-      "prime_strength": 69,
-      "P_chosen": 0.726
-    },
-    {
-      "symbol": "PARTIUSDT",
-      "edge": 0.424,
-      "confidence": 42,
-      "prime_strength": 63,
       "P_chosen": 0.752
     },
     {
-      "symbol": "ALGOUSDT",
-      "edge": 0.422,
-      "confidence": 42,
-      "prime_strength": 71,
-      "P_chosen": 0.735
+      "symbol": "QTUMUSDT",
+      "edge": 0.431,
+      "confidence": 43,
+      "prime_strength": 70,
+      "P_chosen": 0.76
     },
     {
-      "symbol": "OPENUSDT",
-      "edge": 0.42,
+      "symbol": "TRXUSDT",
+      "edge": 0.43,
+      "confidence": 43,
+      "prime_strength": 71,
+      "P_chosen": 0.709
+    },
+    {
+      "symbol": "CRVUSDT",
+      "edge": 0.425,
       "confidence": 42,
-      "prime_strength": 68,
+      "prime_strength": 70,
       "P_chosen": 0.728
     },
     {
-      "symbol": "SUNUSDT",
+      "symbol": "SWELLUSDT",
+      "edge": 0.423,
+      "confidence": 42,
+      "prime_strength": 68,
+      "P_chosen": 0.622
+    },
+    {
+      "symbol": "ZEREBROUSDT",
+      "edge": 0.42,
+      "confidence": 42,
+      "prime_strength": 69,
+      "P_chosen": 0.747
+    },
+    {
+      "symbol": "MOCAUSDT",
       "edge": 0.419,
       "confidence": 42,
-      "prime_strength": 70,
-      "P_chosen": 0.715
+      "prime_strength": 68,
+      "P_chosen": 0.747
     },
     {
-      "symbol": "SFPUSDT",
-      "edge": 0.417,
+      "symbol": "AAVEUSDT",
+      "edge": 0.415,
       "confidence": 42,
-      "prime_strength": 68,
-      "P_chosen": 0.759
+      "prime_strength": 63,
+      "P_chosen": 0.737
     },
     {
-      "symbol": "KNCUSDT",
-      "edge": 0.417,
+      "symbol": "ATOMUSDT",
+      "edge": 0.415,
       "confidence": 42,
+      "prime_strength": 63,
+      "P_chosen": 0.73
+    },
+    {
+      "symbol": "BTCUSDT",
+      "edge": 0.415,
+      "confidence": 41,
+      "prime_strength": 69,
+      "P_chosen": 0.709
+    },
+    {
+      "symbol": "JTOUSDT",
+      "edge": 0.415,
+      "confidence": 41,
+      "prime_strength": 69,
+      "P_chosen": 0.73
+    },
+    {
+      "symbol": "OPENUSDT",
+      "edge": 0.414,
+      "confidence": 41,
       "prime_strength": 68,
-      "P_chosen": 0.735
+      "P_chosen": 0.726
     },
     {
       "symbol": "GASUSDT",
       "edge": 0.414,
       "confidence": 41,
-      "prime_strength": 60,
+      "prime_strength": 61,
       "P_chosen": 0.721
     },
     {
-      "symbol": "ATOMUSDT",
+      "symbol": "PARTIUSDT",
       "edge": 0.413,
       "confidence": 41,
-      "prime_strength": 63,
-      "P_chosen": 0.73
-    },
-    {
-      "symbol": "BEAMXUSDT",
-      "edge": 0.412,
-      "confidence": 41,
-      "prime_strength": 69,
-      "P_chosen": 0.737
-    },
-    {
-      "symbol": "SUSDT",
-      "edge": 0.412,
-      "confidence": 41,
-      "prime_strength": 70,
+      "prime_strength": 62,
       "P_chosen": 0.745
     },
     {
-      "symbol": "1000FLOKIUSDT",
-      "edge": 0.411,
+      "symbol": "SKATEUSDT",
+      "edge": 0.413,
       "confidence": 41,
-      "prime_strength": 71,
-      "P_chosen": 0.74
+      "prime_strength": 66,
+      "P_chosen": 0.731
     },
     {
-      "symbol": "LRCUSDT",
-      "edge": 0.411,
+      "symbol": "SFPUSDT",
+      "edge": 0.41,
+      "confidence": 41,
+      "prime_strength": 68,
+      "P_chosen": 0.756
+    },
+    {
+      "symbol": "BEAMXUSDT",
+      "edge": 0.41,
       "confidence": 41,
       "prime_strength": 69,
-      "P_chosen": 0.729
+      "P_chosen": 0.735
+    },
+    {
+      "symbol": "SUSDT",
+      "edge": 0.409,
+      "confidence": 41,
+      "prime_strength": 69,
+      "P_chosen": 0.742
     },
     {
       "symbol": "GRTUSDT",
       "edge": 0.407,
       "confidence": 41,
-      "prime_strength": 71,
+      "prime_strength": 69,
       "P_chosen": 0.743
     },
     {
-      "symbol": "SUSHIUSDT",
+      "symbol": "SUNUSDT",
       "edge": 0.404,
       "confidence": 40,
-      "prime_strength": 70,
-      "P_chosen": 0.723
+      "prime_strength": 69,
+      "P_chosen": 0.708
     },
     {
-      "symbol": "ARUSDT",
+      "symbol": "LRCUSDT",
       "edge": 0.403,
       "confidence": 40,
-      "prime_strength": 70,
-      "P_chosen": 0.724
+      "prime_strength": 68,
+      "P_chosen": 0.726
     },
     {
-      "symbol": "PENDLEUSDT",
-      "edge": 0.402,
-      "confidence": 40,
-      "prime_strength": 63,
-      "P_chosen": 0.715
-    },
-    {
-      "symbol": "1000SATSUSDT",
-      "edge": 0.401,
-      "confidence": 40,
-      "prime_strength": 67,
-      "P_chosen": 0.748
-    },
-    {
-      "symbol": "AEROUSDT",
+      "symbol": "KNCUSDT",
       "edge": 0.4,
       "confidence": 40,
-      "prime_strength": 70,
-      "P_chosen": 0.728
+      "prime_strength": 68,
+      "P_chosen": 0.726
     },
     {
-      "symbol": "AGLDUSDT",
+      "symbol": "ETHUSDT",
       "edge": 0.4,
       "confidence": 40,
-      "prime_strength": 66,
-      "P_chosen": 0.715
+      "prime_strength": 62,
+      "P_chosen": 0.706
+    },
+    {
+      "symbol": "TRBUSDT",
+      "edge": 0.399,
+      "confidence": 40,
+      "prime_strength": 69,
+      "P_chosen": 0.744
+    },
+    {
+      "symbol": "1000FLOKIUSDT",
+      "edge": 0.398,
+      "confidence": 40,
+      "prime_strength": 69,
+      "P_chosen": 0.733
     },
     {
       "symbol": "RUNEUSDT",
-      "edge": 0.396,
+      "edge": 0.398,
       "confidence": 40,
       "prime_strength": 69,
       "P_chosen": 0.702
     },
     {
-      "symbol": "DENTUSDT",
-      "edge": 0.393,
+      "symbol": "PENDLEUSDT",
+      "edge": 0.398,
+      "confidence": 40,
+      "prime_strength": 69,
+      "P_chosen": 0.713
+    },
+    {
+      "symbol": "SUSHIUSDT",
+      "edge": 0.396,
+      "confidence": 40,
+      "prime_strength": 69,
+      "P_chosen": 0.72
+    },
+    {
+      "symbol": "TLMUSDT",
+      "edge": 0.396,
+      "confidence": 40,
+      "prime_strength": 66,
+      "P_chosen": 0.733
+    },
+    {
+      "symbol": "AGLDUSDT",
+      "edge": 0.396,
+      "confidence": 40,
+      "prime_strength": 66,
+      "P_chosen": 0.713
+    },
+    {
+      "symbol": "AEROUSDT",
+      "edge": 0.392,
       "confidence": 39,
-      "prime_strength": 65,
-      "P_chosen": 0.727
+      "prime_strength": 68,
+      "P_chosen": 0.723
+    },
+    {
+      "symbol": "DENTUSDT",
+      "edge": 0.392,
+      "confidence": 39,
+      "prime_strength": 66,
+      "P_chosen": 0.726
     },
     {
       "symbol": "OPUSDT",
       "edge": 0.392,
       "confidence": 39,
-      "prime_strength": 69,
-      "P_chosen": 0.709
+      "prime_strength": 68,
+      "P_chosen": 0.71
+    },
+    {
+      "symbol": "1000SATSUSDT",
+      "edge": 0.388,
+      "confidence": 39,
+      "prime_strength": 65,
+      "P_chosen": 0.742
+    },
+    {
+      "symbol": "GPSUSDT",
+      "edge": 0.387,
+      "confidence": 39,
+      "prime_strength": 67,
+      "P_chosen": 0.731
     },
     {
       "symbol": "AXLUSDT",
-      "edge": 0.392,
+      "edge": 0.386,
       "confidence": 39,
       "prime_strength": 67,
-      "P_chosen": 0.73
-    },
-    {
-      "symbol": "BLURUSDT",
-      "edge": 0.391,
-      "confidence": 39,
-      "prime_strength": 67,
-      "P_chosen": 0.718
-    },
-    {
-      "symbol": "NXPCUSDT",
-      "edge": 0.388,
-      "confidence": 39,
-      "prime_strength": 67,
-      "P_chosen": 0.704
-    },
-    {
-      "symbol": "AVAXUSDT",
-      "edge": 0.387,
-      "confidence": 39,
-      "prime_strength": 62,
-      "P_chosen": 0.713
+      "P_chosen": 0.727
     },
     {
       "symbol": "GTCUSDT",
       "edge": 0.386,
       "confidence": 39,
-      "prime_strength": 63,
+      "prime_strength": 64,
       "P_chosen": 0.741
     },
     {
-      "symbol": "LINEAUSDT",
-      "edge": 0.385,
+      "symbol": "BLURUSDT",
+      "edge": 0.383,
       "confidence": 38,
-      "prime_strength": 69,
-      "P_chosen": 0.695
+      "prime_strength": 67,
+      "P_chosen": 0.713
     },
     {
-      "symbol": "ATHUSDT",
-      "edge": 0.384,
+      "symbol": "AVAXUSDT",
+      "edge": 0.381,
       "confidence": 38,
-      "prime_strength": 64,
-      "P_chosen": 0.733
+      "prime_strength": 68,
+      "P_chosen": 0.711
     },
     {
-      "symbol": "PUNDIXUSDT",
-      "edge": 0.382,
+      "symbol": "METUSDT",
+      "edge": 0.38,
       "confidence": 38,
-      "prime_strength": 65,
+      "prime_strength": 67,
       "P_chosen": 0.706
     },
     {
       "symbol": "MELANIAUSDT",
-      "edge": 0.381,
+      "edge": 0.38,
       "confidence": 38,
       "prime_strength": 67,
-      "P_chosen": 0.714
+      "P_chosen": 0.713
     },
     {
-      "symbol": "BMTUSDT",
-      "edge": 0.381,
+      "symbol": "LAYERUSDT",
+      "edge": 0.38,
       "confidence": 38,
-      "prime_strength": 65,
-      "P_chosen": 0.716
+      "prime_strength": 67,
+      "P_chosen": 0.72
     },
     {
-      "symbol": "1MBABYDOGEUSDT",
+      "symbol": "LINEAUSDT",
+      "edge": 0.38,
+      "confidence": 38,
+      "prime_strength": 68,
+      "P_chosen": 0.693
+    },
+    {
+      "symbol": "NXPCUSDT",
       "edge": 0.379,
       "confidence": 38,
-      "prime_strength": 67,
-      "P_chosen": 0.698
-    },
-    {
-      "symbol": "POPCATUSDT",
-      "edge": 0.378,
-      "confidence": 38,
-      "prime_strength": 69,
-      "P_chosen": 0.735
+      "prime_strength": 66,
+      "P_chosen": 0.7
     },
     {
       "symbol": "UMAUSDT",
@@ -483,123 +497,130 @@
       "P_chosen": 0.733
     },
     {
-      "symbol": "PIPPINUSDT",
+      "symbol": "ATHUSDT",
       "edge": 0.376,
       "confidence": 38,
-      "prime_strength": 67,
-      "P_chosen": 0.714
+      "prime_strength": 64,
+      "P_chosen": 0.729
+    },
+    {
+      "symbol": "BMTUSDT",
+      "edge": 0.374,
+      "confidence": 37,
+      "prime_strength": 64,
+      "P_chosen": 0.712
+    },
+    {
+      "symbol": "PUNDIXUSDT",
+      "edge": 0.374,
+      "confidence": 37,
+      "prime_strength": 65,
+      "P_chosen": 0.701
     },
     {
       "symbol": "SANDUSDT",
       "edge": 0.374,
       "confidence": 37,
-      "prime_strength": 68,
-      "P_chosen": 0.71
+      "prime_strength": 67,
+      "P_chosen": 0.711
+    },
+    {
+      "symbol": "PIPPINUSDT",
+      "edge": 0.373,
+      "confidence": 37,
+      "prime_strength": 65,
+      "P_chosen": 0.712
     },
     {
       "symbol": "RLCUSDT",
-      "edge": 0.374,
+      "edge": 0.371,
       "confidence": 37,
       "prime_strength": 65,
-      "P_chosen": 0.704
+      "P_chosen": 0.703
+    },
+    {
+      "symbol": "POPCATUSDT",
+      "edge": 0.37,
+      "confidence": 37,
+      "prime_strength": 67,
+      "P_chosen": 0.732
+    },
+    {
+      "symbol": "1MBABYDOGEUSDT",
+      "edge": 0.368,
+      "confidence": 37,
+      "prime_strength": 66,
+      "P_chosen": 0.694
+    },
+    {
+      "symbol": "ARUSDT",
+      "edge": 0.366,
+      "confidence": 37,
+      "prime_strength": 67,
+      "P_chosen": 0.706
     },
     {
       "symbol": "USTCUSDT",
-      "edge": 0.371,
-      "confidence": 37,
-      "prime_strength": 64,
-      "P_chosen": 0.734
-    },
-    {
-      "symbol": "HUSDT",
-      "edge": 0.367,
-      "confidence": 37,
-      "prime_strength": 61,
-      "P_chosen": 0.73
-    },
-    {
-      "symbol": "SQDUSDT",
       "edge": 0.366,
       "confidence": 37,
-      "prime_strength": 60,
-      "P_chosen": 0.678
-    },
-    {
-      "symbol": "INJUSDT",
-      "edge": 0.366,
-      "confidence": 37,
-      "prime_strength": 68,
-      "P_chosen": 0.719
+      "prime_strength": 65,
+      "P_chosen": 0.731
     },
     {
       "symbol": "FLOCKUSDT",
-      "edge": 0.366,
-      "confidence": 37,
+      "edge": 0.363,
+      "confidence": 36,
       "prime_strength": 65,
       "P_chosen": 0.694
     },
     {
-      "symbol": "XRPUSDT",
-      "edge": 0.366,
-      "confidence": 37,
-      "prime_strength": 68,
-      "P_chosen": 0.716
-    },
-    {
-      "symbol": "1000SHIBUSDT",
-      "edge": 0.365,
-      "confidence": 37,
-      "prime_strength": 68,
-      "P_chosen": 0.714
-    },
-    {
-      "symbol": "DEGOUSDT",
-      "edge": 0.364,
+      "symbol": "HUSDT",
+      "edge": 0.363,
       "confidence": 36,
-      "prime_strength": 58,
-      "P_chosen": 0.73
-    },
-    {
-      "symbol": "TACUSDT",
-      "edge": 0.364,
-      "confidence": 36,
-      "prime_strength": 63,
-      "P_chosen": 0.725
-    },
-    {
-      "symbol": "ETHFIUSDT",
-      "edge": 0.364,
-      "confidence": 36,
-      "prime_strength": 67,
-      "P_chosen": 0.725
-    },
-    {
-      "symbol": "DOODUSDT",
-      "edge": 0.362,
-      "confidence": 36,
-      "prime_strength": 65,
-      "P_chosen": 0.718
-    },
-    {
-      "symbol": "LAYERUSDT",
-      "edge": 0.361,
-      "confidence": 36,
-      "prime_strength": 65,
-      "P_chosen": 0.709
-    },
-    {
-      "symbol": "B2USDT",
-      "edge": 0.361,
-      "confidence": 36,
-      "prime_strength": 64,
-      "P_chosen": 0.686
+      "prime_strength": 60,
+      "P_chosen": 0.728
     },
     {
       "symbol": "NEWTUSDT",
-      "edge": 0.36,
+      "edge": 0.362,
       "confidence": 36,
       "prime_strength": 66,
-      "P_chosen": 0.694
+      "P_chosen": 0.695
+    },
+    {
+      "symbol": "XRPUSDT",
+      "edge": 0.362,
+      "confidence": 36,
+      "prime_strength": 66,
+      "P_chosen": 0.712
+    },
+    {
+      "symbol": "TACUSDT",
+      "edge": 0.361,
+      "confidence": 36,
+      "prime_strength": 64,
+      "P_chosen": 0.724
+    },
+    {
+      "symbol": "INJUSDT",
+      "edge": 0.361,
+      "confidence": 36,
+      "prime_strength": 66,
+      "P_chosen": 0.717
+    },
+    {
+      "symbol": "SQDUSDT",
+      "edge": 0.36,
+      "confidence": 36,
+      "prime_strength": 59,
+      "P_chosen": 0.675
+    },
+    {
+      "symbol": "ETHFIUSDT",
+      "edge": 0.358,
+      "confidence": 36,
+      "prime_strength": 66,
+      "P_chosen": 0.723
     },
     {
       "symbol": "KERNELUSDT",
@@ -609,13 +630,6 @@
       "P_chosen": 0.722
     },
     {
-      "symbol": "BANANAS31USDT",
-      "edge": 0.358,
-      "confidence": 36,
-      "prime_strength": 64,
-      "P_chosen": 0.725
-    },
-    {
       "symbol": "CELOUSDT",
       "edge": 0.358,
       "confidence": 36,
@@ -623,613 +637,627 @@
       "P_chosen": 0.695
     },
     {
-      "symbol": "BANANAUSDT",
-      "edge": 0.358,
+      "symbol": "1000SHIBUSDT",
+      "edge": 0.357,
       "confidence": 36,
-      "prime_strength": 65,
-      "P_chosen": 0.702
+      "prime_strength": 66,
+      "P_chosen": 0.709
     },
     {
       "symbol": "A2ZUSDT",
       "edge": 0.357,
       "confidence": 36,
-      "prime_strength": 64,
-      "P_chosen": 0.71
+      "prime_strength": 65,
+      "P_chosen": 0.713
+    },
+    {
+      "symbol": "WIFUSDT",
+      "edge": 0.357,
+      "confidence": 36,
+      "prime_strength": 66,
+      "P_chosen": 0.691
     },
     {
       "symbol": "MEMEUSDT",
       "edge": 0.357,
       "confidence": 36,
-      "prime_strength": 67,
+      "prime_strength": 66,
       "P_chosen": 0.71
     },
     {
-      "symbol": "ARKMUSDT",
+      "symbol": "B2USDT",
       "edge": 0.356,
       "confidence": 36,
-      "prime_strength": 67,
-      "P_chosen": 0.72
+      "prime_strength": 65,
+      "P_chosen": 0.684
     },
     {
-      "symbol": "PUMPUSDT",
-      "edge": 0.355,
-      "confidence": 35,
-      "prime_strength": 67,
-      "P_chosen": 0.721
-    },
-    {
-      "symbol": "INITUSDT",
-      "edge": 0.355,
-      "confidence": 35,
-      "prime_strength": 64,
-      "P_chosen": 0.721
+      "symbol": "XNYUSDT",
+      "edge": 0.356,
+      "confidence": 36,
+      "prime_strength": 65,
+      "P_chosen": 0.722
     },
     {
       "symbol": "ENJUSDT",
+      "edge": 0.356,
+      "confidence": 36,
+      "prime_strength": 65,
+      "P_chosen": 0.719
+    },
+    {
+      "symbol": "1000PEPEUSDT",
+      "edge": 0.354,
+      "confidence": 35,
+      "prime_strength": 66,
+      "P_chosen": 0.713
+    },
+    {
+      "symbol": "BANANAUSDT",
+      "edge": 0.354,
+      "confidence": 35,
+      "prime_strength": 58,
+      "P_chosen": 0.7
+    },
+    {
+      "symbol": "PUMPUSDT",
       "edge": 0.353,
       "confidence": 35,
-      "prime_strength": 65,
-      "P_chosen": 0.717
+      "prime_strength": 66,
+      "P_chosen": 0.72
     },
     {
-      "symbol": "REDUSDT",
+      "symbol": "DOODUSDT",
+      "edge": 0.353,
+      "confidence": 35,
+      "prime_strength": 64,
+      "P_chosen": 0.713
+    },
+    {
+      "symbol": "NEIROUSDT",
       "edge": 0.352,
       "confidence": 35,
-      "prime_strength": 63,
-      "P_chosen": 0.712
+      "prime_strength": 66,
+      "P_chosen": 0.713
     },
     {
-      "symbol": "SEIUSDT",
-      "edge": 0.351,
+      "symbol": "BANANAS31USDT",
+      "edge": 0.35,
       "confidence": 35,
-      "prime_strength": 67,
-      "P_chosen": 0.714
+      "prime_strength": 64,
+      "P_chosen": 0.72
     },
     {
-      "symbol": "GLMUSDT",
-      "edge": 0.351,
+      "symbol": "API3USDT",
+      "edge": 0.35,
+      "confidence": 35,
+      "prime_strength": 65,
+      "P_chosen": 0.72
+    },
+    {
+      "symbol": "DEGOUSDT",
+      "edge": 0.35,
+      "confidence": 35,
+      "prime_strength": 64,
+      "P_chosen": 0.72
+    },
+    {
+      "symbol": "ALLUSDT",
+      "edge": 0.349,
+      "confidence": 35,
+      "prime_strength": 63,
+      "P_chosen": 0.689
+    },
+    {
+      "symbol": "FUSDT",
+      "edge": 0.348,
       "confidence": 35,
       "prime_strength": 59,
       "P_chosen": 0.702
     },
     {
-      "symbol": "MUBARAKUSDT",
-      "edge": 0.35,
+      "symbol": "ARKMUSDT",
+      "edge": 0.347,
       "confidence": 35,
-      "prime_strength": 64,
+      "prime_strength": 66,
       "P_chosen": 0.715
     },
     {
-      "symbol": "HOLOUSDT",
-      "edge": 0.35,
+      "symbol": "GLMUSDT",
+      "edge": 0.347,
+      "confidence": 35,
+      "prime_strength": 59,
+      "P_chosen": 0.698
+    },
+    {
+      "symbol": "INITUSDT",
+      "edge": 0.347,
       "confidence": 35,
       "prime_strength": 65,
-      "P_chosen": 0.688
+      "P_chosen": 0.716
+    },
+    {
+      "symbol": "DOTUSDT",
+      "edge": 0.346,
+      "confidence": 35,
+      "prime_strength": 66,
+      "P_chosen": 0.717
+    },
+    {
+      "symbol": "REDUSDT",
+      "edge": 0.345,
+      "confidence": 35,
+      "prime_strength": 64,
+      "P_chosen": 0.708
+    },
+    {
+      "symbol": "MUBARAKUSDT",
+      "edge": 0.345,
+      "confidence": 34,
+      "prime_strength": 64,
+      "P_chosen": 0.712
     },
     {
       "symbol": "POLUSDT",
-      "edge": 0.35,
-      "confidence": 35,
-      "prime_strength": 67,
-      "P_chosen": 0.686
+      "edge": 0.344,
+      "confidence": 34,
+      "prime_strength": 65,
+      "P_chosen": 0.684
     },
     {
-      "symbol": "OMUSDT",
-      "edge": 0.349,
-      "confidence": 35,
-      "prime_strength": 67,
-      "P_chosen": 0.691
-    },
-    {
-      "symbol": "SNXUSDT",
-      "edge": 0.348,
-      "confidence": 35,
-      "prime_strength": 67,
-      "P_chosen": 0.713
+      "symbol": "ACHUSDT",
+      "edge": 0.344,
+      "confidence": 34,
+      "prime_strength": 65,
+      "P_chosen": 0.69
     },
     {
       "symbol": "SPXUSDT",
       "edge": 0.343,
       "confidence": 34,
-      "prime_strength": 66,
-      "P_chosen": 0.716
+      "prime_strength": 65,
+      "P_chosen": 0.715
     },
     {
-      "symbol": "ENAUSDT",
-      "edge": 0.343,
+      "symbol": "HOLOUSDT",
+      "edge": 0.342,
       "confidence": 34,
-      "prime_strength": 66,
-      "P_chosen": 0.697
+      "prime_strength": 64,
+      "P_chosen": 0.684
     },
     {
-      "symbol": "GRIFFAINUSDT",
-      "edge": 0.343,
+      "symbol": "CETUSUSDT",
+      "edge": 0.341,
       "confidence": 34,
-      "prime_strength": 62,
+      "prime_strength": 63,
+      "P_chosen": 0.685
+    },
+    {
+      "symbol": "SEIUSDT",
+      "edge": 0.341,
+      "confidence": 34,
+      "prime_strength": 65,
       "P_chosen": 0.708
     },
     {
-      "symbol": "LINKUSDT",
-      "edge": 0.342,
+      "symbol": "ENAUSDT",
+      "edge": 0.34,
       "confidence": 34,
-      "prime_strength": 59,
-      "P_chosen": 0.681
+      "prime_strength": 65,
+      "P_chosen": 0.694
     },
     {
-      "symbol": "BNBUSDT",
-      "edge": 0.342,
-      "confidence": 34,
-      "prime_strength": 59,
-      "P_chosen": 0.68
-    },
-    {
-      "symbol": "DOTUSDT",
-      "edge": 0.341,
-      "confidence": 34,
-      "prime_strength": 66,
-      "P_chosen": 0.714
-    },
-    {
-      "symbol": "FFUSDT",
+      "symbol": "SNXUSDT",
       "edge": 0.339,
       "confidence": 34,
-      "prime_strength": 66,
-      "P_chosen": 0.68
+      "prime_strength": 65,
+      "P_chosen": 0.708
     },
     {
-      "symbol": "DEXEUSDT",
+      "symbol": "OMUSDT",
       "edge": 0.338,
       "confidence": 34,
-      "prime_strength": 56,
-      "P_chosen": 0.706
-    },
-    {
-      "symbol": "ZORAUSDT",
-      "edge": 0.338,
-      "confidence": 34,
-      "prime_strength": 66,
-      "P_chosen": 0.679
-    },
-    {
-      "symbol": "MIRAUSDT",
-      "edge": 0.338,
-      "confidence": 34,
-      "prime_strength": 64,
-      "P_chosen": 0.702
+      "prime_strength": 65,
+      "P_chosen": 0.686
     },
     {
       "symbol": "VVVUSDT",
       "edge": 0.338,
       "confidence": 34,
-      "prime_strength": 63,
-      "P_chosen": 0.676
+      "prime_strength": 64,
+      "P_chosen": 0.677
     },
     {
-      "symbol": "AAVEUSDT",
-      "edge": 0.336,
+      "symbol": "LINKUSDT",
+      "edge": 0.337,
       "confidence": 34,
-      "prime_strength": 59,
-      "P_chosen": 0.697
-    },
-    {
-      "symbol": "ILVUSDT",
-      "edge": 0.336,
-      "confidence": 34,
-      "prime_strength": 56,
-      "P_chosen": 0.692
-    },
-    {
-      "symbol": "MEUSDT",
-      "edge": 0.335,
-      "confidence": 33,
-      "prime_strength": 63,
+      "prime_strength": 58,
       "P_chosen": 0.679
     },
     {
-      "symbol": "SKATEUSDT",
-      "edge": 0.335,
-      "confidence": 33,
-      "prime_strength": 60,
-      "P_chosen": 0.69
+      "symbol": "MIRAUSDT",
+      "edge": 0.336,
+      "confidence": 34,
+      "prime_strength": 64,
+      "P_chosen": 0.7
     },
     {
-      "symbol": "CHILLGUYUSDT",
-      "edge": 0.334,
+      "symbol": "FFUSDT",
+      "edge": 0.335,
+      "confidence": 34,
+      "prime_strength": 65,
+      "P_chosen": 0.678
+    },
+    {
+      "symbol": "BNBUSDT",
+      "edge": 0.333,
       "confidence": 33,
-      "prime_strength": 62,
+      "prime_strength": 64,
+      "P_chosen": 0.674
+    },
+    {
+      "symbol": "GRIFFAINUSDT",
+      "edge": 0.332,
+      "confidence": 33,
+      "prime_strength": 61,
+      "P_chosen": 0.702
+    },
+    {
+      "symbol": "DEXEUSDT",
+      "edge": 0.332,
+      "confidence": 33,
+      "prime_strength": 56,
       "P_chosen": 0.703
     },
     {
-      "symbol": "SWELLUSDT",
-      "edge": 0.334,
-      "confidence": 33,
-      "prime_strength": 62,
-      "P_chosen": 0.597
-    },
-    {
-      "symbol": "AKTUSDT",
+      "symbol": "ZORAUSDT",
       "edge": 0.332,
       "confidence": 33,
-      "prime_strength": 57,
-      "P_chosen": 0.679
+      "prime_strength": 64,
+      "P_chosen": 0.676
     },
     {
       "symbol": "XTZUSDT",
-      "edge": 0.329,
+      "edge": 0.331,
       "confidence": 33,
-      "prime_strength": 65,
+      "prime_strength": 64,
+      "P_chosen": 0.69
+    },
+    {
+      "symbol": "ILVUSDT",
+      "edge": 0.331,
+      "confidence": 33,
+      "prime_strength": 57,
       "P_chosen": 0.689
     },
     {
-      "symbol": "SOMIUSDT",
-      "edge": 0.328,
+      "symbol": "MEUSDT",
+      "edge": 0.33,
       "confidence": 33,
       "prime_strength": 63,
-      "P_chosen": 0.704
-    },
-    {
-      "symbol": "ANIMEUSDT",
-      "edge": 0.328,
-      "confidence": 33,
-      "prime_strength": 62,
-      "P_chosen": 0.684
-    },
-    {
-      "symbol": "MEWUSDT",
-      "edge": 0.328,
-      "confidence": 33,
-      "prime_strength": 62,
-      "P_chosen": 0.692
-    },
-    {
-      "symbol": "DOLOUSDT",
-      "edge": 0.328,
-      "confidence": 33,
-      "prime_strength": 63,
-      "P_chosen": 0.698
+      "P_chosen": 0.677
     },
     {
       "symbol": "FLOWUSDT",
       "edge": 0.328,
       "confidence": 33,
-      "prime_strength": 64,
+      "prime_strength": 63,
       "P_chosen": 0.693
     },
     {
-      "symbol": "IPUSDT",
-      "edge": 0.328,
+      "symbol": "AKTUSDT",
+      "edge": 0.326,
       "confidence": 33,
-      "prime_strength": 59,
-      "P_chosen": 0.698
+      "prime_strength": 57,
+      "P_chosen": 0.676
     },
     {
-      "symbol": "CHRUSDT",
-      "edge": 0.327,
-      "confidence": 33,
-      "prime_strength": 63,
-      "P_chosen": 0.711
+      "symbol": "ANIMEUSDT",
+      "edge": 0.324,
+      "confidence": 32,
+      "prime_strength": 62,
+      "P_chosen": 0.681
     },
     {
       "symbol": "AXSUSDT",
-      "edge": 0.327,
-      "confidence": 33,
-      "prime_strength": 58,
-      "P_chosen": 0.688
-    },
-    {
-      "symbol": "ENSUSDT",
-      "edge": 0.326,
-      "confidence": 33,
-      "prime_strength": 65,
-      "P_chosen": 0.673
-    },
-    {
-      "symbol": "ETCUSDT",
-      "edge": 0.32,
-      "confidence": 32,
-      "prime_strength": 65,
-      "P_chosen": 0.683
-    },
-    {
-      "symbol": "AGTUSDT",
-      "edge": 0.32,
-      "confidence": 32,
-      "prime_strength": 56,
-      "P_chosen": 0.698
-    },
-    {
-      "symbol": "SYRUPUSDT",
-      "edge": 0.32,
+      "edge": 0.324,
       "confidence": 32,
       "prime_strength": 57,
-      "P_chosen": 0.689
+      "P_chosen": 0.686
     },
     {
-      "symbol": "TLMUSDT",
-      "edge": 0.32,
+      "symbol": "DOLOUSDT",
+      "edge": 0.324,
       "confidence": 32,
-      "prime_strength": 61,
-      "P_chosen": 0.693
-    },
-    {
-      "symbol": "ZETAUSDT",
-      "edge": 0.319,
-      "confidence": 32,
-      "prime_strength": 63,
-      "P_chosen": 0.68
-    },
-    {
-      "symbol": "BIGTIMEUSDT",
-      "edge": 0.318,
-      "confidence": 32,
-      "prime_strength": 64,
-      "P_chosen": 0.682
-    },
-    {
-      "symbol": "BANKUSDT",
-      "edge": 0.318,
-      "confidence": 32,
-      "prime_strength": 52,
-      "P_chosen": 0.57
-    },
-    {
-      "symbol": "NEIROUSDT",
-      "edge": 0.317,
-      "confidence": 32,
-      "prime_strength": 65,
+      "prime_strength": 62,
       "P_chosen": 0.695
     },
     {
-      "symbol": "ONDOUSDT",
+      "symbol": "LYNUSDT",
+      "edge": 0.323,
+      "confidence": 32,
+      "prime_strength": 62,
+      "P_chosen": 0.707
+    },
+    {
+      "symbol": "CHRUSDT",
+      "edge": 0.322,
+      "confidence": 32,
+      "prime_strength": 62,
+      "P_chosen": 0.708
+    },
+    {
+      "symbol": "BELUSDT",
+      "edge": 0.322,
+      "confidence": 32,
+      "prime_strength": 63,
+      "P_chosen": 0.687
+    },
+    {
+      "symbol": "CHILLGUYUSDT",
+      "edge": 0.321,
+      "confidence": 32,
+      "prime_strength": 62,
+      "P_chosen": 0.695
+    },
+    {
+      "symbol": "MEWUSDT",
+      "edge": 0.32,
+      "confidence": 32,
+      "prime_strength": 63,
+      "P_chosen": 0.689
+    },
+    {
+      "symbol": "IPUSDT",
       "edge": 0.317,
       "confidence": 32,
-      "prime_strength": 65,
-      "P_chosen": 0.665
+      "prime_strength": 64,
+      "P_chosen": 0.693
+    },
+    {
+      "symbol": "TRUUSDT",
+      "edge": 0.317,
+      "confidence": 32,
+      "prime_strength": 62,
+      "P_chosen": 0.698
+    },
+    {
+      "symbol": "HYPERUSDT",
+      "edge": 0.316,
+      "confidence": 32,
+      "prime_strength": 63,
+      "P_chosen": 0.7
     },
     {
       "symbol": "SOLVUSDT",
       "edge": 0.316,
       "confidence": 32,
-      "prime_strength": 61,
-      "P_chosen": 0.673
-    },
-    {
-      "symbol": "JELLYJELLYUSDT",
-      "edge": 0.316,
-      "confidence": 32,
-      "prime_strength": 58,
-      "P_chosen": 0.654
-    },
-    {
-      "symbol": "COAIUSDT",
-      "edge": 0.315,
-      "confidence": 31,
-      "prime_strength": 56,
-      "P_chosen": 0.662
+      "prime_strength": 62,
+      "P_chosen": 0.674
     },
     {
       "symbol": "FILUSDT",
       "edge": 0.315,
       "confidence": 31,
-      "prime_strength": 64,
+      "prime_strength": 63,
       "P_chosen": 0.702
     },
     {
-      "symbol": "PENGUUSDT",
-      "edge": 0.314,
+      "symbol": "JELLYJELLYUSDT",
+      "edge": 0.315,
       "confidence": 31,
-      "prime_strength": 64,
-      "P_chosen": 0.684
+      "prime_strength": 57,
+      "P_chosen": 0.653
     },
     {
       "symbol": "XCNUSDT",
       "edge": 0.314,
       "confidence": 31,
-      "prime_strength": 58,
-      "P_chosen": 0.669
-    },
-    {
-      "symbol": "ADAUSDT",
-      "edge": 0.314,
-      "confidence": 31,
-      "prime_strength": 64,
-      "P_chosen": 0.678
-    },
-    {
-      "symbol": "VANAUSDT",
-      "edge": 0.312,
-      "confidence": 31,
-      "prime_strength": 62,
-      "P_chosen": 0.677
-    },
-    {
-      "symbol": "1000BONKUSDT",
-      "edge": 0.312,
-      "confidence": 31,
-      "prime_strength": 64,
-      "P_chosen": 0.664
-    },
-    {
-      "symbol": "YBUSDT",
-      "edge": 0.312,
-      "confidence": 31,
-      "prime_strength": 64,
-      "P_chosen": 0.695
-    },
-    {
-      "symbol": "EVAAUSDT",
-      "edge": 0.312,
-      "confidence": 31,
-      "prime_strength": 56,
-      "P_chosen": 0.649
-    },
-    {
-      "symbol": "MAVIAUSDT",
-      "edge": 0.311,
-      "confidence": 31,
-      "prime_strength": 57,
-      "P_chosen": 0.675
-    },
-    {
-      "symbol": "MOODENGUSDT",
-      "edge": 0.311,
-      "confidence": 31,
-      "prime_strength": 64,
-      "P_chosen": 0.701
-    },
-    {
-      "symbol": "GALAUSDT",
-      "edge": 0.311,
-      "confidence": 31,
-      "prime_strength": 64,
-      "P_chosen": 0.684
-    },
-    {
-      "symbol": "HEMIUSDT",
-      "edge": 0.31,
-      "confidence": 31,
-      "prime_strength": 61,
-      "P_chosen": 0.664
-    },
-    {
-      "symbol": "RAYSOLUSDT",
-      "edge": 0.309,
-      "confidence": 31,
-      "prime_strength": 56,
-      "P_chosen": 0.695
-    },
-    {
-      "symbol": "FORMUSDT",
-      "edge": 0.309,
-      "confidence": 31,
-      "prime_strength": 63,
+      "prime_strength": 59,
       "P_chosen": 0.67
     },
     {
-      "symbol": "IOSTUSDT",
-      "edge": 0.309,
+      "symbol": "ENSUSDT",
+      "edge": 0.314,
       "confidence": 31,
-      "prime_strength": 62,
-      "P_chosen": 0.68
+      "prime_strength": 63,
+      "P_chosen": 0.667
     },
     {
-      "symbol": "ESPORTSUSDT",
-      "edge": 0.309,
+      "symbol": "AGTUSDT",
+      "edge": 0.314,
       "confidence": 31,
       "prime_strength": 56,
-      "P_chosen": 0.682
+      "P_chosen": 0.695
     },
     {
-      "symbol": "ANKRUSDT",
-      "edge": 0.309,
+      "symbol": "SOMIUSDT",
+      "edge": 0.313,
       "confidence": 31,
       "prime_strength": 62,
-      "P_chosen": 0.702
+      "P_chosen": 0.695
     },
     {
-      "symbol": "LYNUSDT",
+      "symbol": "ADAUSDT",
+      "edge": 0.311,
+      "confidence": 31,
+      "prime_strength": 63,
+      "P_chosen": 0.676
+    },
+    {
+      "symbol": "COAIUSDT",
+      "edge": 0.308,
+      "confidence": 31,
+      "prime_strength": 56,
+      "P_chosen": 0.66
+    },
+    {
+      "symbol": "HEMIUSDT",
       "edge": 0.308,
       "confidence": 31,
       "prime_strength": 61,
-      "P_chosen": 0.699
-    },
-    {
-      "symbol": "YGGUSDT",
-      "edge": 0.307,
-      "confidence": 31,
-      "prime_strength": 64,
-      "P_chosen": 0.679
-    },
-    {
-      "symbol": "ETHUSDT",
-      "edge": 0.307,
-      "confidence": 31,
-      "prime_strength": 58,
       "P_chosen": 0.663
     },
     {
-      "symbol": "BRETTUSDT",
+      "symbol": "BIGTIMEUSDT",
+      "edge": 0.308,
+      "confidence": 31,
+      "prime_strength": 63,
+      "P_chosen": 0.676
+    },
+    {
+      "symbol": "MAVIAUSDT",
       "edge": 0.307,
       "confidence": 31,
-      "prime_strength": 61,
-      "P_chosen": 0.684
+      "prime_strength": 57,
+      "P_chosen": 0.673
     },
     {
-      "symbol": "BABYUSDT",
+      "symbol": "GALAUSDT",
+      "edge": 0.307,
+      "confidence": 31,
+      "prime_strength": 63,
+      "P_chosen": 0.681
+    },
+    {
+      "symbol": "FORMUSDT",
       "edge": 0.306,
       "confidence": 31,
-      "prime_strength": 60,
+      "prime_strength": 62,
+      "P_chosen": 0.669
+    },
+    {
+      "symbol": "1000BONKUSDT",
+      "edge": 0.306,
+      "confidence": 31,
+      "prime_strength": 63,
+      "P_chosen": 0.661
+    },
+    {
+      "symbol": "EVAAUSDT",
+      "edge": 0.306,
+      "confidence": 31,
+      "prime_strength": 55,
+      "P_chosen": 0.646
+    },
+    {
+      "symbol": "ONDOUSDT",
+      "edge": 0.306,
+      "confidence": 31,
+      "prime_strength": 63,
+      "P_chosen": 0.66
+    },
+    {
+      "symbol": "VANAUSDT",
+      "edge": 0.306,
+      "confidence": 31,
+      "prime_strength": 56,
+      "P_chosen": 0.674
+    },
+    {
+      "symbol": "SYRUPUSDT",
+      "edge": 0.306,
+      "confidence": 31,
+      "prime_strength": 57,
       "P_chosen": 0.68
-    },
-    {
-      "symbol": "NEOUSDT",
-      "edge": 0.306,
-      "confidence": 31,
-      "prime_strength": 64,
-      "P_chosen": 0.685
-    },
-    {
-      "symbol": "SYSUSDT",
-      "edge": 0.306,
-      "confidence": 31,
-      "prime_strength": 59,
-      "P_chosen": 0.672
     },
     {
       "symbol": "SOONUSDT",
       "edge": 0.305,
       "confidence": 31,
-      "prime_strength": 58,
-      "P_chosen": 0.692
-    },
-    {
-      "symbol": "GPSUSDT",
-      "edge": 0.305,
-      "confidence": 31,
-      "prime_strength": 61,
-      "P_chosen": 0.687
+      "prime_strength": 57,
+      "P_chosen": 0.693
     },
     {
       "symbol": "NEARUSDT",
       "edge": 0.305,
       "confidence": 31,
-      "prime_strength": 64,
-      "P_chosen": 0.685
+      "prime_strength": 63,
+      "P_chosen": 0.684
     },
     {
-      "symbol": "LQTYUSDT",
-      "edge": 0.304,
+      "symbol": "BRETTUSDT",
+      "edge": 0.305,
+      "confidence": 31,
+      "prime_strength": 61,
+      "P_chosen": 0.682
+    },
+    {
+      "symbol": "PENGUUSDT",
+      "edge": 0.305,
+      "confidence": 31,
+      "prime_strength": 63,
+      "P_chosen": 0.677
+    },
+    {
+      "symbol": "ZETAUSDT",
+      "edge": 0.305,
       "confidence": 30,
       "prime_strength": 61,
-      "P_chosen": 0.686
+      "P_chosen": 0.672
     },
     {
-      "symbol": "BCHUSDT",
-      "edge": 0.304,
+      "symbol": "OBOLUSDT",
+      "edge": 0.303,
       "confidence": 30,
-      "prime_strength": 57,
-      "P_chosen": 0.664
+      "prime_strength": 55,
+      "P_chosen": 0.692
     },
     {
-      "symbol": "PNUTUSDT",
-      "edge": 0.304,
+      "symbol": "SYSUSDT",
+      "edge": 0.303,
       "confidence": 30,
-      "prime_strength": 63,
-      "P_chosen": 0.691
+      "prime_strength": 59,
+      "P_chosen": 0.67
     },
     {
-      "symbol": "ZBTUSDT",
+      "symbol": "PORTALUSDT",
+      "edge": 0.303,
+      "confidence": 30,
+      "prime_strength": 61,
+      "P_chosen": 0.681
+    },
+    {
+      "symbol": "RAYSOLUSDT",
       "edge": 0.303,
       "confidence": 30,
       "prime_strength": 62,
-      "P_chosen": 0.666
+      "P_chosen": 0.691
     },
     {
-      "symbol": "EDENUSDT",
-      "edge": 0.302,
+      "symbol": "IOSTUSDT",
+      "edge": 0.301,
+      "confidence": 30,
+      "prime_strength": 62,
+      "P_chosen": 0.676
+    },
+    {
+      "symbol": "WALUSDT",
+      "edge": 0.301,
+      "confidence": 30,
+      "prime_strength": 62,
+      "P_chosen": 0.61
+    },
+    {
+      "symbol": "MOODENGUSDT",
+      "edge": 0.301,
+      "confidence": 30,
+      "prime_strength": 62,
+      "P_chosen": 0.695
+    },
+    {
+      "symbol": "STORJUSDT",
+      "edge": 0.3,
       "confidence": 30,
       "prime_strength": 61,
-      "P_chosen": 0.666
+      "P_chosen": 0.693
+    },
+    {
+      "symbol": "BABYUSDT",
+      "edge": 0.3,
+      "confidence": 30,
+      "prime_strength": 60,
+      "P_chosen": 0.677
     },
     {
       "symbol": "POWRUSDT",
@@ -1239,18 +1267,32 @@
       "P_chosen": 0.685
     },
     {
-      "symbol": "METUSDT",
+      "symbol": "ANKRUSDT",
       "edge": 0.299,
       "confidence": 30,
-      "prime_strength": 63,
-      "P_chosen": 0.666
+      "prime_strength": 61,
+      "P_chosen": 0.726
     },
     {
-      "symbol": "CETUSUSDT",
+      "symbol": "YGGUSDT",
+      "edge": 0.299,
+      "confidence": 30,
+      "prime_strength": 62,
+      "P_chosen": 0.674
+    },
+    {
+      "symbol": "REZUSDT",
+      "edge": 0.299,
+      "confidence": 30,
+      "prime_strength": 61,
+      "P_chosen": 0.67
+    },
+    {
+      "symbol": "PNUTUSDT",
       "edge": 0.297,
       "confidence": 30,
-      "prime_strength": 60,
-      "P_chosen": 0.663
+      "prime_strength": 62,
+      "P_chosen": 0.687
     },
     {
       "symbol": "CHZUSDT",
@@ -1260,249 +1302,249 @@
       "P_chosen": 0.687
     },
     {
-      "symbol": "ICXUSDT",
-      "edge": 0.297,
+      "symbol": "ESPORTSUSDT",
+      "edge": 0.296,
       "confidence": 30,
-      "prime_strength": 60,
-      "P_chosen": 0.68
-    },
-    {
-      "symbol": "LDOUSDT",
-      "edge": 0.297,
-      "confidence": 30,
-      "prime_strength": 63,
+      "prime_strength": 56,
       "P_chosen": 0.678
     },
     {
-      "symbol": "PYTHUSDT",
+      "symbol": "ZBTUSDT",
       "edge": 0.296,
       "confidence": 30,
-      "prime_strength": 63,
-      "P_chosen": 0.688
-    },
-    {
-      "symbol": "币安人生USDT",
-      "edge": 0.296,
-      "confidence": 30,
-      "prime_strength": 57,
-      "P_chosen": 0.651
-    },
-    {
-      "symbol": "XLMUSDT",
-      "edge": 0.295,
-      "confidence": 30,
-      "prime_strength": 63,
-      "P_chosen": 0.654
-    },
-    {
-      "symbol": "DRIFTUSDT",
-      "edge": 0.295,
-      "confidence": 29,
       "prime_strength": 61,
-      "P_chosen": 0.691
+      "P_chosen": 0.662
     },
     {
-      "symbol": "DOGSUSDT",
+      "symbol": "KASUSDT",
+      "edge": 0.295,
+      "confidence": 30,
+      "prime_strength": 62,
+      "P_chosen": 0.668
+    },
+    {
+      "symbol": "LQTYUSDT",
       "edge": 0.295,
       "confidence": 29,
-      "prime_strength": 59,
-      "P_chosen": 0.68
+      "prime_strength": 60,
+      "P_chosen": 0.681
     },
     {
       "symbol": "SSVUSDT",
       "edge": 0.294,
       "confidence": 29,
       "prime_strength": 62,
-      "P_chosen": 0.676
+      "P_chosen": 0.675
     },
     {
-      "symbol": "ALLUSDT",
+      "symbol": "YBUSDT",
       "edge": 0.294,
       "confidence": 29,
+      "prime_strength": 62,
+      "P_chosen": 0.685
+    },
+    {
+      "symbol": "PYTHUSDT",
+      "edge": 0.293,
+      "confidence": 29,
+      "prime_strength": 62,
+      "P_chosen": 0.686
+    },
+    {
+      "symbol": "EDENUSDT",
+      "edge": 0.293,
+      "confidence": 29,
       "prime_strength": 60,
-      "P_chosen": 0.661
+      "P_chosen": 0.662
+    },
+    {
+      "symbol": "ETCUSDT",
+      "edge": 0.293,
+      "confidence": 29,
+      "prime_strength": 62,
+      "P_chosen": 0.667
     },
     {
       "symbol": "ONUSDT",
-      "edge": 0.293,
+      "edge": 0.292,
       "confidence": 29,
       "prime_strength": 55,
       "P_chosen": 0.687
     },
     {
-      "symbol": "SHELLUSDT",
-      "edge": 0.293,
+      "symbol": "ICXUSDT",
+      "edge": 0.292,
       "confidence": 29,
-      "prime_strength": 61,
-      "P_chosen": 0.662
-    },
-    {
-      "symbol": "TAOUSDT",
-      "edge": 0.293,
-      "confidence": 29,
-      "prime_strength": 62,
-      "P_chosen": 0.67
+      "prime_strength": 60,
+      "P_chosen": 0.677
     },
     {
       "symbol": "RAREUSDT",
-      "edge": 0.293,
+      "edge": 0.291,
       "confidence": 29,
-      "prime_strength": 59,
+      "prime_strength": 60,
       "P_chosen": 0.665
     },
     {
-      "symbol": "KITEUSDT",
+      "symbol": "THETAUSDT",
       "edge": 0.291,
       "confidence": 29,
       "prime_strength": 62,
-      "P_chosen": 0.655
+      "P_chosen": 0.674
+    },
+    {
+      "symbol": "BCHUSDT",
+      "edge": 0.291,
+      "confidence": 29,
+      "prime_strength": 55,
+      "P_chosen": 0.657
+    },
+    {
+      "symbol": "TAOUSDT",
+      "edge": 0.29,
+      "confidence": 29,
+      "prime_strength": 61,
+      "P_chosen": 0.669
     },
     {
       "symbol": "STRKUSDT",
       "edge": 0.29,
       "confidence": 29,
-      "prime_strength": 63,
-      "P_chosen": 0.686
+      "prime_strength": 62,
+      "P_chosen": 0.687
     },
     {
-      "symbol": "SCRUSDT",
+      "symbol": "DOGSUSDT",
       "edge": 0.29,
       "confidence": 29,
-      "prime_strength": 60,
-      "P_chosen": 0.682
-    },
-    {
-      "symbol": "THETAUSDT",
-      "edge": 0.288,
-      "confidence": 29,
-      "prime_strength": 63,
-      "P_chosen": 0.673
-    },
-    {
-      "symbol": "STORJUSDT",
-      "edge": 0.288,
-      "confidence": 29,
-      "prime_strength": 62,
-      "P_chosen": 0.686
-    },
-    {
-      "symbol": "GMTUSDT",
-      "edge": 0.288,
-      "confidence": 29,
-      "prime_strength": 62,
-      "P_chosen": 0.676
-    },
-    {
-      "symbol": "0GUSDT",
-      "edge": 0.288,
-      "confidence": 29,
-      "prime_strength": 63,
-      "P_chosen": 0.675
+      "prime_strength": 59,
+      "P_chosen": 0.677
     },
     {
       "symbol": "LTCUSDT",
       "edge": 0.288,
       "confidence": 29,
-      "prime_strength": 63,
+      "prime_strength": 62,
       "P_chosen": 0.689
     },
     {
-      "symbol": "FUNUSDT",
+      "symbol": "SCRUSDT",
+      "edge": 0.287,
+      "confidence": 29,
+      "prime_strength": 60,
+      "P_chosen": 0.672
+    },
+    {
+      "symbol": "C98USDT",
+      "edge": 0.287,
+      "confidence": 29,
+      "prime_strength": 59,
+      "P_chosen": 0.674
+    },
+    {
+      "symbol": "LDOUSDT",
+      "edge": 0.287,
+      "confidence": 29,
+      "prime_strength": 62,
+      "P_chosen": 0.672
+    },
+    {
+      "symbol": "DRIFTUSDT",
+      "edge": 0.287,
+      "confidence": 29,
+      "prime_strength": 61,
+      "P_chosen": 0.686
+    },
+    {
+      "symbol": "HANAUSDT",
+      "edge": 0.287,
+      "confidence": 29,
+      "prime_strength": 60,
+      "P_chosen": 0.652
+    },
+    {
+      "symbol": "SHELLUSDT",
       "edge": 0.286,
       "confidence": 29,
       "prime_strength": 61,
-      "P_chosen": 0.675
-    },
-    {
-      "symbol": "KASUSDT",
-      "edge": 0.286,
-      "confidence": 29,
-      "prime_strength": 62,
-      "P_chosen": 0.673
+      "P_chosen": 0.659
     },
     {
       "symbol": "COTIUSDT",
       "edge": 0.285,
       "confidence": 29,
-      "prime_strength": 61,
+      "prime_strength": 60,
       "P_chosen": 0.687
     },
     {
-      "symbol": "WALUSDT",
-      "edge": 0.284,
+      "symbol": "NEOUSDT",
+      "edge": 0.285,
       "confidence": 28,
       "prime_strength": 61,
-      "P_chosen": 0.595
+      "P_chosen": 0.673
     },
     {
-      "symbol": "FARTCOINUSDT",
-      "edge": 0.284,
+      "symbol": "XLMUSDT",
+      "edge": 0.283,
       "confidence": 28,
-      "prime_strength": 62,
-      "P_chosen": 0.674
-    },
-    {
-      "symbol": "WOOUSDT",
-      "edge": 0.284,
-      "confidence": 28,
-      "prime_strength": 57,
-      "P_chosen": 0.674
+      "prime_strength": 61,
+      "P_chosen": 0.648
     },
     {
       "symbol": "TIAUSDT",
       "edge": 0.283,
       "confidence": 28,
-      "prime_strength": 62,
-      "P_chosen": 0.666
+      "prime_strength": 61,
+      "P_chosen": 0.665
     },
     {
-      "symbol": "ACTUSDT",
-      "edge": 0.281,
+      "symbol": "CVXUSDT",
+      "edge": 0.283,
       "confidence": 28,
-      "prime_strength": 60,
+      "prime_strength": 54,
       "P_chosen": 0.671
     },
     {
-      "symbol": "CAKEUSDT",
+      "symbol": "FUNUSDT",
+      "edge": 0.282,
+      "confidence": 28,
+      "prime_strength": 60,
+      "P_chosen": 0.672
+    },
+    {
+      "symbol": "GMTUSDT",
       "edge": 0.281,
       "confidence": 28,
-      "prime_strength": 56,
-      "P_chosen": 0.675
+      "prime_strength": 61,
+      "P_chosen": 0.672
     },
     {
       "symbol": "PEOPLEUSDT",
       "edge": 0.281,
       "confidence": 28,
-      "prime_strength": 62,
+      "prime_strength": 61,
       "P_chosen": 0.67
     },
     {
-      "symbol": "JSTUSDT",
+      "symbol": "0GUSDT",
       "edge": 0.281,
       "confidence": 28,
-      "prime_strength": 55,
+      "prime_strength": 61,
+      "P_chosen": 0.671
+    },
+    {
+      "symbol": "JSTUSDT",
+      "edge": 0.28,
+      "confidence": 28,
+      "prime_strength": 56,
       "P_chosen": 0.646
     },
     {
       "symbol": "FLMUSDT",
-      "edge": 0.28,
-      "confidence": 28,
-      "prime_strength": 57,
-      "P_chosen": 0.675
-    },
-    {
-      "symbol": "XAIUSDT",
       "edge": 0.279,
       "confidence": 28,
-      "prime_strength": 58,
-      "P_chosen": 0.658
-    },
-    {
-      "symbol": "WCTUSDT",
-      "edge": 0.279,
-      "confidence": 28,
-      "prime_strength": 60,
-      "P_chosen": 0.652
+      "prime_strength": 56,
+      "P_chosen": 0.665
     },
     {
       "symbol": "TUTUSDT",
@@ -1512,493 +1554,514 @@
       "P_chosen": 0.665
     },
     {
-      "symbol": "RECALLUSDT",
+      "symbol": "FARTCOINUSDT",
       "edge": 0.277,
       "confidence": 28,
-      "prime_strength": 60,
-      "P_chosen": 0.682
-    },
-    {
-      "symbol": "CELRUSDT",
-      "edge": 0.276,
-      "confidence": 28,
-      "prime_strength": 59,
-      "P_chosen": 0.668
-    },
-    {
-      "symbol": "HEIUSDT",
-      "edge": 0.275,
-      "confidence": 28,
-      "prime_strength": 58,
-      "P_chosen": 0.654
-    },
-    {
-      "symbol": "API3USDT",
-      "edge": 0.274,
-      "confidence": 27,
-      "prime_strength": 60,
-      "P_chosen": 0.677
-    },
-    {
-      "symbol": "BASUSDT",
-      "edge": 0.274,
-      "confidence": 27,
-      "prime_strength": 59,
-      "P_chosen": 0.662
-    },
-    {
-      "symbol": "XNYUSDT",
-      "edge": 0.274,
-      "confidence": 27,
-      "prime_strength": 58,
-      "P_chosen": 0.676
-    },
-    {
-      "symbol": "ACHUSDT",
-      "edge": 0.273,
-      "confidence": 27,
-      "prime_strength": 60,
-      "P_chosen": 0.654
+      "prime_strength": 61,
+      "P_chosen": 0.669
     },
     {
       "symbol": "KAIAUSDT",
-      "edge": 0.273,
-      "confidence": 27,
-      "prime_strength": 59,
-      "P_chosen": 0.645
+      "edge": 0.276,
+      "confidence": 28,
+      "prime_strength": 60,
+      "P_chosen": 0.646
     },
     {
-      "symbol": "C98USDT",
-      "edge": 0.273,
-      "confidence": 27,
-      "prime_strength": 57,
-      "P_chosen": 0.665
+      "symbol": "币安人生USDT",
+      "edge": 0.275,
+      "confidence": 28,
+      "prime_strength": 55,
+      "P_chosen": 0.644
     },
     {
-      "symbol": "XANUSDT",
+      "symbol": "CAKEUSDT",
       "edge": 0.273,
       "confidence": 27,
-      "prime_strength": 58,
-      "P_chosen": 0.642
-    },
-    {
-      "symbol": "SXPUSDT",
-      "edge": 0.271,
-      "confidence": 27,
-      "prime_strength": 59,
+      "prime_strength": 54,
       "P_chosen": 0.67
     },
     {
-      "symbol": "SXTUSDT",
-      "edge": 0.271,
-      "confidence": 27,
-      "prime_strength": 58,
-      "P_chosen": 0.674
-    },
-    {
-      "symbol": "JASMYUSDT",
-      "edge": 0.27,
-      "confidence": 27,
-      "prime_strength": 60,
-      "P_chosen": 0.656
-    },
-    {
-      "symbol": "ATAUSDT",
-      "edge": 0.27,
+      "symbol": "WOOUSDT",
+      "edge": 0.273,
       "confidence": 27,
       "prime_strength": 57,
-      "P_chosen": 0.65
+      "P_chosen": 0.67
     },
     {
-      "symbol": "WIFUSDT",
-      "edge": 0.27,
-      "confidence": 27,
-      "prime_strength": 61,
-      "P_chosen": 0.648
-    },
-    {
-      "symbol": "SUIUSDT",
-      "edge": 0.27,
-      "confidence": 27,
-      "prime_strength": 61,
-      "P_chosen": 0.666
-    },
-    {
-      "symbol": "FHEUSDT",
-      "edge": 0.269,
-      "confidence": 27,
-      "prime_strength": 59,
-      "P_chosen": 0.661
-    },
-    {
-      "symbol": "VINEUSDT",
-      "edge": 0.269,
+      "symbol": "UNIUSDT",
+      "edge": 0.272,
       "confidence": 27,
       "prime_strength": 60,
-      "P_chosen": 0.645
+      "P_chosen": 0.651
     },
     {
-      "symbol": "SPELLUSDT",
-      "edge": 0.269,
+      "symbol": "1000CATUSDT",
+      "edge": 0.271,
       "confidence": 27,
-      "prime_strength": 58,
+      "prime_strength": 56,
       "P_chosen": 0.658
     },
     {
-      "symbol": "WLDUSDT",
+      "symbol": "XAIUSDT",
+      "edge": 0.271,
+      "confidence": 27,
+      "prime_strength": 58,
+      "P_chosen": 0.654
+    },
+    {
+      "symbol": "CELRUSDT",
+      "edge": 0.27,
+      "confidence": 27,
+      "prime_strength": 59,
+      "P_chosen": 0.664
+    },
+    {
+      "symbol": "BASUSDT",
+      "edge": 0.27,
+      "confidence": 27,
+      "prime_strength": 59,
+      "P_chosen": 0.66
+    },
+    {
+      "symbol": "SXTUSDT",
       "edge": 0.269,
       "confidence": 27,
-      "prime_strength": 61,
-      "P_chosen": 0.657
+      "prime_strength": 58,
+      "P_chosen": 0.673
+    },
+    {
+      "symbol": "WLFIUSDT",
+      "edge": 0.269,
+      "confidence": 27,
+      "prime_strength": 60,
+      "P_chosen": 0.647
     },
     {
       "symbol": "WUSDT",
       "edge": 0.268,
       "confidence": 27,
-      "prime_strength": 61,
+      "prime_strength": 60,
       "P_chosen": 0.666
     },
     {
-      "symbol": "RDNTUSDT",
-      "edge": 0.268,
+      "symbol": "XANUSDT",
+      "edge": 0.267,
+      "confidence": 27,
+      "prime_strength": 59,
+      "P_chosen": 0.639
+    },
+    {
+      "symbol": "HEIUSDT",
+      "edge": 0.267,
       "confidence": 27,
       "prime_strength": 58,
-      "P_chosen": 0.672
-    },
-    {
-      "symbol": "TONUSDT",
-      "edge": 0.268,
-      "confidence": 27,
-      "prime_strength": 55,
       "P_chosen": 0.649
     },
     {
-      "symbol": "BELUSDT",
+      "symbol": "RECALLUSDT",
       "edge": 0.267,
       "confidence": 27,
       "prime_strength": 60,
-      "P_chosen": 0.657
+      "P_chosen": 0.675
     },
     {
-      "symbol": "HFTUSDT",
-      "edge": 0.267,
-      "confidence": 27,
-      "prime_strength": 59,
-      "P_chosen": 0.697
-    },
-    {
-      "symbol": "FUSDT",
+      "symbol": "USELESSUSDT",
       "edge": 0.266,
       "confidence": 27,
-      "prime_strength": 54,
-      "P_chosen": 0.658
-    },
-    {
-      "symbol": "GRASSUSDT",
-      "edge": 0.264,
-      "confidence": 26,
-      "prime_strength": 60,
-      "P_chosen": 0.671
-    },
-    {
-      "symbol": "KAITOUSDT",
-      "edge": 0.264,
-      "confidence": 26,
-      "prime_strength": 54,
-      "P_chosen": 0.649
-    },
-    {
-      "symbol": "TRADOORUSDT",
-      "edge": 0.263,
-      "confidence": 26,
-      "prime_strength": 51,
-      "P_chosen": 0.662
-    },
-    {
-      "symbol": "PLUMEUSDT",
-      "edge": 0.262,
-      "confidence": 26,
       "prime_strength": 59,
-      "P_chosen": 0.643
-    },
-    {
-      "symbol": "TRUMPUSDT",
-      "edge": 0.261,
-      "confidence": 26,
-      "prime_strength": 61,
-      "P_chosen": 0.641
-    },
-    {
-      "symbol": "AIUSDT",
-      "edge": 0.26,
-      "confidence": 26,
-      "prime_strength": 57,
-      "P_chosen": 0.668
-    },
-    {
-      "symbol": "BICOUSDT",
-      "edge": 0.26,
-      "confidence": 26,
-      "prime_strength": 57,
-      "P_chosen": 0.654
-    },
-    {
-      "symbol": "TRUUSDT",
-      "edge": 0.259,
-      "confidence": 26,
-      "prime_strength": 57,
-      "P_chosen": 0.665
-    },
-    {
-      "symbol": "AIOTUSDT",
-      "edge": 0.259,
-      "confidence": 26,
-      "prime_strength": 57,
       "P_chosen": 0.638
     },
     {
-      "symbol": "RVVUSDT",
+      "symbol": "AIOTUSDT",
+      "edge": 0.266,
+      "confidence": 27,
+      "prime_strength": 59,
+      "P_chosen": 0.634
+    },
+    {
+      "symbol": "SXPUSDT",
+      "edge": 0.266,
+      "confidence": 27,
+      "prime_strength": 59,
+      "P_chosen": 0.667
+    },
+    {
+      "symbol": "WCTUSDT",
+      "edge": 0.266,
+      "confidence": 27,
+      "prime_strength": 59,
+      "P_chosen": 0.645
+    },
+    {
+      "symbol": "ACTUSDT",
+      "edge": 0.266,
+      "confidence": 27,
+      "prime_strength": 59,
+      "P_chosen": 0.662
+    },
+    {
+      "symbol": "RDNTUSDT",
+      "edge": 0.265,
+      "confidence": 27,
+      "prime_strength": 59,
+      "P_chosen": 0.67
+    },
+    {
+      "symbol": "TONUSDT",
+      "edge": 0.265,
+      "confidence": 27,
+      "prime_strength": 54,
+      "P_chosen": 0.648
+    },
+    {
+      "symbol": "VINEUSDT",
+      "edge": 0.264,
+      "confidence": 26,
+      "prime_strength": 59,
+      "P_chosen": 0.642
+    },
+    {
+      "symbol": "SPELLUSDT",
+      "edge": 0.262,
+      "confidence": 26,
+      "prime_strength": 58,
+      "P_chosen": 0.654
+    },
+    {
+      "symbol": "FHEUSDT",
+      "edge": 0.261,
+      "confidence": 26,
+      "prime_strength": 58,
+      "P_chosen": 0.656
+    },
+    {
+      "symbol": "JASMYUSDT",
+      "edge": 0.261,
+      "confidence": 26,
+      "prime_strength": 60,
+      "P_chosen": 0.649
+    },
+    {
+      "symbol": "SUIUSDT",
+      "edge": 0.26,
+      "confidence": 26,
+      "prime_strength": 60,
+      "P_chosen": 0.662
+    },
+    {
+      "symbol": "WLDUSDT",
+      "edge": 0.259,
+      "confidence": 26,
+      "prime_strength": 60,
+      "P_chosen": 0.651
+    },
+    {
+      "symbol": "GRASSUSDT",
+      "edge": 0.259,
+      "confidence": 26,
+      "prime_strength": 60,
+      "P_chosen": 0.669
+    },
+    {
+      "symbol": "HFTUSDT",
+      "edge": 0.259,
+      "confidence": 26,
+      "prime_strength": 59,
+      "P_chosen": 0.692
+    },
+    {
+      "symbol": "COMPUSDT",
       "edge": 0.259,
       "confidence": 26,
       "prime_strength": 54,
-      "P_chosen": 0.646
-    },
-    {
-      "symbol": "1000PEPEUSDT",
-      "edge": 0.259,
-      "confidence": 26,
-      "prime_strength": 61,
-      "P_chosen": 0.661
+      "P_chosen": 0.659
     },
     {
       "symbol": "DYMUSDT",
       "edge": 0.259,
       "confidence": 26,
       "prime_strength": 56,
-      "P_chosen": 0.667
+      "P_chosen": 0.668
     },
     {
-      "symbol": "BSVUSDT",
+      "symbol": "BANKUSDT",
       "edge": 0.258,
       "confidence": 26,
-      "prime_strength": 53,
-      "P_chosen": 0.66
+      "prime_strength": 48,
+      "P_chosen": 0.559
+    },
+    {
+      "symbol": "TRUMPUSDT",
+      "edge": 0.258,
+      "confidence": 26,
+      "prime_strength": 60,
+      "P_chosen": 0.64
     },
     {
       "symbol": "NILUSDT",
       "edge": 0.258,
       "confidence": 26,
       "prime_strength": 58,
-      "P_chosen": 0.644
+      "P_chosen": 0.645
     },
     {
-      "symbol": "ALPINEUSDT",
-      "edge": 0.258,
+      "symbol": "IOTXUSDT",
+      "edge": 0.257,
       "confidence": 26,
       "prime_strength": 59,
-      "P_chosen": 0.641
+      "P_chosen": 0.665
     },
     {
-      "symbol": "DIAUSDT",
-      "edge": 0.257,
+      "symbol": "ATAUSDT",
+      "edge": 0.256,
       "confidence": 26,
-      "prime_strength": 58,
-      "P_chosen": 0.655
-    },
-    {
-      "symbol": "STOUSDT",
-      "edge": 0.257,
-      "confidence": 26,
-      "prime_strength": 54,
+      "prime_strength": 57,
       "P_chosen": 0.642
     },
     {
       "symbol": "INUSDT",
-      "edge": 0.256,
+      "edge": 0.255,
       "confidence": 26,
       "prime_strength": 54,
-      "P_chosen": 0.663
+      "P_chosen": 0.662
     },
     {
-      "symbol": "4USDT",
-      "edge": 0.256,
-      "confidence": 26,
-      "prime_strength": 59,
-      "P_chosen": 0.636
-    },
-    {
-      "symbol": "CTSIUSDT",
+      "symbol": "BANDUSDT",
       "edge": 0.255,
       "confidence": 25,
-      "prime_strength": 56,
-      "P_chosen": 0.655
+      "prime_strength": 58,
+      "P_chosen": 0.645
     },
     {
-      "symbol": "TWTUSDT",
-      "edge": 0.254,
-      "confidence": 25,
-      "prime_strength": 59,
-      "P_chosen": 0.637
-    },
-    {
-      "symbol": "CUSDT",
+      "symbol": "PLUMEUSDT",
       "edge": 0.254,
       "confidence": 25,
       "prime_strength": 58,
-      "P_chosen": 0.644
+      "P_chosen": 0.64
     },
     {
-      "symbol": "SAGAUSDT",
-      "edge": 0.254,
+      "symbol": "KITEUSDT",
+      "edge": 0.253,
       "confidence": 25,
-      "prime_strength": 56,
-      "P_chosen": 0.665
+      "prime_strength": 59,
+      "P_chosen": 0.628
     },
     {
       "symbol": "SKYUSDT",
       "edge": 0.253,
       "confidence": 25,
       "prime_strength": 58,
-      "P_chosen": 0.641
+      "P_chosen": 0.64
     },
     {
-      "symbol": "CKBUSDT",
+      "symbol": "KAITOUSDT",
       "edge": 0.253,
       "confidence": 25,
-      "prime_strength": 58,
-      "P_chosen": 0.638
+      "prime_strength": 53,
+      "P_chosen": 0.643
     },
     {
-      "symbol": "AEVOUSDT",
+      "symbol": "TRADOORUSDT",
       "edge": 0.253,
       "confidence": 25,
-      "prime_strength": 58,
-      "P_chosen": 0.661
+      "prime_strength": 52,
+      "P_chosen": 0.656
     },
     {
-      "symbol": "1000000MOGUSDT",
-      "edge": 0.251,
+      "symbol": "DIAUSDT",
+      "edge": 0.253,
       "confidence": 25,
       "prime_strength": 58,
       "P_chosen": 0.653
     },
     {
-      "symbol": "AVAAIUSDT",
-      "edge": 0.25,
+      "symbol": "ALPINEUSDT",
+      "edge": 0.253,
+      "confidence": 25,
+      "prime_strength": 58,
+      "P_chosen": 0.639
+    },
+    {
+      "symbol": "AIUSDT",
+      "edge": 0.252,
+      "confidence": 25,
+      "prime_strength": 57,
+      "P_chosen": 0.663
+    },
+    {
+      "symbol": "CUSDT",
+      "edge": 0.252,
+      "confidence": 25,
+      "prime_strength": 58,
+      "P_chosen": 0.643
+    },
+    {
+      "symbol": "4USDT",
+      "edge": 0.251,
+      "confidence": 25,
+      "prime_strength": 58,
+      "P_chosen": 0.633
+    },
+    {
+      "symbol": "CTSIUSDT",
+      "edge": 0.251,
+      "confidence": 25,
+      "prime_strength": 57,
+      "P_chosen": 0.654
+    },
+    {
+      "symbol": "BICOUSDT",
+      "edge": 0.249,
+      "confidence": 25,
+      "prime_strength": 57,
+      "P_chosen": 0.648
+    },
+    {
+      "symbol": "SAGAUSDT",
+      "edge": 0.249,
       "confidence": 25,
       "prime_strength": 56,
-      "P_chosen": 0.651
+      "P_chosen": 0.662
     },
     {
-      "symbol": "MLNUSDT",
-      "edge": 0.25,
-      "confidence": 25,
-      "prime_strength": 48,
-      "P_chosen": 0.65
-    },
-    {
-      "symbol": "DEEPUSDT",
-      "edge": 0.25,
-      "confidence": 25,
-      "prime_strength": 58,
-      "P_chosen": 0.646
-    },
-    {
-      "symbol": "EDUUSDT",
-      "edge": 0.25,
-      "confidence": 25,
-      "prime_strength": 58,
-      "P_chosen": 0.652
-    },
-    {
-      "symbol": "TURTLEUSDT",
+      "symbol": "TWTUSDT",
       "edge": 0.248,
       "confidence": 25,
       "prime_strength": 59,
-      "P_chosen": 0.625
+      "P_chosen": 0.634
+    },
+    {
+      "symbol": "BSVUSDT",
+      "edge": 0.248,
+      "confidence": 25,
+      "prime_strength": 52,
+      "P_chosen": 0.655
     },
     {
       "symbol": "CYBERUSDT",
       "edge": 0.248,
       "confidence": 25,
       "prime_strength": 58,
-      "P_chosen": 0.653
+      "P_chosen": 0.652
     },
     {
-      "symbol": "NFPUSDT",
-      "edge": 0.247,
+      "symbol": "AEVOUSDT",
+      "edge": 0.248,
       "confidence": 25,
-      "prime_strength": 54,
-      "P_chosen": 0.637
+      "prime_strength": 58,
+      "P_chosen": 0.657
     },
     {
-      "symbol": "QUSDT",
-      "edge": 0.247,
-      "confidence": 25,
-      "prime_strength": 52,
-      "P_chosen": 0.625
-    },
-    {
-      "symbol": "KSMUSDT",
+      "symbol": "EDUUSDT",
       "edge": 0.246,
       "confidence": 25,
-      "prime_strength": 53,
-      "P_chosen": 0.659
+      "prime_strength": 58,
+      "P_chosen": 0.651
     },
     {
-      "symbol": "VETUSDT",
-      "edge": 0.246,
+      "symbol": "1000000MOGUSDT",
+      "edge": 0.245,
       "confidence": 25,
-      "prime_strength": 60,
-      "P_chosen": 0.632
+      "prime_strength": 58,
+      "P_chosen": 0.65
     },
     {
-      "symbol": "EPTUSDT",
+      "symbol": "ICNTUSDT",
       "edge": 0.245,
       "confidence": 25,
       "prime_strength": 56,
-      "P_chosen": 0.663
+      "P_chosen": 0.61
     },
     {
-      "symbol": "CLOUSDT",
+      "symbol": "RVVUSDT",
       "edge": 0.245,
       "confidence": 24,
-      "prime_strength": 51,
-      "P_chosen": 0.558
+      "prime_strength": 52,
+      "P_chosen": 0.637
     },
     {
-      "symbol": "ARBUSDT",
+      "symbol": "TAUSDT",
       "edge": 0.244,
       "confidence": 24,
-      "prime_strength": 59,
-      "P_chosen": 0.635
+      "prime_strength": 52,
+      "P_chosen": 0.636
+    },
+    {
+      "symbol": "AVAAIUSDT",
+      "edge": 0.244,
+      "confidence": 24,
+      "prime_strength": 57,
+      "P_chosen": 0.638
     },
     {
       "symbol": "ONTUSDT",
       "edge": 0.244,
       "confidence": 24,
       "prime_strength": 58,
-      "P_chosen": 0.655
+      "P_chosen": 0.654
+    },
+    {
+      "symbol": "MLNUSDT",
+      "edge": 0.244,
+      "confidence": 24,
+      "prime_strength": 47,
+      "P_chosen": 0.646
+    },
+    {
+      "symbol": "STOUSDT",
+      "edge": 0.244,
+      "confidence": 24,
+      "prime_strength": 52,
+      "P_chosen": 0.635
+    },
+    {
+      "symbol": "KSMUSDT",
+      "edge": 0.244,
+      "confidence": 24,
+      "prime_strength": 58,
+      "P_chosen": 0.658
+    },
+    {
+      "symbol": "DEEPUSDT",
+      "edge": 0.243,
+      "confidence": 24,
+      "prime_strength": 57,
+      "P_chosen": 0.642
+    },
+    {
+      "symbol": "NFPUSDT",
+      "edge": 0.243,
+      "confidence": 24,
+      "prime_strength": 54,
+      "P_chosen": 0.635
+    },
+    {
+      "symbol": "ARBUSDT",
+      "edge": 0.242,
+      "confidence": 24,
+      "prime_strength": 58,
+      "P_chosen": 0.633
     },
     {
       "symbol": "FETUSDT",
       "edge": 0.242,
       "confidence": 24,
-      "prime_strength": 59,
+      "prime_strength": 58,
       "P_chosen": 0.657
     },
     {
-      "symbol": "BIDUSDT",
+      "symbol": "EPTUSDT",
       "edge": 0.241,
       "confidence": 24,
       "prime_strength": 56,
-      "P_chosen": 0.653
+      "P_chosen": 0.66
     },
     {
-      "symbol": "SKLUSDT",
-      "edge": 0.241,
+      "symbol": "CKBUSDT",
+      "edge": 0.24,
       "confidence": 24,
-      "prime_strength": 56,
+      "prime_strength": 58,
       "P_chosen": 0.631
     },
     {
@@ -2006,70 +2069,56 @@
       "edge": 0.24,
       "confidence": 24,
       "prime_strength": 57,
-      "P_chosen": 0.647
+      "P_chosen": 0.646
     },
     {
-      "symbol": "AIXBTUSDT",
+      "symbol": "VETUSDT",
       "edge": 0.239,
-      "confidence": 24,
-      "prime_strength": 59,
-      "P_chosen": 0.653
-    },
-    {
-      "symbol": "ICNTUSDT",
-      "edge": 0.239,
-      "confidence": 24,
-      "prime_strength": 54,
-      "P_chosen": 0.599
-    },
-    {
-      "symbol": "TSTUSDT",
-      "edge": 0.238,
-      "confidence": 24,
-      "prime_strength": 57,
-      "P_chosen": 0.639
-    },
-    {
-      "symbol": "SUPERUSDT",
-      "edge": 0.238,
       "confidence": 24,
       "prime_strength": 58,
-      "P_chosen": 0.643
+      "P_chosen": 0.629
     },
     {
       "symbol": "COOKIEUSDT",
-      "edge": 0.237,
+      "edge": 0.239,
       "confidence": 24,
       "prime_strength": 57,
-      "P_chosen": 0.65
+      "P_chosen": 0.651
     },
     {
-      "symbol": "DUSDT",
-      "edge": 0.236,
+      "symbol": "BIDUSDT",
+      "edge": 0.239,
       "confidence": 24,
       "prime_strength": 57,
-      "P_chosen": 0.631
+      "P_chosen": 0.653
     },
     {
       "symbol": "RENDERUSDT",
       "edge": 0.236,
       "confidence": 24,
       "prime_strength": 53,
-      "P_chosen": 0.656
+      "P_chosen": 0.655
     },
     {
-      "symbol": "FISUSDT",
+      "symbol": "QUSDT",
       "edge": 0.235,
       "confidence": 24,
       "prime_strength": 51,
-      "P_chosen": 0.644
+      "P_chosen": 0.619
     },
     {
-      "symbol": "PHBUSDT",
+      "symbol": "SKLUSDT",
       "edge": 0.235,
-      "confidence": 24,
-      "prime_strength": 57,
-      "P_chosen": 0.652
+      "confidence": 23,
+      "prime_strength": 55,
+      "P_chosen": 0.627
+    },
+    {
+      "symbol": "MITOUSDT",
+      "edge": 0.234,
+      "confidence": 23,
+      "prime_strength": 52,
+      "P_chosen": 0.625
     },
     {
       "symbol": "TURBOUSDT",
@@ -2079,60 +2128,18 @@
       "P_chosen": 0.639
     },
     {
-      "symbol": "MASKUSDT",
+      "symbol": "FISUSDT",
       "edge": 0.234,
       "confidence": 23,
-      "prime_strength": 58,
-      "P_chosen": 0.648
+      "prime_strength": 51,
+      "P_chosen": 0.643
     },
     {
-      "symbol": "SPKUSDT",
-      "edge": 0.233,
-      "confidence": 23,
-      "prime_strength": 58,
-      "P_chosen": 0.633
-    },
-    {
-      "symbol": "ARPAUSDT",
-      "edge": 0.233,
-      "confidence": 23,
-      "prime_strength": 56,
-      "P_chosen": 0.644
-    },
-    {
-      "symbol": "HYPERUSDT",
-      "edge": 0.233,
-      "confidence": 23,
-      "prime_strength": 57,
-      "P_chosen": 0.652
-    },
-    {
-      "symbol": "ENSOUSDT",
-      "edge": 0.233,
-      "confidence": 23,
-      "prime_strength": 52,
-      "P_chosen": 0.634
-    },
-    {
-      "symbol": "DOGEUSDT",
-      "edge": 0.232,
-      "confidence": 23,
-      "prime_strength": 59,
-      "P_chosen": 0.639
-    },
-    {
-      "symbol": "ZKCUSDT",
-      "edge": 0.232,
-      "confidence": 23,
-      "prime_strength": 57,
-      "P_chosen": 0.635
-    },
-    {
-      "symbol": "LUMIAUSDT",
+      "symbol": "TSTUSDT",
       "edge": 0.231,
       "confidence": 23,
       "prime_strength": 57,
-      "P_chosen": 0.649
+      "P_chosen": 0.635
     },
     {
       "symbol": "LUNA2USDT",
@@ -2142,494 +2149,515 @@
       "P_chosen": 0.627
     },
     {
-      "symbol": "HYPEUSDT",
-      "edge": 0.231,
-      "confidence": 23,
-      "prime_strength": 53,
-      "P_chosen": 0.647
-    },
-    {
-      "symbol": "THEUSDT",
-      "edge": 0.23,
-      "confidence": 23,
-      "prime_strength": 56,
-      "P_chosen": 0.634
-    },
-    {
       "symbol": "MONUSDT",
       "edge": 0.23,
       "confidence": 23,
       "prime_strength": 51,
-      "P_chosen": 0.621
+      "P_chosen": 0.62
     },
     {
-      "symbol": "MOVRUSDT",
+      "symbol": "SUPERUSDT",
       "edge": 0.23,
       "confidence": 23,
       "prime_strength": 57,
-      "P_chosen": 0.626
+      "P_chosen": 0.638
     },
     {
-      "symbol": "PIXELUSDT",
+      "symbol": "HYPEUSDT",
       "edge": 0.229,
       "confidence": 23,
-      "prime_strength": 57,
-      "P_chosen": 0.649
+      "prime_strength": 52,
+      "P_chosen": 0.647
     },
     {
-      "symbol": "ASTRUSDT",
-      "edge": 0.228,
+      "symbol": "LUMIAUSDT",
+      "edge": 0.229,
       "confidence": 23,
-      "prime_strength": 57,
-      "P_chosen": 0.629
-    },
-    {
-      "symbol": "BLESSUSDT",
-      "edge": 0.227,
-      "confidence": 23,
-      "prime_strength": 53,
-      "P_chosen": 0.601
-    },
-    {
-      "symbol": "REZUSDT",
-      "edge": 0.227,
-      "confidence": 23,
-      "prime_strength": 57,
-      "P_chosen": 0.631
-    },
-    {
-      "symbol": "APRUSDT",
-      "edge": 0.226,
-      "confidence": 23,
-      "prime_strength": 53,
-      "P_chosen": 0.627
-    },
-    {
-      "symbol": "BOMEUSDT",
-      "edge": 0.226,
-      "confidence": 23,
-      "prime_strength": 59,
-      "P_chosen": 0.634
-    },
-    {
-      "symbol": "RONINUSDT",
-      "edge": 0.226,
-      "confidence": 23,
-      "prime_strength": 56,
-      "P_chosen": 0.643
-    },
-    {
-      "symbol": "KAVAUSDT",
-      "edge": 0.225,
-      "confidence": 22,
-      "prime_strength": 56,
-      "P_chosen": 0.631
-    },
-    {
-      "symbol": "USUALUSDT",
-      "edge": 0.224,
-      "confidence": 22,
       "prime_strength": 56,
       "P_chosen": 0.647
     },
     {
-      "symbol": "CHESSUSDT",
+      "symbol": "SPKUSDT",
+      "edge": 0.228,
+      "confidence": 23,
+      "prime_strength": 57,
+      "P_chosen": 0.63
+    },
+    {
+      "symbol": "ARPAUSDT",
+      "edge": 0.228,
+      "confidence": 23,
+      "prime_strength": 56,
+      "P_chosen": 0.641
+    },
+    {
+      "symbol": "ENSOUSDT",
+      "edge": 0.228,
+      "confidence": 23,
+      "prime_strength": 57,
+      "P_chosen": 0.63
+    },
+    {
+      "symbol": "AIXBTUSDT",
+      "edge": 0.227,
+      "confidence": 23,
+      "prime_strength": 58,
+      "P_chosen": 0.645
+    },
+    {
+      "symbol": "MASKUSDT",
+      "edge": 0.226,
+      "confidence": 23,
+      "prime_strength": 58,
+      "P_chosen": 0.643
+    },
+    {
+      "symbol": "PHBUSDT",
+      "edge": 0.226,
+      "confidence": 23,
+      "prime_strength": 56,
+      "P_chosen": 0.646
+    },
+    {
+      "symbol": "DUSDT",
       "edge": 0.224,
       "confidence": 22,
-      "prime_strength": 55,
-      "P_chosen": 0.648
+      "prime_strength": 56,
+      "P_chosen": 0.625
+    },
+    {
+      "symbol": "DOGEUSDT",
+      "edge": 0.224,
+      "confidence": 22,
+      "prime_strength": 57,
+      "P_chosen": 0.633
     },
     {
       "symbol": "IOUSDT",
       "edge": 0.223,
       "confidence": 22,
-      "prime_strength": 56,
-      "P_chosen": 0.627
+      "prime_strength": 55,
+      "P_chosen": 0.628
     },
     {
-      "symbol": "GOATUSDT",
+      "symbol": "USUALUSDT",
+      "edge": 0.223,
+      "confidence": 22,
+      "prime_strength": 56,
+      "P_chosen": 0.646
+    },
+    {
+      "symbol": "KAVAUSDT",
       "edge": 0.222,
+      "confidence": 22,
+      "prime_strength": 56,
+      "P_chosen": 0.63
+    },
+    {
+      "symbol": "RONINUSDT",
+      "edge": 0.222,
+      "confidence": 22,
+      "prime_strength": 56,
+      "P_chosen": 0.641
+    },
+    {
+      "symbol": "THEUSDT",
+      "edge": 0.221,
+      "confidence": 22,
+      "prime_strength": 56,
+      "P_chosen": 0.629
+    },
+    {
+      "symbol": "ASTRUSDT",
+      "edge": 0.221,
       "confidence": 22,
       "prime_strength": 57,
-      "P_chosen": 0.636
+      "P_chosen": 0.625
     },
     {
-      "symbol": "OBOLUSDT",
-      "edge": 0.222,
+      "symbol": "APRUSDT",
+      "edge": 0.22,
       "confidence": 22,
-      "prime_strength": 50,
-      "P_chosen": 0.644
-    },
-    {
-      "symbol": "PORTALUSDT",
-      "edge": 0.222,
-      "confidence": 22,
-      "prime_strength": 55,
-      "P_chosen": 0.637
+      "prime_strength": 51,
+      "P_chosen": 0.617
     },
     {
       "symbol": "DYDXUSDT",
       "edge": 0.22,
       "confidence": 22,
-      "prime_strength": 54,
+      "prime_strength": 53,
       "P_chosen": 0.642
     },
     {
-      "symbol": "BIOUSDT",
-      "edge": 0.22,
-      "confidence": 22,
-      "prime_strength": 58,
-      "P_chosen": 0.625
-    },
-    {
-      "symbol": "KOMAUSDT",
+      "symbol": "PIXELUSDT",
       "edge": 0.219,
       "confidence": 22,
-      "prime_strength": 55,
+      "prime_strength": 56,
+      "P_chosen": 0.643
+    },
+    {
+      "symbol": "ZKCUSDT",
+      "edge": 0.219,
+      "confidence": 22,
+      "prime_strength": 56,
       "P_chosen": 0.628
     },
     {
-      "symbol": "RESOLVUSDT",
-      "edge": 0.219,
+      "symbol": "BIOUSDT",
+      "edge": 0.217,
       "confidence": 22,
       "prime_strength": 57,
-      "P_chosen": 0.632
-    },
-    {
-      "symbol": "MANTAUSDT",
-      "edge": 0.218,
-      "confidence": 22,
-      "prime_strength": 57,
-      "P_chosen": 0.641
-    },
-    {
-      "symbol": "MERLUSDT",
-      "edge": 0.216,
-      "confidence": 22,
-      "prime_strength": 52,
       "P_chosen": 0.625
     },
     {
-      "symbol": "WLFIUSDT",
-      "edge": 0.216,
+      "symbol": "TURTLEUSDT",
+      "edge": 0.217,
       "confidence": 22,
-      "prime_strength": 58,
-      "P_chosen": 0.619
-    },
-    {
-      "symbol": "USELESSUSDT",
-      "edge": 0.215,
-      "confidence": 21,
       "prime_strength": 56,
-      "P_chosen": 0.611
-    },
-    {
-      "symbol": "EGLDUSDT",
-      "edge": 0.213,
-      "confidence": 21,
-      "prime_strength": 51,
-      "P_chosen": 0.641
-    },
-    {
-      "symbol": "CCUSDT",
-      "edge": 0.212,
-      "confidence": 21,
-      "prime_strength": 55,
       "P_chosen": 0.61
     },
     {
-      "symbol": "HMSTRUSDT",
-      "edge": 0.212,
-      "confidence": 21,
-      "prime_strength": 55,
-      "P_chosen": 0.62
-    },
-    {
-      "symbol": "1000CHEEMSUSDT",
-      "edge": 0.212,
-      "confidence": 21,
-      "prime_strength": 55,
+      "symbol": "KOMAUSDT",
+      "edge": 0.216,
+      "confidence": 22,
+      "prime_strength": 56,
       "P_chosen": 0.627
     },
     {
-      "symbol": "HOOKUSDT",
-      "edge": 0.211,
+      "symbol": "SLPUSDT",
+      "edge": 0.216,
+      "confidence": 22,
+      "prime_strength": 56,
+      "P_chosen": 0.639
+    },
+    {
+      "symbol": "CLOUSDT",
+      "edge": 0.215,
       "confidence": 21,
-      "prime_strength": 51,
-      "P_chosen": 0.63
+      "prime_strength": 49,
+      "P_chosen": 0.554
+    },
+    {
+      "symbol": "MANTAUSDT",
+      "edge": 0.214,
+      "confidence": 21,
+      "prime_strength": 56,
+      "P_chosen": 0.639
+    },
+    {
+      "symbol": "BLESSUSDT",
+      "edge": 0.214,
+      "confidence": 21,
+      "prime_strength": 47,
+      "P_chosen": 0.571
+    },
+    {
+      "symbol": "BOMEUSDT",
+      "edge": 0.213,
+      "confidence": 21,
+      "prime_strength": 56,
+      "P_chosen": 0.627
+    },
+    {
+      "symbol": "GOATUSDT",
+      "edge": 0.213,
+      "confidence": 21,
+      "prime_strength": 56,
+      "P_chosen": 0.631
+    },
+    {
+      "symbol": "NOMUSDT",
+      "edge": 0.212,
+      "confidence": 21,
+      "prime_strength": 55,
+      "P_chosen": 0.639
+    },
+    {
+      "symbol": "CHESSUSDT",
+      "edge": 0.209,
+      "confidence": 21,
+      "prime_strength": 55,
+      "P_chosen": 0.639
     },
     {
       "symbol": "VANRYUSDT",
-      "edge": 0.209,
+      "edge": 0.208,
       "confidence": 21,
       "prime_strength": 54,
-      "P_chosen": 0.635
+      "P_chosen": 0.634
     },
     {
-      "symbol": "OLUSDT",
-      "edge": 0.209,
-      "confidence": 21,
-      "prime_strength": 54,
-      "P_chosen": 0.633
-    },
-    {
-      "symbol": "GMXUSDT",
+      "symbol": "RSRUSDT",
       "edge": 0.207,
       "confidence": 21,
-      "prime_strength": 48,
-      "P_chosen": 0.612
+      "prime_strength": 56,
+      "P_chosen": 0.637
     },
     {
-      "symbol": "COWUSDT",
+      "symbol": "HMSTRUSDT",
       "edge": 0.207,
+      "confidence": 21,
+      "prime_strength": 55,
+      "P_chosen": 0.617
+    },
+    {
+      "symbol": "LPTUSDT",
+      "edge": 0.207,
+      "confidence": 21,
+      "prime_strength": 56,
+      "P_chosen": 0.626
+    },
+    {
+      "symbol": "SOLUSDT",
+      "edge": 0.206,
+      "confidence": 21,
+      "prime_strength": 51,
+      "P_chosen": 0.616
+    },
+    {
+      "symbol": "PUMPBTCUSDT",
+      "edge": 0.206,
       "confidence": 21,
       "prime_strength": 55,
       "P_chosen": 0.616
     },
     {
-      "symbol": "HANAUSDT",
-      "edge": 0.207,
-      "confidence": 21,
-      "prime_strength": 56,
-      "P_chosen": 0.612
-    },
-    {
-      "symbol": "EPICUSDT",
-      "edge": 0.198,
-      "confidence": 20,
-      "prime_strength": 50,
-      "P_chosen": 0.62
-    },
-    {
-      "symbol": "ASTERUSDT",
-      "edge": 0.197,
-      "confidence": 20,
-      "prime_strength": 57,
-      "P_chosen": 0.633
-    },
-    {
-      "symbol": "ARKUSDT",
-      "edge": 0.197,
-      "confidence": 20,
-      "prime_strength": 53,
-      "P_chosen": 0.622
-    },
-    {
-      "symbol": "UNIUSDT",
-      "edge": 0.197,
-      "confidence": 20,
-      "prime_strength": 57,
-      "P_chosen": 0.612
-    },
-    {
-      "symbol": "IOTXUSDT",
-      "edge": 0.196,
+      "symbol": "CCUSDT",
+      "edge": 0.203,
       "confidence": 20,
       "prime_strength": 54,
-      "P_chosen": 0.628
-    },
-    {
-      "symbol": "ERAUSDT",
-      "edge": 0.195,
-      "confidence": 20,
-      "prime_strength": 54,
-      "P_chosen": 0.624
-    },
-    {
-      "symbol": "BROCCOLIF3BUSDT",
-      "edge": 0.195,
-      "confidence": 20,
-      "prime_strength": 50,
-      "P_chosen": 0.624
-    },
-    {
-      "symbol": "1000WHYUSDT",
-      "edge": 0.192,
-      "confidence": 19,
-      "prime_strength": 53,
-      "P_chosen": 0.624
-    },
-    {
-      "symbol": "FXSUSDT",
-      "edge": 0.191,
-      "confidence": 19,
-      "prime_strength": 54,
-      "P_chosen": 0.618
-    },
-    {
-      "symbol": "COMPUSDT",
-      "edge": 0.188,
-      "confidence": 19,
-      "prime_strength": 50,
-      "P_chosen": 0.618
-    },
-    {
-      "symbol": "TAUSDT",
-      "edge": 0.186,
-      "confidence": 19,
-      "prime_strength": 49,
-      "P_chosen": 0.611
-    },
-    {
-      "symbol": "STBLUSDT",
-      "edge": 0.185,
-      "confidence": 18,
-      "prime_strength": 49,
-      "P_chosen": 0.621
-    },
-    {
-      "symbol": "CVXUSDT",
-      "edge": 0.182,
-      "confidence": 18,
-      "prime_strength": 47,
-      "P_chosen": 0.613
-    },
-    {
-      "symbol": "JUPUSDT",
-      "edge": 0.181,
-      "confidence": 18,
-      "prime_strength": 55,
-      "P_chosen": 0.608
-    },
-    {
-      "symbol": "HBARUSDT",
-      "edge": 0.181,
-      "confidence": 18,
-      "prime_strength": 55,
-      "P_chosen": 0.599
-    },
-    {
-      "symbol": "BANDUSDT",
-      "edge": 0.179,
-      "confidence": 18,
-      "prime_strength": 52,
-      "P_chosen": 0.604
-    },
-    {
-      "symbol": "DODOXUSDT",
-      "edge": 0.178,
-      "confidence": 18,
-      "prime_strength": 47,
-      "P_chosen": 0.598
-    },
-    {
-      "symbol": "1000CATUSDT",
-      "edge": 0.177,
-      "confidence": 18,
-      "prime_strength": 51,
       "P_chosen": 0.605
     },
     {
-      "symbol": "SIGNUSDT",
-      "edge": 0.176,
-      "confidence": 18,
-      "prime_strength": 52,
-      "P_chosen": 0.59
-    },
-    {
-      "symbol": "BBUSDT",
-      "edge": 0.176,
-      "confidence": 18,
-      "prime_strength": 54,
+      "symbol": "MERLUSDT",
+      "edge": 0.202,
+      "confidence": 20,
+      "prime_strength": 50,
       "P_chosen": 0.617
     },
     {
-      "symbol": "TREEUSDT",
-      "edge": 0.174,
-      "confidence": 17,
+      "symbol": "GMXUSDT",
+      "edge": 0.201,
+      "confidence": 20,
+      "prime_strength": 54,
+      "P_chosen": 0.609
+    },
+    {
+      "symbol": "1000WHYUSDT",
+      "edge": 0.2,
+      "confidence": 20,
       "prime_strength": 53,
-      "P_chosen": 0.6
+      "P_chosen": 0.628
     },
     {
-      "symbol": "EIGENUSDT",
-      "edge": 0.174,
-      "confidence": 17,
-      "prime_strength": 55,
-      "P_chosen": 0.607
-    },
-    {
-      "symbol": "APTUSDT",
-      "edge": 0.173,
-      "confidence": 17,
-      "prime_strength": 49,
+      "symbol": "OLUSDT",
+      "edge": 0.2,
+      "confidence": 20,
+      "prime_strength": 54,
       "P_chosen": 0.621
     },
     {
-      "symbol": "NOMUSDT",
-      "edge": 0.171,
-      "confidence": 17,
-      "prime_strength": 52,
-      "P_chosen": 0.612
+      "symbol": "RESOLVUSDT",
+      "edge": 0.198,
+      "confidence": 20,
+      "prime_strength": 55,
+      "P_chosen": 0.62
     },
     {
-      "symbol": "MORPHOUSDT",
-      "edge": 0.168,
-      "confidence": 17,
+      "symbol": "EGLDUSDT",
+      "edge": 0.197,
+      "confidence": 20,
+      "prime_strength": 56,
+      "P_chosen": 0.631
+    },
+    {
+      "symbol": "HOOKUSDT",
+      "edge": 0.196,
+      "confidence": 20,
+      "prime_strength": 50,
+      "P_chosen": 0.622
+    },
+    {
+      "symbol": "ARKUSDT",
+      "edge": 0.196,
+      "confidence": 20,
+      "prime_strength": 54,
+      "P_chosen": 0.621
+    },
+    {
+      "symbol": "COWUSDT",
+      "edge": 0.192,
+      "confidence": 19,
+      "prime_strength": 54,
+      "P_chosen": 0.608
+    },
+    {
+      "symbol": "EPICUSDT",
+      "edge": 0.192,
+      "confidence": 19,
+      "prime_strength": 50,
+      "P_chosen": 0.615
+    },
+    {
+      "symbol": "1000CHEEMSUSDT",
+      "edge": 0.189,
+      "confidence": 19,
+      "prime_strength": 54,
+      "P_chosen": 0.614
+    },
+    {
+      "symbol": "FXSUSDT",
+      "edge": 0.187,
+      "confidence": 19,
+      "prime_strength": 54,
+      "P_chosen": 0.609
+    },
+    {
+      "symbol": "STBLUSDT",
+      "edge": 0.186,
+      "confidence": 19,
+      "prime_strength": 50,
+      "P_chosen": 0.622
+    },
+    {
+      "symbol": "ASTERUSDT",
+      "edge": 0.186,
+      "confidence": 19,
+      "prime_strength": 55,
+      "P_chosen": 0.626
+    },
+    {
+      "symbol": "ERAUSDT",
+      "edge": 0.183,
+      "confidence": 18,
+      "prime_strength": 53,
+      "P_chosen": 0.617
+    },
+    {
+      "symbol": "BROCCOLIF3BUSDT",
+      "edge": 0.182,
+      "confidence": 18,
       "prime_strength": 48,
-      "P_chosen": 0.605
+      "P_chosen": 0.615
     },
     {
-      "symbol": "SOPHUSDT",
-      "edge": 0.167,
-      "confidence": 17,
+      "symbol": "COMMONUSDT",
+      "edge": 0.176,
+      "confidence": 18,
       "prime_strength": 49,
-      "P_chosen": 0.605
-    },
-    {
-      "symbol": "AUCTIONUSDT",
-      "edge": 0.155,
-      "confidence": 15,
-      "prime_strength": 47,
-      "P_chosen": 0.596
-    },
-    {
-      "symbol": "ORDERUSDT",
-      "edge": 0.155,
-      "confidence": 15,
-      "prime_strength": 51,
-      "P_chosen": 0.597
-    },
-    {
-      "symbol": "TRUTHUSDT",
-      "edge": 0.155,
-      "confidence": 15,
-      "prime_strength": 48,
       "P_chosen": 0.6
     },
     {
-      "symbol": "TUSDT",
-      "edge": 0.147,
-      "confidence": 15,
+      "symbol": "HBARUSDT",
+      "edge": 0.175,
+      "confidence": 17,
+      "prime_strength": 53,
+      "P_chosen": 0.597
+    },
+    {
+      "symbol": "JUPUSDT",
+      "edge": 0.174,
+      "confidence": 17,
+      "prime_strength": 54,
+      "P_chosen": 0.603
+    },
+    {
+      "symbol": "BBUSDT",
+      "edge": 0.171,
+      "confidence": 17,
+      "prime_strength": 53,
+      "P_chosen": 0.614
+    },
+    {
+      "symbol": "APTUSDT",
+      "edge": 0.17,
+      "confidence": 17,
       "prime_strength": 48,
-      "P_chosen": 0.582
+      "P_chosen": 0.619
     },
     {
-      "symbol": "ALTUSDT",
-      "edge": 0.138,
-      "confidence": 14,
-      "prime_strength": 50,
-      "P_chosen": 0.588
-    },
-    {
-      "symbol": "2ZUSDT",
-      "edge": 0.134,
-      "confidence": 13,
-      "prime_strength": 46,
+      "symbol": "SIGNUSDT",
+      "edge": 0.169,
+      "confidence": 17,
+      "prime_strength": 51,
       "P_chosen": 0.587
     },
     {
-      "symbol": "RSRUSDT",
-      "edge": 0.134,
-      "confidence": 13,
-      "prime_strength": 50,
-      "P_chosen": 0.59
+      "symbol": "DODOXUSDT",
+      "edge": 0.166,
+      "confidence": 17,
+      "prime_strength": 46,
+      "P_chosen": 0.592
     },
     {
-      "symbol": "LPTUSDT",
+      "symbol": "TREEUSDT",
+      "edge": 0.166,
+      "confidence": 17,
+      "prime_strength": 52,
+      "P_chosen": 0.596
+    },
+    {
+      "symbol": "EIGENUSDT",
+      "edge": 0.16,
+      "confidence": 16,
+      "prime_strength": 53,
+      "P_chosen": 0.598
+    },
+    {
+      "symbol": "SOPHUSDT",
+      "edge": 0.159,
+      "confidence": 16,
+      "prime_strength": 48,
+      "P_chosen": 0.601
+    },
+    {
+      "symbol": "MORPHOUSDT",
+      "edge": 0.155,
+      "confidence": 16,
+      "prime_strength": 47,
+      "P_chosen": 0.597
+    },
+    {
+      "symbol": "AUCTIONUSDT",
+      "edge": 0.152,
+      "confidence": 15,
+      "prime_strength": 47,
+      "P_chosen": 0.595
+    },
+    {
+      "symbol": "ORDERUSDT",
+      "edge": 0.149,
+      "confidence": 15,
+      "prime_strength": 51,
+      "P_chosen": 0.594
+    },
+    {
+      "symbol": "TUSDT",
+      "edge": 0.142,
+      "confidence": 14,
+      "prime_strength": 47,
+      "P_chosen": 0.579
+    },
+    {
+      "symbol": "MINAUSDT",
+      "edge": 0.137,
+      "confidence": 14,
+      "prime_strength": 50,
+      "P_chosen": 0.587
+    },
+    {
+      "symbol": "ALTUSDT",
       "edge": 0.134,
       "confidence": 13,
       "prime_strength": 49,
-      "P_chosen": 0.582
+      "P_chosen": 0.585
+    },
+    {
+      "symbol": "2ZUSDT",
+      "edge": 0.133,
+      "confidence": 13,
+      "prime_strength": 45,
+      "P_chosen": 0.586
     },
     {
       "symbol": "PHAUSDT",
@@ -2639,116 +2667,81 @@
       "P_chosen": 0.581
     },
     {
-      "symbol": "MINAUSDT",
-      "edge": 0.132,
-      "confidence": 13,
-      "prime_strength": 49,
-      "P_chosen": 0.584
-    },
-    {
-      "symbol": "COMMONUSDT",
-      "edge": 0.131,
-      "confidence": 13,
-      "prime_strength": 44,
-      "P_chosen": 0.576
-    },
-    {
       "symbol": "SYNUSDT",
-      "edge": 0.131,
+      "edge": 0.129,
       "confidence": 13,
       "prime_strength": 41,
-      "P_chosen": 0.569
+      "P_chosen": 0.568
     },
     {
-      "symbol": "PUMPBTCUSDT",
-      "edge": 0.126,
+      "symbol": "TRUTHUSDT",
+      "edge": 0.127,
       "confidence": 13,
-      "prime_strength": 45,
-      "P_chosen": 0.571
+      "prime_strength": 44,
+      "P_chosen": 0.583
     },
     {
       "symbol": "RIFUSDT",
-      "edge": 0.126,
-      "confidence": 13,
-      "prime_strength": 43,
-      "P_chosen": 0.569
-    },
-    {
-      "symbol": "1000000BOBUSDT",
-      "edge": 0.122,
-      "confidence": 12,
-      "prime_strength": 44,
-      "P_chosen": 0.576
-    },
-    {
-      "symbol": "MITOUSDT",
-      "edge": 0.121,
+      "edge": 0.123,
       "confidence": 12,
       "prime_strength": 42,
-      "P_chosen": 0.57
-    },
-    {
-      "symbol": "AVNTUSDT",
-      "edge": 0.12,
-      "confidence": 12,
-      "prime_strength": 48,
-      "P_chosen": 0.578
-    },
-    {
-      "symbol": "SLPUSDT",
-      "edge": 0.12,
-      "confidence": 12,
-      "prime_strength": 46,
-      "P_chosen": 0.578
-    },
-    {
-      "symbol": "ALICEUSDT",
-      "edge": 0.114,
-      "confidence": 11,
-      "prime_strength": 43,
-      "P_chosen": 0.566
-    },
-    {
-      "symbol": "TOSHIUSDT",
-      "edge": 0.111,
-      "confidence": 11,
-      "prime_strength": 43,
-      "P_chosen": 0.56
-    },
-    {
-      "symbol": "SKYAIUSDT",
-      "edge": 0.104,
-      "confidence": 10,
-      "prime_strength": 43,
-      "P_chosen": 0.566
-    },
-    {
-      "symbol": "LAUSDT",
-      "edge": 0.099,
-      "confidence": 10,
-      "prime_strength": 45,
-      "P_chosen": 0.567
-    },
-    {
-      "symbol": "QNTUSDT",
-      "edge": 0.095,
-      "confidence": 10,
-      "prime_strength": 42,
-      "P_chosen": 0.552
-    },
-    {
-      "symbol": "CUDISUSDT",
-      "edge": 0.092,
-      "confidence": 9,
-      "prime_strength": 38,
-      "P_chosen": 0.56
+      "P_chosen": 0.568
     },
     {
       "symbol": "FLUXUSDT",
-      "edge": 0.091,
-      "confidence": 9,
+      "edge": 0.123,
+      "confidence": 12,
+      "prime_strength": 46,
+      "P_chosen": 0.577
+    },
+    {
+      "symbol": "1000000BOBUSDT",
+      "edge": 0.12,
+      "confidence": 12,
+      "prime_strength": 44,
+      "P_chosen": 0.575
+    },
+    {
+      "symbol": "AVNTUSDT",
+      "edge": 0.118,
+      "confidence": 12,
+      "prime_strength": 47,
+      "P_chosen": 0.576
+    },
+    {
+      "symbol": "TOSHIUSDT",
+      "edge": 0.104,
+      "confidence": 10,
       "prime_strength": 42,
       "P_chosen": 0.557
+    },
+    {
+      "symbol": "SKYAIUSDT",
+      "edge": 0.103,
+      "confidence": 10,
+      "prime_strength": 42,
+      "P_chosen": 0.561
+    },
+    {
+      "symbol": "ALICEUSDT",
+      "edge": 0.1,
+      "confidence": 10,
+      "prime_strength": 42,
+      "P_chosen": 0.558
+    },
+    {
+      "symbol": "QNTUSDT",
+      "edge": 0.094,
+      "confidence": 9,
+      "prime_strength": 41,
+      "P_chosen": 0.551
+    },
+    {
+      "symbol": "HAEDALUSDT",
+      "edge": 0.086,
+      "confidence": 9,
+      "prime_strength": 38,
+      "P_chosen": 0.533
     },
     {
       "symbol": "FIDAUSDT",
@@ -2758,61 +2751,61 @@
       "P_chosen": 0.552
     },
     {
+      "symbol": "LAUSDT",
+      "edge": 0.074,
+      "confidence": 7,
+      "prime_strength": 40,
+      "P_chosen": 0.55
+    },
+    {
       "symbol": "ZRXUSDT",
-      "edge": 0.057,
+      "edge": 0.056,
       "confidence": 6,
       "prime_strength": 37,
       "P_chosen": 0.533
     },
     {
       "symbol": "1INCHUSDT",
-      "edge": 0.056,
-      "confidence": 6,
-      "prime_strength": 38,
-      "P_chosen": 0.535
-    },
-    {
-      "symbol": "RVNUSDT",
-      "edge": 0.048,
+      "edge": 0.05,
       "confidence": 5,
-      "prime_strength": 35,
+      "prime_strength": 36,
       "P_chosen": 0.532
     }
   ],
   "rejection_reasons": {
     "❌ Prime强度不足": 53,
-    "❌ 概率过低": 57,
-    "❌ 置信度不足": 56,
-    "❌ Edge不足": 57,
+    "❌ 概率过低": 58,
+    "❌ 置信度不足": 57,
+    "❌ Edge不足": 58,
     "❌ 四门槛质量不足": 5
   },
   "close_to_threshold": [
     {
       "symbol": "TAKEUSDT",
       "metric": "Gate",
-      "gap": 0.005,
-      "current": 0.835,
-      "threshold": 0.84
-    },
-    {
-      "symbol": "ARIAUSDT",
-      "metric": "Gate",
-      "gap": 0.005,
-      "current": 0.835,
+      "gap": 0.004,
+      "current": 0.836,
       "threshold": 0.84
     },
     {
       "symbol": "MUSDT",
       "metric": "Gate",
-      "gap": 0.006,
-      "current": 0.834,
+      "gap": 0.018,
+      "current": 0.822,
+      "threshold": 0.84
+    },
+    {
+      "symbol": "AIAUSDT",
+      "metric": "Gate",
+      "gap": 0.021,
+      "current": 0.819,
       "threshold": 0.84
     },
     {
       "symbol": "BDXNUSDT",
       "metric": "Gate",
-      "gap": 0.012,
-      "current": 0.828,
+      "gap": 0.025,
+      "current": 0.815,
       "threshold": 0.84
     },
     {
@@ -2824,8 +2817,8 @@
     }
   ],
   "market_stats": {
-    "avg_edge": 0.275,
-    "avg_confidence": 27.5,
+    "avg_edge": 0.278,
+    "avg_confidence": 27.8,
     "new_coins_count": 6,
     "new_coins_pct": 1.3
   },
@@ -2839,9 +2832,9 @@
     },
     "M": {
       "min": -80,
-      "p25": -63.0,
-      "median": -43.0,
-      "p75": -14.0,
+      "p25": -67.0,
+      "median": -49.0,
+      "p75": -18.0,
       "max": 100
     },
     "C": {
@@ -2853,15 +2846,15 @@
     },
     "V": {
       "min": -75,
-      "p25": -53.0,
-      "median": -40.0,
-      "p75": 31.0,
+      "p25": -51.0,
+      "median": -32.0,
+      "p75": 48.0,
       "max": 75
     },
     "O": {
-      "min": -54,
+      "min": -63,
       "p25": 34.0,
-      "median": 72.0,
+      "median": 71.0,
       "p75": 86.0,
       "max": 89
     },
@@ -2894,21 +2887,21 @@
       "max": 31
     },
     "I": {
-      "min": -43,
+      "min": -45,
       "p25": -22.0,
-      "median": -3.0,
+      "median": -4.0,
       "p75": 20.0,
-      "max": 54
+      "max": 53
     }
   },
   "threshold_recommendations": [
     "⚠️ Gate阈值可能偏高：5个币种非常接近但未通过，建议降低阈值"
   ],
   "performance": {
-    "total_time_sec": 72.12,
-    "speed_coins_per_sec": 6.36,
+    "total_time_sec": 101.59,
+    "speed_coins_per_sec": 4.52,
     "api_calls": 0,
     "cache_hit_rate": "100.0%",
-    "memory_mb": 97.46150970458984
+    "memory_mb": 97.4630355834961
   }
 }
