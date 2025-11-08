@@ -1,131 +1,28 @@
 {
-  "timestamp": "2025-11-08T00:00:38.589429",
+  "timestamp": "2025-11-08T00:00:57.262563",
   "scan_info": {
     "total_symbols": 5,
-    "signals_found": 4,
-    "filtered": 1
+    "signals_found": 2,
+    "filtered": 3
   },
   "signals": [
     {
-      "symbol": "BTCUSDT",
-      "edge": 0.583,
-      "confidence": 58,
-      "prime_strength": 82,
-      "P_chosen": 0.772
+      "symbol": "TEST1",
+      "edge": 0.5,
+      "confidence": 60
     },
     {
-      "symbol": "ETHUSDT",
-      "edge": 0.526,
-      "confidence": 53,
-      "prime_strength": 78,
-      "P_chosen": 0.784
-    },
-    {
-      "symbol": "SOLUSDT",
-      "edge": 0.374,
-      "confidence": 37,
-      "prime_strength": 61,
-      "P_chosen": 0.755
-    },
-    {
-      "symbol": "ZECUSDT",
-      "edge": 0.048,
-      "confidence": 5,
-      "prime_strength": 38,
-      "P_chosen": 0.538
+      "symbol": "TEST2",
+      "edge": 0.6,
+      "confidence": 65
     }
   ],
   "rejection_reasons": {
-    "❌ Prime强度不足": 1,
-    "❌ 概率过低": 1,
-    "❌ 置信度不足": 1,
-    "❌ Edge不足": 1
+    "Prime不足": 2,
+    "EV不足": 1
   },
-  "close_to_threshold": [],
-  "market_stats": {
-    "avg_edge": 0.321,
-    "avg_confidence": 32.2,
-    "new_coins_count": 0,
-    "new_coins_pct": 0.0
-  },
-  "factor_distribution": {
-    "T": {
-      "min": -100,
-      "p25": -10.0,
-      "median": 100.0,
-      "p75": 100.0,
-      "max": 100
-    },
-    "M": {
-      "min": -80,
-      "p25": -51.0,
-      "median": 82.0,
-      "p75": 94.0,
-      "max": 96
-    },
-    "C": {
-      "min": -71,
-      "p25": -43.0,
-      "median": -3.0,
-      "p75": 12.0,
-      "max": 17
-    },
-    "V": {
-      "min": -47,
-      "p25": -35.5,
-      "median": -11.0,
-      "p75": 16.5,
-      "max": 38
-    },
-    "O": {
-      "min": 26,
-      "p25": 43.5,
-      "median": 76.0,
-      "p75": 83.0,
-      "max": 87
-    },
-    "B": {
-      "min": -96,
-      "p25": -76.5,
-      "median": 0.0,
-      "p75": 21.0,
-      "max": 42
-    },
-    "F": {
-      "min": -100,
-      "p25": -100.0,
-      "median": -100.0,
-      "p75": -100.0,
-      "max": -100
-    },
-    "L": {
-      "min": 47,
-      "p25": 73.0,
-      "median": 100.0,
-      "p75": 100.0,
-      "max": 100
-    },
-    "S": {
-      "min": -32,
-      "p25": -26.0,
-      "median": -12.0,
-      "p75": 22.0,
-      "max": 28
-    },
-    "I": {
-      "min": -80,
-      "p25": -71.5,
-      "median": -63.0,
-      "p75": 48.0,
-      "max": 96
-    }
-  },
-  "threshold_recommendations": [],
   "performance": {
-    "total_time_sec": 2.05,
-    "speed_coins_per_sec": 2.44,
-    "api_calls": 0,
-    "cache_hit_rate": "100.0%",
-    "memory_mb": 96.47216796875
+    "total_time_sec": 10,
+    "speed_coins_per_sec": 0.5
   }
 }
