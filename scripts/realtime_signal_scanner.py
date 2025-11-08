@@ -129,6 +129,7 @@ class RealtimeSignalScanner:
 
     def __init__(
         self,
+        min_score: int = 35,
         send_telegram: bool = True,
         record_data: bool = True,
         verbose: bool = True
@@ -137,10 +138,12 @@ class RealtimeSignalScanner:
         初始化扫描器
 
         Args:
+            min_score: 最低confidence阈值（v7.2）
             send_telegram: 是否发送Telegram通知
             record_data: 是否记录数据到数据库（v7.2特性）
             verbose: 是否显示详细输出
         """
+        self.min_score = min_score
         self.send_telegram = send_telegram
         self.record_data = record_data and DATA_RECORDING_AVAILABLE
         self.verbose = verbose
@@ -208,76 +211,117 @@ class RealtimeSignalScanner:
 
         Args:
             max_symbols: 最大扫描币种数（None=全部）
-
-        Note:
-            - batch_scan_optimized已经包含了统计报告生成和Telegram发送
-            - 如果有信号，会自动发送扫描摘要到Telegram
-            - 数据会自动写入数据库和Git仓库
         """
         if not self.initialized:
             await self.initialize()
 
         log("\n" + "=" * 60)
-        log(f"📡 开始扫描 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        log(f"📡 开始v7.2扫描 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         log("=" * 60)
 
-        # 执行批量扫描（包含所有v7.2功能）
-        # batch_scan_optimized会自动：
-        # 1. 生成统计报告
-        # 2. 写入数据库
-        # 3. 发送Telegram摘要（如果有信号）
-        # 4. 提交到Git仓库
+        # 执行批量扫描
         scan_result = await self.scanner.scan(max_symbols=max_symbols)
 
-        # v7.2+: 发送单独的交易信号到Telegram（使用v7.2格式）
-        if self.send_telegram and self.telegram_enabled:
-            prime_signals = scan_result.get('results', [])
-            if prime_signals:
-                await self._send_signals_to_telegram(prime_signals)
+        # 提取信号列表
+        results = scan_result.get('results', [])
 
-        log("=" * 60)
-        log(f"✅ 扫描完成")
+        if not results:
+            warn("扫描无结果")
+            return
+
+        # v7.2增强：对每个信号应用v7.2分析
+        v72_results = []
+        for result in results:
+            try:
+                # 应用v7.2增强
+                v72_result = self._apply_v72_enhancements(result)
+                v72_results.append(v72_result)
+
+                # 记录到数据库
+                if self.record_data:
+                    self.recorder.record_signal_snapshot(v72_result)
+                    self.analysis_db.write_complete_signal(v72_result)
+
+            except Exception as e:
+                error(f"v7.2增强失败 {result.get('symbol')}: {e}")
+                continue
+
+        # 过滤Prime信号（四道闸门 + AntiJitter）
+        prime_signals = self._filter_prime_signals_v72(v72_results)
+
+        # 统计
+        log(f"\n📊 扫描统计:")
+        log(f"   总币种数: {len(results)}")
+        log(f"   v7.2增强: {len(v72_results)}")
+        log(f"   Prime信号: {len(prime_signals)}")
+        if prime_signals:
+            log(f"   币种列表: {', '.join([s['symbol'] for s in prime_signals])}")
+
+        # 发送Telegram
+        if self.send_telegram and prime_signals:
+            await self._send_signals_to_telegram_v72(prime_signals)
+
         log("=" * 60 + "\n")
 
-        return scan_result
+    def _apply_v72_enhancements(self, result: dict) -> dict:
+        """应用v7.2增强分析"""
+        symbol = result.get('symbol')
+        klines = result.get('klines', [])
+        oi_data = result.get('oi_data', [])
+        cvd_series = result.get('cvd_series', [])
+        atr = result.get('atr', 0)
 
-    async def _send_signals_to_telegram(self, signals: list):
-        """发送v7.2格式的交易信号到Telegram（逐个发送，带AntiJitter过滤）"""
-        log(f"\n📤 检查 {len(signals)} 个Prime交易信号...")
-
-        sent_count = 0
-        skipped_count = 0
-
-        for signal in signals:
+        if len(klines) >= 100 and len(cvd_series) >= 10:
             try:
-                symbol = signal.get('symbol')
+                v72_enhanced = analyze_with_v72_enhancements(
+                    original_result=result,
+                    symbol=symbol,
+                    klines=klines,
+                    oi_data=oi_data,
+                    cvd_series=cvd_series,
+                    atr_now=atr
+                )
+                return v72_enhanced
+            except Exception as e:
+                warn(f"v7.2增强失败 {symbol}: {e}")
+                return result
+        else:
+            return result
 
-                # v7.2增强：应用v7.2分析（如果有原始数据）
-                klines = signal.get('klines', [])
-                oi_data = signal.get('oi_data', [])
-                cvd_series = signal.get('cvd_series', [])
-                atr = signal.get('atr', 0)
+    def _filter_prime_signals_v72(self, results: list) -> list:
+        """
+        v7.2版本的Prime信号过滤
 
-                if len(klines) >= 100 and len(cvd_series) >= 10:
-                    # 应用v7.2增强
-                    signal = analyze_with_v72_enhancements(
-                        original_result=signal,
-                        symbol=symbol,
-                        klines=klines,
-                        oi_data=oi_data,
-                        cvd_series=cvd_series,
-                        atr_now=atr
-                    )
-                else:
-                    warn(f"   ⚠️ {symbol} 数据不足，跳过v7.2增强")
+        过滤条件：
+        1. v72_enhancements存在
+        2. all_gates_passed = True（四道闸门全部通过）
+        3. confidence_v72 >= min_score
+        4. 通过AntiJitter防抖动检查
+        """
+        prime_signals = []
 
-                # 获取v7.2增强后的数据用于AntiJitter检查
-                v72 = signal.get('v72_enhancements', {})
-                probability = v72.get('P_calibrated', signal.get('probability', 0.5))
-                ev_net = v72.get('EV_net', signal.get('EV_net', 0))
-                all_gates_passed = v72.get('gates', {}).get('pass_all', True)
+        for result in results:
+            symbol = result.get('symbol')
+            v72 = result.get('v72_enhancements', {})
 
-                # AntiJitter检查：防止重复发送
+            # 检查v7.2增强数据
+            if not v72:
+                continue
+
+            # 检查四道闸门（关键！）
+            all_gates_passed = v72.get('gates', {}).get('pass_all', False)
+            if not all_gates_passed:
+                continue
+
+            # 检查confidence
+            confidence = v72.get('confidence_v72', 0)
+            if confidence < self.min_score:
+                continue
+
+            # AntiJitter防抖动检查
+            if self.send_telegram:
+                probability = v72.get('P_calibrated', 0.5)
+                ev_net = v72.get('EV_net', 0)
                 level, should_publish = self.anti_jitter.update(
                     symbol=symbol,
                     probability=probability,
@@ -286,27 +330,36 @@ class RealtimeSignalScanner:
                 )
 
                 if not should_publish:
-                    skipped_count += 1
+                    log(f"   ⏭️  跳过 {symbol} (防抖动)")
                     continue
 
+            # 通过所有检查
+            prime_signals.append(result)
+
+        return prime_signals
+
+    async def _send_signals_to_telegram_v72(self, signals: list):
+        """发送v7.2格式的信号到Telegram"""
+        log(f"\n📤 发送 {len(signals)} 个v7.2 Prime信号到Telegram...")
+
+        for i, signal in enumerate(signals, 1):
+            try:
                 # 使用v7.2消息格式
                 message = render_trade_v72(signal)
 
                 # 发送
                 telegram_send_wrapper(message, self.bot_token, self.chat_id)
 
-                confidence = signal.get('confidence', 0)
-                edge = signal.get('edge', 0)
+                symbol = signal.get('symbol')
+                confidence = signal.get('v72_enhancements', {}).get('confidence_v72', 0)
+                F_v2 = signal.get('v72_enhancements', {}).get('F_v2', 0)
 
-                sent_count += 1
-                log(f"   ✅ {symbol} (Edge={edge:.2f}, Conf={confidence:.1f})")
+                log(f"   ✅ {i}/{len(signals)}: {symbol} (confidence={confidence:.1f}, F={F_v2:.0f})")
 
             except Exception as e:
                 error(f"   ❌ 发送失败 {signal.get('symbol')}: {e}")
-                import traceback
-                traceback.print_exc()
 
-        log(f"✅ 发送完成: {sent_count}个新信号, {skipped_count}个跳过（防抖动）\n")
+        log(f"✅ v7.2信号发送完成\n")
 
     async def run_periodic(self, interval_seconds: int = 300):
         """
