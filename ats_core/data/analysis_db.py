@@ -29,7 +29,7 @@ from datetime import datetime
 class AnalysisDB:
     """完善的分析数据库"""
 
-    def __init__(self, db_path: str = "data/analysis.db"):
+    def __init__(self, db_path: str = "/home/user/cryptosignal/data/analysis.db"):
         """
         初始化分析数据库
 
@@ -1043,7 +1043,7 @@ class AnalysisDB:
 _analysis_db_instance = None
 
 
-def get_analysis_db(db_path: str = "data/analysis.db") -> AnalysisDB:
+def get_analysis_db(db_path: str = "/home/user/cryptosignal/data/analysis.db") -> AnalysisDB:
     """获取AnalysisDB单例"""
     global _analysis_db_instance
     if _analysis_db_instance is None:

@@ -23,7 +23,7 @@ from pathlib import Path
 class TradeRecorder:
     """交易记录器 - 采集真实交易数据"""
 
-    def __init__(self, db_path: str = "data/trade_history.db"):
+    def __init__(self, db_path: str = "/home/user/cryptosignal/data/trade_history.db"):
         """
         初始化交易记录器
 
@@ -395,7 +395,7 @@ class TradeRecorder:
 _recorder_instance = None
 
 
-def get_recorder(db_path: str = "data/trade_history.db") -> TradeRecorder:
+def get_recorder(db_path: str = "/home/user/cryptosignal/data/trade_history.db") -> TradeRecorder:
     """获取TradeRecorder单例"""
     global _recorder_instance
     if _recorder_instance is None:
