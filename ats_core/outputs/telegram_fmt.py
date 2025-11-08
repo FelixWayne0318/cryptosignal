@@ -2021,8 +2021,10 @@ def render_v67_rich(r: Dict[str, Any]) -> str:
 """
 
     # ============ Block 9: 元数据 (v6.7新增Binance链接) ============
-    from datetime import datetime
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
+    from datetime import datetime, timedelta, timezone
+    # UTC+8时区（北京时间）
+    tz_utc8 = timezone(timedelta(hours=8))
+    timestamp = datetime.now(tz_utc8).strftime("%Y-%m-%d %H:%M:%S")
     version = "v6.7"
     binance_url = f"https://www.binance.com/en/futures/{symbol}"
 
@@ -2133,8 +2135,10 @@ RR: 1:{rr:.1f}
     message += f"💼 **仓位**: {position_mult:.0%}\n\n"
 
     # Block 9: 元数据
-    from datetime import datetime
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    from datetime import datetime, timedelta, timezone
+    # UTC+8时区（北京时间）
+    tz_utc8 = timezone(timedelta(hours=8))
+    timestamp = datetime.now(tz_utc8).strftime("%Y-%m-%d %H:%M:%S")
     message += f"━━━━━━━━━━━━━━━━━━━━\n⏰ {timestamp} | 🤖 v6.7"
 
     return message
@@ -2444,12 +2448,15 @@ def render_trade_v72(r: Dict[str, Any]) -> str:
 
 
 def _format_timestamp(ts: float) -> str:
-    """格式化时间戳"""
+    """格式化时间戳为UTC+8时间"""
     if not ts:
         return "—"
     try:
-        from datetime import datetime
-        dt = datetime.fromtimestamp(ts / 1000 if ts > 1e12 else ts)
+        from datetime import datetime, timedelta, timezone
+        # 创建UTC+8时区
+        tz_utc8 = timezone(timedelta(hours=8))
+        # 转换时间戳为UTC+8
+        dt = datetime.fromtimestamp(ts / 1000 if ts > 1e12 else ts, tz=tz_utc8)
         return dt.strftime("%Y-%m-%d %H:%M:%S")
     except Exception:
         return "—"

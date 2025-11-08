@@ -42,7 +42,10 @@ import argparse
 import signal
 import json
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+# UTC+8时区（北京时间）
+TZ_UTC8 = timezone(timedelta(hours=8))
 
 # 添加项目根目录到路径
 project_root = Path(__file__).parent.parent
@@ -216,7 +219,7 @@ class RealtimeSignalScanner:
             await self.initialize()
 
         log("\n" + "=" * 60)
-        log(f"📡 开始v7.2扫描 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        log(f"📡 开始v7.2扫描 - {datetime.now(TZ_UTC8).strftime('%Y-%m-%d %H:%M:%S')}")
         log("=" * 60)
 
         # 执行批量扫描
@@ -392,7 +395,7 @@ class RealtimeSignalScanner:
                 await self.scan_once()
 
                 # 等待下次扫描
-                next_scan = datetime.now() + timedelta(seconds=interval_seconds)
+                next_scan = datetime.now(TZ_UTC8) + timedelta(seconds=interval_seconds)
                 log(f"\n⏰ 下次扫描时间: {next_scan.strftime('%Y-%m-%d %H:%M:%S')}")
                 log(f"   （{interval_seconds}秒后）\n")
 
@@ -444,7 +447,7 @@ class RealtimeSignalScanner:
         if recent:
             log(f"\n最近10个信号:")
             for sig in recent:
-                timestamp = datetime.fromtimestamp(sig['timestamp'] / 1000).strftime('%m-%d %H:%M')
+                timestamp = datetime.fromtimestamp(sig['timestamp'] / 1000, tz=TZ_UTC8).strftime('%m-%d %H:%M')
                 gates = "✅" if sig['all_gates_passed'] else "❌"
                 log(f"  {timestamp} {sig['symbol']:10s} {sig['side']:5s} conf={sig['confidence']:5.1f} P={sig['predicted_p']:.3f} {gates}")
 

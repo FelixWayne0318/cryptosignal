@@ -7,7 +7,10 @@
 import json
 import statistics
 from typing import Dict, List, Any
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+# UTC+8时区（北京时间）
+TZ_UTC8 = timezone(timedelta(hours=8))
 
 
 class ScanStatistics:
@@ -104,7 +107,7 @@ class ScanStatistics:
         new_coins = [d for d in self.symbols_data if d['coin_age_hours'] < 168]
 
         return {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(TZ_UTC8).isoformat(),
             "scan_info": {
                 "total_symbols": len(self.symbols_data),
                 "signals_found": len(self.signals),
@@ -160,7 +163,7 @@ class ScanStatistics:
             详细数据字典
         """
         return {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(TZ_UTC8).isoformat(),
             "total_symbols": len(self.symbols_data),
             "symbols": self.symbols_data
         }
@@ -179,7 +182,7 @@ class ScanStatistics:
         report.append("=" * 50)
         report.append("📊 全市场扫描统计分析报告")
         report.append("=" * 50)
-        report.append(f"🕐 时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        report.append(f"🕐 时间: {datetime.now(TZ_UTC8).strftime('%Y-%m-%d %H:%M:%S')}")
         report.append(f"📈 扫描币种: {len(self.symbols_data)} 个")
         report.append(f"✅ 信号数量: {len(self.signals)} 个")
         report.append(f"📉 过滤数量: {len(self.symbols_data) - len(self.signals)} 个")

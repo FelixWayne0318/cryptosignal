@@ -16,11 +16,15 @@
 import asyncio
 import time
 from typing import List, Dict, Optional
+from datetime import datetime, timedelta, timezone
 from ats_core.execution.binance_futures_client import get_binance_client
 from ats_core.data.realtime_kline_cache import get_kline_cache
 from ats_core.pipeline.analyze_symbol import analyze_symbol_with_preloaded_klines
 from ats_core.logging import log, warn, error
 from ats_core.analysis.scan_statistics import get_global_stats, reset_global_stats
+
+# UTC+8时区（北京时间）
+TZ_UTC8 = timezone(timedelta(hours=8))
 
 
 class OptimizedBatchScanner:
@@ -400,8 +404,7 @@ class OptimizedBatchScanner:
         # ═══════════════════════════════════════════════════════════
         # Phase 1: 三层智能数据更新
         # ═══════════════════════════════════════════════════════════
-        from datetime import datetime
-        current_time = datetime.now()
+        current_time = datetime.now(TZ_UTC8)
         current_minute = current_time.minute
 
         # Layer 1: 价格更新（每次都执行，最轻量）
@@ -810,7 +813,7 @@ class OptimizedBatchScanner:
 
                         if enabled and bot_token and chat_id:
                             # 生成简短的电报消息
-                            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                            timestamp = datetime.now(TZ_UTC8).strftime('%Y-%m-%d %H:%M:%S')
                             total_symbols = summary_data.get('scan_info', {}).get('total_symbols', 0)
 
                             # 获取信号列表（显示所有信号）
