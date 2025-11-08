@@ -29,13 +29,19 @@ from datetime import datetime
 class AnalysisDB:
     """完善的分析数据库"""
 
-    def __init__(self, db_path: str = "/home/user/cryptosignal/data/analysis.db"):
+    def __init__(self, db_path: str = None):
         """
         初始化分析数据库
 
         Args:
-            db_path: SQLite数据库路径
+            db_path: SQLite数据库路径（默认为项目根目录下的data/analysis.db）
         """
+        if db_path is None:
+            # 自动检测项目根目录
+            import os
+            project_root = os.path.expanduser("~/cryptosignal")
+            db_path = os.path.join(project_root, "data", "analysis.db")
+
         self.db_path = db_path
 
         # 确保data目录存在
@@ -1043,7 +1049,7 @@ class AnalysisDB:
 _analysis_db_instance = None
 
 
-def get_analysis_db(db_path: str = "/home/user/cryptosignal/data/analysis.db") -> AnalysisDB:
+def get_analysis_db(db_path: str = None) -> AnalysisDB:
     """获取AnalysisDB单例"""
     global _analysis_db_instance
     if _analysis_db_instance is None:

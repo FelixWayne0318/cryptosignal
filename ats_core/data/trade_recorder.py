@@ -23,13 +23,19 @@ from pathlib import Path
 class TradeRecorder:
     """交易记录器 - 采集真实交易数据"""
 
-    def __init__(self, db_path: str = "/home/user/cryptosignal/data/trade_history.db"):
+    def __init__(self, db_path: str = None):
         """
         初始化交易记录器
 
         Args:
-            db_path: SQLite数据库路径
+            db_path: SQLite数据库路径（默认为项目根目录下的data/trade_history.db）
         """
+        if db_path is None:
+            # 自动检测项目根目录
+            import os
+            project_root = os.path.expanduser("~/cryptosignal")
+            db_path = os.path.join(project_root, "data", "trade_history.db")
+
         self.db_path = db_path
 
         # 确保data目录存在
@@ -395,7 +401,7 @@ class TradeRecorder:
 _recorder_instance = None
 
 
-def get_recorder(db_path: str = "/home/user/cryptosignal/data/trade_history.db") -> TradeRecorder:
+def get_recorder(db_path: str = None) -> TradeRecorder:
     """获取TradeRecorder单例"""
     global _recorder_instance
     if _recorder_instance is None:

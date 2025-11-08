@@ -787,7 +787,64 @@ class OptimizedBatchScanner:
                 import traceback
                 traceback.print_exc()
 
-            # 注：统计报告已写入仓库，不再发送到Telegram
+            # v7.2+: 发送扫描摘要到Telegram（如果有信号）
+            try:
+                import os
+                import json
+                signals_found = summary_data.get('scan_info', {}).get('signals_found', 0)
+
+                # 只在有信号时发送电报通知
+                if signals_found > 0:
+                    # 加载Telegram配置
+                    config_file = Path(__file__).parent.parent.parent / 'config' / 'telegram.json'
+                    if config_file.exists():
+                        with open(config_file, 'r') as f:
+                            telegram_config = json.load(f)
+
+                        bot_token = telegram_config.get('bot_token', '').strip()
+                        chat_id = telegram_config.get('chat_id', '').strip()
+                        enabled = telegram_config.get('enabled', False)
+
+                        if enabled and bot_token and chat_id:
+                            # 生成简短的电报消息
+                            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                            total_symbols = summary_data.get('scan_info', {}).get('total_symbols', 0)
+
+                            # 获取信号列表
+                            signals_list = summary_data.get('signals', [])[:5]  # 只显示前5个
+                            signal_text = '\n'.join([
+                                f"  • {s['symbol']}: Edge={s['edge']:.2f}, Conf={s['confidence']:.0f}"
+                                for s in signals_list
+                            ])
+
+                            message = f"""📊 <b>扫描完成</b>
+
+🕐 时间: {timestamp}
+📈 扫描: {total_symbols} 个币种
+✅ 信号: {signals_found} 个
+
+🎯 <b>发现的信号</b>:
+{signal_text}
+
+📝 详细报告: reports/latest/scan_summary.json"""
+
+                            # 发送到Telegram
+                            success = stats.send_to_telegram(message, bot_token, chat_id)
+                            if success:
+                                log("✅ 扫描摘要已发送到Telegram")
+                            else:
+                                warn("⚠️  发送Telegram失败")
+                        else:
+                            log("ℹ️  Telegram未启用或未配置")
+                    else:
+                        log("ℹ️  未找到Telegram配置文件")
+                else:
+                    log("ℹ️  无信号，跳过Telegram通知")
+            except Exception as e:
+                warn(f"⚠️  发送Telegram摘要失败: {e}")
+                import traceback
+                traceback.print_exc()
+
             log("✅ 统计分析已完成并写入仓库: reports/latest/")
 
         except Exception as e:
