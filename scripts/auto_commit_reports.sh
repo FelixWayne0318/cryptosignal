@@ -119,16 +119,19 @@ if ! git diff --quiet reports/ || ! git diff --cached --quiet reports/ || git ls
         # 提交（不签名，静默模式）
         git commit --no-gpg-sign --quiet -m "$COMMIT_MSG"
 
-        # 推送到远程（静默模式）
+        # 推送到远程（静默模式：成功静默，失败显示错误）
         BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
-        if git push --quiet origin "$BRANCH" 2>/dev/null; then
+        # 捕获错误输出
+        PUSH_ERROR=$(git push --quiet origin "$BRANCH" 2>&1)
+        if [ $? -eq 0 ]; then
             echo "✅ 扫描报告已推送到仓库 (${TOTAL}币种, ${SIGNALS}信号)"
 
             # 记录提交时间
             date +%s > "$LAST_COMMIT_FILE"
         else
-            echo "❌ 推送失败（可能网络问题），但本地已提交"
+            echo "❌ 推送失败: $PUSH_ERROR"
+            echo "💡 本地已提交，可手动运行: git push origin $BRANCH"
             exit 1
         fi
     fi
