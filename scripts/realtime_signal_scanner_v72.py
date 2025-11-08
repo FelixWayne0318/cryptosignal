@@ -40,6 +40,7 @@ from ats_core.pipeline.batch_scan_optimized import OptimizedBatchScanner
 from ats_core.pipeline.analyze_symbol_v72 import analyze_with_v72_enhancements
 from ats_core.outputs.telegram_fmt import render_trade_v72, render_watch_v72
 from ats_core.data.trade_recorder import get_recorder
+from ats_core.data.analysis_db import get_analysis_db
 from ats_core.logging import log, warn, error
 
 # v6.7: 统一防抖动配置系统
@@ -142,7 +143,9 @@ class RealtimeSignalScannerV72:
         if record_data:
             try:
                 self.recorder = get_recorder()
+                self.analysis_db = get_analysis_db()
                 log(f"✅ TradeRecorder已初始化")
+                log(f"✅ AnalysisDB已初始化（完善的分析数据库）")
 
                 # 显示当前统计
                 stats = self.recorder.get_statistics()
@@ -209,6 +212,8 @@ class RealtimeSignalScannerV72:
                 # 记录到数据库
                 if self.record_data:
                     self.recorder.record_signal_snapshot(v72_result)
+                    # 同时写入完善的分析数据库
+                    self.analysis_db.write_complete_signal(v72_result)
 
             except Exception as e:
                 error(f"v7.2增强失败 {result.get('symbol')}: {e}")

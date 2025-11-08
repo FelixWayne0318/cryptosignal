@@ -333,9 +333,18 @@ class TradeRecorder:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 
-        # 总信号数
-        cursor.execute("SELECT COUNT(*) FROM signal_snapshots")
-        total_signals = cursor.fetchone()[0]
+        try:
+            # 总信号数
+            cursor.execute("SELECT COUNT(*) FROM signal_snapshots")
+            total_signals = cursor.fetchone()[0]
+        except sqlite3.OperationalError as e:
+            # 表不存在，重新初始化数据库
+            conn.close()
+            self._init_database()
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM signal_snapshots")
+            total_signals = cursor.fetchone()[0]
 
         # 通过闸门的信号数
         cursor.execute("SELECT COUNT(*) FROM signal_snapshots WHERE all_gates_passed = 1")
