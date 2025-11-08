@@ -810,12 +810,22 @@ class OptimizedBatchScanner:
                             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                             total_symbols = summary_data.get('scan_info', {}).get('total_symbols', 0)
 
-                            # 获取信号列表
-                            signals_list = summary_data.get('signals', [])[:5]  # 只显示前5个
-                            signal_text = '\n'.join([
-                                f"  • {s['symbol']}: Edge={s['edge']:.2f}, Conf={s['confidence']:.0f}"
-                                for s in signals_list
-                            ])
+                            # 获取信号列表（显示所有信号）
+                            signals_list = summary_data.get('signals', [])
+
+                            # 如果信号数量<=10，全部显示
+                            # 如果>10，显示前10个，并注明还有多少个
+                            if len(signals_list) <= 10:
+                                signal_text = '\n'.join([
+                                    f"  • {s['symbol']}: Edge={s['edge']:.2f}, Conf={s['confidence']:.0f}, Prime={s['prime_strength']:.0f}"
+                                    for s in signals_list
+                                ])
+                            else:
+                                signal_text = '\n'.join([
+                                    f"  • {s['symbol']}: Edge={s['edge']:.2f}, Conf={s['confidence']:.0f}, Prime={s['prime_strength']:.0f}"
+                                    for s in signals_list[:10]
+                                ])
+                                signal_text += f"\n  ... 还有{len(signals_list) - 10}个信号"
 
                             message = f"""📊 <b>扫描完成</b>
 
@@ -823,10 +833,10 @@ class OptimizedBatchScanner:
 📈 扫描: {total_symbols} 个币种
 ✅ 信号: {signals_found} 个
 
-🎯 <b>发现的信号</b>:
+🎯 <b>Prime信号</b>:
 {signal_text}
 
-📝 详细报告: reports/latest/scan_summary.json"""
+📝 完整报告: reports/latest/scan_summary.json"""
 
                             # 发送到Telegram
                             success = stats.send_to_telegram(message, bot_token, chat_id)
