@@ -653,6 +653,17 @@ class OptimizedBatchScanner:
                     results.append(result)
                     log(f"✅ {symbol}: Prime强度={prime_strength}, 置信度={confidence:.0f}")
 
+                    # v7.2: 写入Prime信号到数据库（信号级别完整数据）
+                    try:
+                        if not hasattr(self, '_analysis_db_batch'):
+                            from ats_core.data.analysis_db import get_analysis_db
+                            self._analysis_db_batch = get_analysis_db()
+                        # 写入6个表：market_data, factor_scores, signal_analysis, gate_evaluation, modulator_effects
+                        self._analysis_db_batch.write_complete_signal(result)
+                    except Exception as e:
+                        # 不影响主流程，只记录警告
+                        warn(f"⚠️  {symbol} 写入数据库失败: {e}")
+
                     # 实时回调：立即处理新发现的信号
                     if on_signal_found:
                         try:
