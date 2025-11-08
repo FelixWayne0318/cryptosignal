@@ -92,7 +92,7 @@ else
 fi
 
 # 添加执行权限
-chmod +x auto_restart.sh deploy_and_run.sh setup.sh scripts/init_databases.py 2>/dev/null || true
+chmod +x auto_restart.sh deploy_and_run.sh setup.sh scripts/init_databases.py start_live.sh 2>/dev/null || true
 
 # 初始化数据库
 echo ""
@@ -103,19 +103,52 @@ python3 scripts/init_databases.py || {
     echo "这不会影响系统运行，数据库会在首次使用时自动创建"
 }
 
-# 启动系统
 echo ""
-echo "🚀 启动系统..."
-echo "=============================================="
-./deploy_and_run.sh
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}✅ 环境准备完成！${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🚀 选择启动模式："
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo -e "${GREEN}1. 实时日志模式（推荐）${NC}"
+echo "   • 显示滚动日志，方便监控"
+echo "   • 按 Ctrl+C 停止"
+echo "   • 关闭SSH窗口程序停止"
+echo "   启动命令: ./start_live.sh"
+echo ""
+echo -e "${YELLOW}2. 后台运行模式${NC}"
+echo "   • 静默后台运行"
+echo "   • SSH断开后继续运行"
+echo "   • 需要手动查看日志"
+echo "   启动命令: ./auto_restart.sh"
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+# 等待用户选择
+read -p "请选择启动模式 [1/2] (默认:1): " choice
+choice=${choice:-1}
 
 echo ""
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}✅ 部署完成！${NC}"
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-echo "📊 系统状态:"
-echo "  查看日志: tail -f ~/cryptosignal/logs/scanner_*.log"
-echo "  重连会话: screen -r cryptosignal"
-echo "  手动重启: ~/cryptosignal/auto_restart.sh"
-echo ""
+if [ "$choice" = "1" ]; then
+    echo -e "${GREEN}🟢 启动实时日志模式...${NC}"
+    echo ""
+    ./start_live.sh
+else
+    echo -e "${YELLOW}🔵 启动后台运行模式...${NC}"
+    echo ""
+    ./auto_restart.sh
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "✅ 后台启动完成"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "📊 管理命令:"
+    echo "  查看日志: tail -f ~/cryptosignal_*.log"
+    echo "  查看状态: ~/cryptosignal/check_v72_status.sh"
+    echo "  重新启动: ~/cryptosignal/auto_restart.sh"
+    echo "  查看实时: ~/cryptosignal/start_live.sh"
+    echo ""
+fi
