@@ -4,10 +4,10 @@
 echo "===== 检查正在运行的扫描器 ====="
 
 # 查找进程
-PID=$(pgrep -f "realtime_signal_scanner_v72.py" | head -1)
+PID=$(pgrep -f "realtime_signal_scanner.py" | head -1)
 
 if [ -z "$PID" ]; then
-    echo "❌ 没有找到运行中的 realtime_signal_scanner_v72.py"
+    echo "❌ 没有找到运行中的 realtime_signal_scanner.py"
     exit 1
 fi
 

@@ -162,16 +162,16 @@ echo "🚀 正在启动 v7.2 扫描器（后台模式 + 实时日志）..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# 停止旧进程
-pkill -f realtime_signal_scanner_v72.py 2>/dev/null || true
+# 停止旧进程（兼容v7.2和统一版本）
+pkill -f realtime_signal_scanner 2>/dev/null || true
 sleep 1
 
 # 创建日志文件名
 LOG_FILE=~/cryptosignal_$(date +%Y%m%d_%H%M%S).log
 
-# 后台启动扫描器
-echo "📝 后台启动扫描器..."
-nohup python3 scripts/realtime_signal_scanner_v72.py --interval 300 > "$LOG_FILE" 2>&1 &
+# 后台启动扫描器（使用统一版本）
+echo "📝 后台启动扫描器（v7.2增强版 - 统一版本）..."
+nohup python3 scripts/realtime_signal_scanner.py --interval 300 > "$LOG_FILE" 2>&1 &
 PID=$!
 
 sleep 2
@@ -185,9 +185,10 @@ if ps -p $PID > /dev/null 2>&1; then
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "📋 管理命令:"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "  查看状态: ~/cryptosignal/check_v72_status.sh"
+    echo "  查看状态: ps aux | grep realtime_signal_scanner"
     echo "  重新启动: ~/cryptosignal/auto_restart.sh"
-    echo "  停止程序: pkill -f realtime_signal_scanner_v72.py"
+    echo "  停止程序: pkill -f realtime_signal_scanner.py"
+    echo "  查看日志: tail -f $LOG_FILE"
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "⚙️  v7.2 新特性:"
