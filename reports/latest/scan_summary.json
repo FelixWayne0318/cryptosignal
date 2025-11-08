@@ -1,118 +1,139 @@
 {
-  "timestamp": "2025-11-08T12:25:41.478424",
+  "timestamp": "2025-11-08T12:33:14.850780",
   "scan_info": {
     "total_symbols": 446,
-    "signals_found": 14,
-    "filtered": 432
+    "signals_found": 15,
+    "filtered": 431
   },
   "signals": [
     {
       "symbol": "FLUXUSDT",
-      "edge": 0.666,
+      "edge": 0.667,
       "confidence": 67,
-      "prime_strength": 78,
-      "P_chosen": 0.78
-    },
-    {
-      "symbol": "MERLUSDT",
-      "edge": 0.606,
-      "confidence": 61,
-      "prime_strength": 68,
-      "P_chosen": 0.795
+      "prime_strength": 76,
+      "P_chosen": 0.785
     },
     {
       "symbol": "NEARUSDT",
-      "edge": 0.6,
-      "confidence": 60,
-      "prime_strength": 76,
-      "P_chosen": 0.823
+      "edge": 0.615,
+      "confidence": 62,
+      "prime_strength": 74,
+      "P_chosen": 0.81
+    },
+    {
+      "symbol": "MERLUSDT",
+      "edge": 0.608,
+      "confidence": 61,
+      "prime_strength": 66,
+      "P_chosen": 0.798
     },
     {
       "symbol": "MOVEUSDT",
-      "edge": 0.594,
-      "confidence": 59,
+      "edge": 0.605,
+      "confidence": 61,
       "prime_strength": 73,
-      "P_chosen": 0.836
+      "P_chosen": 0.84
     },
     {
       "symbol": "SUSDT",
       "edge": 0.593,
       "confidence": 59,
-      "prime_strength": 74,
-      "P_chosen": 0.772
+      "prime_strength": 72,
+      "P_chosen": 0.774
     },
     {
       "symbol": "FLOWUSDT",
-      "edge": 0.577,
-      "confidence": 58,
-      "prime_strength": 73,
-      "P_chosen": 0.811
+      "edge": 0.589,
+      "confidence": 59,
+      "prime_strength": 71,
+      "P_chosen": 0.817
+    },
+    {
+      "symbol": "FILUSDT",
+      "edge": 0.573,
+      "confidence": 57,
+      "prime_strength": 71,
+      "P_chosen": 0.802
     },
     {
       "symbol": "EGLDUSDT",
-      "edge": 0.561,
+      "edge": 0.562,
       "confidence": 56,
-      "prime_strength": 73,
+      "prime_strength": 70,
       "P_chosen": 0.79
     },
     {
       "symbol": "BABYUSDT",
       "edge": 0.543,
       "confidence": 54,
-      "prime_strength": 69,
-      "P_chosen": 0.777
+      "prime_strength": 68,
+      "P_chosen": 0.778
     },
     {
       "symbol": "SEIUSDT",
-      "edge": 0.532,
+      "edge": 0.534,
       "confidence": 53,
-      "prime_strength": 71,
-      "P_chosen": 0.765
+      "prime_strength": 69,
+      "P_chosen": 0.766
     },
     {
       "symbol": "ALCHUSDT",
-      "edge": 0.528,
+      "edge": 0.532,
       "confidence": 53,
       "prime_strength": 62,
-      "P_chosen": 0.619
+      "P_chosen": 0.62
     },
     {
       "symbol": "VETUSDT",
-      "edge": 0.521,
+      "edge": 0.523,
       "confidence": 52,
-      "prime_strength": 71,
-      "P_chosen": 0.767
-    },
-    {
-      "symbol": "FILUSDT",
-      "edge": 0.52,
-      "confidence": 52,
-      "prime_strength": 71,
-      "P_chosen": 0.853
+      "prime_strength": 69,
+      "P_chosen": 0.768
     },
     {
       "symbol": "PARTIUSDT",
-      "edge": 0.517,
+      "edge": 0.522,
       "confidence": 52,
-      "prime_strength": 62,
-      "P_chosen": 0.744
+      "prime_strength": 61,
+      "P_chosen": 0.746
     },
     {
       "symbol": "PORT3USDT",
-      "edge": 0.494,
-      "confidence": 49,
+      "edge": 0.496,
+      "confidence": 50,
       "prime_strength": 65,
       "P_chosen": 0.748
+    },
+    {
+      "symbol": "PENDLEUSDT",
+      "edge": 0.488,
+      "confidence": 49,
+      "prime_strength": 67,
+      "P_chosen": 0.745
     }
   ],
   "rejection_reasons": {
-    "❌ 概率过低": 347,
+    "❌ 概率过低": 348,
     "❌ 置信度不足": 424,
-    "❌ Edge不足": 427,
+    "❌ Edge不足": 426,
     "❌ Prime强度不足": 263,
-    "❌ 四门槛质量不足": 16
+    "❌ 四门槛质量不足": 22
   },
   "close_to_threshold": [
+    {
+      "symbol": "1000SATSUSDT",
+      "metric": "Gate",
+      "gap": 0.001,
+      "current": 0.839,
+      "threshold": 0.84
+    },
+    {
+      "symbol": "MITOUSDT",
+      "metric": "Gate",
+      "gap": 0.001,
+      "current": 0.839,
+      "threshold": 0.84
+    },
     {
       "symbol": "ORDERUSDT",
       "metric": "Gate",
@@ -121,17 +142,24 @@
       "threshold": 0.84
     },
     {
-      "symbol": "DODOXUSDT",
+      "symbol": "RVVUSDT",
       "metric": "Gate",
-      "gap": 0.003,
-      "current": 0.837,
+      "gap": 0.004,
+      "current": 0.836,
       "threshold": 0.84
     },
     {
-      "symbol": "YALAUSDT",
+      "symbol": "MAVIAUSDT",
       "metric": "Gate",
-      "gap": 0.008,
-      "current": 0.832,
+      "gap": 0.007,
+      "current": 0.833,
+      "threshold": 0.84
+    },
+    {
+      "symbol": "APRUSDT",
+      "metric": "Gate",
+      "gap": 0.009,
+      "current": 0.831,
       "threshold": 0.84
     },
     {
@@ -142,17 +170,38 @@
       "threshold": 0.48
     },
     {
-      "symbol": "BROCCOLIF3BUSDT",
+      "symbol": "DODOXUSDT",
       "metric": "Gate",
-      "gap": 0.016,
-      "current": 0.824,
+      "gap": 0.014,
+      "current": 0.826,
       "threshold": 0.84
     },
     {
-      "symbol": "PENDLEUSDT",
-      "metric": "Edge",
+      "symbol": "BROCCOLIF3BUSDT",
+      "metric": "Gate",
       "gap": 0.017,
-      "current": 0.463,
+      "current": 0.823,
+      "threshold": 0.84
+    },
+    {
+      "symbol": "YALAUSDT",
+      "metric": "Gate",
+      "gap": 0.019,
+      "current": 0.821,
+      "threshold": 0.84
+    },
+    {
+      "symbol": "SOONUSDT",
+      "metric": "Gate",
+      "gap": 0.022,
+      "current": 0.818,
+      "threshold": 0.84
+    },
+    {
+      "symbol": "ALPINEUSDT",
+      "metric": "Edge",
+      "gap": 0.03,
+      "current": 0.45,
       "threshold": 0.48
     },
     {
@@ -163,20 +212,6 @@
       "threshold": 0.84
     },
     {
-      "symbol": "ALPINEUSDT",
-      "metric": "Edge",
-      "gap": 0.032,
-      "current": 0.448,
-      "threshold": 0.48
-    },
-    {
-      "symbol": "IOTAUSDT",
-      "metric": "Edge",
-      "gap": 0.037,
-      "current": 0.443,
-      "threshold": 0.48
-    },
-    {
       "symbol": "BERAUSDT",
       "metric": "Edge",
       "gap": 0.037,
@@ -184,11 +219,11 @@
       "threshold": 0.48
     },
     {
-      "symbol": "OBOLUSDT",
-      "metric": "Gate",
-      "gap": 0.041,
-      "current": 0.799,
-      "threshold": 0.84
+      "symbol": "IOTAUSDT",
+      "metric": "Edge",
+      "gap": 0.043,
+      "current": 0.437,
+      "threshold": 0.48
     },
     {
       "symbol": "RESOLVUSDT",
@@ -198,65 +233,37 @@
       "threshold": 0.48
     },
     {
-      "symbol": "HOTUSDT",
+      "symbol": "KGENUSDT",
       "metric": "Edge",
-      "gap": 0.05,
-      "current": 0.43,
+      "gap": 0.059,
+      "current": 0.421,
       "threshold": 0.48
     },
     {
       "symbol": "FFUSDT",
       "metric": "Edge",
-      "gap": 0.058,
-      "current": 0.422,
+      "gap": 0.061,
+      "current": 0.419,
       "threshold": 0.48
     },
     {
-      "symbol": "KGENUSDT",
+      "symbol": "HOTUSDT",
       "metric": "Edge",
-      "gap": 0.071,
-      "current": 0.409,
-      "threshold": 0.48
-    },
-    {
-      "symbol": "KAVAUSDT",
-      "metric": "Edge",
-      "gap": 0.075,
-      "current": 0.405,
-      "threshold": 0.48
-    },
-    {
-      "symbol": "2ZUSDT",
-      "metric": "Edge",
-      "gap": 0.08,
-      "current": 0.4,
+      "gap": 0.068,
+      "current": 0.412,
       "threshold": 0.48
     },
     {
       "symbol": "LIGHTUSDT",
       "metric": "Edge",
-      "gap": 0.081,
-      "current": 0.399,
-      "threshold": 0.48
-    },
-    {
-      "symbol": "OMUSDT",
-      "metric": "Edge",
-      "gap": 0.085,
-      "current": 0.395,
-      "threshold": 0.48
-    },
-    {
-      "symbol": "WLFIUSDT",
-      "metric": "Edge",
-      "gap": 0.088,
-      "current": 0.392,
+      "gap": 0.074,
+      "current": 0.406,
       "threshold": 0.48
     }
   ],
   "market_stats": {
-    "avg_edge": 0.171,
-    "avg_confidence": 17.2,
+    "avg_edge": 0.172,
+    "avg_confidence": 17.4,
     "new_coins_count": 5,
     "new_coins_pct": 1.1
   },
@@ -264,15 +271,15 @@
     "T": {
       "min": -100,
       "p25": -86.0,
-      "median": -56.0,
-      "p75": 1.0,
+      "median": -55.0,
+      "p75": 3.2,
       "max": 100
     },
     "M": {
       "min": -80,
-      "p25": -15.2,
+      "p25": -15.0,
       "median": 20.0,
-      "p75": 51.0,
+      "p75": 54.0,
       "max": 100
     },
     "C": {
@@ -284,23 +291,23 @@
     },
     "V": {
       "min": -75,
-      "p25": -57.0,
+      "p25": -57.2,
       "median": -50.0,
-      "p75": -33.8,
+      "p75": -34.0,
       "max": 76
     },
     "O": {
-      "min": -50,
-      "p25": 1.0,
-      "median": 51.5,
+      "min": -49,
+      "p25": 0.8,
+      "median": 52.0,
       "p75": 84.0,
       "max": 89
     },
     "B": {
-      "min": -95,
+      "min": -94,
       "p25": -8.0,
       "median": 0.0,
-      "p75": 16.0,
+      "p75": 16.2,
       "max": 75
     },
     "F": {
@@ -320,25 +327,25 @@
     "S": {
       "min": -44,
       "p25": -23.0,
-      "median": -18.5,
+      "median": -16.0,
       "p75": 17.0,
-      "max": 46
+      "max": 43
     },
     "I": {
-      "min": -96,
-      "p25": -22.2,
-      "median": -5.5,
+      "min": -44,
+      "p25": -22.0,
+      "median": -2.5,
       "p75": 18.0,
-      "max": 58
+      "max": 57
     }
   },
   "threshold_recommendations": [
-    "⚠️ Edge阈值可能偏高：14个币种非常接近但未通过，建议降低阈值",
-    "⚠️ Gate阈值可能偏高：6个币种非常接近但未通过，建议降低阈值"
+    "⚠️ Gate阈值可能偏高：11个币种非常接近但未通过，建议降低阈值",
+    "⚠️ Edge阈值可能偏高：9个币种非常接近但未通过，建议降低阈值"
   ],
   "performance": {
-    "total_time_sec": 77.31,
-    "speed_coins_per_sec": 5.77,
+    "total_time_sec": 151.85,
+    "speed_coins_per_sec": 2.94,
     "api_calls": 0,
     "cache_hit_rate": "100.0%",
     "memory_mb": 94.90623474121094
