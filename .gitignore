@@ -31,6 +31,7 @@ config/telegram.json
 .last_report_commit
 
 # 注意：reports/ 现在被跟踪（用于自动分析），但history/子目录除外
+# 如需禁用自动提交：export AUTO_COMMIT_REPORTS=false
 
 # --- Data / Cache ---
 data/cache/

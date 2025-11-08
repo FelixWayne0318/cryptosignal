@@ -8,8 +8,23 @@
 #
 # 使用场景：扫描完成后自动调用
 #
+# 环境变量控制：
+# - AUTO_COMMIT_REPORTS=true  : 启用自动提交（默认，服务器自动运行）
+# - AUTO_COMMIT_REPORTS=false : 禁用自动提交（手动测试时使用）
+#
 
 set -e
+
+# ==========================================
+# 环境变量控制：支持手动测试时禁用自动提交
+# ==========================================
+AUTO_COMMIT_REPORTS=${AUTO_COMMIT_REPORTS:-true}
+
+if [ "$AUTO_COMMIT_REPORTS" != "true" ]; then
+    echo "⚠️  自动提交已禁用（AUTO_COMMIT_REPORTS=$AUTO_COMMIT_REPORTS）"
+    echo "💡 如需启用：export AUTO_COMMIT_REPORTS=true"
+    exit 0
+fi
 
 # 自动检测仓库目录（支持不同的部署路径）
 if [ -d "/home/user/cryptosignal" ]; then
