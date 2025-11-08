@@ -60,6 +60,9 @@ class ScanStatistics:
             'gate_multiplier': gates_info.get('gate_multiplier', 0),
             'P_chosen': prime_breakdown.get('P_chosen', 0),
             'p_min_adjusted': result.get('p_min_adjusted', 0),
+            # 方向和权重
+            'side': result.get('side', 'unknown'),
+            'weighted_score': result.get('weighted_score', 0),
             # 信号状态
             'is_prime': publish_info.get('prime', False),
             'rejection_reason': publish_info.get('rejection_reason', []),
@@ -110,6 +113,8 @@ class ScanStatistics:
             "signals": [
                 {
                     "symbol": s['symbol'],
+                    "side": s.get('side', 'unknown'),
+                    "weighted_score": round(s.get('weighted_score', 0), 2),
                     "edge": round(s['edge'], 3),
                     "confidence": round(s['confidence'], 1),
                     "prime_strength": round(s['prime_strength'], 1),

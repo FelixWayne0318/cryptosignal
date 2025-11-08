@@ -2302,6 +2302,20 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
             F_desc = "❌ 资金严重落后"
         factors_section += f"F资金领先：{F_v2_int} {F_desc}\n"
 
+    # I因子（市场独立性）
+    I_v2 = _get(v72, "I_v2")
+    if I_v2 is not None:
+        I_v2_int = int(round(I_v2))
+        if I_v2_int > 70:
+            I_desc = "💎 高度独立"
+        elif I_v2_int > 50:
+            I_desc = "✅ 中度独立"
+        elif I_v2_int > 30:
+            I_desc = "⚠️ 轻微相关"
+        else:
+            I_desc = "❌ 高度相关"
+        factors_section += f"I市场独立：{I_v2_int} {I_desc}\n"
+
     # 因子分组
     group_scores = _get(v72, "group_scores") or {}
     TC_score = group_scores.get("TC")

@@ -103,20 +103,26 @@ def analyze_with_v72_enhancements(
     # EV = P×TP - (1-P)×SL - cost
     EV_net = P_calibrated * TP_distance_pct - (1 - P_calibrated) * SL_distance_pct - total_cost_pct
 
-    # ===== 5. 四道闸门 =====
+    # ===== 5. 提取I因子（市场独立性） =====
+    # v7.2增强：显式提取I因子用于展示
+    # I因子在基础分析中已计算（通过calculate_independence）
+    # 这里直接使用，无需重复计算（需要BTC/ETH数据）
+    I_v2 = original_result.get('I', 50)
+    I_meta = original_result.get('scores_meta', {}).get('I', {})
+
+    # ===== 6. 四道闸门 =====
     from ats_core.pipeline.gates import FourGatesFilter
 
     gates = FourGatesFilter()
 
     # 准备闸门数据
-    I = original_result.get('I', 50)
     market_regime = original_result.get('market_regime', 0)
 
     gate_data = {
         "bars": len(klines),
         "F_score": F_v2,
         "side_long": side_long_v72,
-        "independence": I,
+        "independence": I_v2,
         "market_regime": market_regime,
         "EV_net": EV_net
     }
@@ -138,7 +144,7 @@ def analyze_with_v72_enhancements(
         "v72_enhancements": {
             "version": "v7.2_stage1",
 
-            # F因子v2
+            # F因子v2（资金领先性）
             "F_v2": F_v2,
             "F_v2_meta": F_v2_meta,
             "F_original": original_result.get('F', 0),
@@ -147,6 +153,10 @@ def analyze_with_v72_enhancements(
                 "v2": F_v2,
                 "diff": F_v2 - original_result.get('F', 0)
             },
+
+            # I因子（市场独立性）
+            "I_v2": I_v2,
+            "I_meta": I_meta,
 
             # 因子分组
             "grouped_score": {

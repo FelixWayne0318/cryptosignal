@@ -130,7 +130,9 @@ class RealtimeSignalScanner:
     def __init__(
         self,
         min_score: int = 35,
+        watch_score: int = 30,
         send_telegram: bool = True,
+        enable_watch: bool = True,
         record_data: bool = True,
         verbose: bool = True
     ):
@@ -138,13 +140,17 @@ class RealtimeSignalScanner:
         初始化扫描器
 
         Args:
-            min_score: 最低confidence阈值（v7.2）
+            min_score: 最低confidence阈值（v7.2 PRIME信号）
+            watch_score: WATCH信号阈值（蓄势待发）
             send_telegram: 是否发送Telegram通知
+            enable_watch: 是否启用WATCH信号（蓄势待发）
             record_data: 是否记录数据到数据库（v7.2特性）
             verbose: 是否显示详细输出
         """
         self.min_score = min_score
+        self.watch_score = watch_score
         self.send_telegram = send_telegram
+        self.enable_watch = enable_watch
         self.record_data = record_data and DATA_RECORDING_AVAILABLE
         self.verbose = verbose
         self.initialized = False
@@ -249,17 +255,28 @@ class RealtimeSignalScanner:
         # 过滤Prime信号（四道闸门 + AntiJitter）
         prime_signals = self._filter_prime_signals_v72(v72_results)
 
+        # 过滤WATCH信号（蓄势待发）
+        watch_signals = []
+        if self.enable_watch:
+            watch_signals = self._filter_watch_signals_v72(v72_results, prime_signals)
+
         # 统计
         log(f"\n📊 扫描统计:")
         log(f"   总币种数: {len(results)}")
         log(f"   v7.2增强: {len(v72_results)}")
         log(f"   Prime信号: {len(prime_signals)}")
         if prime_signals:
-            log(f"   币种列表: {', '.join([s['symbol'] for s in prime_signals])}")
+            log(f"   Prime列表: {', '.join([s['symbol'] for s in prime_signals])}")
+        if watch_signals:
+            log(f"   WATCH信号: {len(watch_signals)}")
+            log(f"   WATCH列表: {', '.join([s['symbol'] for s in watch_signals])}")
 
         # 发送Telegram
         if self.send_telegram and prime_signals:
-            await self._send_signals_to_telegram_v72(prime_signals)
+            await self._send_signals_to_telegram_v72(prime_signals, is_watch=False)
+
+        if self.send_telegram and self.enable_watch and watch_signals:
+            await self._send_signals_to_telegram_v72(watch_signals, is_watch=True)
 
         log("=" * 60 + "\n")
 
@@ -338,14 +355,88 @@ class RealtimeSignalScanner:
 
         return prime_signals
 
-    async def _send_signals_to_telegram_v72(self, signals: list):
-        """发送v7.2格式的信号到Telegram"""
-        log(f"\n📤 发送 {len(signals)} 个v7.2 Prime信号到Telegram...")
+    def _filter_watch_signals_v72(self, results: list, prime_signals: list) -> list:
+        """
+        v7.2版本的WATCH信号过滤（蓄势待发）
+
+        过滤条件：
+        1. v72_enhancements存在
+        2. 不是Prime信号（已被Prime过滤）
+        3. confidence_v72 >= watch_score (30-34之间)
+        4. 四道闸门至少通过3个
+        5. 通过AntiJitter WATCH级别检查
+
+        Args:
+            results: 所有v7.2增强后的信号
+            prime_signals: 已过滤的Prime信号列表
+
+        Returns:
+            WATCH信号列表
+        """
+        watch_signals = []
+        prime_symbols = {s['symbol'] for s in prime_signals}
+
+        for result in results:
+            symbol = result.get('symbol')
+
+            # 跳过已经是Prime的信号
+            if symbol in prime_symbols:
+                continue
+
+            v72 = result.get('v72_enhancements', {})
+            if not v72:
+                continue
+
+            # 检查confidence（在watch_score和min_score之间）
+            confidence = v72.get('confidence_v72', 0)
+            if confidence < self.watch_score or confidence >= self.min_score:
+                continue
+
+            # 检查四道闸门（至少通过3个）
+            gate_results = v72.get('gate_results', {})
+            gates_passed_count = sum(1 for g in gate_results.values() if g.get('passed', False))
+            if gates_passed_count < 3:
+                continue
+
+            # AntiJitter WATCH级别检查
+            if self.send_telegram:
+                probability = v72.get('P_calibrated', 0.5)
+                ev_net = v72.get('EV_net', 0)
+                level, should_publish = self.anti_jitter.update(
+                    symbol=symbol,
+                    probability=probability,
+                    ev=ev_net,
+                    gates_passed=False  # WATCH级别不要求全部通过
+                )
+
+                # WATCH级别应该在0.43-0.50之间
+                if level != 'WATCH':
+                    continue
+
+            # 通过所有检查
+            watch_signals.append(result)
+
+        return watch_signals
+
+    async def _send_signals_to_telegram_v72(self, signals: list, is_watch: bool = False):
+        """
+        发送v7.2格式的信号到Telegram
+
+        Args:
+            signals: 信号列表
+            is_watch: 是否为WATCH信号（观察信号）
+        """
+        signal_type = "WATCH观察" if is_watch else "Prime交易"
+        log(f"\n📤 发送 {len(signals)} 个v7.2 {signal_type}信号到Telegram...")
 
         for i, signal in enumerate(signals, 1):
             try:
-                # 使用v7.2消息格式
-                message = render_trade_v72(signal)
+                # 使用v7.2消息格式（is_watch参数会改变消息头部）
+                if is_watch:
+                    from ats_core.outputs.telegram_fmt import render_signal_v72
+                    message = render_signal_v72(signal, is_watch=True)
+                else:
+                    message = render_trade_v72(signal)
 
                 # 发送
                 telegram_send_wrapper(message, self.bot_token, self.chat_id)
