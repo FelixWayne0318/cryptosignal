@@ -650,6 +650,17 @@ class OptimizedBatchScanner:
                 # v6.3新增：显示拒绝原因（专家建议 #5）
                 rejection_reasons = result.get('publish', {}).get('rejection_reason', [])
                 if is_prime and prime_strength >= min_score:
+                    # v7.2+: 添加原始数据用于后续v7.2增强
+                    result['klines'] = k1h
+                    result['oi_data'] = oi_data
+                    # cvd_series需要重新计算（analyze_symbol内部没有返回）
+                    try:
+                        from ats_core.features.cvd_flow import cvd_mix_with_oi_price
+                        cvd_series, _ = cvd_mix_with_oi_price(k1h, oi_data, window=20)
+                        result['cvd_series'] = cvd_series
+                    except:
+                        result['cvd_series'] = []
+
                     results.append(result)
                     log(f"✅ {symbol}: Prime强度={prime_strength}, 置信度={confidence:.0f}")
 
