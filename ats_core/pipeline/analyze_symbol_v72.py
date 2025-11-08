@@ -190,7 +190,14 @@ def analyze_with_v72_enhancements(
                 "signal": signal_v72,
                 "original_was_prime": original_result.get('publish', {}).get('prime', False),
                 "decision_changed": is_prime_v72 != original_result.get('publish', {}).get('prime', False)
-            }
+            },
+
+            # ===== Telegram模板兼容字段（扁平化，便于render_trade_v72读取） =====
+            "P_calibrated": round(P_calibrated, 3),
+            "EV_net": round(EV_net, 4),
+            "confidence_v72": round(confidence_v72, 2),
+            "group_scores": group_meta.get('group_scores', {}),
+            "gate_results": gate_details
         }
     }
 
