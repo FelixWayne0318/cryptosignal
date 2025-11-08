@@ -173,10 +173,6 @@ class RealtimeSignalScanner:
                 warn("将禁用数据记录")
                 self.record_data = False
 
-        # 防抖动系统：记录已发送的信号（避免重复发送）
-        self.sent_signals = {}  # {symbol: timestamp}
-        self.cooldown_hours = 1  # 冷却期：1小时
-
         # 批量扫描器（使用优化版本）
         self.scanner = None
 
@@ -238,48 +234,10 @@ class RealtimeSignalScanner:
         return scan_result
 
     async def _send_signals_to_telegram(self, signals: list):
-        """发送v7.2格式的交易信号到Telegram（逐个发送，带冷却期）"""
-        log(f"\n📤 检查 {len(signals)} 个Prime交易信号...")
+        """发送v7.2格式的交易信号到Telegram（逐个发送）"""
+        log(f"\n📤 发送 {len(signals)} 个Prime交易信号到Telegram...")
 
-        # 获取当前时间
-        now = datetime.now()
-
-        # 清理过期的记录（超过冷却期）
-        expired_symbols = [
-            sym for sym, ts in self.sent_signals.items()
-            if (now - ts).total_seconds() > self.cooldown_hours * 3600
-        ]
-        for sym in expired_symbols:
-            del self.sent_signals[sym]
-
-        # 筛选出需要发送的信号（未在冷却期内）
-        new_signals = []
-        skipped_count = 0
-
-        for signal in signals:
-            symbol = signal.get('symbol')
-
-            # 检查是否在冷却期内
-            if symbol in self.sent_signals:
-                last_sent = self.sent_signals[symbol]
-                time_diff = (now - last_sent).total_seconds() / 3600  # 小时
-                if time_diff < self.cooldown_hours:
-                    skipped_count += 1
-                    continue
-
-            new_signals.append(signal)
-
-        if skipped_count > 0:
-            log(f"   ⏭️  跳过 {skipped_count} 个信号（冷却期内）")
-
-        if not new_signals:
-            log(f"   ℹ️  无新信号需要发送\n")
-            return
-
-        log(f"   📤 发送 {len(new_signals)} 个新信号到Telegram...")
-
-        sent_count = 0
-        for i, signal in enumerate(new_signals, 1):
+        for i, signal in enumerate(signals, 1):
             try:
                 symbol = signal.get('symbol')
 
@@ -308,21 +266,17 @@ class RealtimeSignalScanner:
                 # 发送
                 telegram_send_wrapper(message, self.bot_token, self.chat_id)
 
-                # 记录已发送（更新时间戳）
-                self.sent_signals[symbol] = now
-                sent_count += 1
-
                 confidence = signal.get('confidence', 0)
                 edge = signal.get('edge', 0)
 
-                log(f"   ✅ {i}/{len(new_signals)}: {symbol} (Edge={edge:.2f}, Conf={confidence:.1f})")
+                log(f"   ✅ {i}/{len(signals)}: {symbol} (Edge={edge:.2f}, Conf={confidence:.1f})")
 
             except Exception as e:
                 error(f"   ❌ 发送失败 {signal.get('symbol')}: {e}")
                 import traceback
                 traceback.print_exc()
 
-        log(f"✅ 已发送 {sent_count} 个交易信号（冷却期：{self.cooldown_hours}小时）\n")
+        log(f"✅ Prime交易信号发送完成\n")
 
     async def run_periodic(self, interval_seconds: int = 300):
         """
