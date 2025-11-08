@@ -56,14 +56,17 @@ while [ $RETRY -lt $MAX_RETRIES ]; do
     fi
 done
 
-# 4. 调用 deploy_and_run.sh
+# 4. 调用 setup.sh（禁用自动提交）
 echo ""
 echo "📍 步骤3: 重新启动系统..."
 echo "=========================================="
 echo ""
 
-# 以nohup方式在后台运行，输出重定向到日志文件
-nohup ./deploy_and_run.sh > ~/cryptosignal_$(date +%Y%m%d_%H%M%S).log 2>&1 &
+# 设置环境变量：禁用自动提交
+export AUTO_COMMIT_REPORTS=false
+
+# 调用 setup.sh 启动系统
+./setup.sh
 
 echo "✅ 重启完成！进程ID: $!"
 echo "📋 查看日志: tail -f ~/cryptosignal_*.log"

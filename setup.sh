@@ -178,6 +178,9 @@ LOG_FILE=~/cryptosignal_$(date +%Y%m%d_%H%M%S).log
 
 # 后台启动扫描器（使用统一版本）
 echo "📝 后台启动扫描器（v7.2增强版 - 统一版本）..."
+echo "   📍 自动提交已禁用（AUTO_COMMIT_REPORTS=false）"
+echo "   📁 扫描报告保存在本地: reports/latest/"
+export AUTO_COMMIT_REPORTS=false
 nohup python3 scripts/realtime_signal_scanner.py --interval 300 > "$LOG_FILE" 2>&1 &
 PID=$!
 
@@ -198,11 +201,13 @@ if ps -p $PID > /dev/null 2>&1; then
     echo "  查看日志: tail -f $LOG_FILE"
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "⚙️  v7.2 新特性:"
+    echo "⚙️  v7.2 配置:"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "  环境变量控制自动提交："
-    echo "    - 默认启用自动提交（服务器运行）"
-    echo "    - 手动测试禁用: export AUTO_COMMIT_REPORTS=false"
+    echo "  ✅ 自动提交已禁用（AUTO_COMMIT_REPORTS=false）"
+    echo "  📁 扫描报告保存位置："
+    echo "     - reports/latest/scan_summary.json"
+    echo "     - reports/trends.json"
+    echo "  💡 如需启用自动提交，请修改 setup.sh 删除该设置"
     echo ""
     echo "  目录结构已重组："
     echo "    - tests/     测试文件"
