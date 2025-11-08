@@ -50,6 +50,7 @@ sys.path.insert(0, str(project_root))
 
 from ats_core.pipeline.batch_scan_optimized import OptimizedBatchScanner
 from ats_core.logging import log, warn, error
+from ats_core.outputs.telegram_fmt import render_trade_v72
 
 # v7.2增强: 数据采集模块
 try:
@@ -104,6 +105,20 @@ def load_telegram_config():
         "1. config/telegram.json\n"
         "2. 环境变量: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID"
     )
+
+
+def telegram_send_wrapper(message: str, bot_token: str, chat_id: str):
+    """Telegram发送包装器（发送单独的交易信号）"""
+    import requests
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": message,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True
+    }
+    response = requests.post(url, json=payload, timeout=10)
+    response.raise_for_status()
 
 
 class RealtimeSignalScanner:
@@ -205,11 +220,40 @@ class RealtimeSignalScanner:
         # 4. 提交到Git仓库
         scan_result = await self.scanner.scan(max_symbols=max_symbols)
 
+        # v7.2+: 发送单独的交易信号到Telegram（使用v7.2格式）
+        if self.send_telegram and self.telegram_enabled:
+            prime_signals = scan_result.get('results', [])
+            if prime_signals:
+                await self._send_signals_to_telegram(prime_signals)
+
         log("=" * 60)
         log(f"✅ 扫描完成")
         log("=" * 60 + "\n")
 
         return scan_result
+
+    async def _send_signals_to_telegram(self, signals: list):
+        """发送v7.2格式的交易信号到Telegram（逐个发送）"""
+        log(f"\n📤 发送 {len(signals)} 个Prime交易信号到Telegram...")
+
+        for i, signal in enumerate(signals, 1):
+            try:
+                # 使用v7.2消息格式
+                message = render_trade_v72(signal)
+
+                # 发送
+                telegram_send_wrapper(message, self.bot_token, self.chat_id)
+
+                symbol = signal.get('symbol')
+                confidence = signal.get('confidence', 0)
+                edge = signal.get('edge', 0)
+
+                log(f"   ✅ {i}/{len(signals)}: {symbol} (Edge={edge:.2f}, Conf={confidence:.1f})")
+
+            except Exception as e:
+                error(f"   ❌ 发送失败 {signal.get('symbol')}: {e}")
+
+        log(f"✅ Prime交易信号发送完成\n")
 
     async def run_periodic(self, interval_seconds: int = 300):
         """
