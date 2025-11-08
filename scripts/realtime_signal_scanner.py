@@ -52,6 +52,8 @@ from ats_core.pipeline.batch_scan_optimized import OptimizedBatchScanner
 from ats_core.logging import log, warn, error
 from ats_core.outputs.telegram_fmt import render_trade_v72
 from ats_core.pipeline.analyze_symbol_v72 import analyze_with_v72_enhancements
+from ats_core.publishing.anti_jitter import AntiJitter
+from ats_core.config.anti_jitter_config import get_config
 
 # v7.2增强: 数据采集模块
 try:
@@ -157,6 +159,12 @@ class RealtimeSignalScanner:
                 warn("将禁用Telegram通知")
                 self.send_telegram = False
 
+        # 防抖动系统（AntiJitter）
+        if send_telegram:
+            anti_jitter_config = get_config("1h")  # 1小时K线，1小时冷却期
+            self.anti_jitter = AntiJitter(config=anti_jitter_config)
+            log(f"✅ 防抖动系统已启用: {anti_jitter_config.cooldown_seconds}秒冷却期")
+
         # v7.2: 数据记录器
         if self.record_data:
             try:
@@ -234,10 +242,13 @@ class RealtimeSignalScanner:
         return scan_result
 
     async def _send_signals_to_telegram(self, signals: list):
-        """发送v7.2格式的交易信号到Telegram（逐个发送）"""
-        log(f"\n📤 发送 {len(signals)} 个Prime交易信号到Telegram...")
+        """发送v7.2格式的交易信号到Telegram（逐个发送，带AntiJitter过滤）"""
+        log(f"\n📤 检查 {len(signals)} 个Prime交易信号...")
 
-        for i, signal in enumerate(signals, 1):
+        sent_count = 0
+        skipped_count = 0
+
+        for signal in signals:
             try:
                 symbol = signal.get('symbol')
 
@@ -260,6 +271,24 @@ class RealtimeSignalScanner:
                 else:
                     warn(f"   ⚠️ {symbol} 数据不足，跳过v7.2增强")
 
+                # 获取v7.2增强后的数据用于AntiJitter检查
+                v72 = signal.get('v72_enhancements', {})
+                probability = v72.get('P_calibrated', signal.get('probability', 0.5))
+                ev_net = v72.get('EV_net', signal.get('EV_net', 0))
+                all_gates_passed = v72.get('gates', {}).get('pass_all', True)
+
+                # AntiJitter检查：防止重复发送
+                level, should_publish = self.anti_jitter.update(
+                    symbol=symbol,
+                    probability=probability,
+                    ev=ev_net,
+                    gates_passed=all_gates_passed
+                )
+
+                if not should_publish:
+                    skipped_count += 1
+                    continue
+
                 # 使用v7.2消息格式
                 message = render_trade_v72(signal)
 
@@ -269,14 +298,15 @@ class RealtimeSignalScanner:
                 confidence = signal.get('confidence', 0)
                 edge = signal.get('edge', 0)
 
-                log(f"   ✅ {i}/{len(signals)}: {symbol} (Edge={edge:.2f}, Conf={confidence:.1f})")
+                sent_count += 1
+                log(f"   ✅ {symbol} (Edge={edge:.2f}, Conf={confidence:.1f})")
 
             except Exception as e:
                 error(f"   ❌ 发送失败 {signal.get('symbol')}: {e}")
                 import traceback
                 traceback.print_exc()
 
-        log(f"✅ Prime交易信号发送完成\n")
+        log(f"✅ 发送完成: {sent_count}个新信号, {skipped_count}个跳过（防抖动）\n")
 
     async def run_periodic(self, interval_seconds: int = 300):
         """
