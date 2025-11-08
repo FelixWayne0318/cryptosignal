@@ -30,6 +30,9 @@ config/telegram.json
 .git-credentials
 .last_report_commit
 
+# 部署脚本（包含敏感凭据，仅本地使用）
+deploy_server_with_credentials.sh
+
 # 注意：reports/ 现在被跟踪（用于自动分析），但history/子目录除外
 # 如需禁用自动提交：export AUTO_COMMIT_REPORTS=false
 
