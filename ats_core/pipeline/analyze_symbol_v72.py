@@ -211,7 +211,19 @@ def analyze_with_v72_enhancements(
                 "VOM": group_meta.get('VOM_group'),
                 "B": group_meta.get('B_group')
             },
-            "gate_results": gate_details
+            "gate_results": gate_details,
+
+            # ===== 蓄势待发标记（核心功能）=====
+            # F因子 > 30 = 资金强势领先 = 蓄势待发
+            # F因子 > 15 = 资金明显领先 = 即将爆发
+            "is_momentum_ready": F_v2 > 30,
+            "is_breakout_soon": F_v2 > 15,
+            "momentum_level": (
+                "strong" if F_v2 > 30 else
+                "moderate" if F_v2 > 15 else
+                "weak" if F_v2 > 0 else
+                "negative"
+            )
         }
     }
 

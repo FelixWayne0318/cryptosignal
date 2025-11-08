@@ -2244,7 +2244,15 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
         side_icon = "⚪"
         side_lbl = "中性"
 
-    signal_type = "📍 观察信号" if is_watch else "🚀 交易信号"
+    # 判断是否蓄势待发（F因子预判断）
+    v72 = _get(r, "v72_enhancements") or {}
+    F_v2 = _get(v72, "F_v2") or 0
+    is_momentum_ready = F_v2 > 30  # 资金强势领先
+
+    if is_momentum_ready:
+        signal_type = "🚀 蓄势待发" if not is_watch else "📍 观察信号"
+    else:
+        signal_type = "📍 观察信号" if is_watch else "🚀 交易信号"
 
     header = f"{signal_type}\n"
     header += f"━━━━━━━━━━━━━━━━━━━━\n"
@@ -2288,19 +2296,43 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     factors_section = f"\n\n🔬 v7.2因子分析\n"
     factors_section += f"━━━━━━━━━━━━━━━━━━━━\n"
 
-    # F因子v2
+    # F因子v2（资金领先性 = 蓄势待发的核心指标）
     F_v2 = _get(v72, "F_v2")
     if F_v2 is not None:
         F_v2_int = int(round(F_v2))
+
+        # 蓄势待发判断：F因子高 = 资金领先价格 = 即将爆发
         if F_v2_int > 30:
             F_desc = "💪 资金强势领先"
+            ready_tag = " 🚀蓄势待发"
+        elif F_v2_int > 15:
+            F_desc = "✅ 资金明显领先"
+            ready_tag = " 🔥即将爆发"
         elif F_v2_int > 0:
             F_desc = "✅ 资金温和领先"
+            ready_tag = ""
         elif F_v2_int > -15:
             F_desc = "⚠️ 资金轻微落后"
+            ready_tag = ""
         else:
             F_desc = "❌ 资金严重落后"
-        factors_section += f"F资金领先：{F_v2_int} {F_desc}\n"
+            ready_tag = ""
+
+        factors_section += f"F资金领先：{F_v2_int} {F_desc}{ready_tag}\n"
+
+    # I因子（市场独立性）
+    I_v2 = _get(v72, "I_v2")
+    if I_v2 is not None:
+        I_v2_int = int(round(I_v2))
+        if I_v2_int > 70:
+            I_desc = "💎 高度独立"
+        elif I_v2_int > 50:
+            I_desc = "✅ 中度独立"
+        elif I_v2_int > 30:
+            I_desc = "⚠️ 轻微相关"
+        else:
+            I_desc = "❌ 高度相关"
+        factors_section += f"I市场独立：{I_v2_int} {I_desc}\n"
 
     # I因子（市场独立性）
     I_v2 = _get(v72, "I_v2")
