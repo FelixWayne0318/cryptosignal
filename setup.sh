@@ -47,8 +47,15 @@ fi
 
 # 0.2 拉取远程代码
 echo "正在从远程拉取最新代码..."
-if git fetch origin && git pull origin "$CURRENT_BRANCH" 2>/dev/null; then
-    echo -e "${GREEN}✅ 代码已更新到最新版本${NC}"
+if git fetch origin; then
+    # 使用rebase模式拉取，避免分支分歧问题
+    if git pull --rebase origin "$CURRENT_BRANCH" 2>/dev/null; then
+        echo -e "${GREEN}✅ 代码已更新到最新版本${NC}"
+    else
+        echo -e "${YELLOW}⚠️  检测到分支分歧，强制同步到远程最新版本...${NC}"
+        git reset --hard origin/"$CURRENT_BRANCH" 2>/dev/null || true
+        echo -e "${GREEN}✅ 已同步到远程最新版本${NC}"
+    fi
 else
     echo -e "${YELLOW}⚠️  代码拉取失败（可能网络问题），继续使用本地版本...${NC}"
 fi
