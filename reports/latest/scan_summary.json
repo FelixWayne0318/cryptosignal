@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-11-08T07:52:14.359065",
+  "timestamp": "2025-11-08T07:58:32.461452",
   "scan_info": {
     "total_symbols": 456,
     "signals_found": 2,
@@ -14,15 +14,15 @@
       "P_chosen": 0.771
     },
     {
-      "symbol": "LISTAUSDT",
-      "edge": 0.481,
-      "confidence": 48,
-      "prime_strength": 66,
-      "P_chosen": 0.758
+      "symbol": "FLUXUSDT",
+      "edge": 0.492,
+      "confidence": 49,
+      "prime_strength": 67,
+      "P_chosen": 0.731
     }
   ],
   "rejection_reasons": {
-    "❌ Prime强度不足": 321,
+    "❌ Prime强度不足": 322,
     "❌ 概率过低": 401,
     "❌ 置信度不足": 448,
     "❌ Edge不足": 449,
@@ -32,22 +32,29 @@
     {
       "symbol": "ARIAUSDT",
       "metric": "Gate",
-      "gap": 0.003,
-      "current": 0.837,
+      "gap": 0.004,
+      "current": 0.836,
       "threshold": 0.84
     },
     {
-      "symbol": "FLUXUSDT",
+      "symbol": "LISTAUSDT",
       "metric": "Edge",
-      "gap": 0.009,
-      "current": 0.471,
+      "gap": 0.007,
+      "current": 0.473,
       "threshold": 0.48
     },
     {
       "symbol": "ONUSDT",
       "metric": "Gate",
-      "gap": 0.015,
-      "current": 0.825,
+      "gap": 0.01,
+      "current": 0.83,
+      "threshold": 0.84
+    },
+    {
+      "symbol": "ESPORTSUSDT",
+      "metric": "Gate",
+      "gap": 0.013,
+      "current": 0.827,
       "threshold": 0.84
     },
     {
@@ -60,15 +67,8 @@
     {
       "symbol": "OBOLUSDT",
       "metric": "Gate",
-      "gap": 0.019,
-      "current": 0.821,
-      "threshold": 0.84
-    },
-    {
-      "symbol": "ESPORTSUSDT",
-      "metric": "Gate",
-      "gap": 0.022,
-      "current": 0.818,
+      "gap": 0.017,
+      "current": 0.823,
       "threshold": 0.84
     },
     {
@@ -88,8 +88,8 @@
     {
       "symbol": "CELOUSDT",
       "metric": "Edge",
-      "gap": 0.063,
-      "current": 0.417,
+      "gap": 0.074,
+      "current": 0.406,
       "threshold": 0.48
     },
     {
@@ -114,7 +114,14 @@
       "threshold": 54
     },
     {
-      "symbol": "WCTUSDT",
+      "symbol": "SYRUPUSDT",
+      "metric": "Prime",
+      "gap": 1,
+      "current": 53,
+      "threshold": 54
+    },
+    {
+      "symbol": "YFIUSDT",
       "metric": "Prime",
       "gap": 1,
       "current": 53,
@@ -125,13 +132,6 @@
       "metric": "Prime",
       "gap": 1,
       "current": 53,
-      "threshold": 54
-    },
-    {
-      "symbol": "CFXUSDT",
-      "metric": "Prime",
-      "gap": 2,
-      "current": 52,
       "threshold": 54
     },
     {
@@ -156,14 +156,14 @@
       "threshold": 54
     },
     {
-      "symbol": "SXPUSDT",
+      "symbol": "CFXUSDT",
       "metric": "Prime",
-      "gap": 2,
-      "current": 52,
+      "gap": 3,
+      "current": 51,
       "threshold": 54
     },
     {
-      "symbol": "QNTUSDT",
+      "symbol": "PROVEUSDT",
       "metric": "Prime",
       "gap": 3,
       "current": 51,
@@ -171,7 +171,7 @@
     }
   ],
   "market_stats": {
-    "avg_edge": 0.113,
+    "avg_edge": 0.114,
     "avg_confidence": 11.6,
     "new_coins_count": 5,
     "new_coins_pct": 1.1
@@ -179,16 +179,16 @@
   "factor_distribution": {
     "T": {
       "min": -100,
-      "p25": -81.0,
+      "p25": -72.0,
       "median": -59.0,
-      "p75": -41.2,
+      "p75": -41.0,
       "max": 100
     },
     "M": {
       "min": -80,
       "p25": -80.0,
       "median": -70.0,
-      "p75": -45.2,
+      "p75": -46.0,
       "max": 100
     },
     "C": {
@@ -200,15 +200,15 @@
     },
     "V": {
       "min": -74,
-      "p25": -42.0,
-      "median": 51.0,
+      "p25": -45.0,
+      "median": 49.0,
       "p75": 60.0,
       "max": 76
     },
     "O": {
       "min": -75,
       "p25": -12.0,
-      "median": 36.5,
+      "median": 39.0,
       "p75": 75.0,
       "max": 89
     },
@@ -253,8 +253,8 @@
     "⚠️ Gate阈值可能偏高：7个币种非常接近但未通过，建议降低阈值"
   ],
   "performance": {
-    "total_time_sec": 74.77,
-    "speed_coins_per_sec": 6.1,
+    "total_time_sec": 76.78,
+    "speed_coins_per_sec": 5.94,
     "api_calls": 0,
     "cache_hit_rate": "100.0%",
     "memory_mb": 96.91600799560547
