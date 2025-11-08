@@ -51,6 +51,7 @@ sys.path.insert(0, str(project_root))
 from ats_core.pipeline.batch_scan_optimized import OptimizedBatchScanner
 from ats_core.logging import log, warn, error
 from ats_core.outputs.telegram_fmt import render_trade_v72
+from ats_core.pipeline.analyze_symbol_v72 import analyze_with_v72_enhancements
 
 # v7.2增强: 数据采集模块
 try:
@@ -238,13 +239,33 @@ class RealtimeSignalScanner:
 
         for i, signal in enumerate(signals, 1):
             try:
+                symbol = signal.get('symbol')
+
+                # v7.2增强：应用v7.2分析（如果有原始数据）
+                klines = signal.get('klines', [])
+                oi_data = signal.get('oi_data', [])
+                cvd_series = signal.get('cvd_series', [])
+                atr = signal.get('atr', 0)
+
+                if len(klines) >= 100 and len(cvd_series) >= 10:
+                    # 应用v7.2增强
+                    signal = analyze_with_v72_enhancements(
+                        original_result=signal,
+                        symbol=symbol,
+                        klines=klines,
+                        oi_data=oi_data,
+                        cvd_series=cvd_series,
+                        atr_now=atr
+                    )
+                else:
+                    warn(f"   ⚠️ {symbol} 数据不足，跳过v7.2增强")
+
                 # 使用v7.2消息格式
                 message = render_trade_v72(signal)
 
                 # 发送
                 telegram_send_wrapper(message, self.bot_token, self.chat_id)
 
-                symbol = signal.get('symbol')
                 confidence = signal.get('confidence', 0)
                 edge = signal.get('edge', 0)
 
@@ -252,6 +273,8 @@ class RealtimeSignalScanner:
 
             except Exception as e:
                 error(f"   ❌ 发送失败 {signal.get('symbol')}: {e}")
+                import traceback
+                traceback.print_exc()
 
         log(f"✅ Prime交易信号发送完成\n")
 
