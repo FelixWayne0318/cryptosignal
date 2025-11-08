@@ -196,7 +196,11 @@ def analyze_with_v72_enhancements(
             "P_calibrated": round(P_calibrated, 3),
             "EV_net": round(EV_net, 4),
             "confidence_v72": round(confidence_v72, 2),
-            "group_scores": group_meta.get('group_scores', {}),
+            "group_scores": {
+                "TC": group_meta.get('TC_group'),
+                "VOM": group_meta.get('VOM_group'),
+                "B": group_meta.get('B_group')
+            },
             "gate_results": gate_details
         }
     }
