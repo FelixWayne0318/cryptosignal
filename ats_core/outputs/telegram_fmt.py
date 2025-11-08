@@ -2208,34 +2208,19 @@ def _get_factor_desc_v67(r: Dict[str, Any], factor_name: str, score: int) -> str
 
 def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     """
-    v7.2信号消息模板（规则增强版）
+    v7.2信号消息模板（清晰简洁版）
 
-    v7.2架构（阶段1）：
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━
-    🎯 核心改进：
-      1. F因子v2：精确资金领先性
-      2. 因子分组：TC/VOM/B三组
-      3. 统计校准：confidence → 真实胜率
-      4. 四道闸门：数据/资金/市场/成本
-      5. EV驱动：基于校准概率的期望值
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-    消息结构：
-    1. 头部：Symbol, Price, Side
-    2. 核心指标：P(校准), EV, RR
-    3. v7.2因子：F因子v2 + 因子分组
-    4. 四道闸门：Gate状态
-    5. 执行参数：Entry, TP, SL, Position
-    6. 技术细节：原始因子（折叠）
+    设计理念：适合非专业人士，清晰分层，突出核心
     """
-    # ========== 1. 头部 ==========
+    # ========== 1. 头部：Symbol + 核心指标 ==========
     sym = _get(r, "symbol") or "—"
     price = _get(r, "price") or _get(r, "last")
     price_s = _fmt_price(price)
 
+    # 方向
     side = (_get(r, "side") or "").lower()
     if side in ("long", "buy", "bull", "多", "做多"):
-        side_icon = "🟢"
+        side_icon = "🟩"
         side_lbl = "做多"
     elif side in ("short", "sell", "bear", "空", "做空"):
         side_icon = "🔴"
@@ -2244,130 +2229,170 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
         side_icon = "⚪"
         side_lbl = "中性"
 
-    # 判断是否蓄势待发（F因子预判断）
+    # v7.2数据
     v72 = _get(r, "v72_enhancements") or {}
-    F_v2 = _get(v72, "F_v2") or 0
-    is_momentum_ready = F_v2 > 30  # 资金强势领先
-
-    if is_momentum_ready:
-        signal_type = "🚀 蓄势待发" if not is_watch else "📍 观察信号"
-    else:
-        signal_type = "📍 观察信号" if is_watch else "🚀 交易信号"
-
-    header = f"{signal_type}\n"
-    header += f"━━━━━━━━━━━━━━━━━━━━\n"
-    header += f"币种：{sym}\n"
-    header += f"现价：{price_s}\n"
-    header += f"方向：{side_icon} {side_lbl}"
-
-    # ========== 2. 核心指标（v7.2增强）==========
-    # 获取v72_enhancements数据
-    v72 = _get(r, "v72_enhancements") or {}
-
-    # 校准概率
-    P_calibrated = _get(v72, "P_calibrated")
-    if P_calibrated is None:
-        P_calibrated = _get(r, "probability") or 0.5
-    P_pct = P_calibrated * 100
-
-    # 期望值
-    EV_net = _get(v72, "EV_net")
-    if EV_net is None:
-        EV_net = _get(r, "expected_value") or _get(r, "EV") or 0
-
-    # 盈亏比
-    TP_pct = _get(r, "tp_pct") or _get(r, "TP") or 0.03
-    SL_pct = _get(r, "sl_pct") or _get(r, "SL") or 0.015
+    P_calibrated = _get(v72, "P_calibrated") or _get(r, "probability") or 0.5
+    P_pct = int(P_calibrated * 100)
+    EV_net = _get(v72, "EV_net") or _get(r, "expected_value") or 0
+    TP_pct = _get(r, "tp_pct") or 0.03
+    SL_pct = _get(r, "sl_pct") or 0.015
     RR = TP_pct / SL_pct if SL_pct > 0 else 2.0
+    ttl_h = int(_ttl_hours(r))
 
-    # Confidence（v7.2分组后的）
-    confidence_v72 = _get(v72, "confidence_v72")
-    if confidence_v72 is None:
-        confidence_v72 = abs(_get(r, "weighted_score") or 0)
+    # F因子判断蓄势待发
+    F_v2 = _get(v72, "F_v2") or 0
+    is_momentum_ready = F_v2 > 30
 
-    core = f"\n\n📊 核心指标\n"
-    core += f"━━━━━━━━━━━━━━━━━━━━\n"
-    core += f"胜率(校准)：{P_pct:.1f}%\n"
-    core += f"期望值EV：{EV_net:+.2%}\n"
-    core += f"盈亏比RR：{RR:.2f}:1\n"
-    core += f"信心度：{confidence_v72:.1f}/100"
+    # 构建头部
+    if is_momentum_ready:
+        header = f"🚀 蓄势待发\n"
+    else:
+        header = f"{'📍 观察信号' if is_watch else '🚀 交易信号'}\n"
 
-    # ========== 3. v7.2因子分析 ==========
-    factors_section = f"\n\n🔬 v7.2因子分析\n"
-    factors_section += f"━━━━━━━━━━━━━━━━━━━━\n"
+    header += f"🔹 {sym} · 现价 {price_s}\n"
+    header += f"{side_icon} {side_lbl} 胜率{P_pct}% · 有效期{ttl_h}h\n"
+    header += f"期望收益 {EV_net:+.1%} · 盈亏比 {RR:.1f}:1 ✅"
 
-    # F因子v2（资金领先性 = 蓄势待发的核心指标）
+    # ========== 2. 执行参数 ==========
+    entry = price
+    entry_s = _fmt_price(entry)
+
+    if side in ("long", "buy", "bull", "多", "做多"):
+        tp_price = entry * (1 + TP_pct)
+        sl_price = entry * (1 - SL_pct)
+    else:
+        tp_price = entry * (1 - TP_pct)
+        sl_price = entry * (1 + SL_pct)
+
+    tp_s = _fmt_price(tp_price)
+    sl_s = _fmt_price(sl_price)
+    sl_dist = abs(SL_pct * 100)
+    tp_dist = abs(TP_pct * 100)
+
+    position_base = _get(r, "position_size") or 0.05
+    position_pct = position_base * 100
+
+    params = f"\n\n📍 入场价: {entry_s}\n"
+    params += f"🛑 止损: {sl_s} (-{sl_dist:.1f}%)\n"
+    params += f"🎯 止盈: {tp_s} (+{tp_dist:.1f}%)\n"
+    params += f"\n💼 仓位建议\n"
+    params += f"• 基准仓位: {position_pct:.1f}%"
+
+    # ========== 3. v7.2核心因子 ==========
+    factors = f"\n\n━━━ 🔬 v7.2核心因子 ━━━\n"
+
+    # F因子
     F_v2 = _get(v72, "F_v2")
     if F_v2 is not None:
         F_v2_int = int(round(F_v2))
-
-        # 蓄势待发判断：F因子高 = 资金领先价格 = 即将爆发
         if F_v2_int > 30:
-            F_desc = "💪 资金强势领先"
-            ready_tag = " 🚀蓄势待发"
+            F_icon = "🚀"
+            F_desc = "💪资金强势领先 [蓄势待发]"
         elif F_v2_int > 15:
-            F_desc = "✅ 资金明显领先"
-            ready_tag = " 🔥即将爆发"
+            F_icon = "🔥"
+            F_desc = "✅资金明显领先 [即将爆发]"
         elif F_v2_int > 0:
-            F_desc = "✅ 资金温和领先"
-            ready_tag = ""
+            F_icon = "🟢"
+            F_desc = "✅资金温和领先"
         elif F_v2_int > -15:
-            F_desc = "⚠️ 资金轻微落后"
-            ready_tag = ""
+            F_icon = "🟠"
+            F_desc = "⚠️资金轻微落后"
         else:
-            F_desc = "❌ 资金严重落后"
-            ready_tag = ""
+            F_icon = "🔴"
+            F_desc = "❌资金严重落后"
 
-        factors_section += f"F资金领先：{F_v2_int} {F_desc}{ready_tag}\n"
+        factors += f"\n{F_icon} F资金领先  {F_v2_int:3d}  {F_desc}"
 
-    # I因子（市场独立性）
+    # I因子
     I_v2 = _get(v72, "I_v2")
     if I_v2 is not None:
         I_v2_int = int(round(I_v2))
         if I_v2_int > 70:
-            I_desc = "💎 高度独立"
+            I_icon = "💎"
+            I_desc = "高度独立"
         elif I_v2_int > 50:
-            I_desc = "✅ 中度独立"
+            I_icon = "✅"
+            I_desc = "中度独立"
         elif I_v2_int > 30:
-            I_desc = "⚠️ 轻微相关"
+            I_icon = "🟠"
+            I_desc = "轻微相关"
         else:
-            I_desc = "❌ 高度相关"
-        factors_section += f"I市场独立：{I_v2_int} {I_desc}\n"
+            I_icon = "🔴"
+            I_desc = "高度相关"
 
-    # 因子分组
-    group_scores = _get(v72, "group_scores") or {}
-    TC_score = group_scores.get("TC")
-    VOM_score = group_scores.get("VOM")
-    B_score = group_scores.get("B")
+        factors += f"\n{I_icon} I市场独立  {I_v2_int:3d}  {I_desc}"
 
-    if TC_score is not None:
-        TC_int = int(round(TC_score))
-        factors_section += f"TC组(50%)：{TC_int} [趋势+资金流]\n"
+    # ========== 4. 因子分组详情 ==========
+    details = f"\n\n━━━ 📊 因子分组详情 ━━━\n"
 
-    if VOM_score is not None:
-        VOM_int = int(round(VOM_score))
-        factors_section += f"VOM组(35%)：{VOM_int} [量能+持仓+动量]\n"
-
-    if B_score is not None:
-        B_int = int(round(B_score))
-        factors_section += f"B组(15%)：{B_int} [基差]\n"
-
-    # 原始因子（折叠）
+    # 获取原始因子
     scores = _get(r, "scores") or {}
     T = _as_int_score(scores.get("T"), 0)
     M = _as_int_score(scores.get("M"), 0)
     C = _as_int_score(scores.get("C"), 0)
     V = _as_int_score(scores.get("V"), 0)
     O = _as_int_score(scores.get("O"), 0)
-    B = _as_int_score(scores.get("B"), 0)
+    B_raw = _as_int_score(scores.get("B"), 0)
 
-    factors_section += f"\n原始因子：\n"
-    factors_section += f"  T趋势={T} M动量={M} C资金={C}\n"
-    factors_section += f"  V量能={V} O持仓={O} B基差={B}"
+    # 辅助函数：因子状态
+    def _factor_status(val: int) -> tuple:
+        if val > 50:
+            return "🟢", "强势" if val > 75 else "温和"
+        elif val > 0:
+            return "🟡", "中性"
+        elif val > -50:
+            return "🟠", "偏弱"
+        else:
+            return "🔴", "疲弱"
 
-    # ========== 4. 四道闸门 ==========
-    gates = f"\n\n🚪 四道闸门\n"
-    gates += f"━━━━━━━━━━━━━━━━━━━━\n"
+    # TC组(50%)
+    group_scores = _get(v72, "group_scores") or {}
+    TC_score = group_scores.get("TC")
+    if TC_score is not None:
+        TC_int = int(round(TC_score))
+        details += f"\nTC组(50%)  {TC_int:3d}  [趋势+资金流]"
+
+        # T趋势
+        T_icon, T_desc = _factor_status(T)
+        details += f"\n  {T_icon} 趋势 T  {T:3d}  {T_desc}"
+
+        # M动量 (注意：M在TC和VOM都有)
+        M_icon, M_desc = _factor_status(M)
+        details += f"\n  {M_icon} 动量 M  {M:3d}  {M_desc}"
+
+        # C资金
+        C_icon, C_desc = _factor_status(C)
+        details += f"\n  {C_icon} 资金 C  {C:3d}  {C_desc}"
+
+    # VOM组(35%)
+    VOM_score = group_scores.get("VOM")
+    if VOM_score is not None:
+        VOM_int = int(round(VOM_score))
+        details += f"\n\nVOM组(35%) {VOM_int:3d}  [量能+持仓+动量]"
+
+        # V量能
+        V_icon, V_desc = _factor_status(V)
+        details += f"\n  {V_icon} 量能 V  {V:3d}  {V_desc}"
+
+        # O持仓
+        O_icon, O_desc = _factor_status(O)
+        details += f"\n  {O_icon} 持仓 O  {O:3d}  {O_desc}"
+
+        # M动量（已在TC组显示，这里可以省略或注释）
+        # details += f"\n  {M_icon} 动量 M  {M:3d}  {M_desc}"
+
+    # B组(15%)
+    B_score = group_scores.get("B")
+    if B_score is not None:
+        B_int = int(round(B_score))
+        details += f"\n\nB组(15%)   {B_int:3d}  [基差]"
+
+        # B基差
+        B_icon, B_desc = _factor_status(B_raw)
+        details += f"\n  {B_icon} 基差 B  {B_raw:3d}  {B_desc}"
+
+    # ========== 5. 质量检查（简化四道闸门）==========
+    quality = f"\n\n━━━ ✅ 质量检查 ━━━\n"
 
     gate_results = _get(v72, "gate_results") or {}
     gate1 = gate_results.get("gate1", {})
@@ -2375,76 +2400,35 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     gate3 = gate_results.get("gate3", {})
     gate4 = gate_results.get("gate4", {})
 
-    # Gate 1: 数据质量
     g1_pass = gate1.get("pass", True)
-    g1_icon = "✅" if g1_pass else "❌"
-    bars = gate1.get("bars", 0)
-    gates += f"{g1_icon} Gate1 数据质量：{bars}根K线\n"
-
-    # Gate 2: F闸门
     g2_pass = gate2.get("pass", True)
-    g2_icon = "✅" if g2_pass else "❌"
-    F_dir = gate2.get("F_directional", F_v2 or 0)
-    gates += f"{g2_icon} Gate2 资金支撑：F_dir={F_dir:.0f}\n"
-
-    # Gate 3: 市场闸门
     g3_pass = gate3.get("pass", True)
-    g3_icon = "✅" if g3_pass else "❌"
-    independence = _get(r, "scores", {}).get("I", 50)
-    gates += f"{g3_icon} Gate3 市场环境：独立性={independence:.0f}\n"
-
-    # Gate 4: 成本闸门
     g4_pass = gate4.get("pass", True)
+
+    bars = gate1.get("bars", 0)
+    F_dir = gate2.get("F_directional", F_v2 or 0)
+    independence = _get(r, "scores", {}).get("I", 50)
+
+    g1_icon = "✅" if g1_pass else "❌"
+    g2_icon = "✅" if g2_pass else "❌"
+    g3_icon = "✅" if g3_pass else "❌"
     g4_icon = "✅" if g4_pass else "❌"
-    gates += f"{g4_icon} Gate4 执行成本：EV={EV_net:+.2%}"
 
-    # 总体判定
-    all_pass = g1_pass and g2_pass and g3_pass and g4_pass
-    if all_pass:
-        gates += f"\n\n✅ 全部通过，可发布"
-    else:
-        gates += f"\n\n⚠️ 部分闸门未通过"
+    quality += f"\n{g1_icon} 数据充足 ({bars}根K线)"
+    quality += f"\n{g2_icon} 资金支撑 (F={F_dir:.0f})"
+    quality += f"\n{g3_icon} 市场独立 (I={independence:.0f})"
+    quality += f"\n{g4_icon} 成本可控 (EV={EV_net:+.2%})"
 
-    # ========== 5. 执行参数 ==========
-    execution = f"\n\n💰 执行参数\n"
-    execution += f"━━━━━━━━━━━━━━━━━━━━\n"
-
-    # 入场价
-    entry = price
-    entry_s = _fmt_price(entry)
-    execution += f"入场：{entry_s}\n"
-
-    # 止盈
-    if side in ("long", "buy", "bull", "多", "做多"):
-        tp_price = entry * (1 + TP_pct)
-    else:
-        tp_price = entry * (1 - TP_pct)
-    tp_s = _fmt_price(tp_price)
-    execution += f"止盈：{tp_s} (+{TP_pct*100:.1f}%)\n"
-
-    # 止损
-    if side in ("long", "buy", "bull", "多", "做多"):
-        sl_price = entry * (1 - SL_pct)
-    else:
-        sl_price = entry * (1 + SL_pct)
-    sl_s = _fmt_price(sl_price)
-    execution += f"止损：{sl_s} (-{SL_pct*100:.1f}%)\n"
-
-    # 仓位
-    position_base = _get(r, "position_size") or 0.05
-    position_pct = position_base * 100
-    execution += f"仓位：{position_pct:.1f}%"
-
-    # ========== 6. 元数据 ==========
-    ttl_h = int(_ttl_hours(r))
+    # ========== 6. 时间戳 + 标签 ==========
     timestamp = _get(r, "timestamp") or 0
+    time_str = _format_timestamp(timestamp)
 
-    footer = f"\n\n⏱ 有效期：{ttl_h}小时\n"
-    footer += f"📅 时间：{_format_timestamp(timestamp)}\n"
-    footer += f"🏷 版本：v7.2 Stage1"
+    footer = f"\n\n⏱ {time_str}\n"
+    footer += f"🏷 v7.2\n"
+    footer += f"\n#trade #{sym}"
 
     # ========== 组装完整消息 ==========
-    message = header + core + factors_section + gates + execution + footer
+    message = header + params + factors + details + quality + footer
 
     return message
 
