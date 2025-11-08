@@ -92,7 +92,16 @@ else
 fi
 
 # 添加执行权限
-chmod +x auto_restart.sh deploy_and_run.sh setup.sh 2>/dev/null || true
+chmod +x auto_restart.sh deploy_and_run.sh setup.sh scripts/init_databases.py 2>/dev/null || true
+
+# 初始化数据库
+echo ""
+echo "🗄️  初始化数据库..."
+echo "=============================================="
+python3 scripts/init_databases.py || {
+    echo -e "${RED}❌ 数据库初始化失败${NC}"
+    echo "这不会影响系统运行，数据库会在首次使用时自动创建"
+}
 
 # 启动系统
 echo ""

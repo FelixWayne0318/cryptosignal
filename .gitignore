@@ -36,6 +36,10 @@ config/telegram.json
 data/cache/
 data/database/
 data/reports/
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
 
 # --- Backup files ---
 *.bak
