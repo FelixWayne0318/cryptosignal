@@ -2,7 +2,6 @@
   "version": "3.0.0",
   "updated_at": "2025-11-09",
   "description": "统一因子参数配置 - v3.0（配置管理优化版）",
-
   "global": {
     "standardization": {
       "enabled": true,
@@ -22,15 +21,15 @@
           "comment": "T因子使用更保守的参数（较慢的EW响应）"
         },
         "S": {
-          "alpha": 0.15,
+          "alpha": 0.05,
           "tau": 2.0,
           "z0": 2.5,
-          "enabled": false,
-          "comment": "S因子StandardizationChain已禁用（直接使用原始分数）"
+          "enabled": true,
+          "comment": "S因子优化参数（轻平滑+低压缩，保留zigzag快速信号）",
+          "lam": 3.0
         }
       }
     },
-
     "data_quality": {
       "description": "数据质量阈值配置",
       "min_data_points": {
@@ -58,7 +57,6 @@
         "liquidations": 300
       }
     },
-
     "degradation": {
       "description": "降级策略配置",
       "fallback_strategy": "zero_score",
@@ -71,7 +69,6 @@
       }
     }
   },
-
   "factors": {
     "T": {
       "name": "Trend",
@@ -88,7 +85,6 @@
         "r2_weight": 0.15
       }
     },
-
     "M": {
       "name": "Momentum",
       "layer": "price_action",
@@ -108,7 +104,6 @@
         "min_historical_samples": 30
       }
     },
-
     "C+": {
       "name": "Enhanced CVD",
       "layer": "money_flow",
@@ -124,7 +119,6 @@
         "r2_threshold": 0.7
       }
     },
-
     "S": {
       "name": "Structure",
       "layer": "price_action",
@@ -133,25 +127,24 @@
       "description": "支撑阻力结构质量（ZigZag模式识别）",
       "params": {
         "theta": {
-          "big": 0.40,
-          "small": 0.50,
+          "big": 0.4,
+          "small": 0.5,
           "overlay_add": -0.05,
-          "new_phaseA_add": 0.10,
-          "strong_regime_sub": 0.10
+          "new_phaseA_add": 0.1,
+          "strong_regime_sub": 0.1
         },
         "component_weights": {
           "consistency": 0.22,
           "impulse_correction_ratio": 0.18,
           "retracement": 0.18,
           "timing": 0.14,
-          "not_overextended": 0.20,
+          "not_overextended": 0.2,
           "m15_confirmation": 0.08
         },
         "overextension_threshold": 0.8,
         "overextension_penalty": 0.1
       }
     },
-
     "V+": {
       "name": "Volume + Trigger",
       "layer": "price_action",
@@ -167,7 +160,6 @@
         "adaptive_threshold_mode": "hybrid"
       }
     },
-
     "O+": {
       "name": "OI Regime",
       "layer": "money_flow",
@@ -185,7 +177,6 @@
         "contract_multiplier": 1.0
       }
     },
-
     "L": {
       "name": "Liquidity",
       "layer": "microstructure",
@@ -207,7 +198,6 @@
         "ldi_penalty_max": 20
       }
     },
-
     "B": {
       "name": "Basis + Funding",
       "layer": "microstructure",
@@ -226,7 +216,6 @@
         "fwi_boost_max": 20
       }
     },
-
     "Q": {
       "name": "Liquidation",
       "layer": "microstructure",
@@ -242,7 +231,6 @@
         "wall_cluster_pct": 0.02
       }
     },
-
     "I": {
       "name": "Independence",
       "layer": "market_context",
@@ -258,7 +246,6 @@
         "eth_weight": 0.4
       }
     },
-
     "F": {
       "name": "Fund Leading",
       "type": "regulator",
@@ -285,7 +272,6 @@
       }
     }
   },
-
   "weights_config": {
     "total_weight": 160,
     "normalization_factor": 1.6,
@@ -296,7 +282,6 @@
       "market_context": 10
     }
   },
-
   "adaptive_weights": {
     "enabled": false,
     "blend_ratio": 0.7,
@@ -351,13 +336,11 @@
       }
     }
   },
-
   "thresholds": {
     "prime_strength_min": 65,
     "prime_prob_min": 0.62,
     "watch_strength_min": 55,
     "watch_prob_min": 0.55,
-
     "filters": {
       "liquidity_min": 70,
       "liquidity_warn": 60,
@@ -369,16 +352,14 @@
       "obi_max_short": -0.1,
       "liquidation_wall_distance_min_pct": 0.01
     },
-
     "adjustments": {
       "funding_extreme_prob_discount": 0.85,
-      "funding_extreme_strength_discount": 0.90,
-      "basis_extreme_tp_discount": 0.90,
+      "funding_extreme_strength_discount": 0.9,
+      "basis_extreme_tp_discount": 0.9,
       "low_liquidity_sl_multiplier": 2.5,
       "high_liquidity_sl_multiplier": 1.8
     }
   },
-
   "risk_management": {
     "stop_loss": {
       "base_atr_multiplier": 1.8,
@@ -394,7 +375,6 @@
         "high": 1.8
       }
     },
-
     "take_profit": {
       "base_atr_multiplier": 2.5,
       "tp1_ratio": 1.0,
@@ -403,9 +383,8 @@
       "liquidation_wall_buffer_pct": 0.02,
       "basis_adjustment_enabled": true,
       "basis_threshold_bps": 50,
-      "basis_discount": 0.90
+      "basis_discount": 0.9
     },
-
     "position_sizing": {
       "liquidity_based": true,
       "min_size_pct": 1.0,
@@ -413,10 +392,12 @@
       "liquidity_multiplier": 0.05
     }
   },
-
   "data_sources": {
     "klines": {
-      "timeframes": ["1h", "4h"],
+      "timeframes": [
+        "1h",
+        "4h"
+      ],
       "limits": {
         "1h": 200,
         "4h": 100
@@ -429,7 +410,9 @@
     },
     "liquidations": {
       "enabled": true,
-      "sources": ["binance"],
+      "sources": [
+        "binance"
+      ],
       "interval_minutes": 5
     },
     "funding_rate": {
@@ -437,7 +420,6 @@
       "update_interval_hours": 8
     }
   },
-
   "evaluation": {
     "factor_correlation": {
       "max_threshold": 0.5,
@@ -447,7 +429,7 @@
     "out_of_sample": {
       "test_ratio": 0.2,
       "min_train_days": 90,
-      "decay_threshold_pct": 0.30
+      "decay_threshold_pct": 0.3
     },
     "ic_monitoring": {
       "ic_min": 0.05,

@@ -2,12 +2,14 @@
 """
 S（结构）评分 - 统一±100系统
 
+v3.1 P0修复（2025-11-09）：
+- 重新启用StandardizationChain（优化参数：alpha=0.05, lam=3.0）
+- 修复zigzag无限循环风险（迭代次数保护）
+
 v3.0配置管理（2025-11-09）：
 - 移除硬编码参数，改为从配置文件读取
 - 支持向后兼容（params参数优先级高于配置文件）
 - 使用统一的数据质量检查阈值
-
-注意：StandardizationChain当前被禁用（2025-11-04紧急修复）
 """
 from ats_core.features.ta_core import ema
 from ats_core.scoring.scoring_utils import StandardizationChain
@@ -63,9 +65,29 @@ def _theta(base_big, base_small, overlay_add, phaseA_add, strong_sub, is_big, is
     return max(0.25, min(0.60, th))
 
 def _zigzag_last(h,l, c, theta_atr):
+    """
+    ZigZag算法 - 识别关键高低点
+
+    v3.1 P0修复：添加安全保护
+    - theta_atr最小值检查（防止过密采样）
+    - 最大点数限制（防止内存溢出）
+    """
+    # v3.1: 安全检查 - theta_atr必须大于极小值
+    if theta_atr < 1e-8:
+        # theta过小会导致过度采样，返回空结果
+        return []
+
     pts=[("H", h[0], 0),("L", l[0], 0)]
     state="init"; lastp = c[0]
+
+    # v3.1: 最大点数限制（防止异常数据导致过度采样）
+    max_points = len(c) * 2  # 理论最大值：每根K线最多2个点
+
     for i in range(1,len(c)):
+        # v3.1: 安全保护 - 检查点数上限
+        if len(pts) >= max_points:
+            break
+
         if state in ("init","down"):
             if h[i]-lastp >= theta_atr:
                 pts.append(("H",h[i],i)); lastp=h[i]; state="down"
@@ -76,6 +98,7 @@ def _zigzag_last(h,l, c, theta_atr):
                 pts.append(("H",h[i],i)); lastp=h[i]; state="down"
             if lastp - l[i] >= theta_atr:
                 pts.append(("L",l[i],i)); lastp=l[i]; state="up"
+
     return pts[-6:] if len(pts)>6 else pts
 
 def score_structure(h,l,c, ema30_last, atr_now, params=None, ctx=None):
@@ -203,9 +226,9 @@ def score_structure(h,l,c, ema30_last, atr_now, params=None, ctx=None):
 
     # v2.0合规：应用StandardizationChain（5步稳健化）
     # 输入S_raw，输出标准化后的S_pub（稳健压缩到±100）
-    # ⚠️ 2025-11-04紧急修复：禁用StandardizationChain，过度压缩导致信号丢失
-    # S_pub, diagnostics = _structure_chain.standardize(S_raw)
-    S_pub = max(-100, min(100, S_raw))  # 直接使用原始值
+    # v3.1: 重新启用StandardizationChain（优化参数：alpha=0.05, lam=3.0）
+    chain = _get_structure_chain()
+    S_pub, diagnostics = chain.standardize(S_raw)
 
     # 转换为整数
     S = int(round(S_pub))
