@@ -1190,10 +1190,11 @@ def _analyze_symbol_core(
             "safety_adjustment": adjustment  # 安全边际调整
         },
 
-        # Scorecard结果
-        "weighted_score": weighted_score,  # -100 到 +100
-        "confidence": confidence,  # 0-100（绝对值）
-        "edge": edge,  # -1.0 到 +1.0
+        # Scorecard结果（阶段1.4：标记为deprecated，将被v7.2层的因子分组替代）
+        "weighted_score": weighted_score,  # -100 到 +100 [DEPRECATED: 使用v7.2层的分组加权]
+        "confidence": confidence,  # 0-100（绝对值）[DEPRECATED: 使用v7.2层的confidence_v72]
+        "edge": edge,  # -1.0 到 +1.0 [保留：仍然有用]
+        "_scorecard_deprecation": "weighted_score/confidence使用基础权重（T24/M17/C24/V12/O17/B6），v7.2层使用分组权重（TC50/VOM35/B15）"
 
         # 方向
         "side": "long" if side_long else "short",
