@@ -76,6 +76,13 @@ def analyze_with_v72_enhancements(
     confidence_v72 = abs(weighted_score_v72)
     side_long_v72 = (weighted_score_v72 > 0)
 
+    # ===== 2.5 提取I因子（C1 CRITICAL FIX：必须在统计校准之前定义）=====
+    # v7.2增强：显式提取I因子用于展示和校准
+    # I因子在基础分析中已计算（通过calculate_independence）
+    # 这里直接使用，无需重复计算（需要BTC/ETH数据）
+    I_v2 = original_result.get('I', 50)
+    I_meta = original_result.get('scores_meta', {}).get('I', {})
+
     # ===== 3. 统计校准概率（P0.3增强：支持F/I因子）=====
     from ats_core.calibration.empirical_calibration import EmpiricalCalibrator
 
@@ -114,14 +121,8 @@ def analyze_with_v72_enhancements(
     # EV = P×TP - (1-P)×SL - cost
     EV_net = P_calibrated * TP_distance_pct - (1 - P_calibrated) * SL_distance_pct - total_cost_pct
 
-    # ===== 5. 提取I因子（市场独立性） =====
-    # v7.2增强：显式提取I因子用于展示
-    # I因子在基础分析中已计算（通过calculate_independence）
-    # 这里直接使用，无需重复计算（需要BTC/ETH数据）
-    I_v2 = original_result.get('I', 50)
-    I_meta = original_result.get('scores_meta', {}).get('I', {})
-
-    # ===== 6. 四道闸门（v7.2 重构：读取基础分析结果） =====
+    # ===== 5. 四道闸门（v7.2 重构：读取基础分析结果） =====
+    # Q3 FIX: 修正注释编号（删除重复的I因子定义）
     # v7.2设计理念：
     # - 基础分析（analyze_symbol）已经完成了完整的闸门检查
     # - v7.2增强层只需重新计算部分因子（F_v2），然后应用简化的质量检查
