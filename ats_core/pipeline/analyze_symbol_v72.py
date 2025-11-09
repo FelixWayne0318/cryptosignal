@@ -49,16 +49,19 @@ def analyze_with_v72_enhancements(
     Returns:
         增强后的结果字典
     """
-    # ===== 1. 重新计算F因子（v2） =====
-    from ats_core.features.fund_leading import score_fund_leading_v2
+    # ===== 0. 获取中间数据（L1修复：使用基础层提供的数据，避免重复计算）=====
+    intermediate = original_result.get('intermediate_data', {})
 
-    F_v2, F_v2_meta = score_fund_leading_v2(
-        cvd_series=cvd_series,
-        oi_data=oi_data,
-        klines=klines,
-        atr_now=atr_now,
-        params={}
-    )
+    # 优先使用intermediate_data，如果没有则使用传入的参数（向后兼容）
+    cvd_series = intermediate.get('cvd_series', cvd_series)
+    klines = intermediate.get('klines', klines)
+    oi_data = intermediate.get('oi_data', oi_data)
+    atr_now = intermediate.get('atr_now', atr_now)
+
+    # ===== 1. 获取F因子（A1修复：基础层已使用v2，直接使用）=====
+    # 基础层已经统一使用score_fund_leading_v2，直接使用其结果
+    F_v2 = original_result.get('F', 0)
+    F_v2_meta = original_result.get('scores_meta', {}).get('F', {})
 
     # ===== 2. 重新计算weighted_score（因子分组） =====
     from ats_core.scoring.factor_groups import calculate_grouped_score

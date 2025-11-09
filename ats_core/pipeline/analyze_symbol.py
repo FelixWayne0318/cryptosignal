@@ -1231,6 +1231,26 @@ def _analyze_symbol_core(
             "accumulating_reason": accumulating_reason
         },
 
+        # ===== L1修复：添加中间数据（供v7.2判定层使用）=====
+        # 目的：避免v7.2层重复计算CVD、ATR等数据
+        # 重构阶段1.2a完成日期：2025-11-09
+        "intermediate_data": {
+            "cvd_series": cvd_series,  # CVD序列（完整）
+            "klines": k1,  # K线数据（供v7.2使用）
+            "oi_data": oi_data,  # OI数据（供v7.2使用）
+            "atr_now": atr_now,  # 当前ATR
+            "close_now": close_now,  # 当前收盘价
+            # 质量检查结果（诊断用）
+            "quality_checks": {
+                "check_1_strength_prob": quality_check_1,
+                "check_2_confidence": quality_check_2,
+                "check_3_gate_multiplier": quality_check_3,
+                "check_4_edge": quality_check_4,
+                "gate_multiplier": gate_multiplier,
+                "edge_value": edge
+            }
+        },
+
         # 新币信息（嵌套格式，匹配scanner读取）
         "new_coin": {
             "is_new": is_new_coin,

@@ -657,15 +657,19 @@ class OptimizedBatchScanner:
                 rejection_reasons = result.get('publish', {}).get('rejection_reason', [])
 
                 if is_prime:
-                    # v7.2+: 添加原始数据用于后续v7.2增强
-                    result['klines'] = k1h
-                    result['oi_data'] = oi_data
-                    # cvd_series需要重新计算（analyze_symbol内部没有返回）
-                    try:
-                        from ats_core.features.cvd_flow import cvd_mix_with_oi_price
-                        cvd_series, _ = cvd_mix_with_oi_price(k1h, oi_data, window=20)
-                        result['cvd_series'] = cvd_series
-                    except:
+                    # L1修复：基础层已在intermediate_data中返回klines/oi_data/cvd_series
+                    # 不需要重复计算，直接使用result即可
+                    # （为了向后兼容，保留顶层字段的设置）
+                    intermediate = result.get('intermediate_data', {})
+                    if intermediate:
+                        # 如果有intermediate_data，提取到顶层（v7.2兼容性）
+                        result['klines'] = intermediate.get('klines', k1h)
+                        result['oi_data'] = intermediate.get('oi_data', oi_data)
+                        result['cvd_series'] = intermediate.get('cvd_series', [])
+                    else:
+                        # 降级：如果没有intermediate_data（旧版本），设置默认值
+                        result['klines'] = k1h
+                        result['oi_data'] = oi_data
                         result['cvd_series'] = []
 
                     results.append(result)
