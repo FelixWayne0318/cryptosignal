@@ -288,7 +288,8 @@ def score_fund_leading_v2(
 
     # === 5. 资金动量（CVD + OI，加权）===
     # 归一化到ATR（使资金动量和价格动量可比）
-    atr_norm_factor = atr_now / close_now  # ATR相对价格的比例
+    # P1.2修复：防止ATR过小导致放大噪音
+    atr_norm_factor = max(atr_now / close_now, 0.001)  # 最小0.1%，避免除以过小值
 
     fund_momentum_raw = p["cvd_weight"] * cvd_change_norm + p["oi_weight"] * oi_change_6h
     fund_momentum = fund_momentum_raw / atr_norm_factor

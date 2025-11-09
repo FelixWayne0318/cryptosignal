@@ -135,8 +135,8 @@ def calculate_independence(
     if params is None:
         params = {}
 
-    # 默认参数
-    window = params.get('window_hours', 24)
+    # 默认参数（P1.3优化：48小时窗口更稳定）
+    window = params.get('window_hours', 48)  # 从24→48，提高Beta稳定性
     beta_high = params.get('beta_threshold_high', 1.5)
     beta_low = params.get('beta_threshold_low', 0.5)
     btc_weight = params.get('btc_weight', 0.6)
@@ -162,9 +162,47 @@ def calculate_independence(
     if len(alt_returns) < window or len(btc_returns) < window or len(eth_returns) < window:
         return 50.0, 1.0, {'error': 'Return calculation failed'}
 
-    # === 3. OLS回归 ===
-    y = np.array(alt_returns)
-    X = np.column_stack([btc_returns, eth_returns])
+    # === 2.5 异常值处理（P1.3新增：3-sigma过滤）===
+    # 移除极端异常值（如闪崩、插针等），提高Beta稳定性
+    def remove_outliers(returns_array):
+        """移除3-sigma之外的异常值"""
+        mean = np.mean(returns_array)
+        std = np.std(returns_array)
+        if std == 0:
+            return returns_array
+        # 3-sigma规则：保留 [mean-3*std, mean+3*std] 范围内的数据
+        mask = np.abs(returns_array - mean) <= 3 * std
+        return mask
+
+    # 对所有序列应用相同的mask（保持时间对齐）
+    alt_array = np.array(alt_returns)
+    btc_array = np.array(btc_returns)
+    eth_array = np.array(eth_returns)
+
+    # 计算综合mask（任一序列有异常则该时间点标记为异常）
+    mask_alt = remove_outliers(alt_array)
+    mask_btc = remove_outliers(btc_array)
+    mask_eth = remove_outliers(eth_array)
+    mask_combined = mask_alt & mask_btc & mask_eth
+
+    # 应用mask
+    alt_clean = alt_array[mask_combined]
+    btc_clean = btc_array[mask_combined]
+    eth_clean = eth_array[mask_combined]
+
+    outliers_removed = len(alt_array) - len(alt_clean)
+
+    # 检查过滤后数据是否充足
+    if len(alt_clean) < max(10, window * 0.5):  # 至少保留50%数据或10个点
+        return 50.0, 1.0, {
+            'error': 'Too many outliers removed',
+            'outliers_removed': outliers_removed,
+            'remaining': len(alt_clean)
+        }
+
+    # === 3. OLS回归（使用清洗后的数据）===
+    y = alt_clean
+    X = np.column_stack([btc_clean, eth_clean])
 
     betas, r_squared = _ols_regression(y, X)
     beta_btc = betas[0]
@@ -201,7 +239,7 @@ def calculate_independence(
         independence_level = 'very_low'  # 极低独立性
         interpretation = 'Very high correlation, needs BTC/ETH confirmation'
 
-    # === 7. 元数据 ===
+    # === 7. 元数据（P1.3增强：添加诊断信息）===
     metadata = {
         'independence_score': independence_score,
         'beta_sum': beta_sum,
@@ -210,7 +248,15 @@ def calculate_independence(
         'r_squared': r_squared,
         'independence_level': independence_level,
         'interpretation': interpretation,
-        'window_hours': window
+        'window_hours': window,
+        # P1.3新增：异常值处理诊断
+        'outliers_removed': outliers_removed,
+        'data_points_used': len(alt_clean),
+        'data_quality': len(alt_clean) / len(alt_array) if len(alt_array) > 0 else 0,
+        # P1.3新增：统计诊断
+        'alt_volatility': float(np.std(alt_clean)) if len(alt_clean) > 0 else 0,
+        'btc_volatility': float(np.std(btc_clean)) if len(btc_clean) > 0 else 0,
+        'eth_volatility': float(np.std(eth_clean)) if len(eth_clean) > 0 else 0
     }
 
     return independence_score, beta_sum, metadata

@@ -76,11 +76,22 @@ def analyze_with_v72_enhancements(
     confidence_v72 = abs(weighted_score_v72)
     side_long_v72 = (weighted_score_v72 > 0)
 
-    # ===== 3. 统计校准概率 =====
+    # ===== 3. 统计校准概率（P0.3增强：支持F/I因子）=====
     from ats_core.calibration.empirical_calibration import EmpiricalCalibrator
 
     calibrator = EmpiricalCalibrator()
-    P_calibrated = calibrator.get_calibrated_probability(confidence_v72)
+
+    # P0.3修复：如果使用启发式（冷启动），传递F和I因子进行多维度评估
+    if not calibrator.calibration_table:
+        # 冷启动模式：使用改进的启发式公式
+        P_calibrated = calibrator._bootstrap_probability(
+            confidence=confidence_v72,
+            F_score=F_v2,
+            I_score=I_v2
+        )
+    else:
+        # 统计校准模式：使用历史数据
+        P_calibrated = calibrator.get_calibrated_probability(confidence_v72)
 
     # ===== 4. 计算EV =====
     # 简化版成本估算
@@ -110,24 +121,55 @@ def analyze_with_v72_enhancements(
     I_v2 = original_result.get('I', 50)
     I_meta = original_result.get('scores_meta', {}).get('I', {})
 
-    # ===== 6. 四道闸门 =====
-    from ats_core.pipeline.gates import FourGatesFilter
+    # ===== 6. 四道闸门（v7.2 重构：读取基础分析结果） =====
+    # v7.2设计理念：
+    # - 基础分析（analyze_symbol）已经完成了完整的闸门检查
+    # - v7.2增强层只需重新计算部分因子（F_v2），然后应用简化的质量检查
+    # - 避免重复实现复杂的闸门逻辑（订单簿、DataQual等）
 
-    gates = FourGatesFilter()
+    # 方案：使用简化的四道检查（只检查关键指标）
+    gates_data_quality = 1.0 if len(klines) >= 100 else 0.0
+    gates_ev = 1.0 if EV_net > 0 else 0.0
+    gates_probability = 1.0 if P_calibrated >= 0.50 else 0.0
 
-    # 准备闸门数据
-    market_regime = original_result.get('market_regime', 0)
+    # F因子闸门（v7.2特有：使用F_v2）
+    # F >= -15: 资金支撑合格
+    # F < -15: 价格领先资金，追高风险
+    gates_fund_support = 1.0 if F_v2 >= -15 else 0.0
 
-    gate_data = {
-        "bars": len(klines),
-        "F_score": F_v2,
-        "side_long": side_long_v72,
-        "independence": I_v2,
-        "market_regime": market_regime,
-        "EV_net": EV_net
+    # 综合判定（所有闸门都通过才发布）
+    pass_gates = all([
+        gates_data_quality > 0.5,
+        gates_ev > 0.5,
+        gates_probability > 0.5,
+        gates_fund_support > 0.5
+    ])
+
+    # 闸门原因
+    if not pass_gates:
+        failed_gates = []
+        if gates_data_quality <= 0.5:
+            failed_gates.append(f"数据质量不足(bars={len(klines)})")
+        if gates_ev <= 0.5:
+            failed_gates.append(f"EV≤0({EV_net:.4f})")
+        if gates_probability <= 0.5:
+            failed_gates.append(f"P<0.50({P_calibrated:.3f})")
+        if gates_fund_support <= 0.5:
+            failed_gates.append(f"F因子过低({F_v2})")
+        gate_reason = "; ".join(failed_gates)
+    else:
+        gate_reason = "all_gates_passed"
+
+    # 闸门详情
+    gate_details = {
+        "all_pass": pass_gates,
+        "details": [
+            {"gate": 1, "name": "data_quality", "pass": gates_data_quality > 0.5, "value": gates_data_quality},
+            {"gate": 2, "name": "fund_support", "pass": gates_fund_support > 0.5, "value": F_v2, "threshold": -15},
+            {"gate": 3, "name": "ev", "pass": gates_ev > 0.5, "value": EV_net, "threshold": 0.0},
+            {"gate": 4, "name": "probability", "pass": gates_probability > 0.5, "value": P_calibrated, "threshold": 0.50}
+        ]
     }
-
-    pass_gates, gate_reason, gate_details = gates.check_all(gate_data)
 
     # ===== 6. 最终判定 =====
     is_prime_v72 = pass_gates

@@ -649,10 +649,14 @@ class OptimizedBatchScanner:
                         f"prob_bonus={prime_breakdown.get('prob_bonus',0):.1f}, "
                         f"P_chosen={prime_breakdown.get('P_chosen',0):.3f}")
 
-                # v6.2修复：使用min_score参数过滤信号
-                # v6.3新增：显示拒绝原因（专家建议 #5）
+                # P1.1修复：移除此处的过滤，将所有候选信号传递给v7.2层
+                # 设计理念：
+                # - 批量扫描层：发现所有可能的信号（is_prime=True）
+                # - v7.2增强层：集中过滤和发布决策（统一标准）
+                # - 避免多层重复过滤导致逻辑混乱和用户困惑
                 rejection_reasons = result.get('publish', {}).get('rejection_reason', [])
-                if is_prime and prime_strength >= min_score:
+
+                if is_prime:
                     # v7.2+: 添加原始数据用于后续v7.2增强
                     result['klines'] = k1h
                     result['oi_data'] = oi_data
@@ -665,10 +669,9 @@ class OptimizedBatchScanner:
                         result['cvd_series'] = []
 
                     results.append(result)
-                    log(f"✅ {symbol}: Prime强度={prime_strength}, 置信度={confidence:.0f}")
 
-                    # v7.2数据库写入移至realtime_signal_scanner.py（那时已有完整v72_enhancements）
-                    # 避免在此处重复写入不完整数据
+                    # 记录信号（不过滤）
+                    log(f"{'✅' if prime_strength >= min_score else '⚠️ '} {symbol}: Prime强度={prime_strength}, 置信度={confidence:.0f} {'(待v7.2验证)' if prime_strength < min_score else ''}")
 
                     # 实时回调：立即处理新发现的信号
                     if on_signal_found:
