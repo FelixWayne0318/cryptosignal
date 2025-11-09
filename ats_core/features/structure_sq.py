@@ -1,10 +1,59 @@
+# coding: utf-8
+"""
+S（结构）评分 - 统一±100系统
+
+v3.0配置管理（2025-11-09）：
+- 移除硬编码参数，改为从配置文件读取
+- 支持向后兼容（params参数优先级高于配置文件）
+- 使用统一的数据质量检查阈值
+
+注意：StandardizationChain当前被禁用（2025-11-04紧急修复）
+"""
 from ats_core.features.ta_core import ema
 from ats_core.scoring.scoring_utils import StandardizationChain
+from ats_core.config.factor_config import get_factor_config
+from typing import Optional
 import math
 
-# 模块级StandardizationChain实例（持久化EW状态）
-# 参数: alpha=0.15, tau=2.0 (wider range for structure scores)
-_structure_chain = StandardizationChain(alpha=0.15, tau=2.0, z0=2.5, zmax=6.0, lam=1.5)
+# v3.0: 模块级StandardizationChain实例（延迟初始化）
+_structure_chain: Optional[StandardizationChain] = None
+
+
+def _get_structure_chain() -> StandardizationChain:
+    """
+    获取StandardizationChain实例（延迟初始化）
+
+    v3.0改进：从配置文件读取参数，而非硬编码
+    """
+    global _structure_chain
+
+    if _structure_chain is None:
+        try:
+            config = get_factor_config()
+            std_params = config.get_standardization_params("S")
+
+            # 检查是否启用StandardizationChain
+            if std_params.get('enabled', True):
+                _structure_chain = StandardizationChain(
+                    alpha=std_params['alpha'],
+                    tau=std_params['tau'],
+                    z0=std_params['z0'],
+                    zmax=std_params['zmax'],
+                    lam=std_params['lam']
+                )
+            else:
+                # 如果配置禁用，使用默认参数创建（向后兼容）
+                _structure_chain = StandardizationChain(
+                    alpha=0.15, tau=2.0, z0=2.5, zmax=6.0, lam=1.5
+                )
+        except Exception as e:
+            # 配置加载失败时使用默认参数（向后兼容）
+            print(f"⚠️ S因子StandardizationChain配置加载失败，使用默认参数: {e}")
+            _structure_chain = StandardizationChain(
+                alpha=0.15, tau=2.0, z0=2.5, zmax=6.0, lam=1.5
+            )
+
+    return _structure_chain
 
 def _theta(base_big, base_small, overlay_add, phaseA_add, strong_sub, is_big, is_overlay, is_phaseA, strong_regime):
     th = (base_big if is_big else base_small)
@@ -29,7 +78,7 @@ def _zigzag_last(h,l, c, theta_atr):
                 pts.append(("L",l[i],i)); lastp=l[i]; state="up"
     return pts[-6:] if len(pts)>6 else pts
 
-def score_structure(h,l,c, ema30_last, atr_now, params, ctx):
+def score_structure(h,l,c, ema30_last, atr_now, params=None, ctx=None):
     """
     S（结构）评分 - 统一±100系统
 
@@ -37,12 +86,42 @@ def score_structure(h,l,c, ema30_last, atr_now, params, ctx):
     - 正分：结构质量好（技术形态完整）
     - 负分：结构质量差（形态混乱）
     - 0：中性
+
+    v3.0改进：
+    - params参数可选，从配置文件读取默认参数
+    - 传入的params参数优先级高于配置文件（向后兼容）
     """
+    # v3.0: 从配置文件读取默认参数
+    try:
+        config = get_factor_config()
+        config_params = config.get_factor_params("S")
+    except Exception as e:
+        # 配置加载失败时使用硬编码默认值（向后兼容）
+        print(f"⚠️ S因子配置加载失败，使用默认值: {e}")
+        config_params = {
+            "theta": {
+                "big": 0.45,
+                "small": 0.35,
+                "overlay_add": 0.05,
+                "new_phaseA_add": 0.10,
+                "strong_regime_sub": 0.05
+            }
+        }
+
+    # 合并配置参数：配置文件 < 传入的params（向后兼容）
+    p = dict(config_params)
+    if isinstance(params, dict):
+        p.update(params)
+
+    # 确保ctx不为None
+    if ctx is None:
+        ctx = {}
+
     # theta
     th = _theta(
-        params["theta"]["big"], params["theta"]["small"],
-        params["theta"]["overlay_add"], params["theta"]["new_phaseA_add"],
-        params["theta"]["strong_regime_sub"],
+        p["theta"]["big"], p["theta"]["small"],
+        p["theta"]["overlay_add"], p["theta"]["new_phaseA_add"],
+        p["theta"]["strong_regime_sub"],
         ctx.get("bigcap",False), ctx.get("overlay",False), ctx.get("phaseA",False), ctx.get("strong",False)
     )
     theta_abs = th*atr_now

@@ -159,13 +159,12 @@
       "enabled": true,
       "description": "成交量放大（配合价格方向，自适应阈值）",
       "params": {
-        "vlevel_short": 5,
-        "vlevel_long": 20,
         "vlevel_scale": 0.9,
-        "price_lookback": 20,
-        "price_threshold_mode": "hybrid",
-        "price_threshold_min_data": 50,
-        "normalization_method": "relative_historical"
+        "vroc_scale": 0.9,
+        "vlevel_weight": 0.6,
+        "vroc_weight": 0.4,
+        "price_lookback": 5,
+        "adaptive_threshold_mode": "hybrid"
       }
     },
 
@@ -176,19 +175,14 @@
       "enabled": true,
       "description": "OI持仓量变化（名义OI，自适应阈值）",
       "params": {
-        "oi24_scale": 0.15,
-        "align_scale": 0.15,
+        "oi24_scale": 2.0,
+        "align_scale": 4.0,
         "oi_weight": 0.7,
         "align_weight": 0.3,
-        "price_lookback": 12,
-        "price_threshold_mode": "hybrid",
-        "price_threshold_min_data": 50,
-        "min_oi_samples": 30,
+        "crowding_p95_penalty": 10,
+        "adaptive_threshold_mode": "hybrid",
         "use_notional_oi": true,
-        "contract_multiplier": 1.0,
-        "normalization_method": "relative_historical",
-        "r2_threshold": 0.7,
-        "crowding_p95_penalty": 10
+        "contract_multiplier": 1.0
       }
     },
 

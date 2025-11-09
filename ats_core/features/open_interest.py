@@ -25,6 +25,11 @@ v2.5++最终方案（2025-11-05）：
 - 相对强度 = 当前OI斜率 / 历史平均OI斜率
 - 自动适应不同币种的持仓规模特征
 - 解决不同持仓规模币种的跨币种可比性问题
+
+v3.0配置管理（2025-11-09）：
+- 移除硬编码参数，改为从配置文件读取
+- 支持向后兼容（params参数优先级高于配置文件）
+- 使用统一的数据质量检查阈值
 """
 from statistics import median
 from typing import Dict, Tuple, Any, List, Optional
@@ -33,9 +38,47 @@ from ats_core.sources.oi import fetch_oi_hourly, pct, pct_series
 from ats_core.features.scoring_utils import directional_score  # 保留用于内部计算
 from ats_core.utils.outlier_detection import detect_outliers_iqr, apply_outlier_weights
 from ats_core.scoring.scoring_utils import StandardizationChain
+from ats_core.config.factor_config import get_factor_config
 
-# 模块级StandardizationChain实例
-_oi_chain = StandardizationChain(alpha=0.25, tau=5.0, z0=3.0, z0=2.5, zmax=6.0, lam=1.5)
+# v3.0: 模块级StandardizationChain实例（延迟初始化）
+_oi_chain: Optional[StandardizationChain] = None
+
+
+def _get_oi_chain() -> StandardizationChain:
+    """
+    获取StandardizationChain实例（延迟初始化）
+
+    v3.0改进：从配置文件读取参数，而非硬编码
+    """
+    global _oi_chain
+
+    if _oi_chain is None:
+        try:
+            config = get_factor_config()
+            std_params = config.get_standardization_params("O+")
+
+            # 检查是否启用StandardizationChain
+            if std_params.get('enabled', True):
+                _oi_chain = StandardizationChain(
+                    alpha=std_params['alpha'],
+                    tau=std_params['tau'],
+                    z0=std_params['z0'],
+                    zmax=std_params['zmax'],
+                    lam=std_params['lam']
+                )
+            else:
+                # 如果配置禁用，使用默认参数创建（向后兼容）
+                _oi_chain = StandardizationChain(
+                    alpha=0.25, tau=5.0, z0=3.0, zmax=6.0, lam=1.5
+                )
+        except Exception as e:
+            # 配置加载失败时使用默认参数（向后兼容）
+            print(f"⚠️ O+因子StandardizationChain配置加载失败，使用默认参数: {e}")
+            _oi_chain = StandardizationChain(
+                alpha=0.25, tau=5.0, z0=3.0, zmax=6.0, lam=1.5
+            )
+
+    return _oi_chain
 
 
 def get_adaptive_oi_price_threshold(
@@ -177,32 +220,46 @@ def score_open_interest(symbol: str,
     Args:
         symbol: 交易对符号
         closes: 收盘价列表
-        params: 参数配置
+        params: 参数配置（v3.0：可选，优先级高于配置文件）
         cvd6_fallback: CVD 6小时变化（数据不足时兜底）
         oi_data: 预加载的OI数据（可选，优先使用）
 
     Returns:
         (O分数 [-100, +100], 元数据)
+
+    v3.0改进：
+    - 从配置文件读取默认参数
+    - 传入的params参数优先级高于配置文件（向后兼容）
+    - 使用配置的数据质量检查阈值
     """
-    # 参数默认
-    default_par = {
-        # v2.5++修复（2025-11-05）：调整oi24_scale与C/M因子对齐
-        # 修复前：oi24_scale=3.0 → 2x历史≈87分（相对C/M的76分更陡峭）
-        # 修复后：oi24_scale=2.0 → 2x历史≈96分（与C/M一致，避免不一致的饱和特性）
-        "oi24_scale": 2.0,          # OI 24h变化率缩放系数（原3.0，改为2.0与C/M对齐）
-        "align_scale": 4.0,          # 同向次数缩放系数（4次 给约 69 分）
-        "oi_weight": 0.7,            # OI 变化率权重
-        "align_weight": 0.3,         # 同向权重
-        "crowding_p95_penalty": 10,  # 拥挤度惩罚
-        "min_oi_samples": 30,        # 最少 OI 数据点
-        "adaptive_threshold_mode": "hybrid",  # P0.3: 自适应阈值模式
-        # P1.2: Notional OI参数
-        "use_notional_oi": True,     # 是否使用名义持仓量
-        "contract_multiplier": 1.0,  # 合约乘数（永续通常=1）
-    }
-    par = dict(default_par)
+    # v3.0: 从配置文件读取默认参数
+    try:
+        config = get_factor_config()
+        config_params = config.get_factor_params("O+")
+        min_oi_samples = config.get_data_quality_threshold("O+", "min_data_points")
+    except Exception as e:
+        # 配置加载失败时使用硬编码默认值（向后兼容）
+        print(f"⚠️ O+因子配置加载失败，使用默认值: {e}")
+        config_params = {
+            "oi24_scale": 2.0,
+            "align_scale": 0.15,
+            "oi_weight": 0.7,
+            "align_weight": 0.3,
+            "crowding_p95_penalty": 10,
+            "adaptive_threshold_mode": "hybrid",
+            "use_notional_oi": True,
+            "contract_multiplier": 1.0,
+        }
+        min_oi_samples = 30
+
+    # 合并配置参数：配置文件 < 传入的params（向后兼容）
+    par = dict(config_params)
     if isinstance(params, dict):
         par.update(params)
+
+    # 确保min_oi_samples在par中（为了向后兼容传入的params）
+    if "min_oi_samples" not in par:
+        par["min_oi_samples"] = min_oi_samples
 
     # 优先使用预加载的数据，否则重新获取（向后兼容）
     if oi_data is not None and len(oi_data) > 0:
@@ -430,8 +487,10 @@ def score_open_interest(symbol: str,
         O_raw = O_raw * penalty_factor
 
     # v2.0合规：应用StandardizationChain
-     # ✅ P0修复（2025-11-09）：重新启用StandardizationChain（参数已优化）
-    O_pub, diagnostics = _oi_chain.standardize(O_raw)
+    # ✅ P0修复（2025-11-09）：重新启用StandardizationChain（参数已优化）
+    # v3.0: 使用延迟初始化的StandardizationChain
+    oi_chain = _get_oi_chain()
+    O_pub, diagnostics = oi_chain.standardize(O_raw)
     O = int(round(O_pub))
 
     # 解释（v2.0：考虑价格方向）

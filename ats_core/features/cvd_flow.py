@@ -6,14 +6,57 @@ C（CVD资金流）维度 - 买卖压力分析
 核心指标：
 - CVD（Cumulative Volume Delta）变化
 - 买卖压力对比
+
+v3.0配置管理（2025-11-09）：
+- 移除硬编码参数，改为从配置文件读取
+- 支持向后兼容（params参数优先级高于配置文件）
+- 使用统一的数据质量检查阈值
 """
 import math
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Optional
 from .scoring_utils import directional_score  # 保留用于内部计算
 from ats_core.scoring.scoring_utils import StandardizationChain
+from ats_core.config.factor_config import get_factor_config
 
-# 模块级StandardizationChain实例
-_cvd_chain = StandardizationChain(alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5)
+# v3.0: 模块级StandardizationChain实例（延迟初始化）
+_cvd_chain: Optional[StandardizationChain] = None
+
+
+def _get_cvd_chain() -> StandardizationChain:
+    """
+    获取StandardizationChain实例（延迟初始化）
+
+    v3.0改进：从配置文件读取参数，而非硬编码
+    """
+    global _cvd_chain
+
+    if _cvd_chain is None:
+        try:
+            config = get_factor_config()
+            std_params = config.get_standardization_params("C+")
+
+            # 检查是否启用StandardizationChain
+            if std_params.get('enabled', True):
+                _cvd_chain = StandardizationChain(
+                    alpha=std_params['alpha'],
+                    tau=std_params['tau'],
+                    z0=std_params['z0'],
+                    zmax=std_params['zmax'],
+                    lam=std_params['lam']
+                )
+            else:
+                # 如果配置禁用，使用默认参数创建（向后兼容）
+                _cvd_chain = StandardizationChain(
+                    alpha=0.25, tau=5.0, z0=3.0, zmax=6.0, lam=1.5
+                )
+        except Exception as e:
+            # 配置加载失败时使用默认参数（向后兼容）
+            print(f"⚠️ C+因子StandardizationChain配置加载失败，使用默认参数: {e}")
+            _cvd_chain = StandardizationChain(
+                alpha=0.25, tau=5.0, z0=3.0, zmax=6.0, lam=1.5
+            )
+
+    return _cvd_chain
 
 def score_cvd_flow(
     cvd_series: List[float],
@@ -26,10 +69,10 @@ def score_cvd_flow(
     C（CVD资金流）维度评分
 
     Args:
-# P0修复（2025-11-09）：使用新参数（alpha=0.25, tau=5.0, z0=3.0）
-_cvd_chain = StandardizationChain(alpha=0.25, tau=5.0, z0=3.0, zmax=6.0, lam=1.5)
+        cvd_series: CVD序列
+        c: 收盘价列表
         side_long: 是否做多
-        params: 参数配置
+        params: 参数配置（v3.0：可选，优先级高于配置文件）
         klines: K线数据（用于ADTV_notional归一化，推荐）
 
     Returns:
@@ -45,19 +88,34 @@ _cvd_chain = StandardizationChain(alpha=0.25, tau=5.0, z0=3.0, zmax=6.0, lam=1.5
         - 相对强度 = 当前斜率 / 历史平均斜率
         - 自动适应每个币种的历史特征，BTC和SHIB在同等相对强度下得分一致
         - 解决低价币过度放大问题，实现真正的跨币可比
-    """
-    # 默认参数
-    default_params = {
-        "lookback_hours": 6,       # CVD回看周期（小时）
-        "cvd_scale": 0.15,         # P2.4修复: 0.02→0.15，避免饱和（CVD变化scale，7.5倍增加）
-        "crowding_p95_penalty": 10,  # 拥挤度惩罚（百分比）
-    }
 
-    p = dict(default_params)
+    v3.0改进：
+        - 从配置文件读取默认参数
+        - 传入的params参数优先级高于配置文件（向后兼容）
+        - 使用配置的数据质量检查阈值
+    """
+    # v3.0: 从配置文件读取默认参数
+    try:
+        config = get_factor_config()
+        config_params = config.get_factor_params("C+")
+        min_data_points = config.get_data_quality_threshold("C+", "min_data_points")
+    except Exception as e:
+        # 配置加载失败时使用硬编码默认值（向后兼容）
+        print(f"⚠️ C+因子配置加载失败，使用默认值: {e}")
+        config_params = {
+            "lookback_hours": 6,
+            "cvd_scale": 0.15,
+            "crowding_p95_penalty": 10,
+        }
+        min_data_points = 7
+
+    # 合并配置参数：配置文件 < 传入的params（向后兼容）
+    p = dict(config_params)
     if isinstance(params, dict):
         p.update(params)
 
-    if len(cvd_series) < 7 or len(c) < 7:
+    # v3.0: 使用配置的数据质量阈值
+    if len(cvd_series) < min_data_points or len(c) < min_data_points:
         return 0, {
             "cvd6": 0.0,
             "cvd_score": 0,
@@ -162,8 +220,10 @@ _cvd_chain = StandardizationChain(alpha=0.25, tau=5.0, z0=3.0, zmax=6.0, lam=1.5
     # ========== 5. 最终分数（保留符号） ==========
     # v2.0合规：应用StandardizationChain
     # ✅ P0修复（2025-11-09）：重新启用StandardizationChain（参数已优化）
+    # v3.0: 使用延迟初始化的StandardizationChain
     C_raw = cvd_score  # 保存原始值
-    C_pub, diagnostics = _cvd_chain.standardize(C_raw)
+    cvd_chain = _get_cvd_chain()
+    C_pub, diagnostics = cvd_chain.standardize(C_raw)
     C = int(round(C_pub))
 
     # 计算cvd6用于显示（原始CVD变化，不归一化）
