@@ -317,7 +317,12 @@ def score_open_interest(symbol: str,
             "dnup12":   None,
             "upup12":   None,
             "crowding_warn": False,
-            "data_source": "cvd_fallback",
+            # v3.1: 统一降级元数据结构
+            "degradation_reason": "insufficient_data",  # 统一字段（P1修复）
+            "min_data_required": par["min_oi_samples"],
+            "actual_data_points": len(oi),
+            "fallback_strategy": "cvd_proxy",  # 特殊策略标记
+            "data_source": "cvd_fallback",  # 保留用于向后兼容
             "r_squared": 0.0,
             "is_consistent": False,
             "method": "cvd_fallback",
