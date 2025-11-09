@@ -327,7 +327,7 @@ git log --oneline -5
 全部勾选后，运行：
 ```bash
 cd ~/cryptosignal
-git pull origin claude/reorganize-repo-structure-011CUvEzbqkdKuPnh33PSRPn
+git pull origin claude/reorganize-repo-structure-011CUwp5f5x9B31K29qAb5w3
 ./setup.sh
 ```
 

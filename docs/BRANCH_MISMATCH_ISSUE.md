@@ -49,8 +49,8 @@ pkill -f realtime_signal_scanner
 
 # 2. 切换到正确的分支
 git fetch origin
-git checkout claude/reorganize-repo-structure-011CUvEzbqkdKuPnh33PSRPn
-git pull origin claude/reorganize-repo-structure-011CUvEzbqkdKuPnh33PSRPn
+git checkout claude/reorganize-repo-structure-011CUwp5f5x9B31K29qAb5w3
+git pull origin claude/reorganize-repo-structure-011CUwp5f5x9B31K29qAb5w3
 
 # 3. 清理Python缓存
 find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
@@ -69,7 +69,7 @@ find . -name "*.pyc" -delete 2>/dev/null || true
 ```bash
 # 1. 下载新脚本
 cd ~
-wget https://raw.githubusercontent.com/FelixWayne0318/cryptosignal/claude/reorganize-repo-structure-011CUvEzbqkdKuPnh33PSRPn/scripts/deploy_server_latest.sh
+wget https://raw.githubusercontent.com/FelixWayne0318/cryptosignal/claude/reorganize-repo-structure-011CUwp5f5x9B31K29qAb5w3/scripts/deploy_server_latest.sh
 
 # 2. 编辑脚本，填入真实API密钥
 vi deploy_server_latest.sh
@@ -147,7 +147,7 @@ cd ~/cryptosignal
 git branch --show-current
 ```
 
-应该看到：`claude/reorganize-repo-structure-011CUvEzbqkdKuPnh33PSRPn`
+应该看到：`claude/reorganize-repo-structure-011CUwp5f5x9B31K29qAb5w3`
 
 ### Q3: 切换分支会丢失配置文件吗？
 
@@ -164,7 +164,7 @@ git branch --show-current
 ```bash
 # 查看差异
 cd ~/cryptosignal
-git diff claude/reorganize-repo-structure-011CUrZaXUMTBXApc3jvsqTh claude/reorganize-repo-structure-011CUvEzbqkdKuPnh33PSRPn
+git diff claude/reorganize-repo-structure-011CUrZaXUMTBXApc3jvsqTh claude/reorganize-repo-structure-011CUwp5f5x9B31K29qAb5w3
 ```
 
 主要差异文件：
@@ -188,7 +188,7 @@ git diff claude/reorganize-repo-structure-011CUrZaXUMTBXApc3jvsqTh claude/reorga
 **核心命令**：
 ```bash
 cd ~/cryptosignal
-git checkout claude/reorganize-repo-structure-011CUvEzbqkdKuPnh33PSRPn
+git checkout claude/reorganize-repo-structure-011CUwp5f5x9B31K29qAb5w3
 git pull
 ./setup.sh
 ```
