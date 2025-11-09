@@ -34,12 +34,11 @@ from ats_core.features.cvd import cvd_from_klines, cvd_mix_with_oi_price
 from ats_core.scoring.scorecard import scorecard, get_factor_contributions
 from ats_core.scoring.probability import map_probability
 
-# ========== 阶段3：移除未使用的导入 ==========
-# 移除: map_probability_sigmoid, get_adaptive_temperature (概率已简化)
-# 移除: get_fi_modulator (p_min已简化)
-# from ats_core.scoring.probability_v2 import map_probability_sigmoid, get_adaptive_temperature
-# from ats_core.modulators.fi_modulators import get_fi_modulator
-
+# ========== 世界顶级优化模块 ==========
+from ats_core.scoring.probability_v2 import (
+    map_probability_sigmoid,
+    get_adaptive_temperature
+)
 from ats_core.scoring.adaptive_weights import (
     get_regime_weights,
     blend_weights
@@ -47,6 +46,7 @@ from ats_core.scoring.adaptive_weights import (
 
 # ========== v6.6 统一调制器系统 ==========
 from ats_core.modulators.modulator_chain import ModulatorChain
+from ats_core.modulators.fi_modulators import get_fi_modulator  # v6.7: 统一p_min计算
 from ats_core.features.multi_timeframe import multi_timeframe_coherence
 
 # ========== v6.6 三层止损系统 ==========
@@ -540,16 +540,10 @@ def _analyze_symbol_core(
     # 注意：调制器在scorecard中权重为0，不影响加权分数
     scores.update(modulation)
 
-    # ===== 阶段3：weighted_score极简化计算（仅用于向后兼容） =====
-    # 警告：此值已废弃，生产环境应使用v7.2层的weighted_score_v72
-    # 这里仅保留极简版本以保持代码兼容性
-    #
-    # 移除：复杂的scorecard计算（包含调制器调整）
-    # 保留：基础权重计算
+    # 计算加权分数（scorecard内部已归一化到±100）
+    # 注意：scorecard函数通过 total/weight_sum 自动归一化，无需再除以1.6
+    # 注意：scores现在包含L/S/F/I，但它们在weights中权重为0，不影响结果
     weighted_score, confidence, edge = scorecard(scores, weights)
-
-    # 标记为废弃（将在返回结果中添加说明）
-    _weighted_score_deprecated = True
 
     # 计算每个因子对总分的贡献（用于电报消息显示）
     factor_contributions = get_factor_contributions(scores, weights)
@@ -609,51 +603,96 @@ def _analyze_symbol_core(
         "F": F_meta
     }
 
-    # ===== 阶段3：概率极简化（仅用于向后兼容） =====
-    # ⚠️ 警告：此值已废弃，生产环境必须使用v7.2层的P_calibrated
-    #
-    # 移除：
-    # - 复杂的quality_score计算和补偿
-    # - 调制器温度调整
-    # - Sigmoid映射
-    #
-    # 保留：极简固定值（仅用于保持代码兼容性，无实际意义）
-    # 生产代码必须使用v7.2层的概率值
+    # ---- 4. 基础概率计算（🚀 世界顶级优化：Sigmoid映射）----
+    prior_up = 0.50  # 中性先验
+    quality_score = _calc_quality(scores, len(k1), len(oi_data))
 
-    # 使用极简公式：基于edge的线性映射
-    # 不再使用调制器、温度、质量评分等复杂逻辑
-    P_base = 0.50 + edge * 0.1  # edge在[-1, 1]范围，P在[0.4, 0.6]范围
-    P_base = max(0.40, min(0.65, P_base))  # 限制范围
+    # v6.3.2新增：新币质量评分补偿
+    # 问题：_calc_quality对K线<100的币种惩罚(Q*=0.85)，新币天然数据少被惩罚
+    # 解决：给予适度补偿，但仍保留一定惩罚（数据少确实是风险）
+    #
+    # 补偿策略：
+    # - ultra_new: 部分补偿（0.85 → 0.90），仍保留10%惩罚
+    # - phaseA: 小幅补偿（0.85 → 0.88），保留12%惩罚
+    # - phaseB: 微调补偿（0.85 → 0.87），保留13%惩罚
+    # - mature: 无补偿
+    if is_new_coin and len(k1) < 100:
+        original_quality = quality_score
+        if is_ultra_new:
+            # 超新币：从0.85补偿到0.90
+            quality_score = min(1.0, quality_score / 0.85 * 0.90)
+        elif is_phaseA:
+            # 阶段A：从0.85补偿到0.88
+            quality_score = min(1.0, quality_score / 0.85 * 0.88)
+        elif is_phaseB:
+            # 阶段B：从0.85补偿到0.87
+            quality_score = min(1.0, quality_score / 0.85 * 0.87)
+        # 注：补偿不能超过1.0，且仍保留一定惩罚（体现数据少的风险）
 
-    P_long = P_base if side_long else (1.0 - P_base)
-    P_short = (1.0 - P_base) if side_long else P_base
+    # v6.6: 使用调制器链的Teff（替代get_adaptive_temperature）
+    # 调制器已融合了L/S/F/I的温度调整
+    temperature = modulator_output.Teff_final
+
+    # 使用Sigmoid概率映射（替代线性映射）
+    # v6.6: 使用调制后的temperature和cost
+    P_long_base, P_short_base = map_probability_sigmoid(edge, prior_up, quality_score, temperature)
+    P_base = P_long_base if side_long else P_short_base
+
+    # 移除贝叶斯先验调整（已废弃候选池机制）
+
+    # ---- 5. 最终概率（v2.0合规：移除F直接调整）----
+    # F调制器仅通过Teff/cost调整（在integrated_gates中实现）
+    # 不应直接修改概率，避免双重惩罚
+    # 符合MODULATORS.md § 2.1规范："F仅调节Teff/cost/thresholds，绝不修改方向分数或概率"
+    P_long = min(0.95, P_long_base)
+    P_short = min(0.95, P_short_base)
     P_chosen = P_long if side_long else P_short
 
-    # 标记为废弃
-    _probability_deprecated = True
-
-    # ===== 阶段3：EV极简化（仅用于向后兼容） =====
-    # ⚠️ 警告：此值已废弃，生产环境必须使用v7.2层的EV_net
-    #
-    # 移除：
-    # - 复杂的调制器成本计算
-    # - 复杂的p_min调制（FIModulator）
-    # - 安全边际调整
-    #
-    # 保留：极简固定值（仅用于保持代码兼容性，无实际意义）
-
+    # ---- v6.6: 软约束检查（EV和P门槛）----
     # 获取发布配置
     publish_cfg = params.get("publish", {})
 
-    # EV：使用极简固定成本
-    EV = P_chosen * abs(edge) - (1 - P_chosen) * 0.02  # 固定2%成本
+    # 计算EV使用调制后的cost
+    # 修复：使用abs(edge)，因为无论做多还是做空，收益都应该是正数
+    EV = P_chosen * abs(edge) - (1 - P_chosen) * modulator_output.cost_final
 
-    # p_min：使用固定值
-    p_min_adjusted = 0.55  # 固定阈值
+    # 软约束1：EV ≤ 0
+    if EV <= 0:
+        # 不是硬拒绝，记录为"自然过滤"
+        # 返回success=True但publish=False
+        pass  # 允许继续，但后续会标记为不发布
+
+    # 软约束2：P < p_min（基于F/I调制器调整）
+    # v6.7++修复（2025-11-06）：统一p_min计算到FIModulator
+    # 问题：之前使用ModulatorChain.p_min_adj（仅考虑F），现在统一到FIModulator（完整F+I）
+    #
+    # 归一化F和I到[0, 1]范围（FIModulator需要）
+    F_normalized = (F + 100.0) / 200.0  # [-100, 100] → [0, 1]
+    I_normalized = (I + 100.0) / 200.0  # [-100, 100] → [0, 1]
+
+    # 使用FIModulator计算完整的p_min（包含F和I双重调制）
+    fi_modulator = get_fi_modulator()
+    p_min_modulated, delta_p_min, threshold_details = fi_modulator.calculate_thresholds(
+        F_raw=F_normalized,
+        I_raw=I_normalized,
+        symbol=symbol
+    )
+
+    # FIModulator公式: p_min = p0 + θF·max(0, gF) + θI·min(0, gI)
+    # 其中: p0=0.58, θF=0.03, θI=-0.02, range=[0.50, 0.75]
+    #
+    # 为了保持信号量控制，叠加安全边际调整
+    safety_margin = modulator_output.L_meta.get("safety_margin", 0.005)
+    adjustment = safety_margin / (abs(edge) + 1e-6)
+    adjustment = min(adjustment, 0.02)  # 限制最大调整
+
+    # 最终p_min = FIModulator计算值 + 安全边际
+    p_min_adjusted = p_min_modulated + adjustment
+    # 限制在合理范围
+    p_min_adjusted = max(0.50, min(0.75, p_min_adjusted))
+
+    # 检查P是否低于阈值
     p_below_threshold = P_chosen < p_min_adjusted
-
-    # 标记为废弃
-    _ev_deprecated = True
 
     # ---- 6. 发布判定（4级分级标准）----
 
@@ -720,10 +759,12 @@ def _analyze_symbol_core(
             warn(f"DataQual检查失败 ({symbol}): {e}")
             gates_data_qual = 1.0
 
-    # Gate 2: EV - 期望值（阶段3：使用简化EV）
-    # ⚠️ 使用简化的EV值（仅用于兼容性）
-    # 生产代码应使用v7.2层的EV_net
-    gates_ev = EV  # 使用上面计算的简化EV
+    # Gate 2: EV - 期望值（基于概率和成本）
+    # 修复：使用实际edge而不是假设edge=1.0
+    # EV = P * abs(edge) - (1-P) * cost
+    # 使用调制器输出的最终成本
+    # 负值表示不利，会额外惩罚Prime强度
+    gates_ev = P_chosen * abs(edge) - (1 - P_chosen) * modulator_output.cost_final
 
     # Gate 3: Execution - 执行质量（基于流动性L）
     # L范围-100到+100，映射到execution 0.0-1.0
@@ -1135,10 +1176,18 @@ def _analyze_symbol_core(
         "Teff_final": modulator_output.Teff_final,  # 最终温度（融合后）
         "cost_modulated": modulator_output.cost_final,  # 调制后成本
 
-        # 阶段3：FIModulator已移除（p_min已简化）
+        # v6.7++: FIModulator阈值计算（统一p_min）
         "fi_thresholds": {
-            "_deprecated": "FIModulator已在阶段3移除，p_min使用固定值",
-            "p_min_adjusted": p_min_adjusted,  # 固定值：0.55
+            "p_min_base": threshold_details.get("p_min", 0.0),  # FIModulator基础p_min
+            "p_min_adjusted": p_min_adjusted,  # 加上安全边际后的最终p_min
+            "delta_p_min": delta_p_min,
+            "F_normalized": F_normalized,
+            "I_normalized": I_normalized,
+            "g_F": threshold_details.get("g_F", 0.0),
+            "g_I": threshold_details.get("g_I", 0.0),
+            "adj_F": threshold_details.get("adj_F", 0.0),  # F的调整量
+            "adj_I": threshold_details.get("adj_I", 0.0),  # I的调整量
+            "safety_adjustment": adjustment  # 安全边际调整
         },
 
         # Scorecard结果（阶段1.4：标记为deprecated，将被v7.2层的因子分组替代）
@@ -1151,13 +1200,16 @@ def _analyze_symbol_core(
         "side": "long" if side_long else "short",
         "side_long": side_long,
 
-        # 概率（阶段3：极简化计算，仅用于向后兼容）
+        # 概率（阶段2.3：标记为DEPRECATED，v7.2层使用统计校准概率）
         "P_long": P_long,  # DEPRECATED: 使用v7.2层的P_calibrated
         "P_short": P_short,  # DEPRECATED: 使用v7.2层的P_calibrated
         "probability": P_chosen,  # DEPRECATED: 使用v7.2层的P_calibrated
         "P_base": P_base,  # 基础概率（调整前）[DEPRECATED]
-        "_probability_deprecation": "⚠️ 阶段3：基础层已简化为极简公式（P=0.5+edge*0.1），仅用于兼容性。生产环境必须使用v7.2层的P_calibrated（统计校准）",
+        "_probability_deprecation": "基础层使用sigmoid映射，v7.2层使用统计校准（EmpiricalCalibrator）。生产环境应使用v7.2层的P_calibrated",
         "F_score": F,  # F分数（-100到+100）
+        "F_adjustment": 1.0,  # 调整系数（v6.2: F调节器已移除，固定为1.0）
+        "prior_up": prior_up,
+        "quality_score": quality_score,  # 质量系数（0.6-1.0）
 
         # 发布（阶段1.2b：标记为deprecated，最终判定应由v7.2层完成）
         "publish": {
@@ -1171,10 +1223,10 @@ def _analyze_symbol_core(
             "rejection_reason": rejection_reason,  # v6.3新增：拒绝原因跟踪
             "ttl_h": 8,
             # v6.6软约束（不硬拒绝，仅标记）
-            # 阶段3：标记EV为DEPRECATED（已极简化）
+            # 阶段2.4：标记EV为DEPRECATED，v7.2层使用ATR-based EV计算
             "EV": EV,  # DEPRECATED: 使用v7.2层的EV_net
             "EV_positive": EV > 0,  # DEPRECATED: 使用v7.2层的EV_net > 0
-            "_EV_deprecation": "⚠️ 阶段3：基础层已简化为极简公式（EV=P*edge-(1-P)*0.02），仅用于兼容性。生产环境必须使用v7.2层的EV_net（ATR-based精确计算）",
+            "_EV_deprecation": "基础层使用P*edge-(1-P)*cost，v7.2层使用ATR-based计算。生产环境应使用v7.2层的EV_net",
             "P_threshold": p_min_adjusted,
             "P_above_threshold": not p_below_threshold,
             "soft_filtered": (EV <= 0) or p_below_threshold,  # DEPRECATED: 使用v7.2层的pass_gates
