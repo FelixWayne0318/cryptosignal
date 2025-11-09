@@ -27,7 +27,8 @@ from .scoring_utils import directional_score  # 保留用于内部计算
 from ats_core.scoring.scoring_utils import StandardizationChain
 
 # 模块级StandardizationChain实例（持久化EW状态）
-_momentum_chain = StandardizationChain(alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5)
+# P0修复（2025-11-09）：使用新参数（alpha=0.25, tau=5.0, z0=3.0）
+_momentum_chain = StandardizationChain(alpha=0.25, tau=5.0, z0=3.0, zmax=6.0, lam=1.5)
 
 def score_momentum(
     h: List[float],
@@ -184,9 +185,8 @@ def score_momentum(
     M_raw = p["slope_weight"] * slope_score + p["accel_weight"] * accel_score
 
     # v2.0合规：应用StandardizationChain
-    # ⚠️ 2025-11-04紧急修复：禁用StandardizationChain，过度压缩导致信号丢失
-    # M_pub, diagnostics = _momentum_chain.standardize(M_raw)
-    M_pub = max(-100, min(100, M_raw))  # 直接使用原始值
+    # ✅ P0修复（2025-11-09）：重新启用StandardizationChain（参数已优化）
+    M_pub, diagnostics = _momentum_chain.standardize(M_raw)
     M = int(round(M_pub))
 
     # ========== 5. 解释 ==========

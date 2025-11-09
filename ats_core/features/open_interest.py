@@ -35,7 +35,7 @@ from ats_core.utils.outlier_detection import detect_outliers_iqr, apply_outlier_
 from ats_core.scoring.scoring_utils import StandardizationChain
 
 # 模块级StandardizationChain实例
-_oi_chain = StandardizationChain(alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5)
+_oi_chain = StandardizationChain(alpha=0.25, tau=5.0, z0=3.0, z0=2.5, zmax=6.0, lam=1.5)
 
 
 def get_adaptive_oi_price_threshold(
@@ -430,9 +430,8 @@ def score_open_interest(symbol: str,
         O_raw = O_raw * penalty_factor
 
     # v2.0合规：应用StandardizationChain
-    # ⚠️ 2025-11-04紧急修复：禁用StandardizationChain，过度压缩导致信号丢失
-    # O_pub, diagnostics = _oi_chain.standardize(O_raw)
-    O_pub = max(-100, min(100, O_raw))  # 直接使用原始值
+     # ✅ P0修复（2025-11-09）：重新启用StandardizationChain（参数已优化）
+    O_pub, diagnostics = _oi_chain.standardize(O_raw)
     O = int(round(O_pub))
 
     # 解释（v2.0：考虑价格方向）

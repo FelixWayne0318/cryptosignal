@@ -29,7 +29,8 @@ from ats_core.features.scoring_utils import directional_score  # 保留用于内
 from ats_core.scoring.scoring_utils import StandardizationChain
 
 # 模块级StandardizationChain实例
-_volume_chain = StandardizationChain(alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5)
+# P0修复（2025-11-09）：使用新参数（alpha=0.25, tau=5.0, z0=3.0）
+_volume_chain = StandardizationChain(alpha=0.25, tau=5.0, z0=3.0, zmax=6.0, lam=1.5)
 
 
 def get_adaptive_price_threshold(
@@ -199,9 +200,8 @@ def score_volume(vol, closes=None, params=None):
         V_raw = V_strength
 
     # v2.0合规：应用StandardizationChain
-    # ⚠️ 2025-11-04紧急修复：禁用StandardizationChain，过度压缩导致信号丢失
-    # V_pub, diagnostics = _volume_chain.standardize(V_raw)
-    V_pub = max(-100, min(100, V_raw))  # 直接使用原始值
+    # ✅ P0修复（2025-11-09）：重新启用StandardizationChain（参数已优化）
+    V_pub, diagnostics = _volume_chain.standardize(V_raw)
     V = int(round(V_pub))
 
     # ========== 解释文本（考虑价格方向）==========

@@ -459,7 +459,7 @@ class OptimizedBatchScanner:
 
         # Layer 3: 市场数据更新（低频，每30分钟）
         if current_minute in [0, 30]:
-            log(f"\n📉 [Layer 3] 更新市场数据（资金费率/持仓量）...")
+            log(f"\n📉 [Layer 3] 更新市场数据（资金费率/持仓量/BTC-ETH K线）...")
             try:
                 if self.client is None:
                     warn("⚠️  客户端未初始化，跳过Layer 3更新")
@@ -468,6 +468,16 @@ class OptimizedBatchScanner:
                         symbols=symbols,
                         client=self.client  # ✅ 修复：使用 self.client
                     )
+
+                    # P0修复：定期更新BTC/ETH K线（I因子需要）
+                    log("   更新BTC/ETH K线（I因子）...")
+                    from ats_core.sources.binance import get_klines
+                    try:
+                        self.btc_klines = get_klines('BTCUSDT', '1h', 48)
+                        self.eth_klines = get_klines('ETHUSDT', '1h', 48)
+                        log(f"   ✅ BTC K线: {len(self.btc_klines)}根, ETH K线: {len(self.eth_klines)}根")
+                    except Exception as e:
+                        warn(f"   ⚠️  BTC/ETH K线更新失败（使用缓存）: {e}")
             except Exception as e:
                 error(f"❌ Layer 3 更新异常: {e}")
                 import traceback

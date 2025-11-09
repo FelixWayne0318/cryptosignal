@@ -26,8 +26,8 @@ def score_cvd_flow(
     C（CVD资金流）维度评分
 
     Args:
-        cvd_series: CVD 序列
-        c: 收盘价序列（用于归一化，旧方案）
+# P0修复（2025-11-09）：使用新参数（alpha=0.25, tau=5.0, z0=3.0）
+_cvd_chain = StandardizationChain(alpha=0.25, tau=5.0, z0=3.0, zmax=6.0, lam=1.5)
         side_long: 是否做多
         params: 参数配置
         klines: K线数据（用于ADTV_notional归一化，推荐）
@@ -161,10 +161,9 @@ def score_cvd_flow(
 
     # ========== 5. 最终分数（保留符号） ==========
     # v2.0合规：应用StandardizationChain
-    # ⚠️ 2025-11-04紧急修复：禁用StandardizationChain，过度压缩导致信号丢失
+    # ✅ P0修复（2025-11-09）：重新启用StandardizationChain（参数已优化）
     C_raw = cvd_score  # 保存原始值
-    # C_pub, diagnostics = _cvd_chain.standardize(C_raw)
-    C_pub = max(-100, min(100, C_raw))  # 直接使用原始值
+    C_pub, diagnostics = _cvd_chain.standardize(C_raw)
     C = int(round(C_pub))
 
     # 计算cvd6用于显示（原始CVD变化，不归一化）
