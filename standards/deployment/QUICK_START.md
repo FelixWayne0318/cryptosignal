@@ -1,1 +1,1 @@
-../QUICK_DEPLOY.md
+../../docs/QUICK_DEPLOY.md
