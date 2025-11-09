@@ -20,15 +20,57 @@ v2.5++最终方案（2025-11-05）：
 - 相对强度 = 当前斜率/加速度 / 历史平均值
 - 自动适应每个币种的历史波动特征
 - 解决不同波动率币种的跨币种可比性问题
+
+v3.0配置管理（2025-11-09）：
+- 移除硬编码参数，改为从配置文件读取
+- 支持向后兼容（params参数优先级高于配置文件）
+- 使用统一的数据质量检查阈值
 """
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Optional
 from .ta_core import ema, atr
 from .scoring_utils import directional_score  # 保留用于内部计算
 from ats_core.scoring.scoring_utils import StandardizationChain
+from ats_core.config.factor_config import get_factor_config
 
-# 模块级StandardizationChain实例（持久化EW状态）
-# P0修复（2025-11-09）：使用新参数（alpha=0.25, tau=5.0, z0=3.0）
-_momentum_chain = StandardizationChain(alpha=0.25, tau=5.0, z0=3.0, zmax=6.0, lam=1.5)
+# v3.0: 模块级StandardizationChain实例（延迟初始化）
+_momentum_chain: Optional[StandardizationChain] = None
+
+
+def _get_momentum_chain() -> StandardizationChain:
+    """
+    获取StandardizationChain实例（延迟初始化）
+
+    v3.0改进：从配置文件读取参数，而非硬编码
+    """
+    global _momentum_chain
+
+    if _momentum_chain is None:
+        try:
+            config = get_factor_config()
+            std_params = config.get_standardization_params("M")
+
+            # 检查是否启用StandardizationChain
+            if std_params.get('enabled', True):
+                _momentum_chain = StandardizationChain(
+                    alpha=std_params['alpha'],
+                    tau=std_params['tau'],
+                    z0=std_params['z0'],
+                    zmax=std_params['zmax'],
+                    lam=std_params['lam']
+                )
+            else:
+                # 如果配置禁用，使用默认参数创建（向后兼容）
+                _momentum_chain = StandardizationChain(
+                    alpha=0.25, tau=5.0, z0=3.0, zmax=6.0, lam=1.5
+                )
+        except Exception as e:
+            # 配置加载失败时使用默认参数（向后兼容）
+            print(f"⚠️ M因子StandardizationChain配置加载失败，使用默认参数: {e}")
+            _momentum_chain = StandardizationChain(
+                alpha=0.25, tau=5.0, z0=3.0, zmax=6.0, lam=1.5
+            )
+
+    return _momentum_chain
 
 def score_momentum(
     h: List[float],
@@ -48,31 +90,51 @@ def score_momentum(
         h: 最高价列表
         l: 最低价列表
         c: 收盘价列表
-        params: 参数配置
+        params: 参数配置（v3.0：可选，优先级高于配置文件）
 
     Returns:
         (M分数 [-100, +100], 元数据)
-    """
-    # 默认参数
-    # P2.2修改：使用短窗口EMA与T因子正交化
-    # v2.5++: 相对历史归一化，scale需要调整（相对强度范围不同）
-    default_params = {
-        "ema_fast": 3,             # P2.2新增：超短期EMA（vs T的EMA5）
-        "ema_slow": 5,             # P2.2新增：短期EMA（vs T的EMA20）
-        "slope_lookback": 6,       # P2.2修改：12→6，减少窗口长度
-        "slope_scale": 2.00,       # v2.5++修改：1.00→2.00（相对强度用更大scale）
-        "accel_scale": 2.00,       # v2.5++修改：1.00→2.00（相对强度用更大scale）
-        "slope_weight": 0.6,       # 斜率权重
-        "accel_weight": 0.4,       # 加速度权重
-        "atr_period": 14,          # ATR周期（降级方案使用）
-    }
 
-    p = dict(default_params)
+    v3.0改进：
+    - 从配置文件读取默认参数
+    - 传入的params参数优先级高于配置文件（向后兼容）
+    - 使用配置的数据质量检查阈值
+    """
+    # v3.0: 从配置文件读取默认参数
+    try:
+        config = get_factor_config()
+        config_params = config.get_factor_params("M")
+        min_data_points = config.get_data_quality_threshold("M", "min_data_points")
+    except Exception as e:
+        # 配置加载失败时使用硬编码默认值（向后兼容）
+        print(f"⚠️ M因子配置加载失败，使用默认值: {e}")
+        config_params = {
+            "ema_fast": 3,
+            "ema_slow": 5,
+            "slope_lookback": 6,
+            "slope_scale": 2.00,
+            "accel_scale": 2.00,
+            "slope_weight": 0.6,
+            "accel_weight": 0.4,
+            "atr_period": 14,
+        }
+        min_data_points = 20
+
+    # 合并配置参数：配置文件 < 传入的params（向后兼容）
+    p = dict(config_params)
     if isinstance(params, dict):
         p.update(params)
 
-    if len(c) < 20:  # P2.2修改：30→20，短窗口需要更少数据
-        return 0, {"slope_now": 0.0, "accel": 0.0, "slope_score": 0, "accel_score": 0}
+    # v3.0: 使用配置的数据质量阈值
+    if len(c) < min_data_points:
+        return 0, {
+            "slope_now": 0.0,
+            "accel": 0.0,
+            "slope_score": 0,
+            "accel_score": 0,
+            "degradation_reason": "insufficient_data",
+            "min_data_required": min_data_points
+        }
 
     # ========== 1. P2.2改进：使用短周期EMA3/5计算动量 ==========
     # T因子用EMA5/20（大趋势），M因子用EMA3/5（快速动量）→ 正交化
@@ -184,9 +246,11 @@ def score_momentum(
     # ========== 4. 加权平均（原始值）==========
     M_raw = p["slope_weight"] * slope_score + p["accel_weight"] * accel_score
 
-    # v2.0合规：应用StandardizationChain
+    # v3.0: 应用StandardizationChain（从配置读取参数）
+    # v2.0合规：应用StandardizationChain（5步稳健化）
     # ✅ P0修复（2025-11-09）：重新启用StandardizationChain（参数已优化）
-    M_pub, diagnostics = _momentum_chain.standardize(M_raw)
+    momentum_chain = _get_momentum_chain()
+    M_pub, diagnostics = momentum_chain.standardize(M_raw)
     M = int(round(M_pub))
 
     # ========== 5. 解释 ==========
