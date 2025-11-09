@@ -1209,9 +1209,10 @@ def _analyze_symbol_core(
         "prior_up": prior_up,
         "quality_score": quality_score,  # 质量系数（0.6-1.0）
 
-        # 发布
+        # 发布（阶段1.2b：标记为deprecated，最终判定应由v7.2层完成）
         "publish": {
-            "prime": is_prime,
+            "prime": is_prime,  # DEPRECATED: 使用intermediate_data.diagnostic_result.base_is_prime
+            "_deprecated_notice": "publish.prime将由v7.2层统一判定，请使用v7.2增强层的最终判定结果",
             "watch": is_watch,
             "dims_ok": dims_ok,
             "prime_strength": int(prime_strength),  # Prime评分（0-100）
@@ -1234,13 +1235,16 @@ def _analyze_symbol_core(
         # ===== L1修复：添加中间数据（供v7.2判定层使用）=====
         # 目的：避免v7.2层重复计算CVD、ATR等数据
         # 重构阶段1.2a完成日期：2025-11-09
+        # 重构阶段1.2b扩展日期：2025-11-09（添加诊断结果）
         "intermediate_data": {
+            # 原始数据（L1修复）
             "cvd_series": cvd_series,  # CVD序列（完整）
             "klines": k1,  # K线数据（供v7.2使用）
             "oi_data": oi_data,  # OI数据（供v7.2使用）
             "atr_now": atr_now,  # 当前ATR
             "close_now": close_now,  # 当前收盘价
-            # 质量检查结果（诊断用）
+
+            # 质量检查结果（阶段1.2b：详细诊断信息）
             "quality_checks": {
                 "check_1_strength_prob": quality_check_1,
                 "check_2_confidence": quality_check_2,
@@ -1248,6 +1252,24 @@ def _analyze_symbol_core(
                 "check_4_edge": quality_check_4,
                 "gate_multiplier": gate_multiplier,
                 "edge_value": edge
+            },
+
+            # 诊断结果（阶段1.2b：基础层的质量评估，供v7.2层参考）
+            # 注意：这不是最终判定，最终判定应在v7.2层完成
+            "diagnostic_result": {
+                "base_is_prime": is_prime,  # 基础层的prime判定（诊断用）
+                "base_prime_strength": prime_strength,
+                "base_confidence": confidence,
+                "base_probability": P_chosen,
+                "base_edge": edge,
+                "quality_checks_passed": {
+                    "strength_prob": quality_check_1,
+                    "confidence": quality_check_2,
+                    "gate_multiplier": quality_check_3,
+                    "edge": quality_check_4
+                },
+                "rejection_reason": rejection_reason,
+                "deprecation_notice": "基础层的prime判定仅供诊断，最终判定应由v7.2层完成"
             }
         },
 

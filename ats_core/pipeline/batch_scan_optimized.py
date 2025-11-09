@@ -623,10 +623,17 @@ class OptimizedBatchScanner:
                 stats = get_global_stats()
                 stats.add_symbol_result(symbol, result)
 
-                # 筛选Prime信号（只添加is_prime=True的币种）
-                is_prime = result.get('publish', {}).get('prime', False)
-                prime_strength = result.get('publish', {}).get('prime_strength', 0)
+                # 阶段1.2b修复：使用基本质量指标筛选候选信号（而非依赖publish.prime）
+                # 设计理念：batch_scan做初步筛选，v7.2层做最终判定
                 confidence = result.get('confidence', 0)
+                prime_strength = result.get('publish', {}).get('prime_strength', 0)
+
+                # 初步筛选条件：confidence >= 45（质量门槛2）
+                # 这只是候选信号，最终判定在v7.2层
+                is_candidate = confidence >= 45
+
+                # 向后兼容：同时读取publish.prime（但不依赖它）
+                base_is_prime = result.get('publish', {}).get('prime', False)
 
                 # 🔍 调试日志：显示详细评分（verbose模式显示所有，默认只显示前10个）
                 if verbose or i < 10:
@@ -649,14 +656,14 @@ class OptimizedBatchScanner:
                         f"prob_bonus={prime_breakdown.get('prob_bonus',0):.1f}, "
                         f"P_chosen={prime_breakdown.get('P_chosen',0):.3f}")
 
-                # P1.1修复：移除此处的过滤，将所有候选信号传递给v7.2层
+                # P1.1+阶段1.2b修复：将候选信号传递给v7.2层
                 # 设计理念：
-                # - 批量扫描层：发现所有可能的信号（is_prime=True）
+                # - 批量扫描层：初步筛选（confidence >= 45）
                 # - v7.2增强层：集中过滤和发布决策（统一标准）
                 # - 避免多层重复过滤导致逻辑混乱和用户困惑
                 rejection_reasons = result.get('publish', {}).get('rejection_reason', [])
 
-                if is_prime:
+                if is_candidate:
                     # L1修复：基础层已在intermediate_data中返回klines/oi_data/cvd_series
                     # 不需要重复计算，直接使用result即可
                     # （为了向后兼容，保留顶层字段的设置）
@@ -674,8 +681,9 @@ class OptimizedBatchScanner:
 
                     results.append(result)
 
-                    # 记录信号（不过滤）
-                    log(f"{'✅' if prime_strength >= min_score else '⚠️ '} {symbol}: Prime强度={prime_strength}, 置信度={confidence:.0f} {'(待v7.2验证)' if prime_strength < min_score else ''}")
+                    # 记录候选信号（阶段1.2b：标记为候选，最终判定在v7.2层）
+                    candidate_mark = "✅" if base_is_prime else "🔶"  # 🔶表示候选（不确定）
+                    log(f"{candidate_mark} {symbol}: 置信度={confidence:.0f}, Prime强度={prime_strength} (候选信号，待v7.2最终判定)")
 
                     # 实时回调：立即处理新发现的信号
                     if on_signal_found:
