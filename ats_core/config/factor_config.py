@@ -269,6 +269,169 @@ class FactorConfig:
 
         return value
 
+    # ========== v3.0新增：配置管理优化方法 ==========
+
+    def get_standardization_params(self, factor_name: str) -> Dict[str, Any]:
+        """
+        获取StandardizationChain参数（v3.0新增）
+
+        Args:
+            factor_name: 因子名称 (T, M, C+, S, V+, O+, etc.)
+
+        Returns:
+            StandardizationChain参数字典 (alpha, tau, z0, zmax, lam, enabled)
+
+        Raises:
+            KeyError: 配置文件中没有global.standardization配置
+        """
+        if 'global' not in self.config or 'standardization' not in self.config['global']:
+            # 向后兼容：如果没有global配置，返回默认值
+            print(f"⚠️ 配置文件缺少global.standardization，使用默认值")
+            return {
+                'alpha': 0.25,
+                'tau': 5.0,
+                'z0': 3.0,
+                'zmax': 6.0,
+                'lam': 1.5,
+                'enabled': True
+            }
+
+        std_config = self.config['global']['standardization']
+        default_params = std_config.get('default_params', {})
+
+        # 检查是否有因子级覆盖
+        overrides = std_config.get('factor_overrides', {})
+        if factor_name in overrides:
+            # 合并默认参数和覆盖参数
+            params = dict(default_params)
+            params.update(overrides[factor_name])
+            return params
+        else:
+            # 使用默认参数
+            return dict(default_params)
+
+    def get_data_quality_threshold(
+        self,
+        factor_name: str,
+        threshold_type: str = 'min_data_points'
+    ) -> Any:
+        """
+        获取数据质量阈值（v3.0新增）
+
+        Args:
+            factor_name: 因子名称 (T, M, C+, etc.)
+            threshold_type: 阈值类型 ('min_data_points', 'historical_lookback', 'data_freshness_seconds')
+
+        Returns:
+            阈值值（int or float）
+
+        Raises:
+            KeyError: 配置文件中没有global.data_quality配置
+        """
+        if 'global' not in self.config or 'data_quality' not in self.config['global']:
+            # 向后兼容：返回合理的默认值
+            defaults = {
+                'min_data_points': 20,
+                'historical_lookback': 50,
+                'data_freshness_seconds': 3600
+            }
+            return defaults.get(threshold_type, 20)
+
+        data_quality = self.config['global']['data_quality']
+
+        if threshold_type not in data_quality:
+            raise KeyError(f"Unknown threshold type: {threshold_type}")
+
+        thresholds = data_quality[threshold_type]
+
+        # 检查是否有因子级配置
+        if factor_name in thresholds:
+            return thresholds[factor_name]
+        else:
+            # 使用默认值
+            return thresholds.get('default', 20)
+
+    def get_degradation_strategy(self) -> str:
+        """
+        获取降级策略（v3.0新增）
+
+        Returns:
+            降级策略 ('zero_score', 'partial_data', etc.)
+        """
+        if 'global' not in self.config or 'degradation' not in self.config['global']:
+            return 'zero_score'  # 默认策略
+
+        return self.config['global']['degradation'].get('fallback_strategy', 'zero_score')
+
+    def should_log_degradation(self) -> bool:
+        """
+        是否记录降级事件（v3.0新增）
+
+        Returns:
+            True if should log, False otherwise
+        """
+        if 'global' not in self.config or 'degradation' not in self.config['global']:
+            return True  # 默认记录
+
+        return self.config['global']['degradation'].get('log_degradation_events', True)
+
+    def get_confidence_penalty(self, degradation_reason: str) -> float:
+        """
+        获取降级置信度惩罚系数（v3.0新增）
+
+        Args:
+            degradation_reason: 降级原因 ('missing_data', 'stale_data', 'partial_data')
+
+        Returns:
+            惩罚系数 (0.0-1.0)
+        """
+        if 'global' not in self.config or 'degradation' not in self.config['global']:
+            defaults = {
+                'missing_data': 0.5,
+                'stale_data': 0.7,
+                'partial_data': 0.8
+            }
+            return defaults.get(degradation_reason, 0.5)
+
+        degradation = self.config['global']['degradation']
+        confidence_penalty = degradation.get('confidence_penalty', {})
+        return confidence_penalty.get(degradation_reason, 0.5)
+
+    def get_factor_config_full(self, factor_name: str) -> Dict[str, Any]:
+        """
+        获取因子的完整配置（v3.0新增）
+
+        包含：
+        - 基本信息 (name, layer, weight, enabled)
+        - 算法参数 (params)
+        - StandardizationChain参数
+        - 数据质量阈值
+
+        Args:
+            factor_name: 因子名称
+
+        Returns:
+            完整配置字典
+
+        Raises:
+            ValueError: 未知因子名称
+        """
+        if factor_name not in self.factors:
+            raise ValueError(f"Unknown factor: {factor_name}")
+
+        config = dict(self.factors[factor_name])
+
+        # 添加StandardizationChain配置
+        config['standardization'] = self.get_standardization_params(factor_name)
+
+        # 添加数据质量阈值
+        config['data_quality'] = {
+            'min_data_points': self.get_data_quality_threshold(factor_name, 'min_data_points'),
+            'historical_lookback': self.get_data_quality_threshold(factor_name, 'historical_lookback'),
+        }
+
+        return config
+
     # ========== 工具方法 ==========
 
     def normalize_score(self, weighted_sum: float) -> float:
