@@ -47,7 +47,10 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+# UTC+8时区（北京时间）
+TZ_UTC8 = timezone(timedelta(hours=8))
 
 
 @dataclass
@@ -124,7 +127,7 @@ class DataQualMonitor:
         """Get or create metrics for a symbol."""
         if symbol not in self.metrics:
             self.metrics[symbol] = QualityMetrics(
-                window_start=datetime.now()
+                window_start=datetime.now(TZ_UTC8)
             )
             self.event_windows[symbol] = deque(maxlen=10000)  # Keep last 10k events
 
@@ -147,7 +150,7 @@ class DataQualMonitor:
             is_ordered: Whether event is in correct order
         """
         metrics = self._get_or_create_metrics(symbol)
-        now = datetime.now()
+        now = datetime.now(TZ_UTC8)
 
         # Record event
         self.event_windows[symbol].append({
@@ -183,7 +186,7 @@ class DataQualMonitor:
         """
         metrics = self._get_or_create_metrics(symbol)
         metrics.total_expected += expected_count
-        metrics.last_update = datetime.now()
+        metrics.last_update = datetime.now(TZ_UTC8)
 
         self._update_rates(symbol)
 
@@ -196,7 +199,7 @@ class DataQualMonitor:
         """
         metrics = self._get_or_create_metrics(symbol)
         metrics.mismatch_events += 1
-        metrics.last_update = datetime.now()
+        metrics.last_update = datetime.now(TZ_UTC8)
 
         self._update_rates(symbol)
 
@@ -209,7 +212,7 @@ class DataQualMonitor:
             return
 
         # Clean old events outside window
-        cutoff = datetime.now() - timedelta(seconds=self.window_seconds)
+        cutoff = datetime.now(TZ_UTC8) - timedelta(seconds=self.window_seconds)
         while events and events[0]['ts'] < cutoff:
             events.popleft()
 
