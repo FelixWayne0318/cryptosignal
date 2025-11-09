@@ -129,8 +129,8 @@ class RealtimeKlineCache:
                             f"速度: {speed:.1f} 币种/秒, "
                             f"已用: {elapsed:.0f}s, 剩余: {eta:.0f}s")
 
-                    # 小延迟，避免过快
-                    await asyncio.sleep(0.05)
+                    # 小延迟，避免速率限制（1200请求/分钟 = 20请求/秒）
+                    await asyncio.sleep(0.01)
 
                 except Exception as e:
                     error(f"初始化 {symbol} {interval} 失败: {e}")

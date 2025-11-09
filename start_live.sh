@@ -19,7 +19,7 @@ echo ""
 
 # 停止旧进程
 echo "🛑 停止旧进程..."
-pkill -f realtime_signal_scanner_v72.py 2>/dev/null || true
+pkill -f realtime_signal_scanner.py 2>/dev/null || true
 screen -S cryptosignal -X quit 2>/dev/null || true
 sleep 1
 echo ""
@@ -62,7 +62,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 # 前台运行，显示实时日志
-python3 scripts/realtime_signal_scanner_v72.py --interval 300
+python3 scripts/realtime_signal_scanner.py --interval 300
 
 # 如果程序退出
 echo ""

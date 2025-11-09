@@ -27,7 +27,10 @@
 import asyncio
 import time
 from typing import Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+# UTC+8时区（北京时间）
+TZ_UTC8 = timezone(timedelta(hours=8))
 
 from ats_core.execution.binance_futures_client import (
     BinanceFuturesClient,
@@ -245,7 +248,7 @@ class AutoTrader:
 
         log("\n" + "=" * 60)
         log(f"🔍 开始扫描...")
-        log(f"   时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        log(f"   时间: {datetime.now(TZ_UTC8).strftime('%Y-%m-%d %H:%M:%S')}")
         log(f"   最低分数: {min_score}")
         log(f"   扫描模式: {'WebSocket优化（17倍提速）' if self.use_optimized_scan else 'REST标准'}")
         log("=" * 60)
@@ -328,8 +331,8 @@ class AutoTrader:
                 await self.scan_and_execute(symbols, min_score)
 
                 # 等待下次扫描
-                next_scan = datetime.now().timestamp() + interval_minutes * 60
-                next_scan_time = datetime.fromtimestamp(next_scan).strftime('%Y-%m-%d %H:%M:%S')
+                next_scan = datetime.now(TZ_UTC8).timestamp() + interval_minutes * 60
+                next_scan_time = datetime.fromtimestamp(next_scan, tz=TZ_UTC8).strftime('%Y-%m-%d %H:%M:%S')
 
                 log(f"\n⏰ 下次扫描: {next_scan_time}")
 

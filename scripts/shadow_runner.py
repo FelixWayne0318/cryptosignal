@@ -40,8 +40,11 @@ import argparse
 import json
 import signal
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any
+
+# UTC+8时区（北京时间）
+TZ_UTC8 = timezone(timedelta(hours=8))
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -165,7 +168,7 @@ class ShadowRunner:
                 'watch_signals': count
             }
         """
-        scan_start = datetime.now()
+        scan_start = datetime.now(TZ_UTC8)
         self.scan_count += 1
 
         log(f"\n{'='*60}")
@@ -278,7 +281,7 @@ class ShadowRunner:
         self.signal_count += signals_generated
 
         # Summary
-        scan_duration = (datetime.now() - scan_start).total_seconds()
+        scan_duration = (datetime.now(TZ_UTC8) - scan_start).total_seconds()
         summary = {
             'timestamp': scan_start.isoformat(),
             'scan_id': self.scan_count,
@@ -304,7 +307,7 @@ class ShadowRunner:
             duration_hours: Run duration in hours (None = run once)
         """
         self.running = True
-        self.start_time = datetime.now()
+        self.start_time = datetime.now(TZ_UTC8)
 
         # Register signal handlers for graceful shutdown
         def signal_handler(sig, frame):
@@ -329,13 +332,13 @@ class ShadowRunner:
         log(f"🔄 Continuous mode: {duration_hours:.1f} hours")
         end_time = self.start_time + timedelta(hours=duration_hours)
 
-        while self.running and datetime.now() < end_time:
+        while self.running and datetime.now(TZ_UTC8) < end_time:
             try:
                 # Scan
                 await self.scan_once()
 
                 # Check if should continue
-                remaining = (end_time - datetime.now()).total_seconds()
+                remaining = (end_time - datetime.now(TZ_UTC8)).total_seconds()
                 if remaining <= 0:
                     break
 
@@ -352,7 +355,7 @@ class ShadowRunner:
         await self.save_results()
 
         # Final summary
-        total_duration = (datetime.now() - self.start_time).total_seconds() / 3600
+        total_duration = (datetime.now(TZ_UTC8) - self.start_time).total_seconds() / 3600
         log(f"\n{'='*60}")
         log(f"🎯 Shadow Run Complete")
         log(f"{'='*60}")
@@ -363,7 +366,7 @@ class ShadowRunner:
 
     async def save_results(self):
         """Save collected data to output directory."""
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        timestamp = datetime.now(TZ_UTC8).strftime('%Y%m%d_%H%M%S')
 
         log("\n💾 Saving results...")
 
@@ -412,8 +415,8 @@ class ShadowRunner:
         metrics = {
             'run_info': {
                 'start_time': self.start_time.isoformat() if self.start_time else None,
-                'end_time': datetime.now().isoformat(),
-                'duration_hours': (datetime.now() - self.start_time).total_seconds() / 3600 if self.start_time else 0,
+                'end_time': datetime.now(TZ_UTC8).isoformat(),
+                'duration_hours': (datetime.now(TZ_UTC8) - self.start_time).total_seconds() / 3600 if self.start_time else 0,
             },
             'scan_stats': {
                 'total_scans': self.scan_count,

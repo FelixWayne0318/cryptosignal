@@ -7,7 +7,10 @@ Compares outputs from production code vs. new standard implementations.
 from typing import Dict, List, Any, Optional, Tuple
 import statistics
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+# UTC+8时区（北京时间）
+TZ_UTC8 = timezone(timedelta(hours=8))
 
 
 @dataclass
@@ -118,7 +121,7 @@ class ShadowComparator:
 
         result = ComparisonResult(
             symbol=symbol,
-            timestamp=datetime.now(),
+            timestamp=datetime.now(TZ_UTC8),
             metric_name=metric_name,
             old_value=old_value,
             new_value=new_value,

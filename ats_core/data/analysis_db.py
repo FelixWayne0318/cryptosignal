@@ -23,19 +23,28 @@ import json
 import time
 from typing import Dict, Any, Optional, List
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+# UTC+8时区（北京时间）
+TZ_UTC8 = timezone(timedelta(hours=8))
 
 
 class AnalysisDB:
     """完善的分析数据库"""
 
-    def __init__(self, db_path: str = "/home/user/cryptosignal/data/analysis.db"):
+    def __init__(self, db_path: str = None):
         """
         初始化分析数据库
 
         Args:
-            db_path: SQLite数据库路径
+            db_path: SQLite数据库路径（默认为项目根目录下的data/analysis.db）
         """
+        if db_path is None:
+            # 自动检测项目根目录
+            import os
+            project_root = os.path.expanduser("~/cryptosignal")
+            db_path = os.path.join(project_root, "data", "analysis.db")
+
         self.db_path = db_path
 
         # 确保data目录存在
@@ -931,14 +940,17 @@ class AnalysisDB:
             # 获取时间戳
             timestamp_str = summary_data.get('timestamp', '')
             try:
-                from datetime import datetime
                 dt = datetime.fromisoformat(timestamp_str)
+                # 如果时间戳有时区信息，转换到UTC+8；否则当作UTC+8
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=TZ_UTC8)
+                else:
+                    dt = dt.astimezone(TZ_UTC8)
                 timestamp = int(dt.timestamp() * 1000)
                 scan_date = dt.strftime('%Y-%m-%d')
             except:
                 timestamp = int(time.time() * 1000)
-                from datetime import datetime
-                scan_date = datetime.now().strftime('%Y-%m-%d')
+                scan_date = datetime.now(TZ_UTC8).strftime('%Y-%m-%d')
 
             cursor.execute("""
             INSERT INTO scan_statistics (
@@ -995,8 +1007,7 @@ class AnalysisDB:
         cursor = conn.cursor()
 
         # 计算起始时间戳
-        from datetime import datetime, timedelta
-        start_time = datetime.now() - timedelta(days=days)
+        start_time = datetime.now(TZ_UTC8) - timedelta(days=days)
         start_ts = int(start_time.timestamp() * 1000)
 
         cursor.execute("""
@@ -1043,7 +1054,7 @@ class AnalysisDB:
 _analysis_db_instance = None
 
 
-def get_analysis_db(db_path: str = "/home/user/cryptosignal/data/analysis.db") -> AnalysisDB:
+def get_analysis_db(db_path: str = None) -> AnalysisDB:
     """获取AnalysisDB单例"""
     global _analysis_db_instance
     if _analysis_db_instance is None:

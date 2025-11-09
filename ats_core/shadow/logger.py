@@ -8,8 +8,11 @@ import json
 import logging
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
+
+# UTC+8时区（北京时间）
+TZ_UTC8 = timezone(timedelta(hours=8))
 
 
 class ShadowLogger:
@@ -44,7 +47,7 @@ class ShadowLogger:
         self.divergences: List[Dict[str, Any]] = []
         self.metrics: Dict[str, List[float]] = defaultdict(list)
 
-        self.session_start = datetime.now()
+        self.session_start = datetime.now(TZ_UTC8)
 
     def log_comparison(self, comparison_result) -> None:
         """
@@ -86,19 +89,19 @@ class ShadowLogger:
             data: Event data
         """
         event = {
-            'timestamp': datetime.now().isoformat(),
+            'timestamp': datetime.now(TZ_UTC8).isoformat(),
             'type': event_type,
             **data
         }
 
         # Write to event log
-        event_file = self.output_dir / f"events_{datetime.now().strftime('%Y%m%d')}.jsonl"
+        event_file = self.output_dir / f"events_{datetime.now(TZ_UTC8).strftime('%Y%m%d')}.jsonl"
         with open(event_file, 'a', encoding='utf-8') as f:
             f.write(json.dumps(event, ensure_ascii=False) + '\n')
 
     def flush(self) -> None:
         """Write accumulated data to disk."""
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        timestamp = datetime.now(TZ_UTC8).strftime('%Y%m%d_%H%M%S')
 
         # Write comparisons
         if self.comparisons:
@@ -106,7 +109,7 @@ class ShadowLogger:
             with open(comp_file, 'w', encoding='utf-8') as f:
                 json.dump({
                     'session_start': self.session_start.isoformat(),
-                    'session_end': datetime.now().isoformat(),
+                    'session_end': datetime.now(TZ_UTC8).isoformat(),
                     'total': len(self.comparisons),
                     'comparisons': self.comparisons
                 }, f, indent=2, ensure_ascii=False)
@@ -119,7 +122,7 @@ class ShadowLogger:
             with open(div_file, 'w', encoding='utf-8') as f:
                 json.dump({
                     'session_start': self.session_start.isoformat(),
-                    'session_end': datetime.now().isoformat(),
+                    'session_end': datetime.now(TZ_UTC8).isoformat(),
                     'total': len(self.divergences),
                     'divergences': self.divergences
                 }, f, indent=2, ensure_ascii=False)
@@ -142,7 +145,7 @@ class ShadowLogger:
             with open(metrics_file, 'w', encoding='utf-8') as f:
                 json.dump({
                     'session_start': self.session_start.isoformat(),
-                    'session_end': datetime.now().isoformat(),
+                    'session_end': datetime.now(TZ_UTC8).isoformat(),
                     'metrics': metrics_summary
                 }, f, indent=2, ensure_ascii=False)
 
@@ -154,7 +157,7 @@ class ShadowLogger:
         divergent = len(self.divergences)
 
         return {
-            'session_duration_seconds': (datetime.now() - self.session_start).total_seconds(),
+            'session_duration_seconds': (datetime.now(TZ_UTC8) - self.session_start).total_seconds(),
             'total_comparisons': total,
             'divergences': divergent,
             'pass_rate': (total - divergent) / total if total > 0 else 0.0,

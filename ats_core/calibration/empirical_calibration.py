@@ -105,8 +105,9 @@ class EmpiricalCalibrator:
 
         分桶统计：把confidence分成10个桶，计算每个桶的实际胜率
         """
-        if len(self.history) < 50:  # 至少50个样本
-            print(f"[Calibration] 数据不足({len(self.history)}/50)，使用启发式规则")
+        # P0.3修复：降低启用阈值从50→30，加快冷启动
+        if len(self.history) < 30:  # 至少30个样本
+            print(f"[Calibration] 数据不足({len(self.history)}/30)，使用启发式规则")
             return
 
         # 分桶统计
@@ -180,31 +181,51 @@ class EmpiricalCalibrator:
         # 降级到启发式
         return self._bootstrap_probability(confidence)
 
-    def _bootstrap_probability(self, confidence: float) -> float:
+    def _bootstrap_probability(self, confidence: float, F_score: float = None, I_score: float = None) -> float:
         """
-        启发式概率（冷启动）
+        启发式概率（冷启动 - P0.3增强版）
 
-        简单线性映射：
-        - confidence=0 → P=0.40
-        - confidence=50 → P=0.50
-        - confidence=100 → P=0.70
+        线性映射 + F/I因子调整：
+        - confidence=0 → P=0.45（基准）
+        - confidence=50 → P=0.52
+        - confidence=100 → P=0.68
+        - F > 30 → +0.03（资金领先，蓄势待发）
+        - I > 60 → +0.02（高独立性，Alpha机会）
 
-        理由：
-        - 0.40：即使信号很弱，也有40%胜率（市场随机性）
-        - 0.50：中性信号，50%胜率
-        - 0.70：强信号，70%胜率（不能过高，避免过度自信）
+        改进理由（P0.3）：
+        - 0.45基准：比之前的0.40更保守，避免弱信号过度乐观
+        - 0.68上限：比之前的0.70更现实，避免强信号过度自信
+        - F/I调整：结合关键因子，提供多维度评估
 
         Args:
             confidence: 信号置信度 (0-100)
+            F_score: F因子分数 [-100, +100]（可选）
+            I_score: I因子分数 [0, 100]（可选）
 
         Returns:
-            估算的胜率 (0.35-0.75)
+            估算的胜率 (0.40-0.75)
         """
-        # 线性映射
-        P = 0.40 + (confidence / 100.0) * 0.30
+        # 基础线性映射（改进后的范围）
+        P = 0.45 + (confidence / 100.0) * 0.23  # 45%-68%范围
+
+        # F因子调整（蓄势待发检测）
+        if F_score is not None:
+            if F_score > 30:  # 强势蓄势
+                P += 0.03
+            elif F_score > 15:  # 温和蓄势
+                P += 0.01
+            elif F_score < -30:  # 追高风险
+                P -= 0.02
+
+        # I因子调整（独立性Alpha）
+        if I_score is not None:
+            if I_score > 60:  # 高独立性
+                P += 0.02
+            elif I_score < 30:  # 高相关性，需跟随大盘
+                P -= 0.01
 
         # 限制范围
-        return max(0.35, min(0.75, P))
+        return max(0.40, min(0.75, P))
 
     def get_statistics(self) -> Dict[str, Any]:
         """

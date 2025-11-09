@@ -8,8 +8,23 @@
 #
 # 使用场景：扫描完成后自动调用
 #
+# 环境变量控制：
+# - AUTO_COMMIT_REPORTS=true  : 启用自动提交（默认，服务器自动运行）
+# - AUTO_COMMIT_REPORTS=false : 禁用自动提交（手动测试时使用）
+#
 
 set -e
+
+# ==========================================
+# 环境变量控制：支持手动测试时禁用自动提交
+# ==========================================
+AUTO_COMMIT_REPORTS=${AUTO_COMMIT_REPORTS:-true}
+
+if [ "$AUTO_COMMIT_REPORTS" != "true" ]; then
+    echo "⚠️  自动提交已禁用（AUTO_COMMIT_REPORTS=$AUTO_COMMIT_REPORTS）"
+    echo "💡 如需启用：export AUTO_COMMIT_REPORTS=true"
+    exit 0
+fi
 
 # 自动检测仓库目录（支持不同的部署路径）
 if [ -d "/home/user/cryptosignal" ]; then
@@ -101,21 +116,22 @@ if ! git diff --quiet reports/ || ! git diff --cached --quiet reports/ || git ls
 定期扫描报告更新（$COMMIT_REASON）"
         fi
 
-        # 提交（不签名）
-        git commit --no-gpg-sign -m "$COMMIT_MSG"
+        # 提交（不签名，静默模式）
+        git commit --no-gpg-sign --quiet -m "$COMMIT_MSG"
 
-        # 推送到远程
+        # 推送到远程（静默模式：成功静默，失败显示错误）
         BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
-        echo "🚀 推送到远程仓库..."
-        if git push origin "$BRANCH" 2>&1; then
-            echo "✅ 扫描报告已成功推送到仓库"
-            echo "📊 查看: reports/latest/scan_summary.json"
+        # 捕获错误输出
+        PUSH_ERROR=$(git push --quiet origin "$BRANCH" 2>&1)
+        if [ $? -eq 0 ]; then
+            echo "✅ 扫描报告已推送到仓库 (${TOTAL}币种, ${SIGNALS}信号)"
 
             # 记录提交时间
             date +%s > "$LAST_COMMIT_FILE"
         else
-            echo "❌ 推送失败（可能网络问题），但本地已提交"
+            echo "❌ 推送失败: $PUSH_ERROR"
+            echo "💡 本地已提交，可手动运行: git push origin $BRANCH"
             exit 1
         fi
     fi

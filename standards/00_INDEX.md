@@ -1,7 +1,7 @@
 # CryptoSignal 规范文档索引
 
-**当前版本**: v6.7
-**最后更新**: 2025-11-05
+**当前版本**: v7.2
+**最后更新**: 2025-11-08
 **文档类型**: 总索引（系统工程入口）
 
 ---
@@ -135,6 +135,34 @@
 
 ---
 
-**文档版本**: v6.7
-**生效日期**: 2025-11-05
+**文档版本**: v7.2
+**生效日期**: 2025-11-08
 **维护责任**: 系统架构师
+
+---
+
+## 🆕 v7.2 版本更新说明
+
+### 核心改进
+1. **F因子v2**：精确定义的资金流因子（基于CVD动量）
+2. **因子分组**：TC/VOM/B三组因子（提升稳健性）
+3. **四道闸门**：数据质量/EV/执行性/概率四重过滤
+4. **统计校准**：经验校准器（真实胜率预测）
+5. **完善数据库**：7张表系统（analysis.db）支持全量数据采集
+
+### 新增模块
+- `ats_core/features/fund_leading.py` - F因子v2计算
+- `ats_core/scoring/factor_groups.py` - 因子分组评分
+- `ats_core/pipeline/gates.py` - 四道闸门过滤
+- `ats_core/calibration/empirical_calibration.py` - 统计校准
+- `ats_core/data/analysis_db.py` - 完善分析数据库
+- `scripts/realtime_signal_scanner_v72.py` - v7.2集成扫描器
+
+### 启动方式
+```bash
+# 使用 setup.sh 一键部署（推荐）
+./setup.sh
+
+# 或手动启动v7.2扫描器
+python3 scripts/realtime_signal_scanner_v72.py --interval 300
+```

@@ -463,7 +463,7 @@ echo "=============================================="
 cd ~/cryptosignal
 
 echo "启动测试（10秒后自动终止）..."
-timeout 10 python3 scripts/realtime_signal_scanner_v72.py --max-symbols 10 --no-telegram 2>&1 | tail -50 || {
+timeout 10 python3 scripts/realtime_signal_scanner.py --max-symbols 10 --no-telegram 2>&1 | tail -50 || {
     EXIT_CODE=$?
     if [ $EXIT_CODE -eq 124 ]; then
         echo ""
@@ -517,7 +517,7 @@ if command -v screen &> /dev/null; then
         sleep 3
 
         # 启动 screen 会话（前台）
-        screen -S cryptosignal python3 scripts/realtime_signal_scanner_v72.py --interval 300
+        screen -S cryptosignal python3 scripts/realtime_signal_scanner.py --interval 300
     else
         # 无交互式terminal（如从cron/nohup调用），使用detached模式
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -531,7 +531,7 @@ if command -v screen &> /dev/null; then
         LOG_FILE="logs/scanner_$(date +%Y%m%d_%H%M%S).log"
 
         # 启动 screen 会话（detached模式，带日志）
-        screen -dmS cryptosignal bash -c "python3 scripts/realtime_signal_scanner_v72.py --interval 300 2>&1 | tee $LOG_FILE"
+        screen -dmS cryptosignal bash -c "python3 scripts/realtime_signal_scanner.py --interval 300 2>&1 | tee $LOG_FILE"
 
         sleep 2
 
@@ -549,7 +549,7 @@ if command -v screen &> /dev/null; then
             echo "  停止会话: screen -S cryptosignal -X quit"
         else
             echo -e "${YELLOW}⚠️ Screen启动可能失败，回退到nohup模式${NC}"
-            nohup python3 scripts/realtime_signal_scanner_v72.py --interval 300 > "$LOG_FILE" 2>&1 &
+            nohup python3 scripts/realtime_signal_scanner.py --interval 300 > "$LOG_FILE" 2>&1 &
             PID=$!
             echo ""
             echo -e "${GREEN}✅ 已启动（nohup模式），PID: $PID${NC}"
@@ -562,7 +562,7 @@ else
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     LOG_FILE="logs/scanner_$(date +%Y%m%d_%H%M%S).log"
 
-    nohup python3 scripts/realtime_signal_scanner_v72.py --interval 300 > "$LOG_FILE" 2>&1 &
+    nohup python3 scripts/realtime_signal_scanner.py --interval 300 > "$LOG_FILE" 2>&1 &
     PID=$!
 
     echo ""

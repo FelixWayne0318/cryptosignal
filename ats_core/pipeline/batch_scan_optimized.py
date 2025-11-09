@@ -16,11 +16,15 @@
 import asyncio
 import time
 from typing import List, Dict, Optional
+from datetime import datetime, timedelta, timezone
 from ats_core.execution.binance_futures_client import get_binance_client
 from ats_core.data.realtime_kline_cache import get_kline_cache
 from ats_core.pipeline.analyze_symbol import analyze_symbol_with_preloaded_klines
 from ats_core.logging import log, warn, error
 from ats_core.analysis.scan_statistics import get_global_stats, reset_global_stats
+
+# UTC+8时区（北京时间）
+TZ_UTC8 = timezone(timedelta(hours=8))
 
 
 class OptimizedBatchScanner:
@@ -400,8 +404,7 @@ class OptimizedBatchScanner:
         # ═══════════════════════════════════════════════════════════
         # Phase 1: 三层智能数据更新
         # ═══════════════════════════════════════════════════════════
-        from datetime import datetime
-        current_time = datetime.now()
+        current_time = datetime.now(TZ_UTC8)
         current_minute = current_time.minute
 
         # Layer 1: 价格更新（每次都执行，最轻量）
@@ -620,10 +623,17 @@ class OptimizedBatchScanner:
                 stats = get_global_stats()
                 stats.add_symbol_result(symbol, result)
 
-                # 筛选Prime信号（只添加is_prime=True的币种）
-                is_prime = result.get('publish', {}).get('prime', False)
-                prime_strength = result.get('publish', {}).get('prime_strength', 0)
+                # 阶段1.2b修复：使用基本质量指标筛选候选信号（而非依赖publish.prime）
+                # 设计理念：batch_scan做初步筛选，v7.2层做最终判定
                 confidence = result.get('confidence', 0)
+                prime_strength = result.get('publish', {}).get('prime_strength', 0)
+
+                # 初步筛选条件：confidence >= 45（质量门槛2）
+                # 这只是候选信号，最终判定在v7.2层
+                is_candidate = confidence >= 45
+
+                # 向后兼容：同时读取publish.prime（但不依赖它）
+                base_is_prime = result.get('publish', {}).get('prime', False)
 
                 # 🔍 调试日志：显示详细评分（verbose模式显示所有，默认只显示前10个）
                 if verbose or i < 10:
@@ -646,23 +656,34 @@ class OptimizedBatchScanner:
                         f"prob_bonus={prime_breakdown.get('prob_bonus',0):.1f}, "
                         f"P_chosen={prime_breakdown.get('P_chosen',0):.3f}")
 
-                # v6.2修复：使用min_score参数过滤信号
-                # v6.3新增：显示拒绝原因（专家建议 #5）
+                # P1.1+阶段1.2b修复：将候选信号传递给v7.2层
+                # 设计理念：
+                # - 批量扫描层：初步筛选（confidence >= 45）
+                # - v7.2增强层：集中过滤和发布决策（统一标准）
+                # - 避免多层重复过滤导致逻辑混乱和用户困惑
                 rejection_reasons = result.get('publish', {}).get('rejection_reason', [])
-                if is_prime and prime_strength >= min_score:
-                    results.append(result)
-                    log(f"✅ {symbol}: Prime强度={prime_strength}, 置信度={confidence:.0f}")
 
-                    # v7.2: 写入Prime信号到数据库（信号级别完整数据）
-                    try:
-                        if not hasattr(self, '_analysis_db_batch'):
-                            from ats_core.data.analysis_db import get_analysis_db
-                            self._analysis_db_batch = get_analysis_db()
-                        # 写入6个表：market_data, factor_scores, signal_analysis, gate_evaluation, modulator_effects
-                        self._analysis_db_batch.write_complete_signal(result)
-                    except Exception as e:
-                        # 不影响主流程，只记录警告
-                        warn(f"⚠️  {symbol} 写入数据库失败: {e}")
+                if is_candidate:
+                    # L1修复：基础层已在intermediate_data中返回klines/oi_data/cvd_series
+                    # 不需要重复计算，直接使用result即可
+                    # （为了向后兼容，保留顶层字段的设置）
+                    intermediate = result.get('intermediate_data', {})
+                    if intermediate:
+                        # 如果有intermediate_data，提取到顶层（v7.2兼容性）
+                        result['klines'] = intermediate.get('klines', k1h)
+                        result['oi_data'] = intermediate.get('oi_data', oi_data)
+                        result['cvd_series'] = intermediate.get('cvd_series', [])
+                    else:
+                        # 降级：如果没有intermediate_data（旧版本），设置默认值
+                        result['klines'] = k1h
+                        result['oi_data'] = oi_data
+                        result['cvd_series'] = []
+
+                    results.append(result)
+
+                    # 记录候选信号（阶段1.2b：标记为候选，最终判定在v7.2层）
+                    candidate_mark = "✅" if base_is_prime else "🔶"  # 🔶表示候选（不确定）
+                    log(f"{candidate_mark} {symbol}: 置信度={confidence:.0f}, Prime强度={prime_strength} (候选信号，待v7.2最终判定)")
 
                     # 实时回调：立即处理新发现的信号
                     if on_signal_found:
@@ -754,8 +775,7 @@ class OptimizedBatchScanner:
                 except Exception as e:
                     warn(f"⚠️  写入数据库失败: {e}")
 
-                # v6.9+: 自动提交并推送到Git仓库
-                log("\n🔄 自动提交报告到Git仓库...")
+                # v6.9+: 自动提交并推送到Git仓库（静默模式）
                 import subprocess
                 from pathlib import Path
                 auto_commit_script = Path(__file__).parent.parent.parent / 'scripts' / 'auto_commit_reports.sh'
@@ -769,10 +789,11 @@ class OptimizedBatchScanner:
                             timeout=60
                         )
                         if result.returncode == 0:
-                            log("✅ 报告已自动推送到远程仓库")
+                            # 只显示脚本输出的成功消息（✅开头的行）
                             for line in result.stdout.strip().split('\n'):
-                                if line:
-                                    log(f"   {line}")
+                                if line.startswith('✅'):
+                                    log(line)
+                                    break
                         else:
                             warn(f"⚠️  自动提交失败: {result.stderr}")
                     except subprocess.TimeoutExpired:
@@ -787,7 +808,74 @@ class OptimizedBatchScanner:
                 import traceback
                 traceback.print_exc()
 
-            # 注：统计报告已写入仓库，不再发送到Telegram
+            # v7.2+: 发送扫描摘要到Telegram（如果有信号）
+            try:
+                import os
+                import json
+                signals_found = summary_data.get('scan_info', {}).get('signals_found', 0)
+
+                # 只在有信号时发送电报通知
+                if signals_found > 0:
+                    # 加载Telegram配置
+                    config_file = Path(__file__).parent.parent.parent / 'config' / 'telegram.json'
+                    if config_file.exists():
+                        with open(config_file, 'r') as f:
+                            telegram_config = json.load(f)
+
+                        bot_token = telegram_config.get('bot_token', '').strip()
+                        chat_id = telegram_config.get('chat_id', '').strip()
+                        enabled = telegram_config.get('enabled', False)
+
+                        if enabled and bot_token and chat_id:
+                            # 生成简短的电报消息
+                            timestamp = datetime.now(TZ_UTC8).strftime('%Y-%m-%d %H:%M:%S')
+                            total_symbols = summary_data.get('scan_info', {}).get('total_symbols', 0)
+
+                            # 获取信号列表（显示所有信号）
+                            signals_list = summary_data.get('signals', [])
+
+                            # 如果信号数量<=10，全部显示
+                            # 如果>10，显示前10个，并注明还有多少个
+                            if len(signals_list) <= 10:
+                                signal_text = '\n'.join([
+                                    f"  • {s['symbol']}: Edge={s['edge']:.2f}, Conf={s['confidence']:.0f}, Prime={s['prime_strength']:.0f}"
+                                    for s in signals_list
+                                ])
+                            else:
+                                signal_text = '\n'.join([
+                                    f"  • {s['symbol']}: Edge={s['edge']:.2f}, Conf={s['confidence']:.0f}, Prime={s['prime_strength']:.0f}"
+                                    for s in signals_list[:10]
+                                ])
+                                signal_text += f"\n  ... 还有{len(signals_list) - 10}个信号"
+
+                            message = f"""📊 <b>扫描完成</b>
+
+🕐 时间: {timestamp}
+📈 扫描: {total_symbols} 个币种
+✅ 信号: {signals_found} 个
+
+🎯 <b>Prime信号</b>:
+{signal_text}
+
+📝 完整报告: reports/latest/scan_summary.json"""
+
+                            # 发送到Telegram
+                            success = stats.send_to_telegram(message, bot_token, chat_id)
+                            if success:
+                                log("✅ 扫描摘要已发送到Telegram")
+                            else:
+                                warn("⚠️  发送Telegram失败")
+                        else:
+                            log("ℹ️  Telegram未启用或未配置")
+                    else:
+                        log("ℹ️  未找到Telegram配置文件")
+                else:
+                    log("ℹ️  无信号，跳过Telegram通知")
+            except Exception as e:
+                warn(f"⚠️  发送Telegram摘要失败: {e}")
+                import traceback
+                traceback.print_exc()
+
             log("✅ 统计分析已完成并写入仓库: reports/latest/")
 
         except Exception as e:

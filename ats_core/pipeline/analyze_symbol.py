@@ -451,22 +451,19 @@ def _analyze_symbol_core(
     perf['I独立性'] = time.time() - t0
 
     # ---- 2.5. 资金领先性（F调节器）----
-    # F不参与基础评分，仅用于概率调整
-    oi_change_pct = O_meta.get("oi24h_pct", 0.0) if O_meta.get("oi24h_pct") is not None else 0.0
-    vol_ratio = V_meta.get("v5v20", 1.0)
-    price_change_24h = ((c[-1] - c[-25]) / c[-25] * 100) if len(c) >= 25 else 0.0
-    price_slope = (ema30[-1] - ema30[-7]) / 6.0 / max(1e-9, atr_now)  # 归一化斜率
+    # A1修复：统一使用F_v2（6小时窗口，CVD+OI综合判断）
+    # F不参与基础评分，仅用于概率调整和v7.2闸门检查
+    t0 = time.time()
+    from ats_core.features.fund_leading import score_fund_leading_v2
 
-    # ---- 2.5. 计算F调节器（提前计算，让F参与方向判断）----
-    # F本身是带符号的（+表示资金领先，-表示价格领先），不需要依赖side_long
-    F_raw, F_meta = _calc_fund_leading(
-        oi_change_pct, vol_ratio, cvd6, price_change_24h, price_slope, params.get("fund_leading", {})
+    F, F_meta = score_fund_leading_v2(
+        cvd_series=cvd_series,
+        oi_data=oi_data,
+        klines=k1,
+        atr_now=atr_now,
+        params=params.get("fund_leading", {})
     )
-
-    # v6.6修复：F_raw已经过fund_leading.py中的tanh输出±100，无需再tanh
-    # 之前的tanh(F_raw/50)造成double-tanh bug，将±100压缩到±96
-    F = F_raw  # 直接使用fund_leading.py的输出
-    F_meta['note'] = 'v6.6: F_raw直接使用，已移除double-tanh bug'
+    perf['F资金领先'] = time.time() - t0
 
     # ---- 3. Scorecard（v6.6: 6因子A层 + 4调制器B层）----
     # v6.6架构：L/S/F/I移至B层调制器，不参与方向评分
@@ -1193,28 +1190,31 @@ def _analyze_symbol_core(
             "safety_adjustment": adjustment  # 安全边际调整
         },
 
-        # Scorecard结果
-        "weighted_score": weighted_score,  # -100 到 +100
-        "confidence": confidence,  # 0-100（绝对值）
-        "edge": edge,  # -1.0 到 +1.0
+        # Scorecard结果（阶段1.4：标记为deprecated，将被v7.2层的因子分组替代）
+        "weighted_score": weighted_score,  # -100 到 +100 [DEPRECATED: 使用v7.2层的分组加权]
+        "confidence": confidence,  # 0-100（绝对值）[DEPRECATED: 使用v7.2层的confidence_v72]
+        "edge": edge,  # -1.0 到 +1.0 [保留：仍然有用]
+        "_scorecard_deprecation": "weighted_score/confidence使用基础权重（T24/M17/C24/V12/O17/B6），v7.2层使用分组权重（TC50/VOM35/B15）",
 
         # 方向
         "side": "long" if side_long else "short",
         "side_long": side_long,
 
-        # 概率
-        "P_long": P_long,
-        "P_short": P_short,
-        "probability": P_chosen,
-        "P_base": P_base,  # 基础概率（调整前）
+        # 概率（阶段2.3：标记为DEPRECATED，v7.2层使用统计校准概率）
+        "P_long": P_long,  # DEPRECATED: 使用v7.2层的P_calibrated
+        "P_short": P_short,  # DEPRECATED: 使用v7.2层的P_calibrated
+        "probability": P_chosen,  # DEPRECATED: 使用v7.2层的P_calibrated
+        "P_base": P_base,  # 基础概率（调整前）[DEPRECATED]
+        "_probability_deprecation": "基础层使用sigmoid映射，v7.2层使用统计校准（EmpiricalCalibrator）。生产环境应使用v7.2层的P_calibrated",
         "F_score": F,  # F分数（-100到+100）
         "F_adjustment": 1.0,  # 调整系数（v6.2: F调节器已移除，固定为1.0）
         "prior_up": prior_up,
         "quality_score": quality_score,  # 质量系数（0.6-1.0）
 
-        # 发布
+        # 发布（阶段1.2b：标记为deprecated，最终判定应由v7.2层完成）
         "publish": {
-            "prime": is_prime,
+            "prime": is_prime,  # DEPRECATED: 使用intermediate_data.diagnostic_result.base_is_prime
+            "_deprecated_notice": "publish.prime将由v7.2层统一判定，请使用v7.2增强层的最终判定结果",
             "watch": is_watch,
             "dims_ok": dims_ok,
             "prime_strength": int(prime_strength),  # Prime评分（0-100）
@@ -1223,15 +1223,58 @@ def _analyze_symbol_core(
             "rejection_reason": rejection_reason,  # v6.3新增：拒绝原因跟踪
             "ttl_h": 8,
             # v6.6软约束（不硬拒绝，仅标记）
-            "EV": EV,
-            "EV_positive": EV > 0,
+            # 阶段2.4：标记EV为DEPRECATED，v7.2层使用ATR-based EV计算
+            "EV": EV,  # DEPRECATED: 使用v7.2层的EV_net
+            "EV_positive": EV > 0,  # DEPRECATED: 使用v7.2层的EV_net > 0
+            "_EV_deprecation": "基础层使用P*edge-(1-P)*cost，v7.2层使用ATR-based计算。生产环境应使用v7.2层的EV_net",
             "P_threshold": p_min_adjusted,
             "P_above_threshold": not p_below_threshold,
-            "soft_filtered": (EV <= 0) or p_below_threshold,
+            "soft_filtered": (EV <= 0) or p_below_threshold,  # DEPRECATED: 使用v7.2层的pass_gates
             "soft_filter_reason": "EV≤0" if EV <= 0 else ("P<p_min" if p_below_threshold else None),
             # v6.7新增：蓄势待发标识
             "is_accumulating": is_accumulating,
             "accumulating_reason": accumulating_reason
+        },
+
+        # ===== L1修复：添加中间数据（供v7.2判定层使用）=====
+        # 目的：避免v7.2层重复计算CVD、ATR等数据
+        # 重构阶段1.2a完成日期：2025-11-09
+        # 重构阶段1.2b扩展日期：2025-11-09（添加诊断结果）
+        "intermediate_data": {
+            # 原始数据（L1修复）
+            "cvd_series": cvd_series,  # CVD序列（完整）
+            "klines": k1,  # K线数据（供v7.2使用）
+            "oi_data": oi_data,  # OI数据（供v7.2使用）
+            "atr_now": atr_now,  # 当前ATR
+            "close_now": close_now,  # 当前收盘价
+
+            # 质量检查结果（阶段1.2b：详细诊断信息）
+            "quality_checks": {
+                "check_1_strength_prob": quality_check_1,
+                "check_2_confidence": quality_check_2,
+                "check_3_gate_multiplier": quality_check_3,
+                "check_4_edge": quality_check_4,
+                "gate_multiplier": gate_multiplier,
+                "edge_value": edge
+            },
+
+            # 诊断结果（阶段1.2b：基础层的质量评估，供v7.2层参考）
+            # 注意：这不是最终判定，最终判定应在v7.2层完成
+            "diagnostic_result": {
+                "base_is_prime": is_prime,  # 基础层的prime判定（诊断用）
+                "base_prime_strength": prime_strength,
+                "base_confidence": confidence,
+                "base_probability": P_chosen,
+                "base_edge": edge,
+                "quality_checks_passed": {
+                    "strength_prob": quality_check_1,
+                    "confidence": quality_check_2,
+                    "gate_multiplier": quality_check_3,
+                    "edge": quality_check_4
+                },
+                "rejection_reason": rejection_reason,
+                "deprecation_notice": "基础层的prime判定仅供诊断，最终判定应由v7.2层完成"
+            }
         },
 
         # 新币信息（嵌套格式，匹配scanner读取）
@@ -1596,20 +1639,9 @@ def _calc_environment(h, l, c, atr_now, cfg):
     except Exception:
         return 0, {"chop": 50.0, "room": 0.5}
 
-def _calc_fund_leading(oi_change_pct, vol_ratio, cvd_change, price_change_pct, price_slope, cfg):
-    """资金领先性打分（移除circular dependency）"""
-    try:
-        from ats_core.features.fund_leading import score_fund_leading
-        F, meta = score_fund_leading(oi_change_pct, vol_ratio, cvd_change, price_change_pct, price_slope, cfg)
-        return int(F), meta
-    except Exception as e:
-        # 兜底：返回中性分数
-        return 0, {
-            "fund_momentum": 0.0,
-            "price_momentum": 50.0,
-            "leading_raw": 0.0,
-            "error": str(e)
-        }
+# A1修复：_calc_fund_leading函数已废弃（2025-11-09）
+# 原因：基础分析层已统一使用score_fund_leading_v2
+# 旧版本使用5个分散参数，新版本直接使用cvd_series/oi_data/klines/atr_now
 
 def _calc_quality(scores: Dict, n_klines: int, n_oi: int) -> float:
     """

@@ -5,9 +5,12 @@
 
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, Any, List
+
+# UTC+8时区（北京时间）
+TZ_UTC8 = timezone(timedelta(hours=8))
 
 
 class ReportWriter:
@@ -50,7 +53,7 @@ class ReportWriter:
         Returns:
             写入的文件路径
         """
-        timestamp = datetime.now()
+        timestamp = datetime.now(TZ_UTC8)
         ts_str = timestamp.strftime("%Y-%m-%d_%H-%M-%S")
 
         files_written = {}

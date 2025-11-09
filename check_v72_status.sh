@@ -18,8 +18,8 @@ echo ""
 # 1. 检查进程
 echo -e "${BLUE}1️⃣  进程状态${NC}"
 echo "=============================================="
-if pgrep -f "realtime_signal_scanner_v72.py" > /dev/null; then
-    PID=$(pgrep -f "realtime_signal_scanner_v72.py")
+if pgrep -f "realtime_signal_scanner.py" > /dev/null; then
+    PID=$(pgrep -f "realtime_signal_scanner.py")
     echo -e "${GREEN}✅ 扫描器运行中${NC}"
     echo "   进程ID: $PID"
     echo "   运行时间: $(ps -p $PID -o etime= | tr -d ' ')"
@@ -139,7 +139,7 @@ echo "重启扫描器:"
 echo "   ~/cryptosignal/auto_restart.sh"
 echo ""
 echo "停止扫描器:"
-echo "   pkill -f realtime_signal_scanner_v72.py"
+echo "   pkill -f realtime_signal_scanner.py"
 echo ""
 echo "=============================================="
 echo -e "${GREEN}✅ 状态检查完成${NC}"

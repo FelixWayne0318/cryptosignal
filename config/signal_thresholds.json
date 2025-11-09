@@ -1,0 +1,120 @@
+{
+  "version": "v7.2_unified",
+  "description": "统一的信号阈值配置（P2.1配置化）",
+
+  "基础分析阈值": {
+    "mature_coin": {
+      "prime_strength_min": 54,
+      "confidence_min": 60,
+      "edge_min": 0.48,
+      "prime_prob_min": 0.68,
+      "dims_ok_min": 4,
+      "prime_dim_threshold": 65
+    },
+    "newcoin_phaseB": {
+      "prime_strength_min": 28,
+      "confidence_min": 50,
+      "edge_min": 0.42,
+      "prime_prob_min": 0.63,
+      "dims_ok_min": 4,
+      "prime_dim_threshold": 65
+    },
+    "newcoin_phaseA": {
+      "prime_strength_min": 32,
+      "confidence_min": 55,
+      "edge_min": 0.45,
+      "prime_prob_min": 0.65,
+      "dims_ok_min": 5,
+      "prime_dim_threshold": 65
+    },
+    "newcoin_ultra": {
+      "prime_strength_min": 35,
+      "confidence_min": 60,
+      "edge_min": 0.48,
+      "prime_prob_min": 0.68,
+      "dims_ok_min": 5,
+      "prime_dim_threshold": 70
+    }
+  },
+
+  "v72闸门阈值": {
+    "gate1_data_quality": {
+      "min_klines": 100
+    },
+    "gate2_fund_support": {
+      "F_min": -15,
+      "F_extreme_min": -80
+    },
+    "gate3_ev": {
+      "EV_min": 0.0
+    },
+    "gate4_probability": {
+      "P_min": 0.50
+    }
+  },
+
+  "统计校准参数": {
+    "calibration_min_samples": 30,
+    "bootstrap_base_p": 0.45,
+    "bootstrap_max_p": 0.68,
+    "F_bonus_threshold": 30,
+    "F_bonus_value": 0.03,
+    "I_bonus_threshold": 60,
+    "I_bonus_value": 0.02
+  },
+
+  "I因子参数": {
+    "window_hours": 48,
+    "beta_threshold_high": 1.5,
+    "beta_threshold_low": 0.5,
+    "outlier_sigma": 3.0,
+    "min_data_quality": 0.5
+  },
+
+  "蓄势检测阈值": {
+    "strong_accumulation": {
+      "F_min": 90,
+      "C_min": 60,
+      "T_max": 40,
+      "strength_threshold": 35
+    },
+    "moderate_accumulation": {
+      "F_min": 85,
+      "C_min": 70,
+      "T_max": 30,
+      "V_max": 0,
+      "strength_threshold": 38
+    }
+  },
+
+  "AntiJitter参数": {
+    "cooldown_seconds": 3600,
+    "min_probability": 0.50,
+    "min_ev": 0.0
+  },
+
+  "因子分组权重": {
+    "description": "v7.2因子分组权重系统（阶段2.1扩展）",
+    "TC_weight": 0.50,
+    "VOM_weight": 0.35,
+    "B_weight": 0.15,
+    "TC_internal": {
+      "T_weight": 0.70,
+      "C_weight": 0.30
+    },
+    "VOM_internal": {
+      "V_weight": 0.50,
+      "O_weight": 0.30,
+      "M_weight": 0.20
+    }
+  },
+
+  "EV计算参数": {
+    "description": "期望值计算参数（阶段2.1扩展）",
+    "spread_bps": 2.5,
+    "impact_bps": 3.0,
+    "funding_hold_hours": 4.0,
+    "default_RR": 2.0,
+    "atr_multiplier": 1.5
+  }
+}

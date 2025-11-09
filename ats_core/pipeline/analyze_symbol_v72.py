@@ -49,18 +49,25 @@ def analyze_with_v72_enhancements(
     Returns:
         增强后的结果字典
     """
-    # ===== 1. 重新计算F因子（v2） =====
-    from ats_core.features.fund_leading import score_fund_leading_v2
+    # ===== 0. 获取中间数据（L1修复：使用基础层提供的数据，避免重复计算）=====
+    intermediate = original_result.get('intermediate_data', {})
 
-    F_v2, F_v2_meta = score_fund_leading_v2(
-        cvd_series=cvd_series,
-        oi_data=oi_data,
-        klines=klines,
-        atr_now=atr_now,
-        params={}
-    )
+    # 优先使用intermediate_data，如果没有则使用传入的参数（向后兼容）
+    cvd_series = intermediate.get('cvd_series', cvd_series)
+    klines = intermediate.get('klines', klines)
+    oi_data = intermediate.get('oi_data', oi_data)
+    atr_now = intermediate.get('atr_now', atr_now)
 
-    # ===== 2. 重新计算weighted_score（因子分组） =====
+    # ===== 0.5 加载配置（阶段2.2：使用配置文件）=====
+    from ats_core.config.threshold_config import get_thresholds
+    config = get_thresholds()
+
+    # ===== 1. 获取F因子（A1修复：基础层已使用v2，直接使用）=====
+    # 基础层已经统一使用score_fund_leading_v2，直接使用其结果
+    F_v2 = original_result.get('F', 0)
+    F_v2_meta = original_result.get('scores_meta', {}).get('F', {})
+
+    # ===== 2. 重新计算weighted_score（因子分组+配置化权重） =====
     from ats_core.scoring.factor_groups import calculate_grouped_score
 
     # 提取原有因子分数
@@ -71,57 +78,121 @@ def analyze_with_v72_enhancements(
     O = original_result.get('O', 0)
     B = original_result.get('B', 0)
 
-    # 分组计算
-    weighted_score_v72, group_meta = calculate_grouped_score(T, M, C, V, O, B)
+    # 阶段2.2：从配置文件获取权重
+    weights = config.get_factor_weights()
+
+    # 分组计算（使用配置化权重）
+    weighted_score_v72, group_meta = calculate_grouped_score(T, M, C, V, O, B, params=weights)
     confidence_v72 = abs(weighted_score_v72)
     side_long_v72 = (weighted_score_v72 > 0)
 
-    # ===== 3. 统计校准概率 =====
+    # ===== 2.5 提取I因子（C1 CRITICAL FIX：必须在统计校准之前定义）=====
+    # v7.2增强：显式提取I因子用于展示和校准
+    # I因子在基础分析中已计算（通过calculate_independence）
+    # 这里直接使用，无需重复计算（需要BTC/ETH数据）
+    I_v2 = original_result.get('I', 50)
+    I_meta = original_result.get('scores_meta', {}).get('I', {})
+
+    # ===== 3. 统计校准概率（P0.3增强：支持F/I因子）=====
     from ats_core.calibration.empirical_calibration import EmpiricalCalibrator
 
     calibrator = EmpiricalCalibrator()
-    P_calibrated = calibrator.get_calibrated_probability(confidence_v72)
 
-    # ===== 4. 计算EV =====
-    # 简化版成本估算
-    spread_bps = 2.5  # 币安平均点差
-    impact_bps = 3.0  # 小单冲击
+    # P0.3修复：如果使用启发式（冷启动），传递F和I因子进行多维度评估
+    if not calibrator.calibration_table:
+        # 冷启动模式：使用改进的启发式公式
+        P_calibrated = calibrator._bootstrap_probability(
+            confidence=confidence_v72,
+            F_score=F_v2,
+            I_score=I_v2
+        )
+    else:
+        # 统计校准模式：使用历史数据
+        P_calibrated = calibrator.get_calibrated_probability(confidence_v72)
+
+    # ===== 4. 计算EV（阶段2.2：使用配置化参数）=====
+    # 从配置文件获取EV计算参数
+    spread_bps = config.get_ev_params('spread_bps', 2.5)
+    impact_bps = config.get_ev_params('impact_bps', 3.0)
+    funding_hold_hours = config.get_ev_params('funding_hold_hours', 4.0)
+    default_RR = config.get_ev_params('default_RR', 2.0)
+    atr_multiplier = config.get_ev_params('atr_multiplier', 1.5)
+
+    # 成本估算
     cost_bps = spread_bps / 2 + impact_bps
 
     # 资金费
     B_meta = original_result.get('scores_meta', {}).get('B', {})
     funding_rate = B_meta.get('funding_rate', 0.0001)
-    funding_bps = abs(funding_rate) * 10000 * 0.5  # 假设持有4h
+    # 按持有时间计算资金费（从配置读取）
+    funding_bps = abs(funding_rate) * 10000 * (funding_hold_hours / 8.0)
 
     total_cost_pct = (cost_bps + funding_bps) / 10000
 
-    # 止损/止盈（简化：基于ATR）
+    # 止损/止盈（使用配置化参数）
     stop_loss_result = original_result.get('stop_loss', {})
-    SL_distance_pct = stop_loss_result.get('distance_pct', atr_now / original_result['price'] * 1.5)
-    TP_distance_pct = SL_distance_pct * 2.0  # RR=2
+    SL_distance_pct = stop_loss_result.get('distance_pct', atr_now / original_result['price'] * atr_multiplier)
+    TP_distance_pct = SL_distance_pct * default_RR  # 使用配置的RR
 
     # EV = P×TP - (1-P)×SL - cost
     EV_net = P_calibrated * TP_distance_pct - (1 - P_calibrated) * SL_distance_pct - total_cost_pct
 
-    # ===== 5. 四道闸门 =====
-    from ats_core.pipeline.gates import FourGatesFilter
+    # ===== 5. 四道闸门（v7.2 重构：读取基础分析结果） =====
+    # Q3 FIX: 修正注释编号（删除重复的I因子定义）
+    # v7.2设计理念：
+    # - 基础分析（analyze_symbol）已经完成了完整的闸门检查
+    # - v7.2增强层只需重新计算部分因子（F_v2），然后应用简化的质量检查
+    # - 避免重复实现复杂的闸门逻辑（订单簿、DataQual等）
 
-    gates = FourGatesFilter()
+    # 方案：使用简化的四道检查（只检查关键指标）
+    # 阶段2.2：从配置文件读取闸门阈值
+    min_klines = config.get_gate_threshold('gate1_data_quality', 'min_klines', 100)
+    P_min = config.get_gate_threshold('gate4_probability', 'P_min', 0.50)
+    EV_min = config.get_gate_threshold('gate3_ev', 'EV_min', 0.0)
+    F_min = config.get_gate_threshold('gate2_fund_support', 'F_min', -15)
 
-    # 准备闸门数据
-    I = original_result.get('I', 50)
-    market_regime = original_result.get('market_regime', 0)
+    gates_data_quality = 1.0 if len(klines) >= min_klines else 0.0
+    gates_ev = 1.0 if EV_net > EV_min else 0.0
+    gates_probability = 1.0 if P_calibrated >= P_min else 0.0
 
-    gate_data = {
-        "bars": len(klines),
-        "F_score": F_v2,
-        "side_long": side_long_v72,
-        "independence": I,
-        "market_regime": market_regime,
-        "EV_net": EV_net
+    # F因子闸门（v7.2特有：使用F_v2）
+    # F >= F_min: 资金支撑合格
+    # F < F_min: 价格领先资金，追高风险
+    gates_fund_support = 1.0 if F_v2 >= F_min else 0.0
+
+    # 综合判定（所有闸门都通过才发布）
+    pass_gates = all([
+        gates_data_quality > 0.5,
+        gates_ev > 0.5,
+        gates_probability > 0.5,
+        gates_fund_support > 0.5
+    ])
+
+    # 闸门原因
+    if not pass_gates:
+        failed_gates = []
+        if gates_data_quality <= 0.5:
+            failed_gates.append(f"数据质量不足(bars={len(klines)}, 需要>={min_klines})")
+        if gates_ev <= 0.5:
+            failed_gates.append(f"EV≤{EV_min}({EV_net:.4f})")
+        if gates_probability <= 0.5:
+            failed_gates.append(f"P<{P_min}({P_calibrated:.3f})")
+        if gates_fund_support <= 0.5:
+            failed_gates.append(f"F因子过低({F_v2}, 需要>={F_min})")
+        gate_reason = "; ".join(failed_gates)
+    else:
+        gate_reason = "all_gates_passed"
+
+    # 闸门详情
+    gate_details = {
+        "all_pass": pass_gates,
+        "details": [
+            {"gate": 1, "name": "data_quality", "pass": gates_data_quality > 0.5, "value": gates_data_quality},
+            {"gate": 2, "name": "fund_support", "pass": gates_fund_support > 0.5, "value": F_v2, "threshold": -15},
+            {"gate": 3, "name": "ev", "pass": gates_ev > 0.5, "value": EV_net, "threshold": 0.0},
+            {"gate": 4, "name": "probability", "pass": gates_probability > 0.5, "value": P_calibrated, "threshold": 0.50}
+        ]
     }
-
-    pass_gates, gate_reason, gate_details = gates.check_all(gate_data)
 
     # ===== 6. 最终判定 =====
     is_prime_v72 = pass_gates
@@ -138,7 +209,7 @@ def analyze_with_v72_enhancements(
         "v72_enhancements": {
             "version": "v7.2_stage1",
 
-            # F因子v2
+            # F因子v2（资金领先性）
             "F_v2": F_v2,
             "F_v2_meta": F_v2_meta,
             "F_original": original_result.get('F', 0),
@@ -147,6 +218,10 @@ def analyze_with_v72_enhancements(
                 "v2": F_v2,
                 "diff": F_v2 - original_result.get('F', 0)
             },
+
+            # I因子（市场独立性）
+            "I_v2": I_v2,
+            "I_meta": I_meta,
 
             # 因子分组
             "grouped_score": {
@@ -190,7 +265,30 @@ def analyze_with_v72_enhancements(
                 "signal": signal_v72,
                 "original_was_prime": original_result.get('publish', {}).get('prime', False),
                 "decision_changed": is_prime_v72 != original_result.get('publish', {}).get('prime', False)
-            }
+            },
+
+            # ===== Telegram模板兼容字段（扁平化，便于render_trade_v72读取） =====
+            "P_calibrated": round(P_calibrated, 3),
+            "EV_net": round(EV_net, 4),
+            "confidence_v72": round(confidence_v72, 2),
+            "group_scores": {
+                "TC": group_meta.get('TC_group'),
+                "VOM": group_meta.get('VOM_group'),
+                "B": group_meta.get('B_group')
+            },
+            "gate_results": gate_details,
+
+            # ===== 蓄势待发标记（核心功能）=====
+            # F因子 > 30 = 资金强势领先 = 蓄势待发
+            # F因子 > 15 = 资金明显领先 = 即将爆发
+            "is_momentum_ready": F_v2 > 30,
+            "is_breakout_soon": F_v2 > 15,
+            "momentum_level": (
+                "strong" if F_v2 > 30 else
+                "moderate" if F_v2 > 15 else
+                "weak" if F_v2 > 0 else
+                "negative"
+            )
         }
     }
 

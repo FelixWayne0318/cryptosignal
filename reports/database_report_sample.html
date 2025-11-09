@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据库信号报告（示例）</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            padding: 10px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        .summary {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stat {
+            display: inline-block;
+            margin-right: 20px;
+            font-size: 14px;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2196F3;
+        }
+        .note {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+        table {
+            width: 100%;
+            background: white;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background: #2196F3;
+            color: white;
+            font-weight: 600;
+        }
+        tr:hover {
+            background: #f9f9f9;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .badge-success {
+            background: #4CAF50;
+            color: white;
+        }
+        .badge-long {
+            background: #2196F3;
+            color: white;
+        }
+        .badge-short {
+            background: #FF9800;
+            color: white;
+        }
+        @media (max-width: 768px) {
+            table {
+                font-size: 12px;
+            }
+            th, td {
+                padding: 8px 4px;
+            }
+            .stat {
+                display: block;
+                margin-bottom: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 交易信号数据库报告</h1>
+        
+        <div class="note">
+            <strong>📍 这是示例报告</strong><br>
+            实际报告将从服务器数据库生成，包含完整的v7.2信号数据。<br>
+            命令：<code>python3 scripts/view_database.py --html</code>
+        </div>
+        
+        <div class="summary">
+            <div class="stat">
+                <div>总信号数</div>
+                <div class="stat-value">6</div>
+            </div>
+            <div class="stat">
+                <div>扫描次数</div>
+                <div class="stat-value">3</div>
+            </div>
+            <div class="stat">
+                <div>更新时间</div>
+                <div style="font-size:14px">2025-11-09 08:44:24</div>
+            </div>
+        </div>
+        
+        <h2>🎯 最近信号（基于电报消息的示例数据）</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>时间</th>
+                    <th>币种</th>
+                    <th>方向</th>
+                    <th>置信度</th>
+                    <th>概率</th>
+                    <th>EV</th>
+                    <th>F因子</th>
+                    <th>I因子</th>
+                    <th>闸门</th>
+                </tr>
+            </thead>
+            <tbody>
+
+                <tr>
+                    <td>2025-11-09 08:22:00</td>
+                    <td><strong>MAVUSDT</strong></td>
+                    <td><span class="badge badge-long">LONG</span></td>
+                    <td>58.0</td>
+                    <td>0.680</td>
+                    <td>+0.028</td>
+                    <td>71</td>
+                    <td>58</td>
+                    <td>✅</td>
+                </tr>
+
+                <tr>
+                    <td>2025-11-09 08:22:00</td>
+                    <td><strong>API3USDT</strong></td>
+                    <td><span class="badge badge-long">LONG</span></td>
+                    <td>55.0</td>
+                    <td>0.670</td>
+                    <td>+0.025</td>
+                    <td>70</td>
+                    <td>55</td>
+                    <td>✅</td>
+                </tr>
+
+                <tr>
+                    <td>2025-11-09 08:22:00</td>
+                    <td><strong>WCTUSDT</strong></td>
+                    <td><span class="badge badge-short">SHORT</span></td>
+                    <td>54.0</td>
+                    <td>0.665</td>
+                    <td>+0.024</td>
+                    <td>71</td>
+                    <td>52</td>
+                    <td>✅</td>
+                </tr>
+
+                <tr>
+                    <td>2025-11-09 08:17:00</td>
+                    <td><strong>ANKRUSDT</strong></td>
+                    <td><span class="badge badge-long">LONG</span></td>
+                    <td>53.0</td>
+                    <td>0.660</td>
+                    <td>+0.023</td>
+                    <td>69</td>
+                    <td>48</td>
+                    <td>✅</td>
+                </tr>
+
+                <tr>
+                    <td>2025-11-09 08:17:00</td>
+                    <td><strong>ARKMUSDT</strong></td>
+                    <td><span class="badge badge-long">LONG</span></td>
+                    <td>50.0</td>
+                    <td>0.650</td>
+                    <td>+0.020</td>
+                    <td>70</td>
+                    <td>50</td>
+                    <td>✅</td>
+                </tr>
+
+                <tr>
+                    <td>2025-11-09 08:12:00</td>
+                    <td><strong>PORT3USDT</strong></td>
+                    <td><span class="badge badge-short">SHORT</span></td>
+                    <td>50.0</td>
+                    <td>0.648</td>
+                    <td>+0.019</td>
+                    <td>61</td>
+                    <td>45</td>
+                    <td>✅</td>
+                </tr>
+
+            </tbody>
+        </table>
+        
+        <h2>📈 扫描统计</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>时间</th>
+                    <th>扫描币种</th>
+                    <th>发现信号</th>
+                    <th>平均Conf</th>
+                    <th>耗时</th>
+                </tr>
+            </thead>
+            <tbody>
+
+                <tr>
+                    <td>2025-11-09 08:22:00</td>
+                    <td>411</td>
+                    <td>6</td>
+                    <td>53.5</td>
+                    <td>75.5s</td>
+                </tr>
+
+                <tr>
+                    <td>2025-11-09 08:17:00</td>
+                    <td>411</td>
+                    <td>4</td>
+                    <td>51.2</td>
+                    <td>76.2s</td>
+                </tr>
+
+                <tr>
+                    <td>2025-11-09 08:12:00</td>
+                    <td>411</td>
+                    <td>2</td>
+                    <td>48.8</td>
+                    <td>74.8s</td>
+                </tr>
+
+            </tbody>
+        </table>
+        
+        <div class="note">
+            <strong>💡 如何查看实时数据？</strong><br>
+            1. SSH到服务器：<code>ssh root@139.180.157.152</code><br>
+            2. 生成报告：<code>cd ~/cryptosignal && python3 scripts/view_database.py --html</code><br>
+            3. 手机查看：使用HTTP服务器或提交到GitHub<br>
+            详细说明：<code>docs/DATABASE_VIEWER.md</code>
+        </div>
+        
+        <p style="text-align:center; color:#999; margin-top:30px;">
+            示例生成时间: 2025-11-09 08:44:24<br>
+            CryptoSignal v7.2 数据库查看器（示例）
+        </p>
+    </div>
+</body>
+</html>
