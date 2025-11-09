@@ -90,11 +90,16 @@ def score_structure(h,l,c, ema30_last, atr_now, params=None, ctx=None):
     v3.0改进：
     - params参数可选，从配置文件读取默认参数
     - 传入的params参数优先级高于配置文件（向后兼容）
+
+    v3.1改进（2025-11-09）：
+    - 添加数据质量检查（防止崩溃）
+    - 统一降级元数据结构
     """
     # v3.0: 从配置文件读取默认参数
     try:
         config = get_factor_config()
         config_params = config.get_factor_params("S")
+        min_data_points = config.get_data_quality_threshold("S", "min_data_points")
     except Exception as e:
         # 配置加载失败时使用硬编码默认值（向后兼容）
         print(f"⚠️ S因子配置加载失败，使用默认值: {e}")
@@ -107,11 +112,42 @@ def score_structure(h,l,c, ema30_last, atr_now, params=None, ctx=None):
                 "strong_regime_sub": 0.05
             }
         }
+        min_data_points = 10  # 至少需要10个数据点用于zigzag计算
 
     # 合并配置参数：配置文件 < 传入的params（向后兼容）
     p = dict(config_params)
     if isinstance(params, dict):
         p.update(params)
+
+    # ========== v3.1: 数据质量检查（防止崩溃）==========
+    if not c or len(c) < min_data_points:
+        return 0, {
+            "theta": 0.0,
+            "icr": 0.0,
+            "retr": 0.0,
+            "timing": 0.0,
+            "not_over": False,
+            "m15_ok": False,
+            "penalty": 0.0,
+            "interpretation": "数据不足",
+            "degradation_reason": "insufficient_data",  # v3.1: 统一字段名
+            "min_data_required": min_data_points
+        }
+
+    # 检查h、l、c长度一致性
+    if len(h) != len(c) or len(l) != len(c):
+        return 0, {
+            "theta": 0.0,
+            "icr": 0.0,
+            "retr": 0.0,
+            "timing": 0.0,
+            "not_over": False,
+            "m15_ok": False,
+            "penalty": 0.0,
+            "interpretation": "数据不一致",
+            "degradation_reason": "inconsistent_data_length",  # v3.1: 新增降级原因
+            "min_data_required": min_data_points
+        }
 
     # 确保ctx不为None
     if ctx is None:

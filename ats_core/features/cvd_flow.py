@@ -11,12 +11,18 @@ v3.0配置管理（2025-11-09）：
 - 移除硬编码参数，改为从配置文件读取
 - 支持向后兼容（params参数优先级高于配置文件）
 - 使用统一的数据质量检查阈值
+
+v3.1数据质量优化（2025-11-09）：
+- 添加CVD异常值检测和过滤（IQR方法）
+- 降低巨鲸订单和闪崩对因子的影响
+- 与O+因子保持一致的异常值处理策略
 """
 import math
 from typing import List, Tuple, Dict, Any, Optional
 from .scoring_utils import directional_score  # 保留用于内部计算
 from ats_core.scoring.scoring_utils import StandardizationChain
 from ats_core.config.factor_config import get_factor_config
+from ats_core.utils.outlier_detection import detect_outliers_iqr, apply_outlier_weights
 
 # v3.0: 模块级StandardizationChain实例（延迟初始化）
 _cvd_chain: Optional[StandardizationChain] = None
@@ -121,12 +127,39 @@ def score_cvd_flow(
             "cvd_score": 0,
             "consistency": 0.0,
             "r_squared": 0.0,
-            "is_consistent": False
+            "is_consistent": False,
+            # v3.1: 添加降级诊断信息（统一元数据结构）
+            "degradation_reason": "insufficient_data",
+            "min_data_required": min_data_points
         }
 
     # ========== 1. 计算 CVD 6小时变化 ==========
     cvd_window = cvd_series[-7:]  # 最近7个数据点（6小时）
     n = len(cvd_window)
+
+    # ========== 1.5 异常值检测和处理（v3.1新增） ==========
+    # 防止巨鲸订单、闪崩等极端事件污染CVD趋势分析
+    # 使用IQR方法（与O+因子一致）
+    outliers_filtered = 0
+    cvd_window_original = cvd_window.copy()  # 保存原始值用于对比
+
+    if len(cvd_window) >= 5:  # 至少5个点才做异常值检测
+        try:
+            # 检测异常值（multiplier=1.5，标准IQR阈值）
+            outlier_mask = detect_outliers_iqr(cvd_window, multiplier=1.5)
+            outliers_filtered = sum(outlier_mask)
+
+            if outliers_filtered > 0:
+                # 对异常值降权而非完全删除（保持序列长度不变）
+                # CVD对异常值更敏感，使用更低的权重（0.3 vs O+的0.5）
+                cvd_window = apply_outlier_weights(
+                    cvd_window,
+                    outlier_mask,
+                    outlier_weight=0.3  # 异常值仅保留30%权重
+                )
+        except Exception as e:
+            # 异常值检测失败时使用原始数据（向后兼容）
+            outliers_filtered = 0
 
     # ========== 2. 线性回归分析（判断持续性） ==========
     # 2.1 计算线性回归斜率（每小时平均变化）
@@ -240,6 +273,9 @@ def score_cvd_flow(
         "crowding_warn": crowding_warn,       # 是否拥挤
         # v2.5++: 相对历史归一化信息
         "normalization_method": normalization_method,
+        # v3.1: 异常值过滤信息
+        "outliers_filtered": outliers_filtered,  # 检测到的异常值数量
+        "outlier_filter_applied": (outliers_filtered > 0),  # 是否应用了异常值过滤
     }
 
     # 添加相对强度信息（如果使用历史归一化）

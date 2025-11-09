@@ -139,14 +139,15 @@ def score_trend(
     c: Iterable[float],
     c4: Iterable[float],   # 兼容旧签名；未用到
     cfg: dict = None
-) -> Tuple[int, int]:
+) -> Tuple[int, Dict[str, Any]]:
     """
-    返回 (T, Tm)
+    返回 (T, metadata)
     - T : -100~+100 趋势分（带符号）
         * 正值：上涨趋势
         * 负值：下跌趋势
         * 0：震荡/中性
-    - Tm: -1(空) / 0(震荡) / 1(多) - 市场实际趋势方向
+    - metadata: 包含 Tm 和其他诊断信息
+        * Tm: -1(空) / 0(震荡) / 1(多) - 市场实际趋势方向
 
     改进点：
     1. 统一为±100系统
@@ -157,6 +158,10 @@ def score_trend(
     - cfg参数可选，从配置文件读取默认参数
     - 传入的cfg参数优先级高于配置文件（向后兼容）
     - 使用配置的数据质量检查阈值
+
+    v3.1改进（2025-11-09）：
+    - 返回值改为 (T, metadata) 统一接口
+    - metadata 包含 Tm 和降级诊断信息
     """
     H = [float(x) for x in h]
     L = [float(x) for x in l]
@@ -186,8 +191,17 @@ def score_trend(
         params.update(cfg)
 
     # v3.0: 使用配置的数据质量阈值
+    # v3.1: 统一降级元数据结构
     if not C or len(C) < min_data_points:
-        return 0, 0  # 数据太短，给中性分
+        return 0, {
+            "Tm": 0,
+            "slopeATR": 0.0,
+            "emaOrder": 0,
+            "r2": 0.0,
+            "degradation_reason": "insufficient_data",
+            "min_data_required": min_data_points,
+            "actual_data_points": len(C) if C else 0
+        }
 
     # 参数配置
     ema_order_min_bars = int(params.get("ema_order_min_bars", 6))
@@ -276,4 +290,15 @@ def score_trend(
     T = int(round(T_pub))
     Tm = int(dir_flag)
 
-    return T, Tm
+    # v3.1: 返回统一的元数据结构
+    metadata = {
+        "Tm": Tm,
+        "slopeATR": round(slope_per_bar, 6),
+        "emaOrder": 1 if ema_up else (-1 if ema_dn else 0),
+        "r2": round(r2_val, 3),
+        "T_raw": round(T_raw, 2),
+        "slope_score": round(slope_score, 2),
+        "ema_score": round(ema_score, 2),
+    }
+
+    return T, metadata

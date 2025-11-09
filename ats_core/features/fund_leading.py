@@ -280,7 +280,12 @@ def score_fund_leading_v2(
 
     # === 1. 数据验证 ===
     if len(klines) < 7:
-        return 0, {"error": "insufficient_klines", "bars": len(klines)}
+        # v3.1: 统一降级元数据结构（改用标准字段名）
+        return 0, {
+            "degradation_reason": "insufficient_data",
+            "min_data_required": 7,
+            "actual_data_points": len(klines)
+        }
 
     if atr_now <= 0:
         atr_now = 1.0
