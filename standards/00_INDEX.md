@@ -46,11 +46,11 @@
 - **[WEIGHTS_TUNING.md](configuration/WEIGHTS_TUNING.md)** - 权重调优指南
 - **[INDEX.md](configuration/INDEX.md)** - 配置索引
 
-### 5. 开发指南 ([development/](development/))
-- **[WORKFLOW.md](development/WORKFLOW.md)** - 开发流程
-- **[MODIFICATION_RULES.md](development/MODIFICATION_RULES.md)** - 代码修改规范
-- **[DOCUMENTATION_RULES.md](development/DOCUMENTATION_RULES.md)** - 文档编写规范
-- **[INDEX.md](development/INDEX.md)** - 开发索引
+### 5. 开发指南
+- **[DEVELOPMENT_WORKFLOW.md](DEVELOPMENT_WORKFLOW.md)** - Git提交规范和测试流程
+- **[MODIFICATION_RULES.md](MODIFICATION_RULES.md)** - 日常配置和功能修改规范
+- **[SYSTEM_ENHANCEMENT_STANDARD.md](SYSTEM_ENHANCEMENT_STANDARD.md)** - 🆕 系统性升级标准化流程（v3.1新增）
+- **[DOCUMENTATION_RULES.md](DOCUMENTATION_RULES.md)** - 文档编写规范
 
 ### 6. 参考资料 ([reference/](reference/))
 - **[QUICK_REFERENCE.md](reference/QUICK_REFERENCE.md)** - 快速参考手册
@@ -72,7 +72,9 @@
 1. 了解系统 → [01_SYSTEM_OVERVIEW.md](01_SYSTEM_OVERVIEW.md)
 2. 架构设计 → [02_ARCHITECTURE.md](02_ARCHITECTURE.md)
 3. 核心规范 → [specifications/FACTOR_SYSTEM.md](specifications/FACTOR_SYSTEM.md)
-4. 开发流程 → [development/WORKFLOW.md](development/WORKFLOW.md)
+4. 日常开发 → [DEVELOPMENT_WORKFLOW.md](DEVELOPMENT_WORKFLOW.md)
+5. 配置修改 → [MODIFICATION_RULES.md](MODIFICATION_RULES.md)
+6. 🆕 系统升级 → [SYSTEM_ENHANCEMENT_STANDARD.md](SYSTEM_ENHANCEMENT_STANDARD.md)
 
 #### 想了解变更历史
 → [03_VERSION_HISTORY.md](03_VERSION_HISTORY.md)
