@@ -22,14 +22,58 @@ P2.3改进（2025-11-05，scale参数优化）：
 - 问题：scale=0.3过小，导致tanh函数过早饱和，V分数聚集在±80
 - 方案：scale增加3倍（0.3→0.9），避免饱和，使V分数更均匀分布
 - 效果：vlevel=1.3给60分（vs旧版88分），vlevel=1.5给75分（vs旧版97分）
+
+v3.0配置管理（2025-11-09）：
+- 移除硬编码参数，改为从配置文件读取
+- 支持向后兼容（params参数优先级高于配置文件）
+- 使用统一的数据质量检查阈值
 """
 import math
 import numpy as np
+from typing import Optional
 from ats_core.features.scoring_utils import directional_score  # 保留用于内部计算
 from ats_core.scoring.scoring_utils import StandardizationChain
+from ats_core.config.factor_config import get_factor_config
 
-# 模块级StandardizationChain实例
-_volume_chain = StandardizationChain(alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5)
+# v3.0: 模块级StandardizationChain实例（延迟初始化）
+_volume_chain: Optional[StandardizationChain] = None
+
+
+def _get_volume_chain() -> StandardizationChain:
+    """
+    获取StandardizationChain实例（延迟初始化）
+
+    v3.0改进：从配置文件读取参数，而非硬编码
+    """
+    global _volume_chain
+
+    if _volume_chain is None:
+        try:
+            config = get_factor_config()
+            std_params = config.get_standardization_params("V+")
+
+            # 检查是否启用StandardizationChain
+            if std_params.get('enabled', True):
+                _volume_chain = StandardizationChain(
+                    alpha=std_params['alpha'],
+                    tau=std_params['tau'],
+                    z0=std_params['z0'],
+                    zmax=std_params['zmax'],
+                    lam=std_params['lam']
+                )
+            else:
+                # 如果配置禁用，使用默认参数创建（向后兼容）
+                _volume_chain = StandardizationChain(
+                    alpha=0.25, tau=5.0, z0=3.0, zmax=6.0, lam=1.5
+                )
+        except Exception as e:
+            # 配置加载失败时使用默认参数（向后兼容）
+            print(f"⚠️ V+因子StandardizationChain配置加载失败，使用默认参数: {e}")
+            _volume_chain = StandardizationChain(
+                alpha=0.25, tau=5.0, z0=3.0, zmax=6.0, lam=1.5
+            )
+
+    return _volume_chain
 
 
 def get_adaptive_price_threshold(
@@ -97,29 +141,48 @@ def score_volume(vol, closes=None, params=None):
     Args:
         vol: 量能列表
         closes: 收盘价列表（用于判断价格方向）
-        params: 参数配置
+        params: 参数配置（v3.0：可选，优先级高于配置文件）
 
     Returns:
         (V分数 [-100, +100], 元数据)
-    """
-    # 默认参数
-    # P2.3修复（2025-11-05）：scale参数优化，避免±80聚集
-    # 诊断发现：scale=0.3过小导致tanh过早饱和，推荐0.89（3倍增加）
-    default_params = {
-        "vlevel_scale": 0.9,      # P2.3修复: 0.3→0.9，避免饱和（v5/v20=1.3给约60分，1.5给75分）
-        "vroc_scale": 0.9,        # P2.3修复: 0.3→0.9，保持一致性
-        "vlevel_weight": 0.6,     # vlevel 权重
-        "vroc_weight": 0.4,       # vroc 权重
-        "price_lookback": 5,      # 价格方向回溯周期
-        "adaptive_threshold_mode": "hybrid",  # P0.2: 自适应阈值模式
-    }
 
-    p = dict(default_params)
+    v3.0改进：
+    - 从配置文件读取默认参数
+    - 传入的params参数优先级高于配置文件（向后兼容）
+    - 使用配置的数据质量检查阈值
+    """
+    # v3.0: 从配置文件读取默认参数
+    try:
+        config = get_factor_config()
+        config_params = config.get_factor_params("V+")
+        min_data_points = config.get_data_quality_threshold("V+", "min_data_points")
+    except Exception as e:
+        # 配置加载失败时使用硬编码默认值（向后兼容）
+        print(f"⚠️ V+因子配置加载失败，使用默认值: {e}")
+        config_params = {
+            "vlevel_scale": 0.9,
+            "vroc_scale": 0.9,
+            "vlevel_weight": 0.6,
+            "vroc_weight": 0.4,
+            "price_lookback": 5,
+            "adaptive_threshold_mode": "hybrid",
+        }
+        min_data_points = 25
+
+    # 合并配置参数：配置文件 < 传入的params（向后兼容）
+    p = dict(config_params)
     if isinstance(params, dict):
         p.update(params)
 
-    if len(vol) < 25:
-        return 0, {"v5v20": 1.0, "vroc": 0.0, "price_trend_pct": 0.0}
+    # v3.0: 使用配置的数据质量阈值
+    if len(vol) < min_data_points:
+        return 0, {
+            "v5v20": 1.0,
+            "vroc": 0.0,
+            "price_trend_pct": 0.0,
+            "degradation_reason": "insufficient_data",
+            "min_data_required": min_data_points
+        }
 
     v5 = sum(vol[-5:]) / 5.0
     v20 = sum(vol[-20:]) / 20.0
@@ -199,9 +262,10 @@ def score_volume(vol, closes=None, params=None):
         V_raw = V_strength
 
     # v2.0合规：应用StandardizationChain
-    # ⚠️ 2025-11-04紧急修复：禁用StandardizationChain，过度压缩导致信号丢失
-    # V_pub, diagnostics = _volume_chain.standardize(V_raw)
-    V_pub = max(-100, min(100, V_raw))  # 直接使用原始值
+    # ✅ P0修复（2025-11-09）：重新启用StandardizationChain（参数已优化）
+    # v3.0: 使用延迟初始化的StandardizationChain
+    volume_chain = _get_volume_chain()
+    V_pub, diagnostics = volume_chain.standardize(V_raw)
     V = int(round(V_pub))
 
     # ========== 解释文本（考虑价格方向）==========

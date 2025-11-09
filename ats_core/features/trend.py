@@ -5,22 +5,58 @@
 - 返回带符号的分数：+表示上涨趋势，-表示下跌趋势
 - 返回 (T分数, Tm方向)
 - v2.0合规：应用StandardizationChain（5步稳健化）
+
+v3.0配置管理（2025-11-09）：
+- 移除硬编码参数，改为从配置文件读取
+- 支持向后兼容（cfg参数优先级高于配置文件）
+- 使用统一的数据质量检查阈值
 """
 from __future__ import annotations
 
-from typing import List, Tuple, Iterable, Any, Dict
+from typing import List, Tuple, Iterable, Any, Dict, Optional
 from .scoring_utils import directional_score  # 保留用于内部计算
 from ats_core.scoring.scoring_utils import StandardizationChain
+from ats_core.config.factor_config import get_factor_config
 
-# 模块级StandardizationChain实例（持久化EW状态）
-# 参数per STANDARDS.md: alpha=0.15 (1h), tau=3.0 (compression)
-_trend_chain = StandardizationChain(
-    alpha=0.15,      # Pre-smoothing for 1h interval
-    tau=3.0,         # Tanh compression temperature
-    z0=2.5,          # Soft winsor start
-    zmax=6.0,        # Soft winsor max
-    lam=1.5          # Winsor exponential decay
-)
+# v3.0: 模块级StandardizationChain实例（延迟初始化）
+_trend_chain: Optional[StandardizationChain] = None
+
+
+def _get_trend_chain() -> StandardizationChain:
+    """
+    获取StandardizationChain实例（延迟初始化）
+
+    v3.0改进：从配置文件读取参数，而非硬编码
+    """
+    global _trend_chain
+
+    if _trend_chain is None:
+        try:
+            config = get_factor_config()
+            std_params = config.get_standardization_params("T")
+
+            # 检查是否启用StandardizationChain
+            if std_params.get('enabled', True):
+                _trend_chain = StandardizationChain(
+                    alpha=std_params['alpha'],
+                    tau=std_params['tau'],
+                    z0=std_params['z0'],
+                    zmax=std_params['zmax'],
+                    lam=std_params['lam']
+                )
+            else:
+                # 如果配置禁用，使用默认参数创建（向后兼容）
+                _trend_chain = StandardizationChain(
+                    alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5
+                )
+        except Exception as e:
+            # 配置加载失败时使用默认参数（向后兼容）
+            print(f"⚠️ T因子StandardizationChain配置加载失败，使用默认参数: {e}")
+            _trend_chain = StandardizationChain(
+                alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5
+            )
+
+    return _trend_chain
 
 # -------------- 小工具：把"可能是列表"的值收敛成标量 ----------------
 
@@ -102,39 +138,83 @@ def score_trend(
     l: Iterable[float],
     c: Iterable[float],
     c4: Iterable[float],   # 兼容旧签名；未用到
-    cfg: dict
-) -> Tuple[int, int]:
+    cfg: dict = None
+) -> Tuple[int, Dict[str, Any]]:
     """
-    返回 (T, Tm)
+    返回 (T, metadata)
     - T : -100~+100 趋势分（带符号）
         * 正值：上涨趋势
         * 负值：下跌趋势
         * 0：震荡/中性
-    - Tm: -1(空) / 0(震荡) / 1(多) - 市场实际趋势方向
+    - metadata: 包含 Tm 和其他诊断信息
+        * Tm: -1(空) / 0(震荡) / 1(多) - 市场实际趋势方向
 
     改进点：
     1. 统一为±100系统
     2. 不再需要side_long参数
     3. 直接返回带方向的分数
+
+    v3.0改进：
+    - cfg参数可选，从配置文件读取默认参数
+    - 传入的cfg参数优先级高于配置文件（向后兼容）
+    - 使用配置的数据质量检查阈值
+
+    v3.1改进（2025-11-09）：
+    - 返回值改为 (T, metadata) 统一接口
+    - metadata 包含 Tm 和降级诊断信息
     """
     H = [float(x) for x in h]
     L = [float(x) for x in l]
     C = [float(x) for x in c]
-    if not C or len(C) < 30:
-        return 0, 0  # 数据太短，给中性分
+
+    # v3.0: 从配置文件读取默认参数和数据质量阈值
+    try:
+        config = get_factor_config()
+        config_params = config.get_factor_params("T")
+        min_data_points = config.get_data_quality_threshold("T", "min_data_points")
+    except Exception as e:
+        # 配置加载失败时使用硬编码默认值（向后兼容）
+        print(f"⚠️ T因子配置加载失败，使用默认值: {e}")
+        config_params = {
+            "ema_order_min_bars": 6,
+            "slope_lookback": 12,
+            "atr_period": 14,
+            "slope_scale": 0.08,
+            "ema_bonus": 12.5,
+            "r2_weight": 0.15,
+        }
+        min_data_points = 30
+
+    # 合并配置参数：配置文件 < 传入的cfg（向后兼容）
+    params = dict(config_params)
+    if isinstance(cfg, dict):
+        params.update(cfg)
+
+    # v3.0: 使用配置的数据质量阈值
+    # v3.1: 统一降级元数据结构
+    if not C or len(C) < min_data_points:
+        return 0, {
+            "Tm": 0,
+            "slopeATR": 0.0,
+            "emaOrder": 0,
+            "r2": 0.0,
+            "degradation_reason": "insufficient_data",
+            "min_data_required": min_data_points,
+            "actual_data_points": len(C) if C else 0
+        }
 
     # 参数配置
-    ema_order_min_bars = int(cfg.get("ema_order_min_bars", 6))
-    slope_lookback = int(cfg.get("slope_lookback", 12))
-    atr_period = int(cfg.get("atr_period", 14))
+    ema_order_min_bars = int(params.get("ema_order_min_bars", 6))
+    slope_lookback = int(params.get("slope_lookback", 12))
+    atr_period = int(params.get("atr_period", 14))
 
     # 软映射参数
     # v2.5++修复（2025-11-05）：降低组件分数上限，避免T_raw超出±100导致饱和
     # 修复前：slope_scale=0.05, ema_bonus=20.0, r2_weight=0.3 → T_raw范围-170~+170 → 95%极值
     # 修复后：slope_scale=0.08, ema_bonus=12.5, r2_weight=0.15 → T_raw范围-100~+100 → 合理分布
-    slope_scale = float(cfg.get("slope_scale", 0.08))  # 原0.05，增大降低映射强度
-    ema_bonus = float(cfg.get("ema_bonus", 12.5))      # 原20.0（±40分），改为12.5（±25分）
-    r2_weight = float(cfg.get("r2_weight", 0.15))      # 原0.3（±30分），改为0.15（±15分）
+    slope_scale = float(params.get("slope_scale", 0.08))  # 原0.05，增大降低映射强度
+    ema_bonus = float(params.get("ema_bonus", 12.5))      # 原20.0（±40分），改为12.5（±25分）
+    r2_weight = float(params.get("r2_weight", 0.15))      # 原0.3（±30分），改为0.15（±15分）
 
     # ========== 1. EMA 顺序（5/20） ==========
     ema5 = _ema(C, 5)
@@ -201,12 +281,24 @@ def score_trend(
 
     # v2.0合规：应用StandardizationChain（5步稳健化）
     # 输入T_raw（可能超出±100），输出标准化后的T_pub（稳健压缩到±100）
-    # ⚠️ 2025-11-04紧急修复：禁用StandardizationChain，过度压缩导致大跌时T=0
-    # T_pub, diagnostics = _trend_chain.standardize(T_raw)
-    T_pub = max(-100, min(100, T_raw))  # 直接使用原始值，仅裁剪到±100
+    # ✅ P0修复（2025-11-09）：重新启用StandardizationChain（参数已优化）
+    # v3.0: 使用延迟初始化的StandardizationChain
+    trend_chain = _get_trend_chain()
+    T_pub, diagnostics = trend_chain.standardize(T_raw)
 
     # 转换为整数
     T = int(round(T_pub))
     Tm = int(dir_flag)
 
-    return T, Tm
+    # v3.1: 返回统一的元数据结构
+    metadata = {
+        "Tm": Tm,
+        "slopeATR": round(slope_per_bar, 6),
+        "emaOrder": 1 if ema_up else (-1 if ema_dn else 0),
+        "r2": round(r2_val, 3),
+        "T_raw": round(T_raw, 2),
+        "slope_score": round(slope_score, 2),
+        "ema_score": round(ema_score, 2),
+    }
+
+    return T, metadata

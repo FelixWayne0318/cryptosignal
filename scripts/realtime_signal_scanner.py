@@ -345,31 +345,63 @@ class RealtimeSignalScanner:
         """
         发送v7.2格式的信号到Telegram
 
+        v3.1优化：每次只发送Top 1最优信号（按confidence_adjusted排序）
+        - 避免信息过载
+        - 聚焦最优质信号
+        - 降低决策疲劳
+        - 其他信号参与下一轮竞争
+
         蓄势待发（F因子 > 30）会在消息头部和F因子行自动标记
 
         Args:
             signals: 信号列表
         """
-        log(f"\n📤 发送 {len(signals)} 个v7.2信号到Telegram...")
+        if not signals:
+            log("\n📤 无信号需要发送")
+            return
 
-        for i, signal in enumerate(signals, 1):
-            try:
-                # 使用v7.2消息格式（蓄势待发标记已内置在telegram_fmt中）
-                message = render_trade_v72(signal)
+        log(f"\n📤 发现 {len(signals)} 个候选信号，按confidence_adjusted排序...")
 
-                # 发送
-                telegram_send_wrapper(message, self.bot_token, self.chat_id)
+        # v3.1优化：按照confidence_adjusted降序排序（包含I×Market调整）
+        sorted_signals = sorted(
+            signals,
+            key=lambda s: s.get('v72_enhancements', {}).get('grouped_score', {}).get('confidence_adjusted', 0),
+            reverse=True
+        )
 
+        # 只发送Top 1信号
+        top_signal = sorted_signals[0]
+
+        try:
+            # 使用v7.2消息格式（蓄势待发标记已内置在telegram_fmt中）
+            message = render_trade_v72(top_signal)
+
+            # 发送
+            telegram_send_wrapper(message, self.bot_token, self.chat_id)
+
+            symbol = top_signal.get('symbol')
+            v72 = top_signal.get('v72_enhancements', {})
+            confidence = v72.get('grouped_score', {}).get('confidence', 0)
+            confidence_adj = v72.get('grouped_score', {}).get('confidence_adjusted', 0)
+            F_v2 = v72.get('F_v2', 0)
+            I_v2 = v72.get('I_v2', 50)
+
+            log(f"   ✅ Top 1 发送: {symbol}")
+            log(f"      Confidence: {confidence:.1f} → {confidence_adj:.1f} (调整后)")
+            log(f"      F={F_v2:.0f}, I={I_v2:.0f}")
+
+        except Exception as e:
+            error(f"   ❌ 发送失败 {top_signal.get('symbol')}: {e}")
+
+        # 记录跳过的信号（参与下一轮竞争）
+        if len(sorted_signals) > 1:
+            log(f"\n   ⏭️  跳过 {len(sorted_signals) - 1} 个信号（等待下一轮）：")
+            for i, signal in enumerate(sorted_signals[1:], 2):
                 symbol = signal.get('symbol')
-                confidence = signal.get('v72_enhancements', {}).get('confidence_v72', 0)
-                F_v2 = signal.get('v72_enhancements', {}).get('F_v2', 0)
+                conf_adj = signal.get('v72_enhancements', {}).get('grouped_score', {}).get('confidence_adjusted', 0)
+                log(f"      #{i}: {symbol} (confidence_adjusted={conf_adj:.1f})")
 
-                log(f"   ✅ {i}/{len(signals)}: {symbol} (confidence={confidence:.1f}, F={F_v2:.0f})")
-
-            except Exception as e:
-                error(f"   ❌ 发送失败 {signal.get('symbol')}: {e}")
-
-        log(f"✅ v7.2信号发送完成\n")
+        log(f"\n✅ v7.2信号发送完成（Top 1策略）\n")
 
     async def run_periodic(self, interval_seconds: int = 300):
         """

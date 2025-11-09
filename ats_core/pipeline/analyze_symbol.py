@@ -1555,14 +1555,17 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
 # ============ 特征计算辅助函数 ============
 
 def _calc_trend(h, l, c, c4, cfg):
-    """趋势打分（±100系统）"""
+    """趋势打分（±100系统）
+
+    v3.1: 更新以支持新的 score_trend 返回格式 (T, metadata)
+    """
     try:
         from ats_core.features.trend import score_trend
-        T, Tm = score_trend(h, l, c, c4, cfg)
-        meta = {"Tm": Tm, "slopeATR": 0.0, "emaOrder": Tm}
+        # v3.1: score_trend 现在返回 (T, metadata) 而不是 (T, Tm)
+        T, meta = score_trend(h, l, c, c4, cfg)
         return int(T), meta
     except Exception:
-        return 0, {"Tm": 0, "slopeATR": 0.0, "emaOrder": 0}
+        return 0, {"Tm": 0, "slopeATR": 0.0, "emaOrder": 0, "degradation_reason": "calculation_error"}
 
 def _calc_accel(c, cvd_series, cfg):
     """加速度打分（旧版，保留用于兼容）"""

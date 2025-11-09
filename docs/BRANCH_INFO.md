@@ -10,7 +10,7 @@
 ### 当前使用的新分支（推荐）⭐
 
 ```
-claude/reorganize-repo-structure-011CUvEzbqkdKuPnh33PSRPn
+claude/reorganize-repo-structure-011CUwp5f5x9B31K29qAb5w3
 ```
 
 **创建时间**: 2025-11-08
@@ -58,10 +58,10 @@ cd /home/user/cryptosignal
 git fetch origin
 
 # 2. 切换到新分支
-git checkout claude/reorganize-repo-structure-011CUvEzbqkdKuPnh33PSRPn
+git checkout claude/reorganize-repo-structure-011CUwp5f5x9B31K29qAb5w3
 
 # 3. 拉取最新代码
-git pull origin claude/reorganize-repo-structure-011CUvEzbqkdKuPnh33PSRPn
+git pull origin claude/reorganize-repo-structure-011CUwp5f5x9B31K29qAb5w3
 
 # 4. 清理Python缓存（重要！）
 find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
@@ -165,7 +165,7 @@ cryptosignal/
 
 ### Q1: 我应该使用哪个分支？
 
-**A**: 使用新分支 `claude/reorganize-repo-structure-011CUvEzbqkdKuPnh33PSRPn`
+**A**: 使用新分支 `claude/reorganize-repo-structure-011CUwp5f5x9B31K29qAb5w3`
 
 这是最新的分支，包含所有改进和完善的文档。
 

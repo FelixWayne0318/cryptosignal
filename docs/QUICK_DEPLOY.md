@@ -1,7 +1,7 @@
 # 🚀 v7.2 快速部署指南
 
 **版本**: v7.2
-**分支**: `claude/reorganize-repo-structure-011CUvEzbqkdKuPnh33PSRPn`
+**分支**: `claude/reorganize-repo-structure-011CUwp5f5x9B31K29qAb5w3`
 **最后更新**: 2025-11-08
 
 ---
@@ -58,7 +58,7 @@ git clone https://github.com/FelixWayne0318/cryptosignal.git
 cd cryptosignal
 
 # 2. 切换到v7.2分支
-git checkout claude/reorganize-repo-structure-011CUvEzbqkdKuPnh33PSRPn
+git checkout claude/reorganize-repo-structure-011CUwp5f5x9B31K29qAb5w3
 
 # 3. 配置API密钥
 # 编辑 config/binance_credentials.json

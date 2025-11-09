@@ -40,10 +40,10 @@ class AnalysisDB:
             db_path: SQLite数据库路径（默认为项目根目录下的data/analysis.db）
         """
         if db_path is None:
-            # 自动检测项目根目录
+            # 自动检测项目根目录（从当前文件向上3级）
             import os
-            project_root = os.path.expanduser("~/cryptosignal")
-            db_path = os.path.join(project_root, "data", "analysis.db")
+            project_root = Path(__file__).resolve().parent.parent.parent
+            db_path = os.path.join(str(project_root), "data", "analysis.db")
 
         self.db_path = db_path
 

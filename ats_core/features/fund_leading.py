@@ -22,6 +22,11 @@ P0.4改进（crowding veto）：
 - 在crowding时降低F因子分数（防止追高）
 - 应用惩罚而非硬拒绝（保持连续性）
 
+v3.0配置管理（2025-11-09）：
+- 移除硬编码参数，改为从配置文件读取
+- 支持向后兼容（params参数优先级高于配置文件）
+- 使用统一的数据质量检查阈值
+
 输入：
 - oi_change_pct: OI 24小时变化率（%）
 - vol_ratio: v5/v20 量能比值
@@ -31,6 +36,7 @@ P0.4改进（crowding veto）：
 """
 from typing import Dict, Any, Tuple, Optional, List
 from ats_core.features.scoring_utils import directional_score
+from ats_core.config.factor_config import get_factor_config
 import math
 import numpy as np
 
@@ -41,7 +47,7 @@ def score_fund_leading(
     cvd_change: float,
     price_change_pct: float,
     price_slope: float,
-    params: Dict[str, Any],
+    params: Dict[str, Any] = None,
     basis_history: Optional[List[float]] = None,
     funding_history: Optional[List[float]] = None
 ) -> Tuple[int, Dict[str, Any]]:
@@ -62,38 +68,44 @@ def score_fund_leading(
         cvd_change: CVD 6小时变化（归一化到价格），通常在 -0.05 ~ +0.05 范围
         price_change_pct: 价格 24小时变化率（%）
         price_slope: 价格斜率（EMA30 的斜率/ATR）
-        params: 参数配置
+        params: 参数配置（v3.0：可选，优先级高于配置文件）
         basis_history: 历史basis数据（bps），用于crowding检测（P0.4新增）
         funding_history: 历史funding rate数据，用于crowding检测（P0.4新增）
 
     Returns:
         (F分数 [-100, +100], 元数据)
-    """
-    # 默认参数
-    default_params = {
-        # 资金动量权重
-        "oi_weight": 0.4,
-        "vol_weight": 0.3,
-        "cvd_weight": 0.3,
-        # 价格动量权重
-        "trend_weight": 0.6,
-        "slope_weight": 0.4,
-        # 评分参数
-        "oi_scale": 3.0,        # OI 变化 3% 给约 69 分
-        "vol_scale": 0.3,       # v5/v20 = 1.3 给约 69 分
-        "cvd_scale": 0.02,      # CVD 变化 0.02 给约 69 分
-        "price_scale": 3.0,     # 价格变化 3% 给约 69 分
-        "slope_scale": 0.01,    # 斜率 0.01 给约 69 分
-        "leading_scale": 200.0,  # P2.5++修复: 50→100→200，彻底解决饱和问题（leading_raw理论极限±200, tanh(1)≈0.76）
-        # P0.4: Crowding veto参数
-        "crowding_veto_enabled": True,   # 是否启用crowding veto
-        "crowding_percentile": 90,        # 极端值判定百分位（90分位）
-        "crowding_penalty": 0.5,          # 惩罚系数（0.5 = 50%折扣）
-        "crowding_min_data": 100,         # 最少历史数据点
-    }
 
-    # 合并参数
-    p = dict(default_params)
+    v3.0改进：
+    - 从配置文件读取默认参数
+    - 传入的params参数优先级高于配置文件（向后兼容）
+    """
+    # v3.0: 从配置文件读取默认参数
+    try:
+        config = get_factor_config()
+        config_params = config.get_factor_params("F")
+    except Exception as e:
+        # 配置加载失败时使用硬编码默认值（向后兼容）
+        print(f"⚠️ F因子配置加载失败，使用默认值: {e}")
+        config_params = {
+            "oi_weight": 0.4,
+            "vol_weight": 0.3,
+            "cvd_weight": 0.3,
+            "trend_weight": 0.6,
+            "slope_weight": 0.4,
+            "oi_scale": 3.0,
+            "vol_scale": 0.3,
+            "cvd_scale": 0.02,
+            "price_scale": 3.0,
+            "slope_scale": 0.01,
+            "leading_scale": 200.0,
+            "crowding_veto_enabled": True,
+            "crowding_percentile": 90,
+            "crowding_penalty": 0.5,
+            "crowding_min_data": 100,
+        }
+
+    # 合并配置参数：配置文件 < 传入的params（向后兼容）
+    p = dict(config_params)
     if isinstance(params, dict):
         p.update(params)
 
@@ -227,26 +239,53 @@ def score_fund_leading_v2(
         oi_data: OI历史数据 [[timestamp, oi_value], ...]
         klines: K线数据（至少7根）
         atr_now: 当前ATR值
-        params: 参数配置
+        params: 参数配置（v3.0：可选，优先级高于配置文件）
 
     Returns:
         (F分数 [-100, +100], 元数据)
-    """
-    if params is None:
-        params = {}
 
-    # 默认参数
-    default_params = {
-        "cvd_weight": 0.6,      # CVD权重（主导）
-        "oi_weight": 0.4,       # OI权重（辅助）
-        "window_hours": 6,      # 时间窗口（6小时）
-        "scale": 2.0,           # tanh缩放因子
-    }
-    p = {**default_params, **params}
+    v3.0改进：
+    - 从配置文件读取默认参数
+    - 传入的params参数优先级高于配置文件（向后兼容）
+    """
+    # v3.0: 从配置文件读取默认参数（使用F_v2子配置或F配置）
+    try:
+        config = get_factor_config()
+        # 尝试获取F_v2特定配置，如果不存在则使用F的基础配置
+        try:
+            config_params = config.get_factor_params("F_v2")
+        except:
+            # 使用F的基础配置中的v2参数
+            f_params = config.get_factor_params("F")
+            config_params = f_params.get("v2", {
+                "cvd_weight": 0.6,
+                "oi_weight": 0.4,
+                "window_hours": 6,
+                "scale": 2.0,
+            })
+    except Exception as e:
+        # 配置加载失败时使用硬编码默认值（向后兼容）
+        print(f"⚠️ F_v2因子配置加载失败，使用默认值: {e}")
+        config_params = {
+            "cvd_weight": 0.6,
+            "oi_weight": 0.4,
+            "window_hours": 6,
+            "scale": 2.0,
+        }
+
+    # 合并配置参数：配置文件 < 传入的params（向后兼容）
+    p = dict(config_params)
+    if isinstance(params, dict):
+        p.update(params)
 
     # === 1. 数据验证 ===
     if len(klines) < 7:
-        return 0, {"error": "insufficient_klines", "bars": len(klines)}
+        # v3.1: 统一降级元数据结构（改用标准字段名）
+        return 0, {
+            "degradation_reason": "insufficient_data",
+            "min_data_required": 7,
+            "actual_data_points": len(klines)
+        }
 
     if atr_now <= 0:
         atr_now = 1.0

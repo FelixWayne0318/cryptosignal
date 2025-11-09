@@ -11,6 +11,7 @@ import urllib.request
 from typing import Any, Dict, List, Optional, Union
 
 from ats_core.backoff import sleep_retry  # 指数退避
+from ats_core.utils.rate_limiter import binance_rate_limit  # v3.1: API限流保护
 
 # 允许通过环境变量覆盖网关，便于内网代理或将来切换
 BASE = os.environ.get("BINANCE_FAPI_BASE", "https://fapi.binance.com")
@@ -21,6 +22,7 @@ API_KEY = os.environ.get("BINANCE_API_KEY", "")
 API_SECRET = os.environ.get("BINANCE_API_SECRET", "")
 
 
+@binance_rate_limit(calls_per_minute=1000)  # v3.1: API限流保护（留20%余量）
 def _get(
     path_or_url: str,
     params: Optional[Dict[str, Any]] = None,
@@ -30,6 +32,8 @@ def _get(
 ) -> Any:
     """
     统一 GET 请求，带重试与简单 UA；path_or_url 可以是完整 URL 或以 / 开头的路径
+
+    v3.1: 添加API限流保护，防止触发Binance风控（1000次/分钟，留20%余量）
     """
     if path_or_url.startswith("http"):
         url = path_or_url
@@ -54,6 +58,7 @@ def _get(
     raise RuntimeError("unknown http error")
 
 
+@binance_rate_limit(calls_per_minute=1000)  # v3.1: API限流保护（留20%余量）
 def _get_signed(
     path: str,
     params: Optional[Dict[str, Any]] = None,
@@ -65,6 +70,8 @@ def _get_signed(
     带签名的 GET 请求（需要API key和secret）
 
     用于需要认证的端点（如部分清算数据端点）
+
+    v3.1: 添加API限流保护，防止触发Binance风控（1000次/分钟，留20%余量）
     """
     if not API_KEY or not API_SECRET:
         raise RuntimeError("需要API认证：请设置BINANCE_API_KEY和BINANCE_API_SECRET环境变量")

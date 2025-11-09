@@ -92,7 +92,7 @@ echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 # ✅ 使用包含所有修复的新分支
-BRANCH="claude/reorganize-repo-structure-011CUvEzbqkdKuPnh33PSRPn"
+BRANCH="claude/reorganize-repo-structure-011CUwp5f5x9B31K29qAb5w3"
 
 if git checkout "$BRANCH"; then
     CURRENT_BRANCH=$(git branch --show-current)
@@ -338,7 +338,7 @@ echo ""
 # 验证5：检查分支版本
 echo "🔍 验证5: 检查代码版本..."
 CURRENT_BRANCH=$(git branch --show-current)
-EXPECTED_BRANCH="claude/reorganize-repo-structure-011CUvEzbqkdKuPnh33PSRPn"
+EXPECTED_BRANCH="claude/reorganize-repo-structure-011CUwp5f5x9B31K29qAb5w3"
 
 if [ "$CURRENT_BRANCH" = "$EXPECTED_BRANCH" ]; then
     echo -e "   ${GREEN}✅ 分支正确: $CURRENT_BRANCH${NC}"

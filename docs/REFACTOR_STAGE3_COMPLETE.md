@@ -540,4 +540,4 @@ $ python3 -m py_compile ats_core/pipeline/analyze_symbol.py
 
 **日期**: 2025-11-09
 **提交**: `9ae217d`
-**分支**: `claude/reorganize-repo-structure-011CUvEzbqkdKuPnh33PSRPn`
+**分支**: `claude/reorganize-repo-structure-011CUwp5f5x9B31K29qAb5w3`

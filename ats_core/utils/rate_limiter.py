@@ -154,6 +154,50 @@ class SafeRateLimiter:
         return results
 
 
+# ============ 装饰器实现（v3.1 P0修复）============
+
+def binance_rate_limit(calls_per_minute: int = 1000):
+    """
+    简单限流装饰器 - 用于保护Binance API调用
+
+    推荐配置：1000次/分钟（Binance限制1200/分钟，留20%余量）
+
+    使用示例:
+        @binance_rate_limit(calls_per_minute=1000)
+        def _get(path, params):
+            # API调用代码
+            ...
+
+    注意：
+        - 这是保护性措施，不会触发风控
+        - Binance官方限制：1200 requests/min
+        - 推荐配置：1000 requests/min（留20%安全余量）
+    """
+    min_interval = 60.0 / calls_per_minute
+    last_call_time = [0.0]
+    lock = threading.Lock()
+
+    def decorator(func: Callable):
+        from functools import wraps
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            with lock:
+                current_time = time.time()
+                time_since_last_call = current_time - last_call_time[0]
+
+                if time_since_last_call < min_interval:
+                    sleep_time = min_interval - time_since_last_call
+                    time.sleep(sleep_time)
+
+                last_call_time[0] = time.time()
+
+            return func(*args, **kwargs)
+
+        return wrapper
+    return decorator
+
+
 # ============ 全局实例 ============
 
 # 保守配置（避免触发风控）

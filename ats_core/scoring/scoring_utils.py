@@ -42,19 +42,28 @@ class StandardizationChain:
 
     def __init__(
         self,
-        alpha: float = 0.15,
-        tau: float = 3.0,
-        z0: float = 2.5,
+        alpha: float = 0.25,  # P0修复：0.15→0.25（加快响应，减少滞后）
+        tau: float = 5.0,     # P0修复：3.0→5.0（减少压缩，避免95%值→-100）
+        z0: float = 3.0,      # P0修复：2.5→3.0（放宽阈值，减少裁剪）
         zmax: float = 6.0,
         lam: float = 1.5
     ):
         """
         Initialize standardization chain with STANDARDS.md parameters.
 
+        P0修复（2025-11-09）：
+        - alpha: 0.15→0.25（加快EW响应，减少极端市场滞后）
+        - tau: 3.0→5.0（减少tanh压缩强度，避免过度压缩）
+        - z0: 2.5→3.0（放宽软裁剪阈值）
+
+        修复问题：
+        - "95%的F=-100"（过度压缩）
+        - "大跌时T=0"（EW滞后）
+
         Args:
-            alpha: Pre-smoothing coefficient (0.10-0.20, default 0.15)
-            tau: Compression temperature (2.5-4.0, default 3.0)
-            z0: Soft winsor threshold (default 2.5)
+            alpha: Pre-smoothing coefficient (0.10-0.30, default 0.25)
+            tau: Compression temperature (2.5-6.0, default 5.0)
+            z0: Soft winsor threshold (default 3.0)
             zmax: Hard maximum z-score (default 6.0)
             lam: Winsor smoothness parameter (default 1.5)
         """

@@ -50,6 +50,11 @@
     },
     "gate4_probability": {
       "P_min": 0.50
+    },
+    "gate5_independence_market": {
+      "I_min": 30,
+      "market_regime_threshold": 30,
+      "description": "v3.1新增：I×Market联合闸门，过滤低独立性+逆势信号"
     }
   },
 

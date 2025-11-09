@@ -1,7 +1,7 @@
 # CryptoSignal 规范文档索引
 
-**当前版本**: v7.2
-**最后更新**: 2025-11-08
+**当前版本**: v7.2 (v3.1规范更新)
+**最后更新**: 2025-11-09
 **文档类型**: 总索引（系统工程入口）
 
 ---
@@ -46,16 +46,37 @@
 - **[WEIGHTS_TUNING.md](configuration/WEIGHTS_TUNING.md)** - 权重调优指南
 - **[INDEX.md](configuration/INDEX.md)** - 配置索引
 
-### 5. 开发指南 ([development/](development/))
-- **[WORKFLOW.md](development/WORKFLOW.md)** - 开发流程
-- **[MODIFICATION_RULES.md](development/MODIFICATION_RULES.md)** - 代码修改规范
-- **[DOCUMENTATION_RULES.md](development/DOCUMENTATION_RULES.md)** - 文档编写规范
-- **[INDEX.md](development/INDEX.md)** - 开发索引
+### 5. 开发指南
+- **[DEVELOPMENT_WORKFLOW.md](DEVELOPMENT_WORKFLOW.md)** - Git提交规范和测试流程
+- **[MODIFICATION_RULES.md](MODIFICATION_RULES.md)** - 日常配置和功能修改规范
+- **[SYSTEM_ENHANCEMENT_STANDARD.md](SYSTEM_ENHANCEMENT_STANDARD.md)** - 🆕 系统性升级标准化流程（v3.1新增）
+- **[DOCUMENTATION_RULES.md](DOCUMENTATION_RULES.md)** - 文档编写规范
+- **[CORE_STANDARDS.md](CORE_STANDARDS.md)** - 核心开发标准
 
 ### 6. 参考资料 ([reference/](reference/))
 - **[QUICK_REFERENCE.md](reference/QUICK_REFERENCE.md)** - 快速参考手册
 - **[SCHEMAS.md](reference/SCHEMAS.md)** - 数据结构和接口定义
 - **[INDEX.md](reference/INDEX.md)** - 参考索引
+
+### 7. 补充文档（根目录）
+
+> **注意**: 以下文档位于 standards/ 根目录，部分与子目录文档重复或为旧版本
+
+#### 部署运维
+- **[DEPLOYMENT_STANDARD.md](DEPLOYMENT_STANDARD.md)** - 服务器部署标准规范
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - 部署流程说明
+- **[QUICK_DEPLOY.md](QUICK_DEPLOY.md)** - 快速部署参考卡
+- **[SERVER_OPERATIONS.md](SERVER_OPERATIONS.md)** - 服务器运维指南
+- **[TELEGRAM_SETUP.md](TELEGRAM_SETUP.md)** - Telegram配置指南
+
+#### 配置管理
+- **[CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md)** - params.json 配置参数详解
+
+#### 架构参考
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - 系统架构说明（v6.0版本，推荐阅读 02_ARCHITECTURE.md）
+
+#### 其他
+- **[STANDARDIZATION_REPORT.md](STANDARDIZATION_REPORT.md)** - 代码库规范化报告（2025-10-30）
 
 ---
 
@@ -72,7 +93,9 @@
 1. 了解系统 → [01_SYSTEM_OVERVIEW.md](01_SYSTEM_OVERVIEW.md)
 2. 架构设计 → [02_ARCHITECTURE.md](02_ARCHITECTURE.md)
 3. 核心规范 → [specifications/FACTOR_SYSTEM.md](specifications/FACTOR_SYSTEM.md)
-4. 开发流程 → [development/WORKFLOW.md](development/WORKFLOW.md)
+4. 日常开发 → [DEVELOPMENT_WORKFLOW.md](DEVELOPMENT_WORKFLOW.md)
+5. 配置修改 → [MODIFICATION_RULES.md](MODIFICATION_RULES.md)
+6. 🆕 系统升级 → [SYSTEM_ENHANCEMENT_STANDARD.md](SYSTEM_ENHANCEMENT_STANDARD.md)
 
 #### 想了解变更历史
 → [03_VERSION_HISTORY.md](03_VERSION_HISTORY.md)

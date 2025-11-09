@@ -2307,10 +2307,23 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
 
         factors += f"\n{F_icon} F资金领先  {F_v2_int:3d}  {F_desc}"
 
-    # I因子
+    # I因子（v3.1增强：显示Beta值和市场对齐分析）
     I_v2 = _get(v72, "I_v2")
     if I_v2 is not None:
         I_v2_int = int(round(I_v2))
+
+        # 获取Beta值和市场对齐分析
+        I_meta = _get(v72, "I_meta") or {}
+        beta_btc = I_meta.get("beta_btc", 0)
+        beta_eth = I_meta.get("beta_eth", 0)
+
+        # v3.1新增：市场对齐分析
+        market_analysis = _get(v72, "independence_market_analysis") or {}
+        market_regime = market_analysis.get("market_regime", 0)
+        alignment = market_analysis.get("alignment", "正常")
+        confidence_mult = market_analysis.get("confidence_multiplier", 1.0)
+
+        # I因子状态
         if I_v2_int > 70:
             I_icon = "💎"
             I_desc = "高度独立"
@@ -2324,7 +2337,33 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
             I_icon = "🔴"
             I_desc = "高度相关"
 
+        # 市场趋势描述
+        if market_regime > 30:
+            market_trend = "牛市"
+            market_icon = "📈"
+        elif market_regime < -30:
+            market_trend = "熊市"
+            market_icon = "📉"
+        else:
+            market_trend = "震荡"
+            market_icon = "↔️"
+
+        # 对齐状态显示
+        if alignment == "顺势":
+            align_icon = "🎯"
+            align_desc = f"顺势({confidence_mult:.1f}x)"
+        elif alignment == "逆势":
+            align_icon = "⚠️"
+            align_desc = "逆势风险"
+        else:
+            align_icon = ""
+            align_desc = ""
+
         factors += f"\n{I_icon} I市场独立  {I_v2_int:3d}  {I_desc}"
+        factors += f"\n   Beta: BTC={beta_btc:.2f} ETH={beta_eth:.2f}"
+        factors += f"\n   {market_icon} 大盘{market_trend}({market_regime:+.0f})"
+        if align_desc:
+            factors += f" {align_icon}{align_desc}"
 
     # ========== 4. 因子分组详情 ==========
     details = f"\n\n━━━ 📊 因子分组详情 ━━━\n"
@@ -2395,33 +2434,51 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
         B_icon, B_desc = _factor_status(B_raw)
         details += f"\n  {B_icon} 基差 B  {B_raw:3d}  {B_desc}"
 
-    # ========== 5. 质量检查（简化四道闸门）==========
-    quality = f"\n\n━━━ ✅ 质量检查 ━━━\n"
+    # ========== 5. 质量检查（v3.1增强：五道闸门）==========
+    quality = f"\n\n━━━ ✅ 质量检查（五道闸门）━━━\n"
 
-    gate_results = _get(v72, "gate_results") or {}
-    gate1 = gate_results.get("gate1", {})
-    gate2 = gate_results.get("gate2", {})
-    gate3 = gate_results.get("gate3", {})
-    gate4 = gate_results.get("gate4", {})
+    # 获取gate_details（v7.2新格式）
+    gate_details_v72 = _get(v72, "gates") or {}
+    gate_details_list = gate_details_v72.get("details", [])
+
+    # 构建gate字典（兼容旧格式）
+    gates = {}
+    for gate_info in gate_details_list:
+        gate_num = gate_info.get("gate")
+        gates[f"gate{gate_num}"] = gate_info
+
+    # 提取各个闸门
+    gate1 = gates.get("gate1", {})
+    gate2 = gates.get("gate2", {})
+    gate3 = gates.get("gate3", {})
+    gate4 = gates.get("gate4", {})
+    gate5 = gates.get("gate5", {})  # v3.1新增
 
     g1_pass = gate1.get("pass", True)
     g2_pass = gate2.get("pass", True)
     g3_pass = gate3.get("pass", True)
     g4_pass = gate4.get("pass", True)
+    g5_pass = gate5.get("pass", True)  # v3.1新增
 
-    bars = gate1.get("bars", 0)
-    F_dir = gate2.get("F_directional", F_v2 or 0)
-    independence = _get(r, "scores", {}).get("I", 50)
+    # 获取数值
+    bars = _get(r, "klines") or []
+    bars_count = len(bars) if isinstance(bars, list) else 0
+    F_dir = gate2.get("value", F_v2 or 0)
+    EV_gate = gate3.get("value", EV_net)
+    P_gate = gate4.get("value", P_calibrated)
+    I_gate = gate5.get("value", I_v2 or 50)  # v3.1新增
 
     g1_icon = "✅" if g1_pass else "❌"
     g2_icon = "✅" if g2_pass else "❌"
     g3_icon = "✅" if g3_pass else "❌"
     g4_icon = "✅" if g4_pass else "❌"
+    g5_icon = "✅" if g5_pass else "❌"  # v3.1新增
 
-    quality += f"\n{g1_icon} 数据充足 ({bars}根K线)"
-    quality += f"\n{g2_icon} 资金支撑 (F={F_dir:.0f})"
-    quality += f"\n{g3_icon} 市场独立 (I={independence:.0f})"
-    quality += f"\n{g4_icon} 成本可控 (EV={EV_net:+.2%})"
+    quality += f"\n{g1_icon} Gate1 数据充足 ({bars_count}根K线)"
+    quality += f"\n{g2_icon} Gate2 资金支撑 (F={F_dir:.0f})"
+    quality += f"\n{g3_icon} Gate3 期望收益 (EV={EV_gate:+.2%})"
+    quality += f"\n{g4_icon} Gate4 胜率校准 (P={P_gate:.1%})"
+    quality += f"\n{g5_icon} Gate5 市场对齐 (I={I_gate:.0f})"  # v3.1新增
 
     # ========== 6. 时间戳 + 标签 ==========
     timestamp = _get(r, "timestamp") or 0

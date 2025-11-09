@@ -137,19 +137,23 @@ def analyze_with_v72_enhancements(
     # EV = P×TP - (1-P)×SL - cost
     EV_net = P_calibrated * TP_distance_pct - (1 - P_calibrated) * SL_distance_pct - total_cost_pct
 
-    # ===== 5. 四道闸门（v7.2 重构：读取基础分析结果） =====
+    # ===== 5. 五道闸门（v7.2 重构 + v3.1增强：新增I×Market联合闸门） =====
     # Q3 FIX: 修正注释编号（删除重复的I因子定义）
     # v7.2设计理念：
     # - 基础分析（analyze_symbol）已经完成了完整的闸门检查
     # - v7.2增强层只需重新计算部分因子（F_v2），然后应用简化的质量检查
     # - 避免重复实现复杂的闸门逻辑（订单簿、DataQual等）
 
-    # 方案：使用简化的四道检查（只检查关键指标）
+    # v3.1新增：Gate 5 - I×Market联合检查（过滤"低独立性+逆势"的危险信号）
+
+    # 方案：使用简化的五道检查（只检查关键指标）
     # 阶段2.2：从配置文件读取闸门阈值
     min_klines = config.get_gate_threshold('gate1_data_quality', 'min_klines', 100)
     P_min = config.get_gate_threshold('gate4_probability', 'P_min', 0.50)
     EV_min = config.get_gate_threshold('gate3_ev', 'EV_min', 0.0)
     F_min = config.get_gate_threshold('gate2_fund_support', 'F_min', -15)
+    I_min = config.get_gate_threshold('gate5_independence_market', 'I_min', 30)  # v3.1新增
+    market_regime_threshold = config.get_gate_threshold('gate5_independence_market', 'market_regime_threshold', 30)  # v3.1新增
 
     gates_data_quality = 1.0 if len(klines) >= min_klines else 0.0
     gates_ev = 1.0 if EV_net > EV_min else 0.0
@@ -160,12 +164,55 @@ def analyze_with_v72_enhancements(
     # F < F_min: 价格领先资金，追高风险
     gates_fund_support = 1.0 if F_v2 >= F_min else 0.0
 
-    # 综合判定（所有闸门都通过才发布）
+    # Gate 5: I×Market联合闸门（v3.1新增）
+    # 过滤"低独立性+逆势"的危险信号
+    market_regime = original_result.get('market_regime', 0)
+
+    if I_v2 >= 60:
+        # 高独立性：不受大盘影响，直接通过
+        gates_independence_market = 1.0
+        conflict_reason = "high_independence"
+        conflict_mult = 1.0
+    elif I_v2 < I_min:
+        # 低独立性：需要检查与大盘方向是否一致
+        if side_long_v72 and market_regime < -market_regime_threshold:
+            # 危险信号：做多但熊市（低独立性+逆势）
+            gates_independence_market = 0.0
+            conflict_reason = "low_independence_bear_market_long"
+            conflict_mult = 0.0
+        elif not side_long_v72 and market_regime > market_regime_threshold:
+            # 危险信号：做空但牛市（低独立性+逆势）
+            gates_independence_market = 0.0
+            conflict_reason = "low_independence_bull_market_short"
+            conflict_mult = 0.0
+        elif side_long_v72 and market_regime > market_regime_threshold:
+            # 优质信号：做多且牛市（低独立性+顺势）- 放大信心
+            gates_independence_market = 1.0
+            conflict_reason = "low_independence_bull_align"
+            conflict_mult = 1.2
+        elif not side_long_v72 and market_regime < -market_regime_threshold:
+            # 优质信号：做空且熊市（低独立性+顺势）- 放大信心
+            gates_independence_market = 1.0
+            conflict_reason = "low_independence_bear_align"
+            conflict_mult = 1.2
+        else:
+            # 正常情况：市场中性或轻度趋势
+            gates_independence_market = 1.0
+            conflict_reason = "normal"
+            conflict_mult = 1.0
+    else:
+        # 中等独立性：正常通过
+        gates_independence_market = 1.0
+        conflict_reason = "normal"
+        conflict_mult = 1.0
+
+    # 综合判定（所有五道闸门都通过才发布）
     pass_gates = all([
         gates_data_quality > 0.5,
         gates_ev > 0.5,
         gates_probability > 0.5,
-        gates_fund_support > 0.5
+        gates_fund_support > 0.5,
+        gates_independence_market > 0.5  # v3.1新增
     ])
 
     # 闸门原因
@@ -179,6 +226,11 @@ def analyze_with_v72_enhancements(
             failed_gates.append(f"P<{P_min}({P_calibrated:.3f})")
         if gates_fund_support <= 0.5:
             failed_gates.append(f"F因子过低({F_v2}, 需要>={F_min})")
+        if gates_independence_market <= 0.5:
+            # v3.1新增：I×Market冲突检测
+            direction = "做多" if side_long_v72 else "做空"
+            market_trend = "牛市" if market_regime > 0 else "熊市"
+            failed_gates.append(f"I×Market冲突({direction}+{market_trend}, I={I_v2:.0f}<{I_min}, Market={market_regime:.0f})")
         gate_reason = "; ".join(failed_gates)
     else:
         gate_reason = "all_gates_passed"
@@ -190,9 +242,16 @@ def analyze_with_v72_enhancements(
             {"gate": 1, "name": "data_quality", "pass": gates_data_quality > 0.5, "value": gates_data_quality},
             {"gate": 2, "name": "fund_support", "pass": gates_fund_support > 0.5, "value": F_v2, "threshold": -15},
             {"gate": 3, "name": "ev", "pass": gates_ev > 0.5, "value": EV_net, "threshold": 0.0},
-            {"gate": 4, "name": "probability", "pass": gates_probability > 0.5, "value": P_calibrated, "threshold": 0.50}
+            {"gate": 4, "name": "probability", "pass": gates_probability > 0.5, "value": P_calibrated, "threshold": 0.50},
+            {"gate": 5, "name": "independence_market", "pass": gates_independence_market > 0.5,
+             "value": I_v2, "market_regime": market_regime, "conflict_reason": conflict_reason,
+             "threshold": I_min}  # v3.1新增
         ]
     }
+
+    # v3.1增强：应用I×Market对齐倍数（提升顺势信号信心）
+    # 当低独立性币种与大盘方向一致时，放大信心度×1.2
+    confidence_v72_adjusted = confidence_v72 * conflict_mult
 
     # ===== 6. 最终判定 =====
     is_prime_v72 = pass_gates
@@ -223,10 +282,20 @@ def analyze_with_v72_enhancements(
             "I_v2": I_v2,
             "I_meta": I_meta,
 
+            # v3.1新增：I×Market对齐分析
+            "independence_market_analysis": {
+                "I_score": I_v2,
+                "market_regime": market_regime,
+                "conflict_reason": conflict_reason,
+                "confidence_multiplier": conflict_mult,
+                "alignment": "顺势" if conflict_mult > 1.0 else ("逆势" if conflict_mult == 0.0 else "正常")
+            },
+
             # 因子分组
             "grouped_score": {
                 "weighted_score": round(weighted_score_v72, 2),
                 "confidence": round(confidence_v72, 2),
+                "confidence_adjusted": round(confidence_v72_adjusted, 2),  # v3.1新增：应用I×Market调整后的信心度
                 "side_long": side_long_v72,
                 "group_meta": group_meta
             },

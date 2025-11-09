@@ -4,15 +4,19 @@
 
 之前的部署脚本使用了**错误的分支**，导致即使配置文件正确，系统仍然无法正常工作。
 
-### 分支对比
+### 分支演进历史
 
-| 特性 | 旧分支（有bug） | 新分支（已修复） |
-|------|----------------|------------------|
-| **分支名** | `011CUrZaXUMTBXApc3jvsqTh` | `011CUvEzbqkdKuPnh33PSRPn` |
-| **数据库路径** | ❌ 硬编码 `/home/user/` | ✅ 自动检测 `~/cryptosignal` |
-| **Telegram通知** | ❌ 只发送Prime信号 | ✅ 自动发送扫描摘要 |
-| **扫描器** | ❌ 两个版本混乱 | ✅ 统一为一个 |
-| **脚本引用** | ❌ 引用v72版本 | ✅ 统一引用 |
+| 特性 | v1 (有bug) | v2 (部分修复) | v3 (当前最新) |
+|------|-----------|--------------|--------------|
+| **分支名** | `011CUrZaXUMTBXApc3jvsqTh` | `011CUvEzbqkdKuPnh33PSRPn` | `011CUwp5f5x9B31K29qAb5w3` |
+| **数据库路径** | ❌ 硬编码 `/home/user/` | ⚠️ 硬编码 `~/cryptosignal` | ✅ 动态检测 |
+| **Telegram通知** | ❌ 只发送Prime信号 | ✅ 自动发送扫描摘要 | ✅ 自动发送扫描摘要 |
+| **扫描器** | ❌ 两个版本混乱 | ✅ 统一为一个 | ✅ 统一为一个 |
+| **脚本引用** | ❌ 引用v72版本 | ✅ 统一引用 | ✅ 统一引用 |
+| **Top 1策略** | ❌ 无 | ❌ 无 | ✅ v3.1优化 |
+| **路径修复** | ❌ 无 | ❌ 无 | ✅ P0修复 (ad59c34) |
+
+**当前推荐**：使用 v3 最新分支 `011CUwp5f5x9B31K29qAb5w3`
 
 ---
 
@@ -49,8 +53,8 @@ pkill -f realtime_signal_scanner
 
 # 2. 切换到正确的分支
 git fetch origin
-git checkout claude/reorganize-repo-structure-011CUvEzbqkdKuPnh33PSRPn
-git pull origin claude/reorganize-repo-structure-011CUvEzbqkdKuPnh33PSRPn
+git checkout claude/reorganize-repo-structure-011CUwp5f5x9B31K29qAb5w3
+git pull origin claude/reorganize-repo-structure-011CUwp5f5x9B31K29qAb5w3
 
 # 3. 清理Python缓存
 find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
@@ -69,7 +73,7 @@ find . -name "*.pyc" -delete 2>/dev/null || true
 ```bash
 # 1. 下载新脚本
 cd ~
-wget https://raw.githubusercontent.com/FelixWayne0318/cryptosignal/claude/reorganize-repo-structure-011CUvEzbqkdKuPnh33PSRPn/scripts/deploy_server_latest.sh
+wget https://raw.githubusercontent.com/FelixWayne0318/cryptosignal/claude/reorganize-repo-structure-011CUwp5f5x9B31K29qAb5w3/scripts/deploy_server_latest.sh
 
 # 2. 编辑脚本，填入真实API密钥
 vi deploy_server_latest.sh
@@ -147,7 +151,7 @@ cd ~/cryptosignal
 git branch --show-current
 ```
 
-应该看到：`claude/reorganize-repo-structure-011CUvEzbqkdKuPnh33PSRPn`
+应该看到：`claude/reorganize-repo-structure-011CUwp5f5x9B31K29qAb5w3`
 
 ### Q3: 切换分支会丢失配置文件吗？
 
@@ -164,7 +168,7 @@ git branch --show-current
 ```bash
 # 查看差异
 cd ~/cryptosignal
-git diff claude/reorganize-repo-structure-011CUrZaXUMTBXApc3jvsqTh claude/reorganize-repo-structure-011CUvEzbqkdKuPnh33PSRPn
+git diff claude/reorganize-repo-structure-011CUrZaXUMTBXApc3jvsqTh claude/reorganize-repo-structure-011CUwp5f5x9B31K29qAb5w3
 ```
 
 主要差异文件：
@@ -179,16 +183,19 @@ git diff claude/reorganize-repo-structure-011CUrZaXUMTBXApc3jvsqTh claude/reorga
 
 ## 总结
 
-**问题根源**：分支错误（`011CUrZaXUMTBXApc3jvsqTh` vs `011CUvEzbqkdKuPnh33PSRPn`）
+**分支演进**：
+- v1 `011CUrZaXUMTBXApc3jvsqTh` - 有严重bug
+- v2 `011CUvEzbqkdKuPnh33PSRPn` - 部分修复
+- v3 `011CUwp5f5x9B31K29qAb5w3` - **当前最新（推荐）**
 
-**解决方案**：切换到正确的分支（见上面的方案1，最简单）
+**解决方案**：切换到最新分支 v3（见上面的方案1，最简单）
 
 **预期时间**：5分钟内完成切换并验证
 
 **核心命令**：
 ```bash
 cd ~/cryptosignal
-git checkout claude/reorganize-repo-structure-011CUvEzbqkdKuPnh33PSRPn
+git checkout claude/reorganize-repo-structure-011CUwp5f5x9B31K29qAb5w3
 git pull
 ./setup.sh
 ```
