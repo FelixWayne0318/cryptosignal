@@ -451,22 +451,19 @@ def _analyze_symbol_core(
     perf['I独立性'] = time.time() - t0
 
     # ---- 2.5. 资金领先性（F调节器）----
-    # F不参与基础评分，仅用于概率调整
-    oi_change_pct = O_meta.get("oi24h_pct", 0.0) if O_meta.get("oi24h_pct") is not None else 0.0
-    vol_ratio = V_meta.get("v5v20", 1.0)
-    price_change_24h = ((c[-1] - c[-25]) / c[-25] * 100) if len(c) >= 25 else 0.0
-    price_slope = (ema30[-1] - ema30[-7]) / 6.0 / max(1e-9, atr_now)  # 归一化斜率
+    # A1修复：统一使用F_v2（6小时窗口，CVD+OI综合判断）
+    # F不参与基础评分，仅用于概率调整和v7.2闸门检查
+    t0 = time.time()
+    from ats_core.features.fund_leading import score_fund_leading_v2
 
-    # ---- 2.5. 计算F调节器（提前计算，让F参与方向判断）----
-    # F本身是带符号的（+表示资金领先，-表示价格领先），不需要依赖side_long
-    F_raw, F_meta = _calc_fund_leading(
-        oi_change_pct, vol_ratio, cvd6, price_change_24h, price_slope, params.get("fund_leading", {})
+    F, F_meta = score_fund_leading_v2(
+        cvd_series=cvd_series,
+        oi_data=oi_data,
+        klines=k1,
+        atr_now=atr_now,
+        params=params.get("fund_leading", {})
     )
-
-    # v6.6修复：F_raw已经过fund_leading.py中的tanh输出±100，无需再tanh
-    # 之前的tanh(F_raw/50)造成double-tanh bug，将±100压缩到±96
-    F = F_raw  # 直接使用fund_leading.py的输出
-    F_meta['note'] = 'v6.6: F_raw直接使用，已移除double-tanh bug'
+    perf['F资金领先'] = time.time() - t0
 
     # ---- 3. Scorecard（v6.6: 6因子A层 + 4调制器B层）----
     # v6.6架构：L/S/F/I移至B层调制器，不参与方向评分
@@ -1596,20 +1593,9 @@ def _calc_environment(h, l, c, atr_now, cfg):
     except Exception:
         return 0, {"chop": 50.0, "room": 0.5}
 
-def _calc_fund_leading(oi_change_pct, vol_ratio, cvd_change, price_change_pct, price_slope, cfg):
-    """资金领先性打分（移除circular dependency）"""
-    try:
-        from ats_core.features.fund_leading import score_fund_leading
-        F, meta = score_fund_leading(oi_change_pct, vol_ratio, cvd_change, price_change_pct, price_slope, cfg)
-        return int(F), meta
-    except Exception as e:
-        # 兜底：返回中性分数
-        return 0, {
-            "fund_momentum": 0.0,
-            "price_momentum": 50.0,
-            "leading_raw": 0.0,
-            "error": str(e)
-        }
+# A1修复：_calc_fund_leading函数已废弃（2025-11-09）
+# 原因：基础分析层已统一使用score_fund_leading_v2
+# 旧版本使用5个分散参数，新版本直接使用cvd_series/oi_data/klines/atr_now
 
 def _calc_quality(scores: Dict, n_klines: int, n_oi: int) -> float:
     """
