@@ -91,5 +91,30 @@
     "cooldown_seconds": 3600,
     "min_probability": 0.50,
     "min_ev": 0.0
+  },
+
+  "因子分组权重": {
+    "description": "v7.2因子分组权重系统（阶段2.1扩展）",
+    "TC_weight": 0.50,
+    "VOM_weight": 0.35,
+    "B_weight": 0.15,
+    "TC_internal": {
+      "T_weight": 0.70,
+      "C_weight": 0.30
+    },
+    "VOM_internal": {
+      "V_weight": 0.50,
+      "O_weight": 0.30,
+      "M_weight": 0.20
+    }
+  },
+
+  "EV计算参数": {
+    "description": "期望值计算参数（阶段2.1扩展）",
+    "spread_bps": 2.5,
+    "impact_bps": 3.0,
+    "funding_hold_hours": 4.0,
+    "default_RR": 2.0,
+    "atr_multiplier": 1.5
   }
 }

@@ -101,6 +101,37 @@ class ThresholdConfig:
         """获取I因子参数"""
         return self.config.get("I因子参数", {}).get(key, default)
 
+    def get_factor_weights(self, group: str = None) -> Dict[str, Any]:
+        """
+        获取因子分组权重（阶段2.1扩展）
+
+        Args:
+            group: 'TC_internal', 'VOM_internal' 或 None（获取全部）
+
+        Returns:
+            权重配置字典
+        """
+        weights = self.config.get("因子分组权重", {})
+        if group:
+            return weights.get(group, {})
+        return weights
+
+    def get_ev_params(self, key: str = None, default: Any = None) -> Any:
+        """
+        获取EV计算参数（阶段2.1扩展）
+
+        Args:
+            key: 参数名（如'spread_bps'）或None（获取全部）
+            default: 默认值
+
+        Returns:
+            参数值或参数字典
+        """
+        ev_params = self.config.get("EV计算参数", {})
+        if key:
+            return ev_params.get(key, default)
+        return ev_params
+
     def get_all(self) -> Dict[str, Any]:
         """获取完整配置"""
         return self.config
@@ -156,5 +187,18 @@ if __name__ == '__main__':
     print("\nI因子参数:")
     print(f"  window_hours: {config.get_i_factor_param('window_hours')}")
     print(f"  beta_threshold_high: {config.get_i_factor_param('beta_threshold_high')}")
+
+    print("\n因子分组权重（阶段2.1新增）:")
+    weights = config.get_factor_weights()
+    print(f"  TC_weight: {weights.get('TC_weight')}")
+    print(f"  VOM_weight: {weights.get('VOM_weight')}")
+    print(f"  B_weight: {weights.get('B_weight')}")
+    tc_internal = config.get_factor_weights('TC_internal')
+    print(f"  TC内部: T={tc_internal.get('T_weight')}, C={tc_internal.get('C_weight')}")
+
+    print("\nEV计算参数（阶段2.1新增）:")
+    print(f"  spread_bps: {config.get_ev_params('spread_bps')}")
+    print(f"  impact_bps: {config.get_ev_params('impact_bps')}")
+    print(f"  default_RR: {config.get_ev_params('default_RR')}")
 
     print("\n" + "=" * 60)
