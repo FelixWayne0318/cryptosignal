@@ -1200,11 +1200,12 @@ def _analyze_symbol_core(
         "side": "long" if side_long else "short",
         "side_long": side_long,
 
-        # 概率
-        "P_long": P_long,
-        "P_short": P_short,
-        "probability": P_chosen,
-        "P_base": P_base,  # 基础概率（调整前）
+        # 概率（阶段2.3：标记为DEPRECATED，v7.2层使用统计校准概率）
+        "P_long": P_long,  # DEPRECATED: 使用v7.2层的P_calibrated
+        "P_short": P_short,  # DEPRECATED: 使用v7.2层的P_calibrated
+        "probability": P_chosen,  # DEPRECATED: 使用v7.2层的P_calibrated
+        "P_base": P_base,  # 基础概率（调整前）[DEPRECATED]
+        "_probability_deprecation": "基础层使用sigmoid映射，v7.2层使用统计校准（EmpiricalCalibrator）。生产环境应使用v7.2层的P_calibrated",
         "F_score": F,  # F分数（-100到+100）
         "F_adjustment": 1.0,  # 调整系数（v6.2: F调节器已移除，固定为1.0）
         "prior_up": prior_up,
@@ -1222,11 +1223,13 @@ def _analyze_symbol_core(
             "rejection_reason": rejection_reason,  # v6.3新增：拒绝原因跟踪
             "ttl_h": 8,
             # v6.6软约束（不硬拒绝，仅标记）
-            "EV": EV,
-            "EV_positive": EV > 0,
+            # 阶段2.4：标记EV为DEPRECATED，v7.2层使用ATR-based EV计算
+            "EV": EV,  # DEPRECATED: 使用v7.2层的EV_net
+            "EV_positive": EV > 0,  # DEPRECATED: 使用v7.2层的EV_net > 0
+            "_EV_deprecation": "基础层使用P*edge-(1-P)*cost，v7.2层使用ATR-based计算。生产环境应使用v7.2层的EV_net",
             "P_threshold": p_min_adjusted,
             "P_above_threshold": not p_below_threshold,
-            "soft_filtered": (EV <= 0) or p_below_threshold,
+            "soft_filtered": (EV <= 0) or p_below_threshold,  # DEPRECATED: 使用v7.2层的pass_gates
             "soft_filter_reason": "EV≤0" if EV <= 0 else ("P<p_min" if p_below_threshold else None),
             # v6.7新增：蓄势待发标识
             "is_accumulating": is_accumulating,

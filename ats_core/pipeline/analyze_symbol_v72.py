@@ -58,12 +58,16 @@ def analyze_with_v72_enhancements(
     oi_data = intermediate.get('oi_data', oi_data)
     atr_now = intermediate.get('atr_now', atr_now)
 
+    # ===== 0.5 加载配置（阶段2.2：使用配置文件）=====
+    from ats_core.config.threshold_config import get_thresholds
+    config = get_thresholds()
+
     # ===== 1. 获取F因子（A1修复：基础层已使用v2，直接使用）=====
     # 基础层已经统一使用score_fund_leading_v2，直接使用其结果
     F_v2 = original_result.get('F', 0)
     F_v2_meta = original_result.get('scores_meta', {}).get('F', {})
 
-    # ===== 2. 重新计算weighted_score（因子分组） =====
+    # ===== 2. 重新计算weighted_score（因子分组+配置化权重） =====
     from ats_core.scoring.factor_groups import calculate_grouped_score
 
     # 提取原有因子分数
@@ -74,8 +78,11 @@ def analyze_with_v72_enhancements(
     O = original_result.get('O', 0)
     B = original_result.get('B', 0)
 
-    # 分组计算
-    weighted_score_v72, group_meta = calculate_grouped_score(T, M, C, V, O, B)
+    # 阶段2.2：从配置文件获取权重
+    weights = config.get_factor_weights()
+
+    # 分组计算（使用配置化权重）
+    weighted_score_v72, group_meta = calculate_grouped_score(T, M, C, V, O, B, params=weights)
     confidence_v72 = abs(weighted_score_v72)
     side_long_v72 = (weighted_score_v72 > 0)
 
@@ -103,23 +110,29 @@ def analyze_with_v72_enhancements(
         # 统计校准模式：使用历史数据
         P_calibrated = calibrator.get_calibrated_probability(confidence_v72)
 
-    # ===== 4. 计算EV =====
-    # 简化版成本估算
-    spread_bps = 2.5  # 币安平均点差
-    impact_bps = 3.0  # 小单冲击
+    # ===== 4. 计算EV（阶段2.2：使用配置化参数）=====
+    # 从配置文件获取EV计算参数
+    spread_bps = config.get_ev_params('spread_bps', 2.5)
+    impact_bps = config.get_ev_params('impact_bps', 3.0)
+    funding_hold_hours = config.get_ev_params('funding_hold_hours', 4.0)
+    default_RR = config.get_ev_params('default_RR', 2.0)
+    atr_multiplier = config.get_ev_params('atr_multiplier', 1.5)
+
+    # 成本估算
     cost_bps = spread_bps / 2 + impact_bps
 
     # 资金费
     B_meta = original_result.get('scores_meta', {}).get('B', {})
     funding_rate = B_meta.get('funding_rate', 0.0001)
-    funding_bps = abs(funding_rate) * 10000 * 0.5  # 假设持有4h
+    # 按持有时间计算资金费（从配置读取）
+    funding_bps = abs(funding_rate) * 10000 * (funding_hold_hours / 8.0)
 
     total_cost_pct = (cost_bps + funding_bps) / 10000
 
-    # 止损/止盈（简化：基于ATR）
+    # 止损/止盈（使用配置化参数）
     stop_loss_result = original_result.get('stop_loss', {})
-    SL_distance_pct = stop_loss_result.get('distance_pct', atr_now / original_result['price'] * 1.5)
-    TP_distance_pct = SL_distance_pct * 2.0  # RR=2
+    SL_distance_pct = stop_loss_result.get('distance_pct', atr_now / original_result['price'] * atr_multiplier)
+    TP_distance_pct = SL_distance_pct * default_RR  # 使用配置的RR
 
     # EV = P×TP - (1-P)×SL - cost
     EV_net = P_calibrated * TP_distance_pct - (1 - P_calibrated) * SL_distance_pct - total_cost_pct
@@ -132,14 +145,20 @@ def analyze_with_v72_enhancements(
     # - 避免重复实现复杂的闸门逻辑（订单簿、DataQual等）
 
     # 方案：使用简化的四道检查（只检查关键指标）
-    gates_data_quality = 1.0 if len(klines) >= 100 else 0.0
-    gates_ev = 1.0 if EV_net > 0 else 0.0
-    gates_probability = 1.0 if P_calibrated >= 0.50 else 0.0
+    # 阶段2.2：从配置文件读取闸门阈值
+    min_klines = config.get_gate_threshold('gate1_data_quality', 'min_klines', 100)
+    P_min = config.get_gate_threshold('gate4_probability', 'P_min', 0.50)
+    EV_min = config.get_gate_threshold('gate3_ev', 'EV_min', 0.0)
+    F_min = config.get_gate_threshold('gate2_fund_support', 'F_min', -15)
+
+    gates_data_quality = 1.0 if len(klines) >= min_klines else 0.0
+    gates_ev = 1.0 if EV_net > EV_min else 0.0
+    gates_probability = 1.0 if P_calibrated >= P_min else 0.0
 
     # F因子闸门（v7.2特有：使用F_v2）
-    # F >= -15: 资金支撑合格
-    # F < -15: 价格领先资金，追高风险
-    gates_fund_support = 1.0 if F_v2 >= -15 else 0.0
+    # F >= F_min: 资金支撑合格
+    # F < F_min: 价格领先资金，追高风险
+    gates_fund_support = 1.0 if F_v2 >= F_min else 0.0
 
     # 综合判定（所有闸门都通过才发布）
     pass_gates = all([
@@ -153,13 +172,13 @@ def analyze_with_v72_enhancements(
     if not pass_gates:
         failed_gates = []
         if gates_data_quality <= 0.5:
-            failed_gates.append(f"数据质量不足(bars={len(klines)})")
+            failed_gates.append(f"数据质量不足(bars={len(klines)}, 需要>={min_klines})")
         if gates_ev <= 0.5:
-            failed_gates.append(f"EV≤0({EV_net:.4f})")
+            failed_gates.append(f"EV≤{EV_min}({EV_net:.4f})")
         if gates_probability <= 0.5:
-            failed_gates.append(f"P<0.50({P_calibrated:.3f})")
+            failed_gates.append(f"P<{P_min}({P_calibrated:.3f})")
         if gates_fund_support <= 0.5:
-            failed_gates.append(f"F因子过低({F_v2})")
+            failed_gates.append(f"F因子过低({F_v2}, 需要>={F_min})")
         gate_reason = "; ".join(failed_gates)
     else:
         gate_reason = "all_gates_passed"
