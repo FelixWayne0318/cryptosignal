@@ -56,3 +56,5 @@ data/*.db-shm
 .DS_Store
 Thumbs.db
 config/binance_credentials.json
+server_deploy_private.sh*
+.cryptosignal-private.sh
