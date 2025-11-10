@@ -689,7 +689,8 @@ def _analyze_symbol_core(
     )
 
     # FIModulator公式: p_min = p0 + θF·max(0, gF) + θI·min(0, gI)
-    # 其中: p0=0.58, θF=0.03, θI=-0.02, range=[0.50, 0.75]
+    # v7.2.5修复: p0从硬编码0.58改为配置0.45（与prime_prob_min一致）
+    # 默认参数: p0=0.45, θF=0.03, θI=-0.02, range=[0.50, 0.75]
     #
     # 为了保持信号量控制，叠加安全边际调整
     safety_margin = modulator_output.L_meta.get("safety_margin", 0.005)

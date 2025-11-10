@@ -73,6 +73,17 @@
     "I_bonus_value": 0.02
   },
 
+  "FI调制器参数": {
+    "description": "F/I因子调制器参数（影响Teff、cost、p_min阈值）",
+    "p0_base": 0.45,
+    "theta_F": 0.03,
+    "theta_I": -0.02,
+    "T0": 50.0,
+    "beta_F": 0.15,
+    "beta_I": 0.10,
+    "_comment": "v7.2.5修复：p0从硬编码0.58改为配置0.45，与prime_prob_min一致"
+  },
+
   "I因子参数": {
     "window_hours": 48,
     "beta_threshold_high": 1.5,

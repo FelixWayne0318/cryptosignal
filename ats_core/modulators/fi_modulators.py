@@ -11,8 +11,25 @@ These factors do NOT participate in scoring. They only adjust:
 """
 
 import math
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
 from dataclasses import dataclass
+
+
+def _load_fi_modulator_config() -> Dict[str, Any]:
+    """
+    从配置文件加载FI调制器参数
+
+    Returns:
+        配置字典，如果加载失败返回空字典
+    """
+    try:
+        from ats_core.config.threshold_config import get_thresholds
+        config = get_thresholds()
+        if config and hasattr(config, 'config_data'):
+            return config.config_data.get("FI调制器参数", {})
+    except Exception:
+        pass
+    return {}
 
 
 @dataclass
@@ -33,7 +50,8 @@ class ModulatorParams:
     rew_I_high: float = -0.002  # Reward when I > 0.7
 
     # Threshold modulation
-    p0: float = 0.58  # Base probability threshold
+    # v7.2.5修复：p0从硬编码0.58改为配置0.45（与prime_prob_min一致）
+    p0: float = 0.58  # Base probability threshold (fallback default)
     theta_F: float = 0.03  # F threshold adjustment
     theta_I: float = -0.02  # I threshold adjustment (negative = easier when independent)
     delta_p0: float = 0.03  # Base probability change threshold
@@ -41,6 +59,30 @@ class ModulatorParams:
     # g(x) normalization
     gamma: float = 4.0  # tanh steepness
     alpha_ema: float = 0.2  # EMA smoothing
+
+    @classmethod
+    def from_config(cls, config_dict: Optional[Dict[str, Any]] = None):
+        """
+        从配置字典创建ModulatorParams实例
+
+        Args:
+            config_dict: 配置字典，如果为None则从配置文件加载
+
+        Returns:
+            ModulatorParams实例
+        """
+        if config_dict is None:
+            config_dict = _load_fi_modulator_config()
+
+        # 从配置读取，提供后备默认值
+        return cls(
+            T0=config_dict.get("T0", 50.0),
+            beta_F=config_dict.get("beta_F", 0.15),
+            beta_I=config_dict.get("beta_I", 0.10),
+            p0=config_dict.get("p0_base", 0.45),  # 关键修复！从0.58→0.45
+            theta_F=config_dict.get("theta_F", 0.03),
+            theta_I=config_dict.get("theta_I", -0.02)
+        )
 
 
 class FIModulator:
@@ -344,8 +386,11 @@ def get_fi_modulator(params: ModulatorParams = None) -> FIModulator:
     """
     Get global FI modulator instance.
 
+    v7.2.5修复：首次创建时如果未提供params，从配置文件加载
+
     Args:
         params: Modulator parameters (only used on first call)
+                如果为None，将从配置文件加载
 
     Returns:
         FIModulator instance
@@ -353,6 +398,9 @@ def get_fi_modulator(params: ModulatorParams = None) -> FIModulator:
     global _fi_modulator
 
     if _fi_modulator is None:
+        # v7.2.5修复：如果未提供参数，从配置文件加载
+        if params is None:
+            params = ModulatorParams.from_config()
         _fi_modulator = FIModulator(params)
 
     return _fi_modulator
