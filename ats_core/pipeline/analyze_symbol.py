@@ -29,6 +29,7 @@ from typing import Dict, Any, Tuple, List
 from statistics import median
 
 from ats_core.cfg import CFG
+from ats_core.config.threshold_config import get_thresholds  # v7.2.3: 配置管理器
 from ats_core.sources.binance import get_klines, get_open_interest_hist, get_spot_klines
 from ats_core.features.cvd import cvd_from_klines, cvd_mix_with_oi_price
 from ats_core.scoring.scorecard import scorecard, get_factor_contributions
@@ -155,6 +156,15 @@ def _analyze_symbol_core(
         分析结果字典
     """
     params = CFG.params or {}
+
+    # v7.2.3: 从配置文件读取阈值（移除硬编码）
+    try:
+        config = get_thresholds()
+    except Exception as e:
+        # 配置加载失败时使用None，后续使用默认值
+        config = None
+        from ats_core.logging import warn
+        warn(f"⚠️  配置文件加载失败，使用默认阈值: {e}")
 
     # 移除候选池先验逻辑（已废弃）
     elite_prior = {}
@@ -966,12 +976,14 @@ def _analyze_symbol_core(
     quality_check_1 = (prime_strength >= prime_strength_threshold) and (P_chosen >= p_min_adjusted)
 
     # 质量门槛2：综合置信度（A层6因子加权）
-    # P2.5+++修复（2025-11-06）：方案1保守型，从70提高到75
-    # P2.5++++调整（2025-11-06）：方案1.5折中方案，75→72，平衡信号量
-    # P2.5+++++调整（2025-11-06）：方案1.8数据驱动，72→60，适应实际分布(25-45普遍)
-    # P2.5++++++调整（2025-11-06）：方案2.0最终平衡，60→48，让ARUSDT(54)等高分通过
-    # P2.5+++++++调整（2025-11-06）：方案2.1全市场扫描校准，48→45，基于405币实测(COTIUSDT 47等)
-    quality_check_2 = confidence >= 45  # 从48降低到45，基于全市场扫描实测分布
+    # v7.2.3修复：从配置文件读取，移除硬编码
+    # 默认值20来自config/signal_thresholds.json中的mature_coin.confidence_min
+    if config:
+        confidence_threshold = config.get_mature_threshold('confidence_min', 20)
+    else:
+        confidence_threshold = 20  # 配置加载失败时的默认值
+
+    quality_check_2 = confidence >= confidence_threshold
 
     # 质量门槛3：四门槛综合质量（gate_multiplier）
     # P2.5+++修复（2025-11-06）：方案1保守型，从0.88提高到0.90
@@ -1003,8 +1015,8 @@ def _analyze_symbol_core(
                 rejection_reason.append(f"❌ Prime强度不足({prime_strength:.1f} < {prime_strength_threshold})")
                 if base_strength < 30:
                     rejection_reason.append(f"  - 基础强度过低({base_strength:.1f}/60)")
-                if confidence < 45:
-                    rejection_reason.append(f"  - 综合置信度低({confidence:.1f}/45)")
+                if confidence < confidence_threshold:
+                    rejection_reason.append(f"  - 综合置信度低({confidence:.1f}/{confidence_threshold})")
                 if prob_bonus < 10:
                     rejection_reason.append(f"  - 概率加成不足({prob_bonus:.1f}/40, P={P_chosen:.3f})")
             if P_chosen < p_min_adjusted:
@@ -1012,7 +1024,7 @@ def _analyze_symbol_core(
 
         # 检查质量门槛2：综合置信度
         if not quality_check_2:
-            rejection_reason.append(f"❌ 置信度不足({confidence:.1f} < 45)")
+            rejection_reason.append(f"❌ 置信度不足({confidence:.1f} < {confidence_threshold})")
 
         # 检查质量门槛3：gate_multiplier
         if not quality_check_3:
