@@ -311,8 +311,17 @@ def score_fund_leading_v2(
     # === 4. OI变化（6h，名义化）===
     if oi_data and len(oi_data) >= 7:
         try:
-            oi_now = float(oi_data[-1][1])
-            oi_6h_ago = float(oi_data[-7][1])
+            # 兼容两种格式：
+            # 1. 字典格式：[{"sumOpenInterest": "123.45", "timestamp": ...}, ...]
+            # 2. 列表格式：[[timestamp, oi_value], ...]
+            if isinstance(oi_data[-1], dict):
+                # 字典格式
+                oi_now = float(oi_data[-1]["sumOpenInterest"])
+                oi_6h_ago = float(oi_data[-7]["sumOpenInterest"])
+            else:
+                # 列表/元组格式
+                oi_now = float(oi_data[-1][1])
+                oi_6h_ago = float(oi_data[-7][1])
 
             # OI名义值（OI × Price）
             oi_notional_now = oi_now * close_now
@@ -320,7 +329,8 @@ def score_fund_leading_v2(
 
             # 名义化变化率
             oi_change_6h = (oi_notional_now - oi_notional_6h) / max(1e-9, abs(oi_notional_6h))
-        except (ValueError, IndexError, TypeError):
+        except (ValueError, IndexError, TypeError, KeyError) as e:
+            # 如果数据格式错误，降级为0
             oi_change_6h = 0.0
     else:
         oi_change_6h = 0.0
