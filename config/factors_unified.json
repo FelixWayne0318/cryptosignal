@@ -268,7 +268,14 @@
         "crowding_veto_enabled": true,
         "crowding_percentile": 90,
         "crowding_penalty": 0.5,
-        "crowding_min_data": 100
+        "crowding_min_data": 100,
+        "v2": {
+          "cvd_weight": 0.6,
+          "oi_weight": 0.4,
+          "window_hours": 6,
+          "scale": 5.0,
+          "_comment": "v7.2修复：scale从2.0增大到5.0，减少tanh饱和，提高F因子区分度"
+        }
       }
     }
   },
