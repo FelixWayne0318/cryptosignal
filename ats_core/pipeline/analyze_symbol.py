@@ -241,23 +241,28 @@ def _analyze_symbol_core(
     newcoin_days_threshold = new_coin_cfg.get("newcoin_days_threshold", 14)   # 规范值：14天
 
     # 判断是否为新币（按照规范 § 1）
+    # v7.2.10修复：从配置读取新币阶段识别阈值（避免硬编码）
+    ultra_new_hours = config.config.get('新币阶段识别', {}).get('ultra_new_hours', 24)
+    phase_A_hours = config.config.get('新币阶段识别', {}).get('phase_A_hours', 168)
+    phase_B_hours = config.config.get('新币阶段识别', {}).get('phase_B_hours', 400)
+
     if data_limited:
         # 数据受限（≥200根K线），使用coin_age_hours推测币龄并分级
         # 修复：之前强制按mature处理导致bars=300 (12.5天)的币用阈值54（过高）
         # 现在：根据实际币龄使用合理阈值（phaseB用28-40）
-        if coin_age_hours < 24:  # < 1天
+        if coin_age_hours < ultra_new_hours:  # 默认 < 24小时
             is_new_coin = True
             coin_phase = "newcoin_ultra(data_limited)"
             is_ultra_new = True
             is_phaseA = False
             is_phaseB = False
-        elif coin_age_hours < 168:  # < 7天
+        elif coin_age_hours < phase_A_hours:  # 默认 < 168小时（7天）
             is_new_coin = True
             coin_phase = "newcoin_phaseA(data_limited)"
             is_ultra_new = False
             is_phaseA = True
             is_phaseB = False
-        elif coin_age_hours < 400:  # < 16.7天
+        elif coin_age_hours < phase_B_hours:  # 默认 < 400小时（16.7天）
             is_new_coin = True
             coin_phase = "newcoin_phaseB(data_limited)"
             is_ultra_new = False
@@ -634,9 +639,12 @@ def _analyze_symbol_core(
     # - mature: 无补偿
     if is_new_coin and len(k1) < 100:
         original_quality = quality_score
+        # v7.2.10修复：从配置读取质量补偿参数（避免硬编码）
+        ultra_new_compensate_from = config.config.get('新币质量补偿', {}).get('ultra_new_compensate_from', 0.85)
+        ultra_new_compensate_to = config.config.get('新币质量补偿', {}).get('ultra_new_compensate_to', 0.90)
         if is_ultra_new:
-            # 超新币：从0.85补偿到0.90
-            quality_score = min(1.0, quality_score / 0.85 * 0.90)
+            # 超新币：从0.85补偿到0.90（配置化）
+            quality_score = min(1.0, quality_score / ultra_new_compensate_from * ultra_new_compensate_to)
         elif is_phaseA:
             # 阶段A：从0.85补偿到0.88
             quality_score = min(1.0, quality_score / 0.85 * 0.88)
@@ -660,8 +668,11 @@ def _analyze_symbol_core(
     # F调制器仅通过Teff/cost调整（在integrated_gates中实现）
     # 不应直接修改概率，避免双重惩罚
     # 符合MODULATORS.md § 2.1规范："F仅调节Teff/cost/thresholds，绝不修改方向分数或概率"
-    P_long = min(0.95, P_long_base)
-    P_short = min(0.95, P_short_base)
+    # v7.2.10修复：从配置读取概率上限（避免硬编码）
+    P_long_max = config.config.get('概率计算阈值', {}).get('P_long_max', 0.95)
+    P_short_max = config.config.get('概率计算阈值', {}).get('P_short_max', 0.95)
+    P_long = min(P_long_max, P_long_base)
+    P_short = min(P_short_max, P_short_base)
     P_chosen = P_long if side_long else P_short
 
     # ---- v6.6: 软约束检查（EV和P门槛）----
@@ -705,8 +716,11 @@ def _analyze_symbol_core(
 
     # 最终p_min = FIModulator计算值 + 安全边际
     p_min_adjusted = p_min_modulated + adjustment
+    # v7.2.10修复：从配置读取p_min调整范围（避免硬编码）
+    p_min_range_min = config.config.get('概率计算阈值', {}).get('p_min_range_min', 0.50)
+    p_min_range_max = config.config.get('概率计算阈值', {}).get('p_min_range_max', 0.75)
     # 限制在合理范围
-    p_min_adjusted = max(0.50, min(0.75, p_min_adjusted))
+    p_min_adjusted = max(p_min_range_min, min(p_min_range_max, p_min_adjusted))
 
     # 检查P是否低于阈值
     p_below_threshold = P_chosen < p_min_adjusted
@@ -819,11 +833,13 @@ def _analyze_symbol_core(
     prime_strength += base_strength
 
     # 2. 概率加成（40分）- 2025-11-04审计优化：降低阈值从0.60到0.30
+    # v7.2.10修复：从配置读取概率加成阈值（避免硬编码）
+    P_chosen_bonus_threshold = config.config.get('概率计算阈值', {}).get('P_chosen_bonus_threshold', 0.30)
     # 30%→0分, 60%→40分, >60%截断
     # 原因：熊市时P_chosen普遍在0.32-0.44范围，0.60阈值过高导致无法获得加成
     prob_bonus = 0.0
-    if P_chosen >= 0.30:
-        prob_bonus = min(40.0, (P_chosen - 0.30) / 0.30 * 40.0)
+    if P_chosen >= P_chosen_bonus_threshold:
+        prob_bonus = min(40.0, (P_chosen - P_chosen_bonus_threshold) / P_chosen_bonus_threshold * 40.0)
         prime_strength += prob_bonus
 
     # 3. ✅ 四门调节影响（乘法调节，可降低0-50%）
@@ -889,11 +905,15 @@ def _analyze_symbol_core(
         )
         mtf_coherence = mtf_result['coherence_score']
 
-        # 一致性过滤: <60分惩罚
-        if mtf_coherence < 60:
+        # v7.2.10修复：从配置读取多时间框架一致性阈值（避免硬编码）
+        mtf_coherence_min = config.config.get('多维度一致性', {}).get('mtf_coherence_min', 60)
+        mtf_coherence_penalty = config.config.get('多维度一致性', {}).get('mtf_coherence_penalty', 0.90)
+
+        # 一致性过滤: <阈值惩罚
+        if mtf_coherence < mtf_coherence_min:
             # 时间框架不一致，降低概率和Prime评分
             P_chosen *= 0.85  # 惩罚15%
-            prime_strength *= 0.90  # Prime评分降低10%
+            prime_strength *= mtf_coherence_penalty  # Prime评分降低（配置化）
 
             # 更新对应方向的概率
             if side_long:
@@ -979,16 +999,31 @@ def _analyze_symbol_core(
         is_accumulating = False
         accumulating_reason = ""
 
-        if F >= 90 and C >= 60 and T < 40:
+        # v7.2.10修复：从配置读取蓄势检测阈值（避免硬编码）
+        strong_acc_cfg = config.config.get('蓄势检测阈值', {}).get('strong_accumulation', {})
+        moderate_acc_cfg = config.config.get('蓄势检测阈值', {}).get('moderate_accumulation', {})
+
+        F_min_strong = strong_acc_cfg.get('F_min', 90)
+        C_min_strong = strong_acc_cfg.get('C_min', 60)
+        T_max_strong = strong_acc_cfg.get('T_max', 40)
+        strength_threshold_strong = strong_acc_cfg.get('strength_threshold', 35)
+
+        F_min_moderate = moderate_acc_cfg.get('F_min', 85)
+        C_min_moderate = moderate_acc_cfg.get('C_min', 70)
+        T_max_moderate = moderate_acc_cfg.get('T_max', 30)
+        V_max_moderate = moderate_acc_cfg.get('V_max', 0)
+        strength_threshold_moderate = moderate_acc_cfg.get('strength_threshold', 38)
+
+        if F >= F_min_strong and C >= C_min_strong and T < T_max_strong:
             # 强烈蓄势特征：资金大量流入，但价格还在横盘/初期
             is_accumulating = True
-            accumulating_reason = "强势蓄势(F≥90+C≥60+T<40)"
-            prime_strength_threshold = 35  # 降低阈值，允许早期捕捉
-        elif F >= 85 and C >= 70 and T < 30 and V < 0:
+            accumulating_reason = f"强势蓄势(F≥{F_min_strong}+C≥{C_min_strong}+T<{T_max_strong})"
+            prime_strength_threshold = strength_threshold_strong  # 降低阈值，允许早期捕捉
+        elif F >= F_min_moderate and C >= C_min_moderate and T < T_max_moderate and V < V_max_moderate:
             # 深度蓄势特征：资金流入 + 量能萎缩（洗盘完成）+ 价格横盘
             is_accumulating = True
-            accumulating_reason = "深度蓄势(F≥85+C≥70+V<0+T<30)"
-            prime_strength_threshold = 38  # 稍微提高一点要求
+            accumulating_reason = f"深度蓄势(F≥{F_min_moderate}+C≥{C_min_moderate}+V<{V_max_moderate}+T<{T_max_moderate})"
+            prime_strength_threshold = strength_threshold_moderate  # 稍微提高一点要求（配置化）
 
     # Prime判定：使用币种特定阈值（可能被蓄势通道降低）+ P值硬约束
     # P2.5+信号过滤：加入P值硬约束，必须P>=p_min_adjusted才能发布
@@ -1065,12 +1100,16 @@ def _analyze_symbol_core(
         if not quality_check_3:
             rejection_reason.append(f"❌ 四门槛质量不足(gate_mult={gate_multiplier:.3f} < {gate_multiplier_threshold:.2f})")
             # 详细说明哪些门槛拖后腿
+            # v7.2.10修复：从配置读取新币闸门阈值（避免硬编码）
+            data_qual_newcoin_min = config.config.get('数据质量阈值', {}).get('data_qual_newcoin_min', 0.95)
+            execution_gate_min = config.config.get('执行闸门阈值', {}).get('execution_gate_min', 0.70)
+
             gates_data_qual = _get(r, "gates.data_qual", 1.0) if 'r' in locals() else 1.0
             gates_execution = 0.5 + L / 200.0 if L else 0.5
-            if gates_data_qual < 0.95:
-                rejection_reason.append(f"  - DataQual低({gates_data_qual:.2%})")
-            if gates_execution < 0.7:
-                rejection_reason.append(f"  - 执行质量差({gates_execution:.2f}, L={L})")
+            if gates_data_qual < data_qual_newcoin_min:
+                rejection_reason.append(f"  - DataQual低({gates_data_qual:.2%} < {data_qual_newcoin_min})")
+            if gates_execution < execution_gate_min:
+                rejection_reason.append(f"  - 执行质量差({gates_execution:.2f} < {execution_gate_min}, L={L})")
 
         # 检查质量门槛4：edge
         if not quality_check_4:
@@ -1702,15 +1741,25 @@ def _calc_quality(scores: Dict, n_klines: int, n_oi: int) -> float:
     """
     Q = 1.0
 
-    # 样本不足
-    if n_klines < 100:
-        Q *= 0.85
-    if n_oi < 50:
-        Q *= 0.90
+    # v7.2.10修复：从配置读取因子质量检查阈值（避免硬编码）
+    from ats_core.config.threshold_config import get_thresholds
+    config = get_thresholds()
+    factor_quality_cfg = config.config.get('因子质量检查', {})
+    n_klines_min = factor_quality_cfg.get('n_klines_min', 100)
+    n_oi_min = factor_quality_cfg.get('n_oi_min', 50)
+    weak_dim_threshold = factor_quality_cfg.get('weak_dim_threshold', 40)
+    weak_dims_max = factor_quality_cfg.get('weak_dims_max', 3)
+    quality_penalty = factor_quality_cfg.get('quality_penalty', 0.90)
 
-    # 维度弱证据过多（绝对值<40的维度 - 优化：降低门槛）
-    weak_dims = sum(1 for s in scores.values() if abs(s) < 40)
-    if weak_dims >= 3:
+    # 样本不足
+    if n_klines < n_klines_min:
+        Q *= 0.85
+    if n_oi < n_oi_min:
+        Q *= quality_penalty
+
+    # 维度弱证据过多（绝对值<阈值的维度）
+    weak_dims = sum(1 for s in scores.values() if abs(s) < weak_dim_threshold)
+    if weak_dims >= weak_dims_max:
         Q *= 0.85
 
     return max(0.6, min(1.0, Q))

@@ -600,26 +600,32 @@ class OptimizedBatchScanner:
                 # 检测数据受限情况
                 data_limited = (bars_1h >= 200)  # ≥200根1h K线，视为数据充足
 
+                # v7.2.10修复：从配置读取新币阶段识别阈值（避免硬编码）
+                config = get_thresholds()
+                ultra_new_hours = config.config.get('新币阶段识别', {}).get('ultra_new_hours', 24)
+                phase_A_hours = config.config.get('新币阶段识别', {}).get('phase_A_hours', 168)
+                phase_B_hours = config.config.get('新币阶段识别', {}).get('phase_B_hours', 400)
+
                 # 根据规范判断币种类型并确定最小数据要求
                 if data_limited:
                     # 数据受限（≥200根K线），无法确定真实币龄，默认成熟币
                     min_k1h = 96
                     min_k4h = 50
                     coin_type = "成熟币(数据受限)"
-                elif bars_1h < 400:
-                    # 规范条件1: bars_1h < 400 → 新币
-                    if bars_1h < 24:  # < 1天
+                elif bars_1h < phase_B_hours:
+                    # 规范条件1: bars_1h < phase_B_hours → 新币
+                    if bars_1h < ultra_new_hours:  # 默认 < 24小时
                         min_k1h = 10
                         min_k4h = 3
-                        coin_type = "新币Ultra(<24h)"
-                    elif bars_1h < 168:  # < 7天
+                        coin_type = f"新币Ultra(<{ultra_new_hours}h)"
+                    elif bars_1h < phase_A_hours:  # 默认 < 168小时（7天）
                         min_k1h = 30
                         min_k4h = 8
-                        coin_type = "新币A(1-7d)"
-                    else:  # 7天 - 400根（≈16.7天）
+                        coin_type = f"新币A({ultra_new_hours//24}-{phase_A_hours//24}d)"
+                    else:  # phase_A_hours - phase_B_hours（默认 7-16.7天）
                         min_k1h = 50
                         min_k4h = 15
-                        coin_type = "新币B(7-16.7d)"
+                        coin_type = f"新币B({phase_A_hours//24}-{phase_B_hours//24}d)"
                 elif coin_age_days < 14:
                     # 规范条件2: since_listing < 14d（近似）
                     min_k1h = 50
