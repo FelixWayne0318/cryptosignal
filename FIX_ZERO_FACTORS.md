@@ -13,15 +13,27 @@
 
 ## 根本原因
 
+发现了**两个关键问题**：
+
+### 问题1: data_feeds 模块缺失
 **`ModuleNotFoundError: No module named 'ats_core.data_feeds'`**
 
 `analyze_symbol.py` 第1409行尝试导入不存在的 `data_feeds` 模块，导致所有分析失败。
 
 这是一个不完整的重构：v6.4 Phase 2 引入了新币数据流概念，但相应的模块从未实现。
 
+### 问题2: OI 数据格式不兼容
+**`KeyError: 1` in `fund_leading.py` line 314**
+
+代码：`oi_data[-1][1]` 尝试用列表索引访问字典，导致 F 因子计算失败。
+
+- Binance API 返回：`[{"sumOpenInterest": "123.45", ...}, ...]` （字典格式）
+- 代码期望：`[[timestamp, value], ...]` （列表格式）
+
 ## 解决方案
 
-已创建 `ats_core/data_feeds.py` 模块，修复导入错误。
+1. ✅ 创建 `ats_core/data_feeds.py` 模块，修复导入错误
+2. ✅ 修改 `fund_leading.py` 兼容字典和列表两种 OI 数据格式
 
 ## iPhone修复步骤（一键）
 
@@ -147,4 +159,8 @@ bash restart_system.sh
 
 **创建时间**: 2025-11-10
 **问题严重级别**: 🔴 Critical（系统完全无法工作）
-**修复状态**: ✅ 已修复（commit dffd049）
+**修复状态**: ✅ 已修复
+
+修复提交：
+- 问题1 (data_feeds): commit 011d9dd
+- 问题2 (OI格式): commit 067b224
