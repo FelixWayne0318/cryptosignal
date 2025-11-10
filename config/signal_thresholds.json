@@ -5,14 +5,14 @@
   "基础分析阈值": {
     "mature_coin": {
       "prime_strength_min": 35,
-      "confidence_min": 12,
+      "confidence_min": 8,
       "edge_min": 0.10,
       "prime_prob_min": 0.45,
       "gate_multiplier_min": 0.84,
       "base_strength_min": 30,
       "dims_ok_min": 3,
       "prime_dim_threshold": 50,
-      "_comment": "v7.2.8修复：confidence_min 20→12, edge_min 0.15→0.10（基于实际数据P75=15, Edge P75=0.15）"
+      "_comment": "v7.2.8修复：confidence_min 12→8（基于实际数据中位=8，通过率40%→57%）"
     },
     "newcoin_phaseB": {
       "prime_strength_min": 28,

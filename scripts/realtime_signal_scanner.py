@@ -132,7 +132,7 @@ class RealtimeSignalScanner:
 
     def __init__(
         self,
-        min_score: int = 12,
+        min_score: int = 8,
         send_telegram: bool = True,
         record_data: bool = True,
         verbose: bool = True
