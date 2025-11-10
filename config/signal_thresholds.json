@@ -8,9 +8,11 @@
       "confidence_min": 20,
       "edge_min": 0.15,
       "prime_prob_min": 0.45,
+      "gate_multiplier_min": 0.84,
+      "base_strength_min": 30,
       "dims_ok_min": 3,
       "prime_dim_threshold": 50,
-      "_comment": "v7.2优化：降低基础层阈值，让v7.2五道闸门负责质量控制"
+      "_comment": "v7.2.4修复：基于实际数据分布（Edge P75=0.14, 中位=0.07），edge_min=0.15合理"
     },
     "newcoin_phaseB": {
       "prime_strength_min": 28,

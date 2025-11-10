@@ -988,19 +988,24 @@ def _analyze_symbol_core(
     quality_check_2 = confidence >= confidence_threshold
 
     # 质量门槛3：四门槛综合质量（gate_multiplier）
-    # P2.5+++修复（2025-11-06）：方案1保守型，从0.88提高到0.90
-    # P2.5++++调整（2025-11-06）：方案1.5折中方案，0.90→0.89，平衡信号量
-    # P2.5+++++调整（2025-11-06）：方案1.8数据驱动，0.89→0.87，轻微放宽
-    # P2.5++++++调整（2025-11-07）：方案2.2全市场扫描校准2，0.87→0.84，基于405币实测(16个币种0.86-0.87接近阈值)
-    quality_check_3 = gate_multiplier >= 0.84  # 从0.87降低到0.84，解锁0.85-0.86区间的高质量币种
+    # v7.2.4修复：从配置文件读取，移除硬编码0.84
+    if config:
+        gate_multiplier_threshold = config.get_mature_threshold('gate_multiplier_min', 0.84)
+    else:
+        gate_multiplier_threshold = 0.84  # 配置加载失败时的默认值
+
+    quality_check_3 = gate_multiplier >= gate_multiplier_threshold
 
     # 质量门槛4：edge优势边际
-    # P2.5+++修复（2025-11-06）：方案1保守型，从0.75提高到0.80
-    # P2.5++++调整（2025-11-06）：方案1.5折中方案，0.80→0.77，平衡信号量
-    # P2.5+++++调整（2025-11-06）：方案1.8数据驱动，0.77→0.70，让GMTUSDT等高分通过
-    # P2.5++++++调整（2025-11-06）：方案2.0最终平衡，0.70→0.55，让PROMUSDT(0.45)等通过
-    # P2.5+++++++调整（2025-11-06）：方案2.1全市场扫描校准，0.55→0.48，基于405币实测(KNCUSDT 0.54, GMXUSDT 0.52, ACTUSDT 0.50等)
-    quality_check_4 = abs(edge) >= 0.48  # 从0.55降低到0.48，基于全市场扫描实测高质量分布
+    # v7.2.4修复：从配置文件读取，移除硬编码0.48
+    # 实际数据分布：Edge P75=0.14, 中位=0.07, Max=0.31
+    # 阈值0.48 > Max，导致100%被拒！应使用配置的0.15（接近P75）
+    if config:
+        edge_threshold = config.get_mature_threshold('edge_min', 0.15)
+    else:
+        edge_threshold = 0.15  # 配置加载失败时的默认值
+
+    quality_check_4 = abs(edge) >= edge_threshold
 
     # 综合判定：所有质量门槛都要通过
     is_prime = quality_check_1 and quality_check_2 and quality_check_3 and quality_check_4
@@ -1009,13 +1014,21 @@ def _analyze_symbol_core(
     # v6.3新增：拒绝原因跟踪（专家建议 #5）
     # v6.3.2修复：使用币种特定的prime_strength_threshold
     # P2.5++修复（2025-11-05）：增加新质量门槛的拒绝原因
+    # v7.2.4修复：移除硬编码，使用配置文件阈值
+
+    # 获取base_strength_min阈值（用于拒绝原因显示）
+    if config:
+        base_strength_threshold = config.get_mature_threshold('base_strength_min', 30)
+    else:
+        base_strength_threshold = 30
+
     rejection_reason = []
     if not is_prime:
         # 检查质量门槛1：Prime强度和概率
         if not quality_check_1:
             if prime_strength < prime_strength_threshold:
                 rejection_reason.append(f"❌ Prime强度不足({prime_strength:.1f} < {prime_strength_threshold})")
-                if base_strength < 30:
+                if base_strength < base_strength_threshold:
                     rejection_reason.append(f"  - 基础强度过低({base_strength:.1f}/60)")
                 if confidence < confidence_threshold:
                     rejection_reason.append(f"  - 综合置信度低({confidence:.1f}/{confidence_threshold})")
@@ -1030,7 +1043,7 @@ def _analyze_symbol_core(
 
         # 检查质量门槛3：gate_multiplier
         if not quality_check_3:
-            rejection_reason.append(f"❌ 四门槛质量不足(gate_mult={gate_multiplier:.3f} < 0.84)")
+            rejection_reason.append(f"❌ 四门槛质量不足(gate_mult={gate_multiplier:.3f} < {gate_multiplier_threshold:.2f})")
             # 详细说明哪些门槛拖后腿
             gates_data_qual = _get(r, "gates.data_qual", 1.0) if 'r' in locals() else 1.0
             gates_execution = 0.5 + L / 200.0 if L else 0.5
@@ -1041,7 +1054,7 @@ def _analyze_symbol_core(
 
         # 检查质量门槛4：edge
         if not quality_check_4:
-            rejection_reason.append(f"❌ Edge不足({abs(edge):.2f} < 0.48)")
+            rejection_reason.append(f"❌ Edge不足({abs(edge):.2f} < {edge_threshold:.2f})")
     else:
         rejection_reason = [f"✅ 通过所有质量门槛(P={P_chosen:.3f}, Prime={prime_strength:.1f}, Conf={confidence:.1f}, GM={gate_multiplier:.3f}, Edge={abs(edge):.2f})"]
 
