@@ -42,6 +42,7 @@ class ScanStatistics:
         publish_info = result.get('publish', {})
         gates_info = result.get('gates', {})
         prime_breakdown = publish_info.get('prime_breakdown', {})
+        scores_meta = result.get('scores_meta', {})  # v7.2+: 元数据
 
         data = {
             'symbol': symbol,
@@ -72,6 +73,10 @@ class ScanStatistics:
             # 数据质量
             'bars': result.get('bars', 0),
             'coin_age_hours': result.get('coin_age_hours', 0),
+            # v7.2+: F因子元数据
+            'F_meta': scores_meta.get('F', {}),
+            # v7.2+: I因子元数据
+            'I_meta': scores_meta.get('I', {}),
         }
 
         self.symbols_data.append(data)
@@ -152,6 +157,7 @@ class ScanStatistics:
                 }
                 for factor in ['T', 'M', 'C', 'V', 'O', 'B', 'F', 'L', 'S', 'I']
             },
+            "factor_anomalies": self._detect_factor_anomalies(),  # v7.2+: 因子异常检测
             "threshold_recommendations": self._generate_threshold_suggestions()
         }
 
@@ -166,6 +172,124 @@ class ScanStatistics:
             "timestamp": datetime.now(TZ_UTC8).isoformat(),
             "total_symbols": len(self.symbols_data),
             "symbols": self.symbols_data
+        }
+
+    def _detect_factor_anomalies(self) -> Dict[str, Any]:
+        """
+        v7.2+: 检测因子异常（饱和、固定值、双峰分布等）
+
+        Returns:
+            异常检测结果字典
+        """
+        anomalies = {
+            'F_saturation': {'count': 0, 'pct': 0, 'coins': []},
+            'I_default': {'count': 0, 'pct': 0, 'coins': []},
+            'F_meta_summary': {},
+            'I_meta_summary': {}
+        }
+
+        if not self.symbols_data:
+            return anomalies
+
+        total = len(self.symbols_data)
+
+        # F因子饱和检测
+        F_saturated_coins = []
+        F_raw_values = []
+        fund_momentum_values = []
+        price_momentum_values = []
+
+        for d in self.symbols_data:
+            F_value = d.get('F', 0)
+            F_meta = d.get('F_meta', {})
+
+            # 检测饱和（|F| >= 98）
+            if abs(F_value) >= 98:
+                F_saturated_coins.append({
+                    'symbol': d['symbol'],
+                    'F': F_value,
+                    'F_raw': F_meta.get('F_raw', 'N/A')
+                })
+
+            # 收集元数据
+            if F_meta:
+                F_raw = F_meta.get('F_raw')
+                if F_raw != 'N/A' and F_raw is not None:
+                    F_raw_values.append(F_raw)
+
+                fund_momentum = F_meta.get('fund_momentum')
+                if fund_momentum != 'N/A' and fund_momentum is not None:
+                    fund_momentum_values.append(fund_momentum)
+
+                price_momentum = F_meta.get('price_momentum')
+                if price_momentum != 'N/A' and price_momentum is not None:
+                    price_momentum_values.append(price_momentum)
+
+        anomalies['F_saturation']['count'] = len(F_saturated_coins)
+        anomalies['F_saturation']['pct'] = len(F_saturated_coins) / total * 100 if total > 0 else 0
+        anomalies['F_saturation']['coins'] = F_saturated_coins[:10]  # 只记录前10个
+
+        # F因子元数据统计
+        if F_raw_values:
+            anomalies['F_meta_summary'] = {
+                'F_raw': self._calc_simple_stats(F_raw_values),
+                'fund_momentum': self._calc_simple_stats(fund_momentum_values) if fund_momentum_values else {},
+                'price_momentum': self._calc_simple_stats(price_momentum_values) if price_momentum_values else {}
+            }
+
+        # I因子默认值检测（I=50表示数据不足或计算失败）
+        I_default_coins = []
+        beta_btc_values = []
+        beta_eth_values = []
+
+        for d in self.symbols_data:
+            I_value = d.get('I', 0)
+            I_meta = d.get('I_meta', {})
+
+            # I=50可能是默认值
+            if I_value == 50 or I_value == 0:
+                error = I_meta.get('error')
+                if error:  # 有error说明是降级到默认值
+                    I_default_coins.append({
+                        'symbol': d['symbol'],
+                        'I': I_value,
+                        'error': error
+                    })
+
+            # 收集Beta系数
+            if I_meta and 'error' not in I_meta:
+                beta_btc = I_meta.get('beta_btc')
+                if beta_btc != 'N/A' and beta_btc is not None:
+                    beta_btc_values.append(beta_btc)
+
+                beta_eth = I_meta.get('beta_eth')
+                if beta_eth != 'N/A' and beta_eth is not None:
+                    beta_eth_values.append(beta_eth)
+
+        anomalies['I_default']['count'] = len(I_default_coins)
+        anomalies['I_default']['pct'] = len(I_default_coins) / total * 100 if total > 0 else 0
+        anomalies['I_default']['coins'] = I_default_coins[:10]
+
+        # I因子元数据统计
+        if beta_btc_values or beta_eth_values:
+            anomalies['I_meta_summary'] = {
+                'beta_btc': self._calc_simple_stats(beta_btc_values) if beta_btc_values else {},
+                'beta_eth': self._calc_simple_stats(beta_eth_values) if beta_eth_values else {}
+            }
+
+        return anomalies
+
+    def _calc_simple_stats(self, values: List[float]) -> Dict[str, float]:
+        """计算简单统计（用于元数据）"""
+        if not values:
+            return {}
+
+        return {
+            'min': round(min(values), 4),
+            'mean': round(statistics.mean(values), 4),
+            'median': round(statistics.median(values), 4),
+            'max': round(max(values), 4),
+            'count': len(values)
         }
 
     def generate_statistics_report(self) -> str:
@@ -187,6 +311,31 @@ class ScanStatistics:
         report.append(f"✅ 信号数量: {len(self.signals)} 个")
         report.append(f"📉 过滤数量: {len(self.symbols_data) - len(self.signals)} 个")
         report.append("")
+
+        # v7.2+: 因子异常检测
+        anomalies = self._detect_factor_anomalies()
+
+        # 如果有异常，优先显示
+        if anomalies['F_saturation']['count'] > 0 or anomalies['I_default']['count'] > 0:
+            report.append("⚠️  【因子异常警告】")
+
+            if anomalies['F_saturation']['count'] > 0:
+                sat_count = anomalies['F_saturation']['count']
+                sat_pct = anomalies['F_saturation']['pct']
+                report.append(f"  🔴 F因子饱和: {sat_count}个币种 ({sat_pct:.1f}%) |F|>=98")
+                report.append(f"     可能原因: scale参数过小，建议从2.0增大到5.0+")
+
+                # 显示几个例子
+                for coin in anomalies['F_saturation']['coins'][:5]:
+                    report.append(f"     - {coin['symbol']}: F={coin['F']}, F_raw={coin['F_raw']}")
+
+            if anomalies['I_default']['count'] > 0:
+                default_count = anomalies['I_default']['count']
+                default_pct = anomalies['I_default']['pct']
+                report.append(f"  ⚠️  I因子降级: {default_count}个币种 ({default_pct:.1f}%) 使用默认值")
+                report.append(f"     可能原因: BTC/ETH K线数据不足（需要48h数据）")
+
+            report.append("")
 
         # 1. 信号列表
         if self.signals:
@@ -238,6 +387,68 @@ class ScanStatistics:
                 f"Max={stats['max']:.1f}"
             )
         report.append("")
+
+        # v7.2+: F/I因子元数据统计
+        if anomalies['F_meta_summary'] or anomalies['I_meta_summary']:
+            report.append("📊 【F/I因子诊断数据】")
+
+            if anomalies['F_meta_summary']:
+                F_raw_stats = anomalies['F_meta_summary'].get('F_raw', {})
+                if F_raw_stats:
+                    report.append(
+                        f"  F_raw: "
+                        f"Min={F_raw_stats.get('min', 0):.2f}, "
+                        f"Mean={F_raw_stats.get('mean', 0):.2f}, "
+                        f"Median={F_raw_stats.get('median', 0):.2f}, "
+                        f"Max={F_raw_stats.get('max', 0):.2f} "
+                        f"({F_raw_stats.get('count', 0)}个币种)"
+                    )
+
+                    # 判断scale是否合适
+                    max_abs_F_raw = max(abs(F_raw_stats.get('min', 0)), abs(F_raw_stats.get('max', 0)))
+                    if max_abs_F_raw > 6.0:  # scale=2.0时的饱和点
+                        report.append(f"     ⚠️  最大|F_raw|={max_abs_F_raw:.2f} > 6.0，建议增大scale参数")
+
+                fund_momentum_stats = anomalies['F_meta_summary'].get('fund_momentum', {})
+                if fund_momentum_stats:
+                    report.append(
+                        f"  fund_momentum: "
+                        f"Mean={fund_momentum_stats.get('mean', 0):.4f}, "
+                        f"Median={fund_momentum_stats.get('median', 0):.4f}"
+                    )
+
+                price_momentum_stats = anomalies['F_meta_summary'].get('price_momentum', {})
+                if price_momentum_stats:
+                    report.append(
+                        f"  price_momentum: "
+                        f"Mean={price_momentum_stats.get('mean', 0):.4f}, "
+                        f"Median={price_momentum_stats.get('median', 0):.4f}"
+                    )
+
+            if anomalies['I_meta_summary']:
+                beta_btc_stats = anomalies['I_meta_summary'].get('beta_btc', {})
+                if beta_btc_stats:
+                    report.append(
+                        f"  beta_btc: "
+                        f"Min={beta_btc_stats.get('min', 0):.2f}, "
+                        f"Mean={beta_btc_stats.get('mean', 0):.2f}, "
+                        f"Median={beta_btc_stats.get('median', 0):.2f}, "
+                        f"Max={beta_btc_stats.get('max', 0):.2f} "
+                        f"({beta_btc_stats.get('count', 0)}个币种)"
+                    )
+
+                beta_eth_stats = anomalies['I_meta_summary'].get('beta_eth', {})
+                if beta_eth_stats:
+                    report.append(
+                        f"  beta_eth: "
+                        f"Min={beta_eth_stats.get('min', 0):.2f}, "
+                        f"Mean={beta_eth_stats.get('mean', 0):.2f}, "
+                        f"Median={beta_eth_stats.get('median', 0):.2f}, "
+                        f"Max={beta_eth_stats.get('max', 0):.2f} "
+                        f"({beta_eth_stats.get('count', 0)}个币种)"
+                    )
+
+            report.append("")
 
         # 5. 综合指标分布
         report.append("📊 【综合指标分布】")
