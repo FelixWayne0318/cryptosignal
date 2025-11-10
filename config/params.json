@@ -287,12 +287,12 @@
   },
 
   "publish": {
-    "prime_prob_min": 0.68,
+    "prime_prob_min": 0.45,
     "prime_dims_ok_min": 3,
     "prime_dim_threshold": 30,
     "watch_prob_min": 0.52,
     "watch_prob_max": 0.67,
-    "_comment": "v6.7调整: 提高阈值以减少80%信号（用户要求）"
+    "_comment": "v7.2.8修复: 与signal_thresholds.json保持一致(0.45)，消除配置冲突"
   },
 
   "base": {
