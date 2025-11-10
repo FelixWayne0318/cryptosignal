@@ -1,7 +1,7 @@
 # CryptoSignal 规范文档索引
 
-**当前版本**: v7.2 (v3.1规范更新)
-**最后更新**: 2025-11-09
+**当前版本**: v7.2 (v3.2规范更新)
+**最后更新**: 2025-11-10
 **文档类型**: 总索引（系统工程入口）
 
 ---
@@ -49,7 +49,7 @@
 ### 5. 开发指南
 - **[DEVELOPMENT_WORKFLOW.md](DEVELOPMENT_WORKFLOW.md)** - Git提交规范和测试流程
 - **[MODIFICATION_RULES.md](MODIFICATION_RULES.md)** - 日常配置和功能修改规范
-- **[SYSTEM_ENHANCEMENT_STANDARD.md](SYSTEM_ENHANCEMENT_STANDARD.md)** - 🆕 系统性升级标准化流程（v3.1新增）
+- **[SYSTEM_ENHANCEMENT_STANDARD.md](SYSTEM_ENHANCEMENT_STANDARD.md)** - 🆕 系统性升级标准化流程（v3.2.0 - 含硬编码清理案例）
 - **[DOCUMENTATION_RULES.md](DOCUMENTATION_RULES.md)** - 文档编写规范
 - **[CORE_STANDARDS.md](CORE_STANDARDS.md)** - 核心开发标准
 
@@ -95,7 +95,7 @@
 3. 核心规范 → [specifications/FACTOR_SYSTEM.md](specifications/FACTOR_SYSTEM.md)
 4. 日常开发 → [DEVELOPMENT_WORKFLOW.md](DEVELOPMENT_WORKFLOW.md)
 5. 配置修改 → [MODIFICATION_RULES.md](MODIFICATION_RULES.md)
-6. 🆕 系统升级 → [SYSTEM_ENHANCEMENT_STANDARD.md](SYSTEM_ENHANCEMENT_STANDARD.md)
+6. 🆕 系统升级 → [SYSTEM_ENHANCEMENT_STANDARD.md](SYSTEM_ENHANCEMENT_STANDARD.md) (v3.2.0)
 
 #### 想了解变更历史
 → [03_VERSION_HISTORY.md](03_VERSION_HISTORY.md)

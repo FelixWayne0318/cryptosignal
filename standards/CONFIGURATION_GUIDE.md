@@ -4,10 +4,59 @@
 
 ---
 
+## ⚠️ 配置文件层次结构（v7.2.7更新）
+
+CryptoSignal系统使用多个配置文件，遵循以下优先级顺序：
+
+### 配置优先级（§5.2标准）
+
+```
+1. config/signal_thresholds.json  ← 最高优先级（信号阈值配置）
+2. config/factors_unified.json    ← 中等优先级（因子配置）
+3. config/params.json             ← 基础优先级（系统参数）
+```
+
+### 配置文件用途
+
+| 配置文件 | 用途 | 适用场景 |
+|---------|------|---------|
+| **signal_thresholds.json** | 所有信号阈值配置 | Prime判定、闸门阈值、统计校准、EV计算 |
+| **factors_unified.json** | 因子计算参数 | 因子分组权重、计算窗口、缩放系数 |
+| **params.json** | 系统全局参数 | 因子权重、新币配置、Overlay过滤 |
+
+### 重要原则（v7.2.7）
+
+1. **单一数据源**: 每个参数只在一个配置文件中定义
+2. **避免硬编码**: 所有阈值必须从配置文件读取，代码中禁止硬编码
+3. **默认值一致**: 代码中的fallback默认值必须与配置文件保持一致
+4. **配置统一**: 优先使用signal_thresholds.json，避免混用多个配置源
+
+### 配置读取示例
+
+```python
+# ✅ 正确：使用ThresholdConfig统一读取
+from ats_core.config.threshold_config import get_thresholds
+
+config = get_thresholds()
+prime_prob_min = config.get_mature_threshold('prime_prob_min', 0.45)
+
+# ❌ 错误：硬编码
+prime_prob_min = 0.68  # 禁止！
+
+# ❌ 错误：混用多个配置源
+prime_prob_min = params.get("publish", {}).get("prime_prob_min", 0.68)
+```
+
+**详细案例**: 参考 `standards/SYSTEM_ENHANCEMENT_STANDARD.md` v7.2.3-v7.2.7硬编码清理系列
+
+---
+
 ## 📋 配置文件位置
 
 ```
-config/params.json
+config/params.json             # 系统全局参数
+config/signal_thresholds.json  # 信号阈值配置（优先）
+config/factors_unified.json    # 因子计算参数
 ```
 
 ---
@@ -590,12 +639,117 @@ python3 scripts/realtime_signal_scanner.py --once
 
 ---
 
+## ⚠️ 配置修改最佳实践（v7.2.7新增）
+
+### 避免硬编码的原则
+
+根据v7.2.3-v7.2.7硬编码清理系列的经验总结：
+
+#### 1. 禁止的做法 ❌
+
+```python
+# 错误1: 直接硬编码数值
+if prime_prob < 0.58:  # ❌ 硬编码阈值
+    reject()
+
+# 错误2: 代码中定义默认值，不读取配置
+p0 = 0.58  # ❌ 应该从配置文件读取
+
+# 错误3: 混用多个配置源
+prob_min = params.get("prime_prob_min", 0.68)  # params.json
+F_min = config.get_gate_threshold("gate2_fund_support", "F_min", -15)  # signal_thresholds.json
+# ❌ 两个不同的配置源，容易产生冲突
+```
+
+#### 2. 推荐的做法 ✅
+
+```python
+# 正确1: 从配置文件读取
+from ats_core.config.threshold_config import get_thresholds
+
+config = get_thresholds()
+prime_prob_min = config.get_mature_threshold('prime_prob_min', 0.45)
+
+# 正确2: 使用类方法从配置创建实例
+params = ModulatorParams.from_config()  # 自动从配置加载所有参数
+
+# 正确3: 统一配置源
+# 所有信号阈值都从 signal_thresholds.json 读取
+prime_strength_min = config.get_mature_threshold('prime_strength_min', 35)
+confidence_min = config.get_mature_threshold('confidence_min', 20)
+edge_min = config.get_mature_threshold('edge_min', 0.15)
+```
+
+#### 3. 默认值一致性检查
+
+```python
+# 代码中的fallback默认值必须与配置文件保持一致
+#
+# 示例：ThresholdConfig._get_default_config()
+def _get_default_config(self) -> Dict[str, Any]:
+    """默认配置（硬编码备份）
+
+    v7.2.7修复：默认值应与signal_thresholds.json保持一致
+    """
+    return {
+        "基础分析阈值": {
+            "mature_coin": {
+                "prime_strength_min": 35,  # 必须与配置文件一致
+                "confidence_min": 20,      # 必须与配置文件一致
+                "edge_min": 0.15,          # 必须与配置文件一致
+                "prime_prob_min": 0.45     # 必须与配置文件一致
+            }
+        }
+    }
+```
+
+#### 4. 硬编码检测方法
+
+```bash
+# 定期扫描硬编码的阈值
+grep -rn "if.*>.*0\.[0-9]" ats_core/ --include="*.py" | grep -v "test"
+
+# 查找可能的硬编码概率阈值
+grep -rn "prime_prob.*=.*0\.[0-9]" ats_core/ --include="*.py"
+
+# 查找硬编码的分数阈值
+grep -rn "strength.*>=.*[0-9]" ats_core/ --include="*.py"
+```
+
+### 配置文件冲突检测
+
+当发现系统行为与预期不符时，首先检查配置冲突：
+
+```bash
+# 1. 检查同一参数是否在多个配置文件中定义
+grep -r "prime_prob_min" config/
+
+# 2. 对比配置文件和代码中的默认值
+# 配置文件值
+cat config/signal_thresholds.json | jq '.基础分析阈值.mature_coin.prime_prob_min'
+
+# 代码默认值
+grep -A 5 "_get_default_config" ats_core/config/threshold_config.py | grep prime_prob_min
+
+# 3. 验证两者是否一致
+# 如果不一致，需要修复代码中的默认值
+```
+
+### 相关文档
+
+- **硬编码清理案例**: `standards/SYSTEM_ENHANCEMENT_STANDARD.md` § 实战案例（v7.2.3-v7.2.7）
+- **配置统一说明**: `docs/v7.2.7_CONFIG_UNIFICATION.md`
+- **综合清理记录**: `docs/v7.2.6_COMPREHENSIVE_HARDCODE_CLEANUP.md`
+
+---
+
 ## 🔗 相关文档
 
 - [SYSTEM_OVERVIEW.md](./SYSTEM_OVERVIEW.md) - 系统总览
 - [MODIFICATION_RULES.md](./MODIFICATION_RULES.md) - 修改规范
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - 技术架构
+- [SYSTEM_ENHANCEMENT_STANDARD.md](./SYSTEM_ENHANCEMENT_STANDARD.md) - 系统增强标准（v3.2.0含硬编码清理）
 
 ---
 
-**最后更新**: 2025-10-30
+**最后更新**: 2025-11-10
