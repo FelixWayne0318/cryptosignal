@@ -1,64 +1,73 @@
 {
-  "timestamp": "2025-11-10T18:10:51.983545+08:00",
+  "timestamp": "2025-11-10T18:15:29.707354+08:00",
   "scan_info": {
     "total_symbols": 100,
-    "signals_found": 52,
-    "filtered": 48
+    "signals_found": 54,
+    "filtered": 46
   },
   "signals": [
+    {
+      "symbol": "XRPUSDT",
+      "side": "long",
+      "weighted_score": 28,
+      "edge": 0.276,
+      "confidence": 28,
+      "prime_strength": 56,
+      "P_chosen": 0.646
+    },
     {
       "symbol": "TRXUSDT",
       "side": "long",
       "weighted_score": 27,
-      "edge": 0.266,
+      "edge": 0.273,
       "confidence": 27,
       "prime_strength": 61,
-      "P_chosen": 0.605
+      "P_chosen": 0.602
     },
     {
-      "symbol": "XRPUSDT",
+      "symbol": "STRKUSDT",
       "side": "long",
-      "weighted_score": 26,
-      "edge": 0.262,
-      "confidence": 26,
-      "prime_strength": 55,
-      "P_chosen": 0.638
+      "weighted_score": 24,
+      "edge": 0.237,
+      "confidence": 24,
+      "prime_strength": 59,
+      "P_chosen": 0.609
     },
     {
       "symbol": "SOLUSDT",
       "side": "long",
       "weighted_score": 23,
-      "edge": 0.234,
+      "edge": 0.228,
       "confidence": 23,
       "prime_strength": 59,
-      "P_chosen": 0.643
+      "P_chosen": 0.639
     },
     {
-      "symbol": "GIGGLEUSDT",
+      "symbol": "PAXGUSDT",
       "side": "long",
-      "weighted_score": 22,
-      "edge": 0.224,
-      "confidence": 22,
-      "prime_strength": 57,
-      "P_chosen": 0.596
+      "weighted_score": 21,
+      "edge": 0.21,
+      "confidence": 21,
+      "prime_strength": 48,
+      "P_chosen": 0.575
     },
     {
       "symbol": "AVAXUSDT",
       "side": "long",
       "weighted_score": 21,
-      "edge": 0.207,
+      "edge": 0.206,
       "confidence": 21,
       "prime_strength": 56,
-      "P_chosen": 0.59
+      "P_chosen": 0.588
     },
     {
       "symbol": "PUMPUSDT",
       "side": "long",
-      "weighted_score": 20,
-      "edge": 0.204,
-      "confidence": 20,
-      "prime_strength": 55,
-      "P_chosen": 0.589
+      "weighted_score": 21,
+      "edge": 0.206,
+      "confidence": 21,
+      "prime_strength": 56,
+      "P_chosen": 0.588
     },
     {
       "symbol": "LINKUSDT",
@@ -70,145 +79,154 @@
       "P_chosen": 0.588
     },
     {
+      "symbol": "BTCUSDT",
+      "side": "long",
+      "weighted_score": 20,
+      "edge": 0.201,
+      "confidence": 20,
+      "prime_strength": 57,
+      "P_chosen": 0.647
+    },
+    {
+      "symbol": "AAVEUSDT",
+      "side": "long",
+      "weighted_score": 20,
+      "edge": 0.196,
+      "confidence": 20,
+      "prime_strength": 54,
+      "P_chosen": 0.578
+    },
+    {
+      "symbol": "1000BONKUSDT",
+      "side": "long",
+      "weighted_score": 19,
+      "edge": 0.195,
+      "confidence": 19,
+      "prime_strength": 53,
+      "P_chosen": 0.579
+    },
+    {
       "symbol": "ZECUSDT",
       "side": "long",
       "weighted_score": 19,
       "edge": 0.194,
       "confidence": 19,
       "prime_strength": 56,
-      "P_chosen": 0.607
+      "P_chosen": 0.608
+    },
+    {
+      "symbol": "OPUSDT",
+      "side": "long",
+      "weighted_score": 19,
+      "edge": 0.186,
+      "confidence": 19,
+      "prime_strength": 52,
+      "P_chosen": 0.575
+    },
+    {
+      "symbol": "BCHUSDT",
+      "side": "long",
+      "weighted_score": 19,
+      "edge": 0.186,
+      "confidence": 19,
+      "prime_strength": 48,
+      "P_chosen": 0.547
     },
     {
       "symbol": "ZKUSDT",
       "side": "long",
       "weighted_score": 19,
-      "edge": 0.192,
+      "edge": 0.185,
       "confidence": 19,
-      "prime_strength": 51,
-      "P_chosen": 0.563
-    },
-    {
-      "symbol": "BTCUSDT",
-      "side": "long",
-      "weighted_score": 19,
-      "edge": 0.192,
-      "confidence": 19,
-      "prime_strength": 54,
-      "P_chosen": 0.641
+      "prime_strength": 50,
+      "P_chosen": 0.562
     },
     {
       "symbol": "1000PEPEUSDT",
       "side": "long",
-      "weighted_score": 19,
-      "edge": 0.191,
-      "confidence": 19,
-      "prime_strength": 53,
-      "P_chosen": 0.578
+      "weighted_score": 18,
+      "edge": 0.179,
+      "confidence": 18,
+      "prime_strength": 51,
+      "P_chosen": 0.572
     },
     {
-      "symbol": "PAXGUSDT",
+      "symbol": "GIGGLEUSDT",
       "side": "long",
-      "weighted_score": 19,
-      "edge": 0.189,
-      "confidence": 19,
-      "prime_strength": 46,
-      "P_chosen": 0.57
+      "weighted_score": 17,
+      "edge": 0.175,
+      "confidence": 17,
+      "prime_strength": 48,
+      "P_chosen": 0.592
     },
     {
       "symbol": "TRUMPUSDT",
       "side": "long",
-      "weighted_score": 19,
-      "edge": 0.187,
-      "confidence": 19,
-      "prime_strength": 52,
+      "weighted_score": 17,
+      "edge": 0.173,
+      "confidence": 17,
+      "prime_strength": 50,
+      "P_chosen": 0.57
+    },
+    {
+      "symbol": "COAIUSDT",
+      "side": "long",
+      "weighted_score": 17,
+      "edge": 0.172,
+      "confidence": 17,
+      "prime_strength": 50,
+      "P_chosen": 0.567
+    },
+    {
+      "symbol": "XPLUSDT",
+      "side": "long",
+      "weighted_score": 16,
+      "edge": 0.162,
+      "confidence": 16,
+      "prime_strength": 50,
       "P_chosen": 0.574
-    },
-    {
-      "symbol": "1000BONKUSDT",
-      "side": "long",
-      "weighted_score": 18,
-      "edge": 0.184,
-      "confidence": 18,
-      "prime_strength": 52,
-      "P_chosen": 0.58
-    },
-    {
-      "symbol": "OPUSDT",
-      "side": "long",
-      "weighted_score": 18,
-      "edge": 0.176,
-      "confidence": 18,
-      "prime_strength": 52,
-      "P_chosen": 0.576
-    },
-    {
-      "symbol": "WLDUSDT",
-      "side": "long",
-      "weighted_score": 17,
-      "edge": 0.174,
-      "confidence": 17,
-      "prime_strength": 50,
-      "P_chosen": 0.566
-    },
-    {
-      "symbol": "BCHUSDT",
-      "side": "long",
-      "weighted_score": 17,
-      "edge": 0.169,
-      "confidence": 17,
-      "prime_strength": 46,
-      "P_chosen": 0.545
-    },
-    {
-      "symbol": "RESOLVUSDT",
-      "side": "long",
-      "weighted_score": 17,
-      "edge": 0.166,
-      "confidence": 17,
-      "prime_strength": 50,
-      "P_chosen": 0.569
     },
     {
       "symbol": "FETUSDT",
       "side": "long",
       "weighted_score": 16,
-      "edge": 0.164,
+      "edge": 0.161,
       "confidence": 16,
       "prime_strength": 51,
-      "P_chosen": 0.579
+      "P_chosen": 0.577
     },
     {
-      "symbol": "SOONUSDT",
+      "symbol": "INJUSDT",
       "side": "long",
       "weighted_score": 16,
-      "edge": 0.162,
+      "edge": 0.158,
       "confidence": 16,
-      "prime_strength": 44,
-      "P_chosen": 0.564
+      "prime_strength": 49,
+      "P_chosen": 0.565
     },
     {
       "symbol": "FARTCOINUSDT",
       "side": "long",
       "weighted_score": 16,
-      "edge": 0.157,
-      "confidence": 16,
-      "prime_strength": 50,
-      "P_chosen": 0.576
-    },
-    {
-      "symbol": "COAIUSDT",
-      "side": "long",
-      "weighted_score": 16,
       "edge": 0.156,
       "confidence": 16,
-      "prime_strength": 48,
+      "prime_strength": 50,
+      "P_chosen": 0.575
+    },
+    {
+      "symbol": "RESOLVUSDT",
+      "side": "long",
+      "weighted_score": 16,
+      "edge": 0.155,
+      "confidence": 16,
+      "prime_strength": 49,
       "P_chosen": 0.565
     },
     {
       "symbol": "UNIUSDT",
       "side": "long",
       "weighted_score": 15,
-      "edge": 0.155,
+      "edge": 0.153,
       "confidence": 15,
       "prime_strength": 49,
       "P_chosen": 0.573
@@ -217,346 +235,346 @@
       "symbol": "XMRUSDT",
       "side": "long",
       "weighted_score": 15,
-      "edge": 0.151,
-      "confidence": 15,
-      "prime_strength": 49,
-      "P_chosen": 0.571
-    },
-    {
-      "symbol": "TAOUSDT",
-      "side": "long",
-      "weighted_score": 15,
       "edge": 0.15,
       "confidence": 15,
       "prime_strength": 49,
-      "P_chosen": 0.569
+      "P_chosen": 0.573
     },
     {
-      "symbol": "PENGUUSDT",
+      "symbol": "ONDOUSDT",
       "side": "long",
-      "weighted_score": 15,
-      "edge": 0.15,
-      "confidence": 15,
+      "weighted_score": 14,
+      "edge": 0.145,
+      "confidence": 14,
       "prime_strength": 47,
-      "P_chosen": 0.556
+      "P_chosen": 0.558
+    },
+    {
+      "symbol": "SOONUSDT",
+      "side": "long",
+      "weighted_score": 14,
+      "edge": 0.144,
+      "confidence": 14,
+      "prime_strength": 37,
+      "P_chosen": 0.555
+    },
+    {
+      "symbol": "ALCHUSDT",
+      "side": "long",
+      "weighted_score": 14,
+      "edge": 0.142,
+      "confidence": 14,
+      "prime_strength": 45,
+      "P_chosen": 0.552
     },
     {
       "symbol": "DOTUSDT",
       "side": "long",
       "weighted_score": 14,
-      "edge": 0.143,
-      "confidence": 14,
-      "prime_strength": 48,
-      "P_chosen": 0.566
-    },
-    {
-      "symbol": "INJUSDT",
-      "side": "long",
-      "weighted_score": 14,
-      "edge": 0.139,
+      "edge": 0.137,
       "confidence": 14,
       "prime_strength": 47,
       "P_chosen": 0.562
     },
     {
-      "symbol": "XPLUSDT",
-      "side": "long",
-      "weighted_score": 14,
-      "edge": 0.138,
-      "confidence": 14,
-      "prime_strength": 47,
-      "P_chosen": 0.565
-    },
-    {
-      "symbol": "ALCHUSDT",
+      "symbol": "CRVUSDT",
       "side": "long",
       "weighted_score": 13,
-      "edge": 0.132,
-      "confidence": 13,
-      "prime_strength": 44,
-      "P_chosen": 0.551
-    },
-    {
-      "symbol": "ACTUSDT",
-      "side": "long",
-      "weighted_score": 13,
-      "edge": 0.129,
+      "edge": 0.131,
       "confidence": 13,
       "prime_strength": 45,
-      "P_chosen": 0.558
-    },
-    {
-      "symbol": "STRKUSDT",
-      "side": "long",
-      "weighted_score": 13,
-      "edge": 0.127,
-      "confidence": 13,
-      "prime_strength": 47,
-      "P_chosen": 0.565
-    },
-    {
-      "symbol": "AAVEUSDT",
-      "side": "long",
-      "weighted_score": 13,
-      "edge": 0.126,
-      "confidence": 13,
-      "prime_strength": 44,
-      "P_chosen": 0.548
-    },
-    {
-      "symbol": "DOGEUSDT",
-      "side": "long",
-      "weighted_score": 13,
-      "edge": 0.126,
-      "confidence": 13,
-      "prime_strength": 48,
-      "P_chosen": 0.57
+      "P_chosen": 0.551
     },
     {
       "symbol": "ENAUSDT",
       "side": "long",
-      "weighted_score": 12,
-      "edge": 0.125,
-      "confidence": 12,
-      "prime_strength": 45,
+      "weighted_score": 13,
+      "edge": 0.129,
+      "confidence": 13,
+      "prime_strength": 46,
       "P_chosen": 0.556
     },
     {
-      "symbol": "CRVUSDT",
+      "symbol": "HBARUSDT",
       "side": "long",
-      "weighted_score": 12,
-      "edge": 0.124,
-      "confidence": 12,
-      "prime_strength": 44,
-      "P_chosen": 0.551
+      "weighted_score": 13,
+      "edge": 0.128,
+      "confidence": 13,
+      "prime_strength": 45,
+      "P_chosen": 0.549
     },
     {
-      "symbol": "ONDOUSDT",
+      "symbol": "WLDUSDT",
+      "side": "long",
+      "weighted_score": 13,
+      "edge": 0.127,
+      "confidence": 13,
+      "prime_strength": 44,
+      "P_chosen": 0.546
+    },
+    {
+      "symbol": "TAOUSDT",
       "side": "long",
       "weighted_score": 12,
-      "edge": 0.124,
+      "edge": 0.122,
       "confidence": 12,
       "prime_strength": 45,
-      "P_chosen": 0.555
+      "P_chosen": 0.559
     },
     {
-      "symbol": "USELESSUSDT",
+      "symbol": "XLMUSDT",
       "side": "long",
-      "weighted_score": 11,
-      "edge": 0.114,
-      "confidence": 11,
-      "prime_strength": 43,
-      "P_chosen": 0.55
+      "weighted_score": 12,
+      "edge": 0.12,
+      "confidence": 12,
+      "prime_strength": 44,
+      "P_chosen": 0.547
     },
     {
       "symbol": "NEARUSDT",
       "side": "long",
       "weighted_score": 11,
-      "edge": 0.112,
-      "confidence": 11,
-      "prime_strength": 43,
-      "P_chosen": 0.547
-    },
-    {
-      "symbol": "HYPEUSDT",
-      "side": "long",
-      "weighted_score": 11,
-      "edge": 0.112,
-      "confidence": 11,
-      "prime_strength": 43,
-      "P_chosen": 0.544
-    },
-    {
-      "symbol": "HBARUSDT",
-      "side": "long",
-      "weighted_score": 11,
-      "edge": 0.107,
+      "edge": 0.113,
       "confidence": 11,
       "prime_strength": 42,
-      "P_chosen": 0.539
+      "P_chosen": 0.543
     },
     {
-      "symbol": "XLMUSDT",
+      "symbol": "DOGEUSDT",
       "side": "long",
-      "weighted_score": 9,
-      "edge": 0.092,
-      "confidence": 9,
-      "prime_strength": 40,
-      "P_chosen": 0.538
+      "weighted_score": 11,
+      "edge": 0.109,
+      "confidence": 11,
+      "prime_strength": 45,
+      "P_chosen": 0.561
     },
     {
-      "symbol": "APRUSDT",
+      "symbol": "FFUSDT",
       "side": "long",
-      "weighted_score": 9,
-      "edge": 0.09,
-      "confidence": 9,
-      "prime_strength": 36,
-      "P_chosen": 0.539
+      "weighted_score": 11,
+      "edge": 0.108,
+      "confidence": 11,
+      "prime_strength": 42,
+      "P_chosen": 0.54
+    },
+    {
+      "symbol": "ACTUSDT",
+      "side": "long",
+      "weighted_score": 11,
+      "edge": 0.108,
+      "confidence": 11,
+      "prime_strength": 42,
+      "P_chosen": 0.546
     },
     {
       "symbol": "RENDERUSDT",
       "side": "long",
-      "weighted_score": 9,
-      "edge": 0.088,
-      "confidence": 9,
+      "weighted_score": 10,
+      "edge": 0.103,
+      "confidence": 10,
+      "prime_strength": 43,
+      "P_chosen": 0.551
+    },
+    {
+      "symbol": "APRUSDT",
+      "side": "long",
+      "weighted_score": 10,
+      "edge": 0.099,
+      "confidence": 10,
+      "prime_strength": 37,
+      "P_chosen": 0.541
+    },
+    {
+      "symbol": "HYPEUSDT",
+      "side": "long",
+      "weighted_score": 10,
+      "edge": 0.097,
+      "confidence": 10,
       "prime_strength": 41,
-      "P_chosen": 0.545
+      "P_chosen": 0.539
     },
     {
       "symbol": "ZENUSDT",
       "side": "long",
-      "weighted_score": 8,
-      "edge": 0.083,
-      "confidence": 8,
-      "prime_strength": 39,
+      "weighted_score": 9,
+      "edge": 0.09,
+      "confidence": 9,
+      "prime_strength": 40,
+      "P_chosen": 0.539
+    },
+    {
+      "symbol": "USELESSUSDT",
+      "side": "long",
+      "weighted_score": 9,
+      "edge": 0.089,
+      "confidence": 9,
+      "prime_strength": 40,
       "P_chosen": 0.537
+    },
+    {
+      "symbol": "PENGUUSDT",
+      "side": "long",
+      "weighted_score": 9,
+      "edge": 0.088,
+      "confidence": 9,
+      "prime_strength": 40,
+      "P_chosen": 0.535
     },
     {
       "symbol": "ADAUSDT",
       "side": "long",
       "weighted_score": 8,
-      "edge": 0.08,
+      "edge": 0.081,
       "confidence": 8,
       "prime_strength": 40,
       "P_chosen": 0.538
     },
     {
-      "symbol": "FFUSDT",
-      "side": "long",
-      "weighted_score": 8,
-      "edge": 0.079,
-      "confidence": 8,
-      "prime_strength": 38,
-      "P_chosen": 0.531
-    },
-    {
-      "symbol": "APTUSDT",
-      "side": "long",
-      "weighted_score": 7,
-      "edge": 0.073,
-      "confidence": 7,
-      "prime_strength": 37,
-      "P_chosen": 0.527
-    },
-    {
       "symbol": "ETHUSDT",
       "side": "long",
-      "weighted_score": 7,
-      "edge": 0.069,
-      "confidence": 7,
-      "prime_strength": 37,
-      "P_chosen": 0.529
+      "weighted_score": 8,
+      "edge": 0.075,
+      "confidence": 8,
+      "prime_strength": 39,
+      "P_chosen": 0.532
     },
     {
       "symbol": "SUIUSDT",
       "side": "long",
-      "weighted_score": 5,
-      "edge": 0.054,
-      "confidence": 5,
-      "prime_strength": 36,
-      "P_chosen": 0.526
+      "weighted_score": 7,
+      "edge": 0.069,
+      "confidence": 7,
+      "prime_strength": 38,
+      "P_chosen": 0.528
     },
     {
       "symbol": "MOODENGUSDT",
       "side": "long",
-      "weighted_score": 5,
-      "edge": 0.053,
-      "confidence": 5,
+      "weighted_score": 6,
+      "edge": 0.063,
+      "confidence": 6,
+      "prime_strength": 37,
+      "P_chosen": 0.528
+    },
+    {
+      "symbol": "FUSDT",
+      "side": "long",
+      "weighted_score": 6,
+      "edge": 0.06,
+      "confidence": 6,
       "prime_strength": 36,
-      "P_chosen": 0.527
+      "P_chosen": 0.523
     },
     {
       "symbol": "ATOMUSDT",
       "side": "long",
+      "weighted_score": 6,
+      "edge": 0.06,
+      "confidence": 6,
+      "prime_strength": 37,
+      "P_chosen": 0.529
+    },
+    {
+      "symbol": "COTIUSDT",
+      "side": "long",
       "weighted_score": 5,
-      "edge": 0.046,
+      "edge": 0.051,
       "confidence": 5,
-      "prime_strength": 36,
-      "P_chosen": 0.524
+      "prime_strength": 35,
+      "P_chosen": 0.52
+    },
+    {
+      "symbol": "WIFUSDT",
+      "side": "long",
+      "weighted_score": 5,
+      "edge": 0.05,
+      "confidence": 5,
+      "prime_strength": 35,
+      "P_chosen": 0.52
     }
   ],
   "rejection_reasons": {
-    "❌ Prime强度不足": 44,
-    "❌ 概率过低": 44,
-    "❌ 置信度不足": 41,
-    "❌ Edge不足": 39
+    "❌ Prime强度不足": 42,
+    "❌ 概率过低": 42,
+    "❌ 置信度不足": 37,
+    "❌ Edge不足": 37
   },
   "close_to_threshold": [],
   "market_stats": {
-    "avg_edge": 0.101,
-    "avg_confidence": 10.2,
+    "avg_edge": 0.102,
+    "avg_confidence": 10.9,
     "new_coins_count": 4,
     "new_coins_pct": 4.0
   },
   "factor_distribution": {
     "T": {
-      "min": -48,
-      "p25": -19.0,
+      "min": -44,
+      "p25": -20.8,
       "median": 0.0,
-      "p75": 24.8,
+      "p75": 23.8,
       "max": 96
     },
     "M": {
-      "min": -31,
+      "min": -30,
       "p25": -13.0,
-      "median": 0.0,
+      "median": -1.0,
       "p75": 14.0,
       "max": 49
     },
     "C": {
       "min": -49,
       "p25": -14.0,
-      "median": -3.5,
-      "p75": 8.0,
+      "median": -2.5,
+      "p75": 7.0,
       "max": 26
     },
     "V": {
       "min": -48,
-      "p25": -13.0,
-      "median": -1.0,
+      "p25": -12.0,
+      "median": 0.0,
       "p75": 11.0,
-      "max": 41
+      "max": 42
     },
     "O": {
-      "min": -30,
-      "p25": -14.0,
+      "min": -33,
+      "p25": -15.0,
       "median": 0.0,
-      "p75": 12.0,
+      "p75": 12.8,
       "max": 49
     },
     "B": {
       "min": -95,
-      "p25": -21.0,
+      "p25": -20.8,
       "median": 0.0,
-      "p75": 6.8,
-      "max": 57
+      "p75": 8.8,
+      "max": 56
     },
     "F": {
-      "min": -46,
-      "p25": -4.0,
+      "min": -44,
+      "p25": -3.8,
       "median": 0.0,
-      "p75": 2.0,
-      "max": 87
+      "p75": 3.0,
+      "max": 86
     },
     "L": {
       "min": 0,
-      "p25": 92.2,
+      "p25": 94.2,
       "median": 100.0,
       "p75": 100.0,
       "max": 100
     },
     "S": {
       "min": -100,
-      "p25": -51.8,
-      "median": -23.5,
-      "p75": 27.0,
-      "max": 100
+      "p25": -35.8,
+      "median": 0.0,
+      "p75": 40.0,
+      "max": 99
     },
     "I": {
       "min": -96,
-      "p25": -26.8,
-      "median": -3.5,
-      "p75": 14.0,
+      "p25": -26.0,
+      "median": -4.5,
+      "p75": 13.0,
       "max": 43
     }
   },
@@ -573,48 +591,48 @@
     },
     "F_meta_summary": {
       "F_raw": {
-        "min": -0.2473,
-        "mean": 0.0082,
-        "median": -0.0021,
-        "max": 0.6768,
+        "min": -0.2384,
+        "mean": 0.0095,
+        "median": 0.0001,
+        "max": 0.641,
         "count": 96
       },
       "fund_momentum": {
-        "min": -0.235,
-        "mean": 0.0096,
-        "median": -0.0011,
-        "max": 0.7032,
+        "min": -0.2216,
+        "mean": 0.0076,
+        "median": -0.0033,
+        "max": 0.6684,
         "count": 96
       },
       "price_momentum": {
-        "min": -0.3736,
-        "mean": 0.0015,
-        "median": 0.0033,
-        "max": 0.3176,
+        "min": -0.3635,
+        "mean": -0.0019,
+        "median": -0.0003,
+        "max": 0.3282,
         "count": 96
       }
     },
     "I_meta_summary": {
       "beta_btc": {
-        "min": -3.7872,
-        "mean": 0.7327,
-        "median": 0.762,
-        "max": 6.058,
+        "min": -3.8822,
+        "mean": 0.7452,
+        "median": 0.7536,
+        "max": 5.9886,
         "count": 96
       },
       "beta_eth": {
-        "min": -2.7557,
-        "mean": 0.7725,
-        "median": 0.6675,
-        "max": 7.2316,
+        "min": -2.7385,
+        "mean": 0.7844,
+        "median": 0.6669,
+        "max": 7.1883,
         "count": 96
       }
     }
   },
   "threshold_recommendations": [],
   "performance": {
-    "total_time_sec": 14.67,
-    "speed_coins_per_sec": 6.82,
+    "total_time_sec": 25.19,
+    "speed_coins_per_sec": 3.97,
     "api_calls": 0,
     "cache_hit_rate": "100.0%",
     "memory_mb": 80.54695129394531
