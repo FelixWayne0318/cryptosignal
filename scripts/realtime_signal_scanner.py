@@ -57,6 +57,7 @@ from ats_core.outputs.telegram_fmt import render_trade_v72
 from ats_core.pipeline.analyze_symbol_v72 import analyze_with_v72_enhancements
 from ats_core.publishing.anti_jitter import AntiJitter
 from ats_core.config.anti_jitter_config import get_config
+from ats_core.analysis.report_writer import get_report_writer
 
 # v7.2增强: 数据采集模块
 try:
@@ -248,6 +249,33 @@ class RealtimeSignalScanner:
             except Exception as e:
                 error(f"v7.2增强失败 {result.get('symbol')}: {e}")
                 continue
+
+        # 🔧 关键修复：重写报告，包含v7.2增强数据
+        # 原始scan()方法写的scan_detail.json没有v7.2数据，这里覆盖它
+        try:
+            writer = get_report_writer()
+            latest_detail_path = writer.latest_dir / "scan_detail.json"
+
+            # 读取原始报告结构
+            if latest_detail_path.exists():
+                with open(latest_detail_path, 'r', encoding='utf-8') as f:
+                    original_detail = json.load(f)
+
+                # 用v7.2增强结果替换symbols数组
+                original_detail['symbols'] = v72_results
+                original_detail['v72_enhanced'] = True
+                original_detail['enhancement_timestamp'] = datetime.now(TZ_UTC8).isoformat()
+
+                # 写回文件
+                with open(latest_detail_path, 'w', encoding='utf-8') as f:
+                    json.dump(original_detail, f, indent=2, ensure_ascii=False)
+
+                log(f"✅ 已更新scan_detail.json（含v7.2数据）")
+            else:
+                warn("⚠️ scan_detail.json不存在，无法更新")
+
+        except Exception as e:
+            warn(f"⚠️ 更新scan_detail.json失败: {e}")
 
         # 过滤Prime信号（四道闸门 + AntiJitter）
         prime_signals = self._filter_prime_signals_v72(v72_results)
