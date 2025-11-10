@@ -45,21 +45,21 @@
       "min_klines": 100
     },
     "gate2_fund_support": {
-      "F_min": -80,
+      "F_min": -50,
       "F_extreme_min": -80,
-      "comment": "v7.2.8修复：从-50降到-80，覆盖F Min=-79，允许更多资金流出的信号"
+      "comment": "v7.2.8修复：保持-50风控（F<-50=资金流出严重，追高风险）"
     },
     "gate3_ev": {
       "EV_min": 0.0
     },
     "gate4_probability": {
       "P_min": 0.40,
-      "comment": "v7.2.8修复：从0.45降到0.40，进一步放宽概率要求"
+      "comment": "v7.2.8修复：从0.45降到0.40，适度放宽概率要求"
     },
     "gate5_independence_market": {
-      "I_min": -10,
+      "I_min": 0,
       "market_regime_threshold": 30,
-      "description": "v7.2.8修复：I_min从10降到-10，覆盖I中位=-10.5，进一步放宽独立性要求"
+      "description": "v7.2.8修复：I_min=0（折中），保留市场方向检查（I<0时需顺势）"
     }
   },
 
