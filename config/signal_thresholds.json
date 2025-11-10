@@ -59,8 +59,24 @@
     "gate5_independence_market": {
       "I_min": 0,
       "market_regime_threshold": 30,
-      "description": "v7.2.8修复：I_min=0（折中），保留市场方向检查（I<0时需顺势）"
+      "I_high_independence": 60,
+      "confidence_boost_aligned": 1.2,
+      "description": "v7.2.9新增：I_high_independence=60（高独立性阈值），confidence_boost_aligned=1.2（顺势信号信心放大系数）"
     }
+  },
+
+  "v72增强参数": {
+    "description": "v7.2增强层所需的数据质量要求",
+    "min_klines_for_v72": 100,
+    "min_cvd_points": 10,
+    "_comment": "v7.2.9修复：从realtime_scanner硬编码提取到配置"
+  },
+
+  "F因子动量阈值": {
+    "description": "F因子动量级别判定阈值（用于蓄势待发标记）",
+    "F_strong_momentum": 30,
+    "F_moderate_momentum": 15,
+    "_comment": "v7.2.9修复：从v72代码硬编码提取到配置，F>30=强势蓄势，F>15=中等动量"
   },
 
   "统计校准参数": {

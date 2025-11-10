@@ -305,7 +305,17 @@ class RealtimeSignalScanner:
         cvd_series = result.get('cvd_series', [])
         atr = result.get('atr', 0)
 
-        if len(klines) >= 100 and len(cvd_series) >= 10:
+        # v7.2.9修复：从配置读取数据质量阈值（避免硬编码）
+        from ats_core.config.threshold_config import get_thresholds
+        config = get_thresholds()
+        try:
+            min_klines_for_v72 = config.config.get('v72增强参数', {}).get('min_klines_for_v72', 100)
+            min_cvd_points = config.config.get('v72增强参数', {}).get('min_cvd_points', 10)
+        except:
+            min_klines_for_v72 = 100
+            min_cvd_points = 10
+
+        if len(klines) >= min_klines_for_v72 and len(cvd_series) >= min_cvd_points:
             try:
                 v72_enhanced = analyze_with_v72_enhancements(
                     original_result=result,
