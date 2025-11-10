@@ -273,9 +273,9 @@
           "cvd_weight": 0.6,
           "oi_weight": 0.4,
           "window_hours": 6,
-          "scale": 0.10,
+          "scale": 0.50,
           "use_relative_change": true,
-          "_comment": "v7.2.3修复：改用相对变化率而非绝对值，解决天文数字问题；scale调整为0.10（百分比级别）"
+          "_comment": "v7.2.8修复：scale从0.10增大到0.50，避免F因子饱和（F_raw=0.47时F=74而非100）"
         }
       }
     }
