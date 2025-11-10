@@ -57,9 +57,9 @@
       "comment": "从0.50降到0.45，配合冷启动启发式公式"
     },
     "gate5_independence_market": {
-      "I_min": 30,
+      "I_min": 10,
       "market_regime_threshold": 30,
-      "description": "v3.1新增：I×Market联合闸门，过滤低独立性+逆势信号"
+      "description": "v7.2.8修复：I_min从30降到10，适应震荡市（仍保留市场方向检查）"
     }
   },
 
