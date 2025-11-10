@@ -135,8 +135,8 @@ def calculate_independence(
     if params is None:
         params = {}
 
-    # 默认参数（P1.3优化：48小时窗口更稳定）
-    window = params.get('window_hours', 48)  # 从24→48，提高Beta稳定性
+    # 默认参数（v7.2.8修复：24小时窗口以适应当前数据量）
+    window = params.get('window_hours', 24)  # v7.2.8: 48→24，避免数据不足导致全返回50
     beta_high = params.get('beta_threshold_high', 1.5)
     beta_low = params.get('beta_threshold_low', 0.5)
     btc_weight = params.get('btc_weight', 0.6)

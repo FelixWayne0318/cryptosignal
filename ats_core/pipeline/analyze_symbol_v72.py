@@ -62,6 +62,14 @@ def analyze_with_v72_enhancements(
     from ats_core.config.threshold_config import get_thresholds
     config = get_thresholds()
 
+    # v7.2.9修复：加载F因子动量阈值（避免硬编码）
+    try:
+        F_strong_momentum = config.config.get('F因子动量阈值', {}).get('F_strong_momentum', 30)
+        F_moderate_momentum = config.config.get('F因子动量阈值', {}).get('F_moderate_momentum', 15)
+    except:
+        F_strong_momentum = 30
+        F_moderate_momentum = 15
+
     # ===== 1. 获取F因子（A1修复：基础层已使用v2，直接使用）=====
     # 基础层已经统一使用score_fund_leading_v2，直接使用其结果
     F_v2 = original_result.get('F', 0)
@@ -154,6 +162,9 @@ def analyze_with_v72_enhancements(
     F_min = config.get_gate_threshold('gate2_fund_support', 'F_min', -15)
     I_min = config.get_gate_threshold('gate5_independence_market', 'I_min', 30)  # v3.1新增
     market_regime_threshold = config.get_gate_threshold('gate5_independence_market', 'market_regime_threshold', 30)  # v3.1新增
+    # v7.2.9修复：从配置读取I因子相关阈值（避免硬编码）
+    I_high_independence = config.get_gate_threshold('gate5_independence_market', 'I_high_independence', 60)
+    confidence_boost_aligned = config.get_gate_threshold('gate5_independence_market', 'confidence_boost_aligned', 1.2)
 
     gates_data_quality = 1.0 if len(klines) >= min_klines else 0.0
     gates_ev = 1.0 if EV_net > EV_min else 0.0
@@ -168,7 +179,7 @@ def analyze_with_v72_enhancements(
     # 过滤"低独立性+逆势"的危险信号
     market_regime = original_result.get('market_regime', 0)
 
-    if I_v2 >= 60:
+    if I_v2 >= I_high_independence:
         # 高独立性：不受大盘影响，直接通过
         gates_independence_market = 1.0
         conflict_reason = "high_independence"
@@ -189,12 +200,12 @@ def analyze_with_v72_enhancements(
             # 优质信号：做多且牛市（低独立性+顺势）- 放大信心
             gates_independence_market = 1.0
             conflict_reason = "low_independence_bull_align"
-            conflict_mult = 1.2
+            conflict_mult = confidence_boost_aligned  # v7.2.9修复：从配置读取
         elif not side_long_v72 and market_regime < -market_regime_threshold:
             # 优质信号：做空且熊市（低独立性+顺势）- 放大信心
             gates_independence_market = 1.0
             conflict_reason = "low_independence_bear_align"
-            conflict_mult = 1.2
+            conflict_mult = confidence_boost_aligned  # v7.2.9修复：从配置读取
         else:
             # 正常情况：市场中性或轻度趋势
             gates_independence_market = 1.0
@@ -348,13 +359,14 @@ def analyze_with_v72_enhancements(
             "gate_results": gate_details,
 
             # ===== 蓄势待发标记（核心功能）=====
-            # F因子 > 30 = 资金强势领先 = 蓄势待发
-            # F因子 > 15 = 资金明显领先 = 即将爆发
-            "is_momentum_ready": F_v2 > 30,
-            "is_breakout_soon": F_v2 > 15,
+            # v7.2.9修复：从配置读取F因子动量阈值（避免硬编码）
+            # F因子 > F_strong_momentum = 资金强势领先 = 蓄势待发
+            # F因子 > F_moderate_momentum = 资金明显领先 = 即将爆发
+            "is_momentum_ready": F_v2 > F_strong_momentum,
+            "is_breakout_soon": F_v2 > F_moderate_momentum,
             "momentum_level": (
-                "strong" if F_v2 > 30 else
-                "moderate" if F_v2 > 15 else
+                "strong" if F_v2 > F_strong_momentum else
+                "moderate" if F_v2 > F_moderate_momentum else
                 "weak" if F_v2 > 0 else
                 "negative"
             )

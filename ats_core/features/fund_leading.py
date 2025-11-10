@@ -299,20 +299,39 @@ def score_fund_leading_v2(
     price_change_pct = price_change_6h / price_6h_ago
 
     # === 3. CVD变化（6h）===
+    # v7.2.3修复：使用相对变化率而非绝对值，避免天文数字
     if len(cvd_series) >= 7:
         cvd_6h_ago = cvd_series[-7]
         cvd_now = cvd_series[-1]
-        cvd_change_6h = cvd_now - cvd_6h_ago
-        # 归一化到价格（CVD是累积成交量，需要转为相对价格的比例）
-        cvd_change_norm = cvd_change_6h / max(1e-9, abs(price_6h_ago))
+
+        # 检查是否启用相对变化率模式
+        use_relative = p.get("use_relative_change", True)
+
+        if use_relative:
+            # 使用相对变化率（推荐）：变化百分比
+            cvd_change_pct = (cvd_now - cvd_6h_ago) / max(abs(cvd_6h_ago), 1e-9)
+            cvd_change_norm = cvd_change_pct
+        else:
+            # 旧逻辑（已废弃）：绝对变化除以价格
+            cvd_change_6h = cvd_now - cvd_6h_ago
+            cvd_change_norm = cvd_change_6h / max(1e-9, abs(price_6h_ago))
     else:
         cvd_change_norm = 0.0
 
     # === 4. OI变化（6h，名义化）===
     if oi_data and len(oi_data) >= 7:
         try:
-            oi_now = float(oi_data[-1][1])
-            oi_6h_ago = float(oi_data[-7][1])
+            # 兼容两种格式：
+            # 1. 字典格式：[{"sumOpenInterest": "123.45", "timestamp": ...}, ...]
+            # 2. 列表格式：[[timestamp, oi_value], ...]
+            if isinstance(oi_data[-1], dict):
+                # 字典格式
+                oi_now = float(oi_data[-1]["sumOpenInterest"])
+                oi_6h_ago = float(oi_data[-7]["sumOpenInterest"])
+            else:
+                # 列表/元组格式
+                oi_now = float(oi_data[-1][1])
+                oi_6h_ago = float(oi_data[-7][1])
 
             # OI名义值（OI × Price）
             oi_notional_now = oi_now * close_now
@@ -320,21 +339,27 @@ def score_fund_leading_v2(
 
             # 名义化变化率
             oi_change_6h = (oi_notional_now - oi_notional_6h) / max(1e-9, abs(oi_notional_6h))
-        except (ValueError, IndexError, TypeError):
+        except (ValueError, IndexError, TypeError, KeyError) as e:
+            # 如果数据格式错误，降级为0
             oi_change_6h = 0.0
     else:
         oi_change_6h = 0.0
 
     # === 5. 资金动量（CVD + OI，加权）===
-    # 归一化到ATR（使资金动量和价格动量可比）
-    # P1.2修复：防止ATR过小导致放大噪音
-    atr_norm_factor = max(atr_now / close_now, 0.001)  # 最小0.1%，避免除以过小值
+    # v7.2.3修复：使用相对变化率后，无需再除以ATR
+    use_relative = p.get("use_relative_change", True)
 
-    fund_momentum_raw = p["cvd_weight"] * cvd_change_norm + p["oi_weight"] * oi_change_6h
-    fund_momentum = fund_momentum_raw / atr_norm_factor
-
-    # === 6. 价格动量（归一化到ATR）===
-    price_momentum = price_change_pct / atr_norm_factor
+    if use_relative:
+        # 相对变化率模式：直接加权，无需归一化
+        fund_momentum = p["cvd_weight"] * cvd_change_norm + p["oi_weight"] * oi_change_6h
+        # 价格动量也使用变化率
+        price_momentum = price_change_pct
+    else:
+        # 旧逻辑（已废弃）：归一化到ATR
+        atr_norm_factor = max(atr_now / close_now, 0.001)
+        fund_momentum_raw = p["cvd_weight"] * cvd_change_norm + p["oi_weight"] * oi_change_6h
+        fund_momentum = fund_momentum_raw / atr_norm_factor
+        price_momentum = price_change_pct / atr_norm_factor
 
     # === 7. F原始值（资金 - 价格）===
     F_raw = fund_momentum - price_momentum
@@ -352,8 +377,9 @@ def score_fund_leading_v2(
         "cvd_6h_norm": round(cvd_change_norm, 4),
         "oi_6h_pct": round(oi_change_6h, 4),
         "price_6h_pct": round(price_change_pct * 100, 2),
-        "atr_norm": round(atr_norm_factor, 4),
-        "version": "v2_simplified"
+        "atr_norm": round(atr_now / close_now, 4) if close_now > 0 else 0,
+        "use_relative_change": use_relative,
+        "version": "v2.3_relative_change"
     }
 
     return F_score, meta

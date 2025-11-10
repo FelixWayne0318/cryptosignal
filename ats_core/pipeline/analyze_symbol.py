@@ -29,6 +29,7 @@ from typing import Dict, Any, Tuple, List
 from statistics import median
 
 from ats_core.cfg import CFG
+from ats_core.config.threshold_config import get_thresholds  # v7.2.3: 配置管理器
 from ats_core.sources.binance import get_klines, get_open_interest_hist, get_spot_klines
 from ats_core.features.cvd import cvd_from_klines, cvd_mix_with_oi_price
 from ats_core.scoring.scorecard import scorecard, get_factor_contributions
@@ -155,6 +156,15 @@ def _analyze_symbol_core(
         分析结果字典
     """
     params = CFG.params or {}
+
+    # v7.2.3: 从配置文件读取阈值（移除硬编码）
+    try:
+        config = get_thresholds()
+    except Exception as e:
+        # 配置加载失败时使用None，后续使用默认值
+        config = None
+        from ats_core.logging import warn
+        warn(f"⚠️  配置文件加载失败，使用默认阈值: {e}")
 
     # 移除候选池先验逻辑（已废弃）
     elite_prior = {}
@@ -679,7 +689,8 @@ def _analyze_symbol_core(
     )
 
     # FIModulator公式: p_min = p0 + θF·max(0, gF) + θI·min(0, gI)
-    # 其中: p0=0.58, θF=0.03, θI=-0.02, range=[0.50, 0.75]
+    # v7.2.5修复: p0从硬编码0.58改为配置0.45（与prime_prob_min一致）
+    # 默认参数: p0=0.45, θF=0.03, θI=-0.02, range=[0.50, 0.75]
     #
     # 为了保持信号量控制，叠加安全边际调整
     safety_margin = modulator_output.L_meta.get("safety_margin", 0.005)
@@ -697,31 +708,44 @@ def _analyze_symbol_core(
     # ---- 6. 发布判定（4级分级标准）----
 
     # 新币特殊处理：应用分级标准
+    # v7.2.6修复：移除所有硬编码，从配置文件读取
     if is_ultra_new:
         # 超新币（1-24小时）：超级谨慎
         prime_prob_min = new_coin_cfg.get("ultra_new_prime_prob_min", 0.70)
         prime_dims_ok_min = new_coin_cfg.get("ultra_new_dims_ok_min", 6)
-        prime_dim_threshold = 70  # 提高单维度门槛
-        watch_prob_min = 0.65  # 新币不发watch信号
+        prime_dim_threshold = new_coin_cfg.get("ultra_new_prime_dim_threshold", 70)  # v7.2.6修复：从配置读取
+        watch_prob_min = new_coin_cfg.get("ultra_new_watch_prob_min", 0.65)  # v7.2.6修复：从配置读取
     elif is_phaseA:
         # 阶段A（1-7天）：极度谨慎
         prime_prob_min = new_coin_cfg.get("phaseA_prime_prob_min", 0.65)
         prime_dims_ok_min = new_coin_cfg.get("phaseA_dims_ok_min", 5)
-        prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
-        watch_prob_min = 0.60
+        # v7.2.7修复：优先从signal_thresholds.json读取，回退到params.json
+        prime_dim_threshold = config.get_newcoin_threshold('phaseA', 'prime_dim_threshold', 65) if config else 65
+        watch_prob_min = new_coin_cfg.get("phaseA_watch_prob_min", 0.60)  # v7.2.6修复：从配置读取
     elif is_phaseB:
         # 阶段B（7-30天）：谨慎
         prime_prob_min = new_coin_cfg.get("phaseB_prime_prob_min", 0.63)
         prime_dims_ok_min = new_coin_cfg.get("phaseB_dims_ok_min", 4)
-        prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
-        watch_prob_min = 0.60
+        # v7.2.7修复：优先从signal_thresholds.json读取，回退到params.json
+        prime_dim_threshold = config.get_newcoin_threshold('phaseB', 'prime_dim_threshold', 65) if config else 65
+        watch_prob_min = new_coin_cfg.get("phaseB_watch_prob_min", 0.60)  # v7.2.6修复：从配置读取
     else:
         # 成熟币种：正常标准
-        # P2.5++修复（2025-11-05）：提高概率门槛，减少80%信号
-        prime_prob_min = publish_cfg.get("prime_prob_min", 0.68)  # 从0.62提高到0.68
-        prime_dims_ok_min = publish_cfg.get("prime_dims_ok_min", 4)
-        prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
-        watch_prob_min = publish_cfg.get("watch_prob_min", 0.65)  # 从0.58提高到0.65
+        # v7.2.7修复：统一使用signal_thresholds.json，移除params.json依赖
+        # 修复前：使用params.json的publish配置（prime_prob_min=0.68）
+        # 修复后：使用signal_thresholds.json的mature_coin配置（prime_prob_min=0.45）
+        if config:
+            prime_prob_min = config.get_mature_threshold('prime_prob_min', 0.45)  # v7.2.7修复
+            prime_dims_ok_min = config.get_mature_threshold('dims_ok_min', 3)
+            prime_dim_threshold = config.get_mature_threshold('prime_dim_threshold', 50)
+            # watch功能已废弃，但保留兼容性
+            watch_prob_min = 0.65  # 保持原值，watch信号不再发送
+        else:
+            # 配置加载失败时使用默认值
+            prime_prob_min = 0.45
+            prime_dims_ok_min = 3
+            prime_dim_threshold = 50
+            watch_prob_min = 0.65
 
     # ---- Prime评分系统（v4.0 - 基于10维因子系统）----
     # 重大改进：使用10维综合评分替代4维独立评分
@@ -899,11 +923,13 @@ def _analyze_symbol_core(
     elif is_phaseB:
         prime_strength_threshold = new_coin_cfg.get("phaseB_prime_strength_min", 28)
     else:
-        # P2.5++修复（2025-11-05）：提高阈值从40→55，减少80%信号，保留高质量信号
-        # P2.5+++修复（2025-11-06）：方案1保守型，进一步提高到60，减少90%信号
-        # P2.5++++调整（2025-11-06）：方案1.5折中方案，60→57，平衡信号量
-        # P2.5+++++调整（2025-11-06）：方案1.8数据驱动，57→54，基于实际日志(SSVUSDT 56.5等)
-        prime_strength_threshold = 54  # 从57降低到54
+        # v7.2.3修复：从配置文件读取，移除硬编码54
+        # 基于实际分布：Prime强度中位=36, P75=45, Max=59
+        # 阈值35（配置文件默认值）接近中位数，合理
+        if config:
+            prime_strength_threshold = config.get_mature_threshold('prime_strength_min', 35)
+        else:
+            prime_strength_threshold = 35  # 配置加载失败时的默认值
 
     # v6.7新增：蓄势待发检测（F优先通道）
     # P2.1增强：使用detect_accumulation_v2，带veto条件
@@ -966,27 +992,34 @@ def _analyze_symbol_core(
     quality_check_1 = (prime_strength >= prime_strength_threshold) and (P_chosen >= p_min_adjusted)
 
     # 质量门槛2：综合置信度（A层6因子加权）
-    # P2.5+++修复（2025-11-06）：方案1保守型，从70提高到75
-    # P2.5++++调整（2025-11-06）：方案1.5折中方案，75→72，平衡信号量
-    # P2.5+++++调整（2025-11-06）：方案1.8数据驱动，72→60，适应实际分布(25-45普遍)
-    # P2.5++++++调整（2025-11-06）：方案2.0最终平衡，60→48，让ARUSDT(54)等高分通过
-    # P2.5+++++++调整（2025-11-06）：方案2.1全市场扫描校准，48→45，基于405币实测(COTIUSDT 47等)
-    quality_check_2 = confidence >= 45  # 从48降低到45，基于全市场扫描实测分布
+    # v7.2.3修复：从配置文件读取，移除硬编码
+    # 默认值20来自config/signal_thresholds.json中的mature_coin.confidence_min
+    if config:
+        confidence_threshold = config.get_mature_threshold('confidence_min', 20)
+    else:
+        confidence_threshold = 20  # 配置加载失败时的默认值
+
+    quality_check_2 = confidence >= confidence_threshold
 
     # 质量门槛3：四门槛综合质量（gate_multiplier）
-    # P2.5+++修复（2025-11-06）：方案1保守型，从0.88提高到0.90
-    # P2.5++++调整（2025-11-06）：方案1.5折中方案，0.90→0.89，平衡信号量
-    # P2.5+++++调整（2025-11-06）：方案1.8数据驱动，0.89→0.87，轻微放宽
-    # P2.5++++++调整（2025-11-07）：方案2.2全市场扫描校准2，0.87→0.84，基于405币实测(16个币种0.86-0.87接近阈值)
-    quality_check_3 = gate_multiplier >= 0.84  # 从0.87降低到0.84，解锁0.85-0.86区间的高质量币种
+    # v7.2.4修复：从配置文件读取，移除硬编码0.84
+    if config:
+        gate_multiplier_threshold = config.get_mature_threshold('gate_multiplier_min', 0.84)
+    else:
+        gate_multiplier_threshold = 0.84  # 配置加载失败时的默认值
+
+    quality_check_3 = gate_multiplier >= gate_multiplier_threshold
 
     # 质量门槛4：edge优势边际
-    # P2.5+++修复（2025-11-06）：方案1保守型，从0.75提高到0.80
-    # P2.5++++调整（2025-11-06）：方案1.5折中方案，0.80→0.77，平衡信号量
-    # P2.5+++++调整（2025-11-06）：方案1.8数据驱动，0.77→0.70，让GMTUSDT等高分通过
-    # P2.5++++++调整（2025-11-06）：方案2.0最终平衡，0.70→0.55，让PROMUSDT(0.45)等通过
-    # P2.5+++++++调整（2025-11-06）：方案2.1全市场扫描校准，0.55→0.48，基于405币实测(KNCUSDT 0.54, GMXUSDT 0.52, ACTUSDT 0.50等)
-    quality_check_4 = abs(edge) >= 0.48  # 从0.55降低到0.48，基于全市场扫描实测高质量分布
+    # v7.2.4修复：从配置文件读取，移除硬编码0.48
+    # 实际数据分布：Edge P75=0.14, 中位=0.07, Max=0.31
+    # 阈值0.48 > Max，导致100%被拒！应使用配置的0.15（接近P75）
+    if config:
+        edge_threshold = config.get_mature_threshold('edge_min', 0.15)
+    else:
+        edge_threshold = 0.15  # 配置加载失败时的默认值
+
+    quality_check_4 = abs(edge) >= edge_threshold
 
     # 综合判定：所有质量门槛都要通过
     is_prime = quality_check_1 and quality_check_2 and quality_check_3 and quality_check_4
@@ -995,16 +1028,24 @@ def _analyze_symbol_core(
     # v6.3新增：拒绝原因跟踪（专家建议 #5）
     # v6.3.2修复：使用币种特定的prime_strength_threshold
     # P2.5++修复（2025-11-05）：增加新质量门槛的拒绝原因
+    # v7.2.4修复：移除硬编码，使用配置文件阈值
+
+    # 获取base_strength_min阈值（用于拒绝原因显示）
+    if config:
+        base_strength_threshold = config.get_mature_threshold('base_strength_min', 30)
+    else:
+        base_strength_threshold = 30
+
     rejection_reason = []
     if not is_prime:
         # 检查质量门槛1：Prime强度和概率
         if not quality_check_1:
             if prime_strength < prime_strength_threshold:
                 rejection_reason.append(f"❌ Prime强度不足({prime_strength:.1f} < {prime_strength_threshold})")
-                if base_strength < 30:
+                if base_strength < base_strength_threshold:
                     rejection_reason.append(f"  - 基础强度过低({base_strength:.1f}/60)")
-                if confidence < 45:
-                    rejection_reason.append(f"  - 综合置信度低({confidence:.1f}/45)")
+                if confidence < confidence_threshold:
+                    rejection_reason.append(f"  - 综合置信度低({confidence:.1f}/{confidence_threshold})")
                 if prob_bonus < 10:
                     rejection_reason.append(f"  - 概率加成不足({prob_bonus:.1f}/40, P={P_chosen:.3f})")
             if P_chosen < p_min_adjusted:
@@ -1012,11 +1053,11 @@ def _analyze_symbol_core(
 
         # 检查质量门槛2：综合置信度
         if not quality_check_2:
-            rejection_reason.append(f"❌ 置信度不足({confidence:.1f} < 45)")
+            rejection_reason.append(f"❌ 置信度不足({confidence:.1f} < {confidence_threshold})")
 
         # 检查质量门槛3：gate_multiplier
         if not quality_check_3:
-            rejection_reason.append(f"❌ 四门槛质量不足(gate_mult={gate_multiplier:.3f} < 0.84)")
+            rejection_reason.append(f"❌ 四门槛质量不足(gate_mult={gate_multiplier:.3f} < {gate_multiplier_threshold:.2f})")
             # 详细说明哪些门槛拖后腿
             gates_data_qual = _get(r, "gates.data_qual", 1.0) if 'r' in locals() else 1.0
             gates_execution = 0.5 + L / 200.0 if L else 0.5
@@ -1027,7 +1068,7 @@ def _analyze_symbol_core(
 
         # 检查质量门槛4：edge
         if not quality_check_4:
-            rejection_reason.append(f"❌ Edge不足({abs(edge):.2f} < 0.48)")
+            rejection_reason.append(f"❌ Edge不足({abs(edge):.2f} < {edge_threshold:.2f})")
     else:
         rejection_reason = [f"✅ 通过所有质量门槛(P={P_chosen:.3f}, Prime={prime_strength:.1f}, Conf={confidence:.1f}, GM={gate_multiplier:.3f}, Edge={abs(edge):.2f})"]
 

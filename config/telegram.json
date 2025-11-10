@@ -3,5 +3,8 @@
   "bot_token": "7545580872:AAF7HzkHA4LRQUiOZngUgL39epuGVeEta70",
   "chat_id": "-1003142003085",
   "_comment": "量灵通@analysis_token_bot",
-  "_channel": "链上望远镜"
+  "_channel": "链上望远镜",
+
+  "send_scan_summary": false,
+  "_send_scan_summary_comment": "是否发送扫描摘要消息（每次扫描完成的统计信息）。false=只发送交易信号，true=同时发送扫描摘要"
 }

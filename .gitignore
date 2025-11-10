@@ -33,6 +33,8 @@ config/telegram.json
 # 部署脚本（包含敏感凭据，仅本地使用）
 deploy_server_with_credentials.sh
 deploy_server.sh
+server_deploy_private.sh
+vultr_deploy_complete.sh
 
 # 注意：reports/ 现在被跟踪（用于自动分析），但history/子目录除外
 # 如需禁用自动提交：export AUTO_COMMIT_REPORTS=false
@@ -56,3 +58,5 @@ data/*.db-shm
 .DS_Store
 Thumbs.db
 config/binance_credentials.json
+server_deploy_private.sh*
+.cryptosignal-private.sh

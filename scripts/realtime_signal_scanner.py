@@ -57,6 +57,7 @@ from ats_core.outputs.telegram_fmt import render_trade_v72
 from ats_core.pipeline.analyze_symbol_v72 import analyze_with_v72_enhancements
 from ats_core.publishing.anti_jitter import AntiJitter
 from ats_core.config.anti_jitter_config import get_config
+from ats_core.analysis.report_writer import get_report_writer
 
 # v7.2增强: 数据采集模块
 try:
@@ -132,7 +133,7 @@ class RealtimeSignalScanner:
 
     def __init__(
         self,
-        min_score: int = 35,
+        min_score: int = 8,
         send_telegram: bool = True,
         record_data: bool = True,
         verbose: bool = True
@@ -167,9 +168,12 @@ class RealtimeSignalScanner:
 
         # 防抖动系统（AntiJitter）
         if send_telegram:
-            anti_jitter_config = get_config("1h")  # 1小时K线，1小时冷却期
+            # v7.2.8修复：使用5m激进配置（confirmation_bars=1）允许单次扫描发布
+            # 原因：1h配置需要2个历史记录，但单次扫描每个symbol只有1个数据点
+            # 结果：所有信号在首次扫描时被"历史记录不足"拒绝
+            anti_jitter_config = get_config("5m")  # confirmation_bars=1, cooldown=5min
             self.anti_jitter = AntiJitter(config=anti_jitter_config)
-            log(f"✅ 防抖动系统已启用: {anti_jitter_config.cooldown_seconds}秒冷却期")
+            log(f"✅ 防抖动系统已启用: {anti_jitter_config.cooldown_seconds}秒冷却期, K/N={anti_jitter_config.confirmation_bars}/{anti_jitter_config.total_bars}")
 
         # v7.2: 数据记录器
         if self.record_data:
@@ -249,6 +253,33 @@ class RealtimeSignalScanner:
                 error(f"v7.2增强失败 {result.get('symbol')}: {e}")
                 continue
 
+        # 🔧 关键修复：重写报告，包含v7.2增强数据
+        # 原始scan()方法写的scan_detail.json没有v7.2数据，这里覆盖它
+        try:
+            writer = get_report_writer()
+            latest_detail_path = writer.latest_dir / "scan_detail.json"
+
+            # 读取原始报告结构
+            if latest_detail_path.exists():
+                with open(latest_detail_path, 'r', encoding='utf-8') as f:
+                    original_detail = json.load(f)
+
+                # 用v7.2增强结果替换symbols数组
+                original_detail['symbols'] = v72_results
+                original_detail['v72_enhanced'] = True
+                original_detail['enhancement_timestamp'] = datetime.now(TZ_UTC8).isoformat()
+
+                # 写回文件
+                with open(latest_detail_path, 'w', encoding='utf-8') as f:
+                    json.dump(original_detail, f, indent=2, ensure_ascii=False)
+
+                log(f"✅ 已更新scan_detail.json（含v7.2数据）")
+            else:
+                warn("⚠️ scan_detail.json不存在，无法更新")
+
+        except Exception as e:
+            warn(f"⚠️ 更新scan_detail.json失败: {e}")
+
         # 过滤Prime信号（四道闸门 + AntiJitter）
         prime_signals = self._filter_prime_signals_v72(v72_results)
 
@@ -274,7 +305,17 @@ class RealtimeSignalScanner:
         cvd_series = result.get('cvd_series', [])
         atr = result.get('atr', 0)
 
-        if len(klines) >= 100 and len(cvd_series) >= 10:
+        # v7.2.9修复：从配置读取数据质量阈值（避免硬编码）
+        from ats_core.config.threshold_config import get_thresholds
+        config = get_thresholds()
+        try:
+            min_klines_for_v72 = config.config.get('v72增强参数', {}).get('min_klines_for_v72', 100)
+            min_cvd_points = config.config.get('v72增强参数', {}).get('min_cvd_points', 10)
+        except:
+            min_klines_for_v72 = 100
+            min_cvd_points = 10
+
+        if len(klines) >= min_klines_for_v72 and len(cvd_series) >= min_cvd_points:
             try:
                 v72_enhanced = analyze_with_v72_enhancements(
                     original_result=result,

@@ -287,12 +287,12 @@
   },
 
   "publish": {
-    "prime_prob_min": 0.68,
+    "prime_prob_min": 0.45,
     "prime_dims_ok_min": 3,
     "prime_dim_threshold": 30,
     "watch_prob_min": 0.52,
     "watch_prob_max": 0.67,
-    "_comment": "v6.7调整: 提高阈值以减少80%信号（用户要求）"
+    "_comment": "v7.2.8修复: 与signal_thresholds.json保持一致(0.45)，消除配置冲突"
   },
 
   "base": {
@@ -335,12 +335,17 @@
     "ultra_new_prime_prob_min": 0.75,
     "ultra_new_dims_ok_min": 6,
     "ultra_new_prime_strength_min": 45,
+    "ultra_new_prime_dim_threshold": 70,
+    "ultra_new_watch_prob_min": 0.65,
     "phaseA_prime_prob_min": 0.72,
     "phaseA_dims_ok_min": 5,
     "phaseA_prime_strength_min": 40,
+    "phaseA_watch_prob_min": 0.60,
     "phaseB_prime_prob_min": 0.70,
     "phaseB_dims_ok_min": 4,
-    "phaseB_prime_strength_min": 35
+    "phaseB_prime_strength_min": 35,
+    "phaseB_watch_prob_min": 0.60,
+    "_comment": "v7.2.6修复：添加watch_prob_min和prime_dim_threshold配置，移除硬编码"
   },
 
   "limits": {

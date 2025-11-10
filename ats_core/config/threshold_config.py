@@ -50,19 +50,22 @@ class ThresholdConfig:
             return self._get_default_config()
 
     def _get_default_config(self) -> Dict[str, Any]:
-        """默认配置（硬编码备份）"""
+        """默认配置（硬编码备份）
+
+        v7.2.7修复：默认值应与signal_thresholds.json保持一致
+        """
         return {
             "基础分析阈值": {
                 "mature_coin": {
-                    "prime_strength_min": 54,
-                    "confidence_min": 60,
-                    "edge_min": 0.48,
-                    "prime_prob_min": 0.68
+                    "prime_strength_min": 35,  # v7.2.7修复：从54改为35
+                    "confidence_min": 20,      # v7.2.7修复：从60改为20
+                    "edge_min": 0.15,          # v7.2.7修复：从0.48改为0.15
+                    "prime_prob_min": 0.45     # v7.2.7修复：从0.68改为0.45
                 }
             },
             "v72闸门阈值": {
-                "gate2_fund_support": {"F_min": -15},
-                "gate4_probability": {"P_min": 0.50}
+                "gate2_fund_support": {"F_min": -50},  # v7.2.7修复：从-15改为-50
+                "gate4_probability": {"P_min": 0.45}   # v7.2.7修复：从0.50改为0.45
             }
         }
 
