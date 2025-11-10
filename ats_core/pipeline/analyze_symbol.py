@@ -909,11 +909,13 @@ def _analyze_symbol_core(
     elif is_phaseB:
         prime_strength_threshold = new_coin_cfg.get("phaseB_prime_strength_min", 28)
     else:
-        # P2.5++修复（2025-11-05）：提高阈值从40→55，减少80%信号，保留高质量信号
-        # P2.5+++修复（2025-11-06）：方案1保守型，进一步提高到60，减少90%信号
-        # P2.5++++调整（2025-11-06）：方案1.5折中方案，60→57，平衡信号量
-        # P2.5+++++调整（2025-11-06）：方案1.8数据驱动，57→54，基于实际日志(SSVUSDT 56.5等)
-        prime_strength_threshold = 54  # 从57降低到54
+        # v7.2.3修复：从配置文件读取，移除硬编码54
+        # 基于实际分布：Prime强度中位=36, P75=45, Max=59
+        # 阈值35（配置文件默认值）接近中位数，合理
+        if config:
+            prime_strength_threshold = config.get_mature_threshold('prime_strength_min', 35)
+        else:
+            prime_strength_threshold = 35  # 配置加载失败时的默认值
 
     # v6.7新增：蓄势待发检测（F优先通道）
     # P2.1增强：使用detect_accumulation_v2，带veto条件
