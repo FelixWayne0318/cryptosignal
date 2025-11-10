@@ -42,14 +42,16 @@
       "min_klines": 100
     },
     "gate2_fund_support": {
-      "F_min": -15,
-      "F_extreme_min": -80
+      "F_min": -50,
+      "F_extreme_min": -80,
+      "comment": "放宽到-50，允许资金流出但技术形态好的信号"
     },
     "gate3_ev": {
       "EV_min": 0.0
     },
     "gate4_probability": {
-      "P_min": 0.50
+      "P_min": 0.45,
+      "comment": "从0.50降到0.45，配合冷启动启发式公式"
     },
     "gate5_independence_market": {
       "I_min": 30,
@@ -94,8 +96,9 @@
 
   "AntiJitter参数": {
     "cooldown_seconds": 3600,
-    "min_probability": 0.50,
-    "min_ev": 0.0
+    "min_probability": 0.45,
+    "min_ev": 0.0,
+    "comment": "与gate4_probability保持一致"
   },
 
   "因子分组权重": {
