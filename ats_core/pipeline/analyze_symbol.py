@@ -719,21 +719,33 @@ def _analyze_symbol_core(
         # 阶段A（1-7天）：极度谨慎
         prime_prob_min = new_coin_cfg.get("phaseA_prime_prob_min", 0.65)
         prime_dims_ok_min = new_coin_cfg.get("phaseA_dims_ok_min", 5)
-        prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
+        # v7.2.7修复：优先从signal_thresholds.json读取，回退到params.json
+        prime_dim_threshold = config.get_newcoin_threshold('phaseA', 'prime_dim_threshold', 65) if config else 65
         watch_prob_min = new_coin_cfg.get("phaseA_watch_prob_min", 0.60)  # v7.2.6修复：从配置读取
     elif is_phaseB:
         # 阶段B（7-30天）：谨慎
         prime_prob_min = new_coin_cfg.get("phaseB_prime_prob_min", 0.63)
         prime_dims_ok_min = new_coin_cfg.get("phaseB_dims_ok_min", 4)
-        prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
+        # v7.2.7修复：优先从signal_thresholds.json读取，回退到params.json
+        prime_dim_threshold = config.get_newcoin_threshold('phaseB', 'prime_dim_threshold', 65) if config else 65
         watch_prob_min = new_coin_cfg.get("phaseB_watch_prob_min", 0.60)  # v7.2.6修复：从配置读取
     else:
         # 成熟币种：正常标准
-        # P2.5++修复（2025-11-05）：提高概率门槛，减少80%信号
-        prime_prob_min = publish_cfg.get("prime_prob_min", 0.68)  # 从0.62提高到0.68
-        prime_dims_ok_min = publish_cfg.get("prime_dims_ok_min", 4)
-        prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
-        watch_prob_min = publish_cfg.get("watch_prob_min", 0.65)  # 从0.58提高到0.65
+        # v7.2.7修复：统一使用signal_thresholds.json，移除params.json依赖
+        # 修复前：使用params.json的publish配置（prime_prob_min=0.68）
+        # 修复后：使用signal_thresholds.json的mature_coin配置（prime_prob_min=0.45）
+        if config:
+            prime_prob_min = config.get_mature_threshold('prime_prob_min', 0.45)  # v7.2.7修复
+            prime_dims_ok_min = config.get_mature_threshold('dims_ok_min', 3)
+            prime_dim_threshold = config.get_mature_threshold('prime_dim_threshold', 50)
+            # watch功能已废弃，但保留兼容性
+            watch_prob_min = 0.65  # 保持原值，watch信号不再发送
+        else:
+            # 配置加载失败时使用默认值
+            prime_prob_min = 0.45
+            prime_dims_ok_min = 3
+            prime_dim_threshold = 50
+            watch_prob_min = 0.65
 
     # ---- Prime评分系统（v4.0 - 基于10维因子系统）----
     # 重大改进：使用10维综合评分替代4维独立评分
