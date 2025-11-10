@@ -818,7 +818,7 @@ class OptimizedBatchScanner:
                 import traceback
                 traceback.print_exc()
 
-            # v7.2+: 发送扫描摘要到Telegram（如果有信号）
+            # v7.2+: 发送扫描摘要到Telegram（如果有信号且配置启用）
             try:
                 import os
                 import json
@@ -835,8 +835,9 @@ class OptimizedBatchScanner:
                         bot_token = telegram_config.get('bot_token', '').strip()
                         chat_id = telegram_config.get('chat_id', '').strip()
                         enabled = telegram_config.get('enabled', False)
+                        send_scan_summary = telegram_config.get('send_scan_summary', False)  # 默认false，不发送扫描摘要
 
-                        if enabled and bot_token and chat_id:
+                        if enabled and bot_token and chat_id and send_scan_summary:
                             # 生成简短的电报消息
                             timestamp = datetime.now(TZ_UTC8).strftime('%Y-%m-%d %H:%M:%S')
                             total_symbols = summary_data.get('scan_info', {}).get('total_symbols', 0)
@@ -876,7 +877,10 @@ class OptimizedBatchScanner:
                             else:
                                 warn("⚠️  发送Telegram失败")
                         else:
-                            log("ℹ️  Telegram未启用或未配置")
+                            if not send_scan_summary:
+                                log("ℹ️  扫描摘要已禁用（send_scan_summary=false），仅发送交易信号")
+                            else:
+                                log("ℹ️  Telegram未启用或未配置")
                     else:
                         log("ℹ️  未找到Telegram配置文件")
                 else:
