@@ -22,6 +22,7 @@ from ats_core.data.realtime_kline_cache import get_kline_cache
 from ats_core.pipeline.analyze_symbol import analyze_symbol_with_preloaded_klines
 from ats_core.logging import log, warn, error
 from ats_core.analysis.scan_statistics import get_global_stats, reset_global_stats
+from ats_core.config.threshold_config import get_thresholds
 
 # UTC+8时区（北京时间）
 TZ_UTC8 = timezone(timedelta(hours=8))
@@ -56,6 +57,9 @@ class OptimizedBatchScanner:
 
         # v7.2+: 加载扫描输出配置
         self.output_config = self._load_output_config()
+
+        # v7.2.8修复：加载信号阈值配置（避免硬编码）
+        self.threshold_config = get_thresholds()
 
         log("✅ 优化批量扫描器创建成功")
 
@@ -700,9 +704,10 @@ class OptimizedBatchScanner:
                 confidence = result.get('confidence', 0)
                 prime_strength = result.get('publish', {}).get('prime_strength', 0)
 
-                # 初步筛选条件：confidence >= 45（质量门槛2）
-                # 这只是候选信号，最终判定在v7.2层
-                is_candidate = confidence >= 45
+                # v7.2.8修复：从配置读取候选信号阈值（避免硬编码45）
+                # 使用与基础分析相同的confidence_min阈值，确保候选信号能传递到v7.2层
+                confidence_threshold = self.threshold_config.get_mature_threshold('confidence_min', 8)
+                is_candidate = confidence >= confidence_threshold
 
                 # 向后兼容：同时读取publish.prime（但不依赖它）
                 base_is_prime = result.get('publish', {}).get('prime', False)
