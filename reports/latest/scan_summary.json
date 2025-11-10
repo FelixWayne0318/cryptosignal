@@ -1,185 +1,113 @@
 {
-  "timestamp": "2025-11-10T22:06:07.190131+08:00",
+  "timestamp": "2025-11-10T22:53:03.153218+08:00",
   "scan_info": {
     "total_symbols": 19,
-    "signals_found": 10,
-    "filtered": 9
+    "signals_found": 2,
+    "filtered": 17
   },
   "signals": [
     {
-      "symbol": "BTCUSDT",
-      "side": "long",
-      "weighted_score": 30,
-      "edge": 0.301,
-      "confidence": 30,
-      "prime_strength": 58,
-      "P_chosen": 0.708
-    },
-    {
       "symbol": "TRUMPUSDT",
       "side": "long",
-      "weighted_score": 23,
-      "edge": 0.225,
-      "confidence": 23,
-      "prime_strength": 54,
-      "P_chosen": 0.588
-    },
-    {
-      "symbol": "DOGEUSDT",
-      "side": "long",
-      "weighted_score": 22,
-      "edge": 0.224,
-      "confidence": 22,
-      "prime_strength": 55,
-      "P_chosen": 0.595
-    },
-    {
-      "symbol": "SOLUSDT",
-      "side": "long",
-      "weighted_score": 20,
-      "edge": 0.198,
-      "confidence": 20,
-      "prime_strength": 54,
-      "P_chosen": 0.642
-    },
-    {
-      "symbol": "XRPUSDT",
-      "side": "long",
-      "weighted_score": 18,
-      "edge": 0.18,
-      "confidence": 18,
-      "prime_strength": 52,
-      "P_chosen": 0.597
+      "weighted_score": 14,
+      "edge": 0.141,
+      "confidence": 14,
+      "prime_strength": 43,
+      "P_chosen": 0.57
     },
     {
       "symbol": "STRKUSDT",
       "side": "long",
-      "weighted_score": 16,
-      "edge": 0.159,
-      "confidence": 16,
-      "prime_strength": 47,
-      "P_chosen": 0.568
-    },
-    {
-      "symbol": "WLFIUSDT",
-      "side": "long",
-      "weighted_score": 14,
-      "edge": 0.144,
-      "confidence": 14,
-      "prime_strength": 46,
-      "P_chosen": 0.569
-    },
-    {
-      "symbol": "ETHUSDT",
-      "side": "long",
-      "weighted_score": 11,
-      "edge": 0.109,
-      "confidence": 11,
-      "prime_strength": 41,
-      "P_chosen": 0.546
-    },
-    {
-      "symbol": "LTCUSDT",
-      "side": "long",
-      "weighted_score": 8,
-      "edge": 0.081,
-      "confidence": 8,
-      "prime_strength": 37,
-      "P_chosen": 0.532
-    },
-    {
-      "symbol": "ASTERUSDT",
-      "side": "long",
-      "weighted_score": 7,
-      "edge": 0.074,
-      "confidence": 7,
-      "prime_strength": 36,
-      "P_chosen": 0.529
+      "weighted_score": 12,
+      "edge": 0.116,
+      "confidence": 12,
+      "prime_strength": 42,
+      "P_chosen": 0.565
     }
   ],
   "rejection_reasons": {
-    "❌ Prime强度不足": 9,
-    "❌ 概率过低": 7,
-    "❌ 置信度不足": 8,
-    "❌ Edge不足": 9
+    "❌ Edge不足": 15,
+    "❌ Prime强度不足": 15,
+    "❌ 概率过低": 15,
+    "❌ 置信度不足": 12
   },
   "close_to_threshold": [],
   "market_stats": {
-    "avg_edge": 0.11,
-    "avg_confidence": 10.9,
+    "avg_edge": 0.067,
+    "avg_confidence": 6.8,
     "new_coins_count": 0,
     "new_coins_pct": 0.0
   },
   "factor_distribution": {
     "T": {
-      "min": -40,
-      "p25": -19.0,
-      "median": 9.0,
-      "p75": 36.0,
-      "max": 96
+      "min": -96,
+      "p25": -14.0,
+      "median": 5.0,
+      "p75": 28.0,
+      "max": 95
     },
     "M": {
-      "min": -48,
-      "p25": -23.0,
-      "median": -1.0,
-      "p75": 14.0,
-      "max": 42
-    },
-    "C": {
       "min": -17,
-      "p25": -12.0,
-      "median": 9.0,
-      "p75": 16.0,
+      "p25": -2.0,
+      "median": 12.0,
+      "p75": 24.0,
       "max": 49
     },
+    "C": {
+      "min": -49,
+      "p25": -22.0,
+      "median": -17.0,
+      "p75": -4.0,
+      "max": 8
+    },
     "V": {
-      "min": -44,
-      "p25": 5.0,
-      "median": 14.0,
-      "p75": 24.0,
-      "max": 47
+      "min": -49,
+      "p25": -19.0,
+      "median": -6.0,
+      "p75": 9.0,
+      "max": 24
     },
     "O": {
-      "min": -43,
-      "p25": -20.0,
-      "median": -13.0,
-      "p75": 3.0,
-      "max": 48
+      "min": -48,
+      "p25": -30.0,
+      "median": -14.0,
+      "p75": 0.0,
+      "max": 9
     },
     "B": {
       "min": -95,
-      "p25": -40.0,
-      "median": -16.0,
-      "p75": 0.0,
-      "max": 6
+      "p25": -42.0,
+      "median": -4.0,
+      "p75": 18.0,
+      "max": 64
     },
     "F": {
-      "min": -29,
-      "p25": -8.0,
-      "median": 0.0,
-      "p75": 2.0,
-      "max": 35
+      "min": -40,
+      "p25": -3.0,
+      "median": -1.0,
+      "p75": 3.0,
+      "max": 33
     },
     "L": {
       "min": 48,
-      "p25": 87.0,
+      "p25": 88.0,
       "median": 100.0,
       "p75": 100.0,
       "max": 100
     },
     "S": {
       "min": -100,
-      "p25": -77.0,
-      "median": 60.0,
-      "p75": 82.0,
-      "max": 99
+      "p25": -99.0,
+      "median": -82.0,
+      "p75": -71.0,
+      "max": 0
     },
     "I": {
-      "min": -96,
-      "p25": -55.0,
-      "median": -29.0,
-      "p75": -20.0,
-      "max": 0
+      "min": -95,
+      "p25": -42.0,
+      "median": -25.0,
+      "p75": -12.0,
+      "max": 96
     }
   },
   "factor_anomalies": {
@@ -195,50 +123,50 @@
     },
     "F_meta_summary": {
       "F_raw": {
-        "min": -0.1472,
-        "mean": -0.0034,
-        "median": 0.0017,
-        "max": 0.185,
+        "min": -0.2117,
+        "mean": -0.0063,
+        "median": -0.003,
+        "max": 0.1724,
         "count": 19
       },
       "fund_momentum": {
-        "min": -0.1849,
-        "mean": -0.0229,
-        "median": -0.0126,
-        "max": 0.1017,
+        "min": -0.2562,
+        "mean": -0.037,
+        "median": -0.0215,
+        "max": 0.0617,
         "count": 19
       },
       "price_momentum": {
-        "min": -0.2958,
-        "mean": -0.0195,
-        "median": 0.0004,
-        "max": 0.1092,
+        "min": -0.2824,
+        "mean": -0.0307,
+        "median": -0.0147,
+        "max": 0.0526,
         "count": 19
       }
     },
     "I_meta_summary": {
       "beta_btc": {
-        "min": -3.9407,
-        "mean": 1.6543,
-        "median": 0.8762,
-        "max": 8.429,
+        "min": -3.4413,
+        "mean": 0.7686,
+        "median": 0.6258,
+        "max": 5.2248,
         "count": 19
       },
       "beta_eth": {
-        "min": -5.4463,
-        "mean": 0.5141,
-        "median": 0.6415,
-        "max": 9.3664,
+        "min": -2.3284,
+        "mean": 1.0449,
+        "median": 0.8001,
+        "max": 10.044,
         "count": 19
       }
     }
   },
   "threshold_recommendations": [],
   "performance": {
-    "total_time_sec": 3.0,
-    "speed_coins_per_sec": 6.67,
+    "total_time_sec": 5.21,
+    "speed_coins_per_sec": 3.84,
     "api_calls": 0,
     "cache_hit_rate": "100.0%",
-    "memory_mb": 81.11953735351562
+    "memory_mb": 81.12010955810547
   }
 }
