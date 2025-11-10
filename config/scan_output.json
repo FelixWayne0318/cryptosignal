@@ -1,0 +1,69 @@
+{
+  "version": "1.0.0",
+  "updated_at": "2025-11-10",
+  "description": "扫描输出配置 - 控制日志详细程度",
+
+  "_comment": "输出详细程度配置",
+  "output_detail_level": {
+    "description": "输出详细程度：full=所有币种详细输出, limited=仅前N个, minimal=仅汇总",
+    "mode": "full",
+    "_available_modes": ["full", "limited", "minimal"],
+    "limited_count": 10,
+    "_comment_limited_count": "limited模式下显示详细输出的币种数量"
+  },
+
+  "_comment_factor_output": "因子评分输出配置",
+  "factor_output": {
+    "show_all_factors": true,
+    "_comment_show_all_factors": "是否显示所有10个因子评分",
+
+    "show_core_factors": true,
+    "_comment_core_factors": "6个核心因子：T, M, C, V, O, B",
+
+    "show_modulators": true,
+    "_comment_modulators": "4个调制器：L, S, F, I",
+
+    "show_gates": true,
+    "_comment_gates": "v7.2五道闸门：DataQual, Fund, EV, Probability, Independence",
+
+    "show_prime_breakdown": true,
+    "_comment_prime_breakdown": "Prime强度分解"
+  },
+
+  "_comment_diagnostic_output": "诊断数据输出配置",
+  "diagnostic_output": {
+    "show_f_factor_details": true,
+    "_comment_f_details": "显示F因子详细数据（F_raw, fund_momentum, price_momentum, atr_norm, tanh饱和状态）",
+
+    "show_i_factor_details": true,
+    "_comment_i_details": "显示I因子详细数据（beta_btc, beta_eth, independence_level）",
+
+    "show_intermediate_values": true,
+    "_comment_intermediate": "显示中间计算值（用于调试和诊断）",
+
+    "alert_on_saturation": true,
+    "_comment_saturation": "当F因子饱和（±100）时发出警告",
+
+    "saturation_threshold": 98,
+    "_comment_threshold": "F因子饱和阈值（绝对值>=此值时认为接近饱和）"
+  },
+
+  "_comment_performance": "性能相关配置",
+  "performance": {
+    "show_slow_coins": true,
+    "slow_threshold_sec": 5.0,
+    "_comment_slow": "分析耗时超过此秒数时显示性能详情",
+
+    "show_progress_interval": 20,
+    "_comment_progress": "每扫描N个币种显示一次进度"
+  },
+
+  "_comment_rejection": "拒绝原因输出配置",
+  "rejection_output": {
+    "show_rejection_reasons": true,
+    "_comment_show": "是否显示信号被拒绝的原因",
+
+    "max_reasons_per_coin": 2,
+    "_comment_max": "每个币种最多显示的拒绝原因数量"
+  }
+}

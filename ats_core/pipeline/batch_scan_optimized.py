@@ -54,7 +54,66 @@ class OptimizedBatchScanner:
         self.btc_klines = []           # BTC K线数据 - I调制器
         self.eth_klines = []           # ETH K线数据 - I调制器
 
+        # v7.2+: 加载扫描输出配置
+        self.output_config = self._load_output_config()
+
         log("✅ 优化批量扫描器创建成功")
+
+    def _load_output_config(self) -> dict:
+        """
+        加载扫描输出配置
+
+        Returns:
+            dict: 输出配置字典
+        """
+        import json
+        from pathlib import Path
+
+        config_path = Path(__file__).parent.parent.parent / 'config' / 'scan_output.json'
+
+        # 默认配置（当配置文件不存在时）
+        default_config = {
+            "output_detail_level": {
+                "mode": "full",  # full=所有币种, limited=前N个, minimal=仅汇总
+                "limited_count": 10
+            },
+            "factor_output": {
+                "show_all_factors": True,
+                "show_core_factors": True,
+                "show_modulators": True,
+                "show_gates": True,
+                "show_prime_breakdown": True
+            },
+            "diagnostic_output": {
+                "show_f_factor_details": True,
+                "show_i_factor_details": True,
+                "show_intermediate_values": True,
+                "alert_on_saturation": True,
+                "saturation_threshold": 98
+            },
+            "performance": {
+                "show_slow_coins": True,
+                "slow_threshold_sec": 5.0,
+                "show_progress_interval": 20
+            },
+            "rejection_output": {
+                "show_rejection_reasons": True,
+                "max_reasons_per_coin": 2
+            }
+        }
+
+        try:
+            if config_path.exists():
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    log(f"✅ 加载扫描输出配置: {config_path}")
+                    return config
+            else:
+                warn(f"⚠️  扫描输出配置不存在，使用默认配置: {config_path}")
+                return default_config
+        except Exception as e:
+            warn(f"⚠️  加载扫描输出配置失败，使用默认配置: {e}")
+            return default_config
 
     async def initialize(self, enable_websocket: bool = False):
         """
@@ -615,8 +674,11 @@ class OptimizedBatchScanner:
 
                 analysis_time = time.time() - analysis_start
 
-                # 性能详情（慢速币种）
-                if analysis_time > 5:
+                # 性能详情（慢速币种，根据配置）
+                slow_threshold = self.output_config.get('performance', {}).get('slow_threshold_sec', 5.0)
+                show_slow = self.output_config.get('performance', {}).get('show_slow_coins', True)
+
+                if show_slow and analysis_time > slow_threshold:
                     log(f"  └─ ⚠️  分析耗时较长: {analysis_time:.1f}秒")
                     # 打印各指标耗时
                     perf = result.get('perf', {})
@@ -645,26 +707,89 @@ class OptimizedBatchScanner:
                 # 向后兼容：同时读取publish.prime（但不依赖它）
                 base_is_prime = result.get('publish', {}).get('prime', False)
 
-                # 🔍 调试日志：显示详细评分（verbose模式显示所有，默认只显示前10个）
-                if verbose or i < 10:
+                # 🔍 v7.2增强：使用配置控制详细输出
+                # 检查是否应该显示详细输出
+                output_mode = self.output_config.get('output_detail_level', {}).get('mode', 'full')
+                limited_count = self.output_config.get('output_detail_level', {}).get('limited_count', 10)
+
+                # 判断是否显示详细信息
+                should_show_detail = False
+                if output_mode == 'full':
+                    should_show_detail = True
+                elif output_mode == 'limited':
+                    should_show_detail = (i < limited_count)
+                elif output_mode == 'minimal':
+                    should_show_detail = False
+                # 向后兼容：如果传入了verbose参数，强制显示
+                if verbose:
+                    should_show_detail = True
+
+                if should_show_detail:
                     scores = result.get('scores', {})
                     modulation = result.get('modulation', {})  # v2.0: F moved to modulation
                     prime_breakdown = result.get('publish', {}).get('prime_breakdown', {})
                     gates_info = result.get('gates', {})
+                    scores_meta = result.get('scores_meta', {})  # v7.2: 元数据
 
                     log(f"  └─ [评分] confidence={confidence}, prime_strength={prime_strength}")
-                    # v6.6: 6+4因子架构（6核心因子+4调制器）
-                    log(f"      A-层核心因子: T={scores.get('T',0):.1f}, M={scores.get('M',0):.1f}, C={scores.get('C',0):.1f}, "
-                        f"V={scores.get('V',0):.1f}, O={scores.get('O',0):.1f}, B={scores.get('B',0):.1f}")
-                    log(f"      B-层调制器: L={modulation.get('L',0):.1f}, S={modulation.get('S',0):.1f}, "
-                        f"F={modulation.get('F',0):.1f}, I={modulation.get('I',0):.1f}")
-                    log(f"      四门调节: DataQual={gates_info.get('data_qual',0):.2f}, "
-                        f"EV={gates_info.get('ev_gate',0):.2f}, "
-                        f"Execution={gates_info.get('execution',0):.2f}, "
-                        f"Probability={gates_info.get('probability',0):.2f}")
-                    log(f"      Prime分解: base={prime_breakdown.get('base_strength',0):.1f}, "
-                        f"prob_bonus={prime_breakdown.get('prob_bonus',0):.1f}, "
-                        f"P_chosen={prime_breakdown.get('P_chosen',0):.3f}")
+
+                    # 6核心因子
+                    if self.output_config.get('factor_output', {}).get('show_core_factors', True):
+                        log(f"      A-层核心因子: T={scores.get('T',0):.1f}, M={scores.get('M',0):.1f}, C={scores.get('C',0):.1f}, "
+                            f"V={scores.get('V',0):.1f}, O={scores.get('O',0):.1f}, B={scores.get('B',0):.1f}")
+
+                    # 4调制器
+                    if self.output_config.get('factor_output', {}).get('show_modulators', True):
+                        log(f"      B-层调制器: L={modulation.get('L',0):.1f}, S={modulation.get('S',0):.1f}, "
+                            f"F={modulation.get('F',0):.1f}, I={modulation.get('I',0):.1f}")
+
+                    # v7.2+: F因子详细诊断数据
+                    if self.output_config.get('diagnostic_output', {}).get('show_f_factor_details', True):
+                        F_value = modulation.get('F', 0)
+                        F_meta = scores_meta.get('F', {})
+
+                        # 提取F因子元数据
+                        F_raw = F_meta.get('F_raw', 'N/A')
+                        fund_momentum = F_meta.get('fund_momentum', 'N/A')
+                        price_momentum = F_meta.get('price_momentum', 'N/A')
+                        atr_norm = F_meta.get('atr_norm', 'N/A')
+
+                        # 检查饱和状态
+                        saturation_threshold = self.output_config.get('diagnostic_output', {}).get('saturation_threshold', 98)
+                        is_saturated = abs(F_value) >= saturation_threshold
+                        saturation_indicator = " ⚠️ 饱和" if is_saturated else ""
+
+                        log(f"      F因子详情{saturation_indicator}:")
+                        log(f"        F={F_value:.0f}, F_raw={F_raw}, fund_momentum={fund_momentum}, price_momentum={price_momentum}, atr_norm={atr_norm}")
+
+                        # 如果配置了饱和警告且确实饱和，额外提示
+                        if is_saturated and self.output_config.get('diagnostic_output', {}).get('alert_on_saturation', True):
+                            log(f"        ⚠️  F因子接近饱和（|F|>={saturation_threshold}），可能需要调整scale参数")
+
+                    # v7.2+: I因子详细诊断数据
+                    if self.output_config.get('diagnostic_output', {}).get('show_i_factor_details', True):
+                        I_value = modulation.get('I', 0)
+                        I_meta = scores_meta.get('I', {})
+
+                        beta_btc = I_meta.get('beta_btc', 'N/A')
+                        beta_eth = I_meta.get('beta_eth', 'N/A')
+                        independence_level = I_meta.get('independence_level', 'N/A')
+
+                        log(f"      I因子详情:")
+                        log(f"        I={I_value:.0f}, beta_btc={beta_btc}, beta_eth={beta_eth}, level={independence_level}")
+
+                    # 闸门信息
+                    if self.output_config.get('factor_output', {}).get('show_gates', True):
+                        log(f"      四门调节: DataQual={gates_info.get('data_qual',0):.2f}, "
+                            f"EV={gates_info.get('ev_gate',0):.2f}, "
+                            f"Execution={gates_info.get('execution',0):.2f}, "
+                            f"Probability={gates_info.get('probability',0):.2f}")
+
+                    # Prime分解
+                    if self.output_config.get('factor_output', {}).get('show_prime_breakdown', True):
+                        log(f"      Prime分解: base={prime_breakdown.get('base_strength',0):.1f}, "
+                            f"prob_bonus={prime_breakdown.get('prob_bonus',0):.1f}, "
+                            f"P_chosen={prime_breakdown.get('P_chosen',0):.3f}")
 
                 # P1.1+阶段1.2b修复：将候选信号传递给v7.2层
                 # 设计理念：
@@ -701,13 +826,15 @@ class OptimizedBatchScanner:
                             await on_signal_found(result)
                         except Exception as e:
                             warn(f"⚠️  信号回调失败: {e}")
-                elif verbose or i < 10:
-                    # 显示拒绝原因（前10个或verbose模式）
-                    if rejection_reasons:
-                        log(f"  └─ ❌ 拒绝: {'; '.join(rejection_reasons[:2])}")  # 只显示前2条原因
+                elif should_show_detail:
+                    # 显示拒绝原因（根据配置）
+                    if rejection_reasons and self.output_config.get('rejection_output', {}).get('show_rejection_reasons', True):
+                        max_reasons = self.output_config.get('rejection_output', {}).get('max_reasons_per_coin', 2)
+                        log(f"  └─ ❌ 拒绝: {'; '.join(rejection_reasons[:max_reasons])}")
 
-                # 进度显示（每20个）
-                if (i + 1) % 20 == 0:
+                # 进度显示（根据配置）
+                progress_interval = self.output_config.get('performance', {}).get('show_progress_interval', 20)
+                if (i + 1) % progress_interval == 0:
                     elapsed = time.time() - scan_start
                     progress = (i + 1) / len(symbols) * 100
                     speed = (i + 1) / elapsed
