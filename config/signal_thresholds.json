@@ -4,12 +4,13 @@
 
   "基础分析阈值": {
     "mature_coin": {
-      "prime_strength_min": 54,
-      "confidence_min": 60,
-      "edge_min": 0.48,
-      "prime_prob_min": 0.68,
-      "dims_ok_min": 4,
-      "prime_dim_threshold": 65
+      "prime_strength_min": 35,
+      "confidence_min": 20,
+      "edge_min": 0.15,
+      "prime_prob_min": 0.45,
+      "dims_ok_min": 3,
+      "prime_dim_threshold": 50,
+      "_comment": "v7.2优化：降低基础层阈值，让v7.2五道闸门负责质量控制"
     },
     "newcoin_phaseB": {
       "prime_strength_min": 28,
