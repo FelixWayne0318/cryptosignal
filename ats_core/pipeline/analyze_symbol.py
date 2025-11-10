@@ -189,15 +189,21 @@ def _analyze_symbol_core(
     coin_age_days = coin_age_hours / 24
 
     # ---- v6.6: DataQual硬门槛检查（唯一硬拒绝）----
-    # 计算数据质量分数
-    data_qual = min(1.0, bars_1h / 200.0) if bars_1h > 0 else 0.0
+    # v7.2.10修复：从配置读取阈值（避免硬编码）
+    from ats_core.config.threshold_config import get_thresholds
+    config = get_thresholds()
+    min_bars_1h = config.config.get('数据质量阈值', {}).get('min_bars_1h', 200)
+    data_qual_min = config.config.get('数据质量阈值', {}).get('data_qual_min', 0.90)
 
-    # 硬拒绝：DataQual < 0.90
-    if data_qual < 0.90:
+    # 计算数据质量分数
+    data_qual = min(1.0, bars_1h / min_bars_1h) if bars_1h > 0 else 0.0
+
+    # 硬拒绝：DataQual < data_qual_min
+    if data_qual < data_qual_min:
         return {
             "success": False,
             "symbol": symbol,
-            "error": f"数据质量不足: DataQual={data_qual:.2f} < 0.90 (bars_1h={bars_1h})",
+            "error": f"数据质量不足: DataQual={data_qual:.2f} < {data_qual_min} (bars_1h={bars_1h})",
             "data_qual": data_qual,
             "bars_1h": bars_1h,
             "rejection_type": "hard_gate_dataqual"

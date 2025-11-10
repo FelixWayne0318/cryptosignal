@@ -165,6 +165,8 @@ def analyze_with_v72_enhancements(
     # v7.2.9修复：从配置读取I因子相关阈值（避免硬编码）
     I_high_independence = config.get_gate_threshold('gate5_independence_market', 'I_high_independence', 60)
     confidence_boost_aligned = config.get_gate_threshold('gate5_independence_market', 'confidence_boost_aligned', 1.2)
+    # v7.2.10修复：从配置读取闸门通过阈值（避免硬编码0.5）
+    gate_pass_threshold = config.get_gate_threshold('v72闸门阈值', 'gate_pass_threshold', 0.5)
 
     gates_data_quality = 1.0 if len(klines) >= min_klines else 0.0
     gates_ev = 1.0 if EV_net > EV_min else 0.0
@@ -218,26 +220,27 @@ def analyze_with_v72_enhancements(
         conflict_mult = 1.0
 
     # 综合判定（所有五道闸门都通过才发布）
+    # v7.2.10修复：使用配置的gate_pass_threshold替代硬编码0.5
     pass_gates = all([
-        gates_data_quality > 0.5,
-        gates_ev > 0.5,
-        gates_probability > 0.5,
-        gates_fund_support > 0.5,
-        gates_independence_market > 0.5  # v3.1新增
+        gates_data_quality > gate_pass_threshold,
+        gates_ev > gate_pass_threshold,
+        gates_probability > gate_pass_threshold,
+        gates_fund_support > gate_pass_threshold,
+        gates_independence_market > gate_pass_threshold  # v3.1新增
     ])
 
     # 闸门原因
     if not pass_gates:
         failed_gates = []
-        if gates_data_quality <= 0.5:
+        if gates_data_quality <= gate_pass_threshold:
             failed_gates.append(f"数据质量不足(bars={len(klines)}, 需要>={min_klines})")
-        if gates_ev <= 0.5:
+        if gates_ev <= gate_pass_threshold:
             failed_gates.append(f"EV≤{EV_min}({EV_net:.4f})")
-        if gates_probability <= 0.5:
+        if gates_probability <= gate_pass_threshold:
             failed_gates.append(f"P<{P_min}({P_calibrated:.3f})")
-        if gates_fund_support <= 0.5:
+        if gates_fund_support <= gate_pass_threshold:
             failed_gates.append(f"F因子过低({F_v2}, 需要>={F_min})")
-        if gates_independence_market <= 0.5:
+        if gates_independence_market <= gate_pass_threshold:
             # v3.1新增：I×Market冲突检测
             direction = "做多" if side_long_v72 else "做空"
             market_trend = "牛市" if market_regime > 0 else "熊市"
@@ -250,11 +253,11 @@ def analyze_with_v72_enhancements(
     gate_details = {
         "all_pass": pass_gates,
         "details": [
-            {"gate": 1, "name": "data_quality", "pass": gates_data_quality > 0.5, "value": gates_data_quality},
-            {"gate": 2, "name": "fund_support", "pass": gates_fund_support > 0.5, "value": F_v2, "threshold": -15},
-            {"gate": 3, "name": "ev", "pass": gates_ev > 0.5, "value": EV_net, "threshold": 0.0},
-            {"gate": 4, "name": "probability", "pass": gates_probability > 0.5, "value": P_calibrated, "threshold": 0.50},
-            {"gate": 5, "name": "independence_market", "pass": gates_independence_market > 0.5,
+            {"gate": 1, "name": "data_quality", "pass": gates_data_quality > gate_pass_threshold, "value": gates_data_quality},
+            {"gate": 2, "name": "fund_support", "pass": gates_fund_support > gate_pass_threshold, "value": F_v2, "threshold": -15},
+            {"gate": 3, "name": "ev", "pass": gates_ev > gate_pass_threshold, "value": EV_net, "threshold": 0.0},
+            {"gate": 4, "name": "probability", "pass": gates_probability > gate_pass_threshold, "value": P_calibrated, "threshold": 0.50},
+            {"gate": 5, "name": "independence_market", "pass": gates_independence_market > gate_pass_threshold,
              "value": I_v2, "market_regime": market_regime, "conflict_reason": conflict_reason,
              "threshold": I_min}  # v3.1新增
         ]

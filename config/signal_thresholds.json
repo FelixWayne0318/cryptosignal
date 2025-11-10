@@ -62,7 +62,9 @@
       "I_high_independence": 60,
       "confidence_boost_aligned": 1.2,
       "description": "v7.2.9新增：I_high_independence=60（高独立性阈值），confidence_boost_aligned=1.2（顺势信号信心放大系数）"
-    }
+    },
+    "gate_pass_threshold": 0.5,
+    "_gate_pass_comment": "v7.2.10新增：闸门通过阈值（>0.5=通过）"
   },
 
   "v72增强参数": {
@@ -154,5 +156,64 @@
     "funding_hold_hours": 4.0,
     "default_RR": 2.0,
     "atr_multiplier": 1.5
+  },
+
+  "数据质量阈值": {
+    "description": "v7.2.10新增：数据质量检查阈值（移除硬编码）",
+    "data_qual_min": 0.90,
+    "data_qual_newcoin_min": 0.95,
+    "min_bars_1h": 200,
+    "min_bars_1h_newcoin": 24,
+    "_comment": "data_qual_min=0.90（成熟币），data_qual_newcoin_min=0.95（新币更严格）"
+  },
+
+  "执行闸门阈值": {
+    "description": "v7.2.10新增：执行质量检查阈值",
+    "execution_gate_min": 0.70,
+    "_comment": "execution_gate_min=0.70（执行质量必须>=70%）"
+  },
+
+  "概率计算阈值": {
+    "description": "v7.2.10新增：概率计算相关阈值",
+    "P_chosen_bonus_threshold": 0.30,
+    "P_long_max": 0.95,
+    "P_short_max": 0.95,
+    "p_min_range_min": 0.50,
+    "p_min_range_max": 0.75,
+    "ultra_new_prime_prob_min": 0.70,
+    "prior_up": 0.50,
+    "_comment": "P_chosen>=0.30开始获得概率加成，P最大不超过0.95，p_min调整范围[0.50, 0.75]"
+  },
+
+  "新币质量补偿": {
+    "description": "v7.2.10新增：新币数据质量补偿参数",
+    "ultra_new_compensate_from": 0.85,
+    "ultra_new_compensate_to": 0.90,
+    "_comment": "超新币质量补偿：从0.85提升到0.90（保留10%惩罚）"
+  },
+
+  "多维度一致性": {
+    "description": "v7.2.10新增：多时间框架一致性阈值",
+    "mtf_coherence_min": 60,
+    "mtf_coherence_penalty": 0.90,
+    "_comment": "mtf_coherence<60时，prime_strength降低10%"
+  },
+
+  "因子质量检查": {
+    "description": "v7.2.10新增：因子质量检查阈值",
+    "weak_dim_threshold": 40,
+    "weak_dims_max": 3,
+    "n_klines_min": 100,
+    "n_oi_min": 50,
+    "quality_penalty": 0.90,
+    "_comment": "弱维度(abs<40)超过3个时降级质量×0.90"
+  },
+
+  "新币阶段识别": {
+    "description": "v7.2.10新增：新币阶段识别阈值（小时）",
+    "ultra_new_hours": 24,
+    "phase_A_hours": 168,
+    "phase_B_hours": 400,
+    "_comment": "ultra_new<24h, phaseA<168h(7天), phaseB<400h(16.7天)"
   }
 }
