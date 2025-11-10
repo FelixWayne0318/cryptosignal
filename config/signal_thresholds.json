@@ -5,14 +5,14 @@
   "基础分析阈值": {
     "mature_coin": {
       "prime_strength_min": 35,
-      "confidence_min": 20,
-      "edge_min": 0.15,
+      "confidence_min": 12,
+      "edge_min": 0.10,
       "prime_prob_min": 0.45,
       "gate_multiplier_min": 0.84,
       "base_strength_min": 30,
       "dims_ok_min": 3,
       "prime_dim_threshold": 50,
-      "_comment": "v7.2.4修复：基于实际数据分布（Edge P75=0.14, 中位=0.07），edge_min=0.15合理"
+      "_comment": "v7.2.8修复：confidence_min 20→12, edge_min 0.15→0.10（基于实际数据P75=15, Edge P75=0.15）"
     },
     "newcoin_phaseB": {
       "prime_strength_min": 28,
@@ -45,21 +45,21 @@
       "min_klines": 100
     },
     "gate2_fund_support": {
-      "F_min": -50,
+      "F_min": -80,
       "F_extreme_min": -80,
-      "comment": "放宽到-50，允许资金流出但技术形态好的信号"
+      "comment": "v7.2.8修复：从-50降到-80，覆盖F Min=-79，允许更多资金流出的信号"
     },
     "gate3_ev": {
       "EV_min": 0.0
     },
     "gate4_probability": {
-      "P_min": 0.45,
-      "comment": "从0.50降到0.45，配合冷启动启发式公式"
+      "P_min": 0.40,
+      "comment": "v7.2.8修复：从0.45降到0.40，进一步放宽概率要求"
     },
     "gate5_independence_market": {
-      "I_min": 10,
+      "I_min": -10,
       "market_regime_threshold": 30,
-      "description": "v7.2.8修复：I_min从30降到10，适应震荡市（仍保留市场方向检查）"
+      "description": "v7.2.8修复：I_min从10降到-10，覆盖I中位=-10.5，进一步放宽独立性要求"
     }
   },
 
