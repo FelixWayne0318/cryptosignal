@@ -328,8 +328,14 @@ class RealtimeSignalScanner:
                 return v72_enhanced
             except Exception as e:
                 warn(f"v7.2增强失败 {symbol}: {e}")
+                # v7.2.11修复：确保返回的result有v72_enhancements字段（即使为空）
+                if 'v72_enhancements' not in result:
+                    result['v72_enhancements'] = {}
                 return result
         else:
+            # v7.2.11修复：数据不足时也添加空的v72_enhancements
+            if 'v72_enhancements' not in result:
+                result['v72_enhancements'] = {}
             return result
 
     def _filter_prime_signals_v72(self, results: list) -> list:
@@ -432,7 +438,9 @@ class RealtimeSignalScanner:
             log(f"      F={F_v2:.0f}, I={I_v2:.0f}")
 
         except Exception as e:
-            error(f"   ❌ 发送失败 {top_signal.get('symbol')}: {e}")
+            # v7.2.11修复：安全获取symbol，防止top_signal不是字典
+            symbol = top_signal.get('symbol') if isinstance(top_signal, dict) else str(top_signal)[:20]
+            error(f"   ❌ 发送失败 {symbol}: {e}")
 
         # 记录跳过的信号（参与下一轮竞争）
         if len(sorted_signals) > 1:

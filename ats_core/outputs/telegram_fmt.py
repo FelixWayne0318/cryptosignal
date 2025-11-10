@@ -2216,6 +2216,10 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
 
     设计理念：适合非专业人士，清晰分层，突出核心
     """
+    # v7.2.11修复：类型检查，防止v72_enhancements不是字典导致的错误
+    if not isinstance(r, dict):
+        return f"❌ 错误：信号数据类型异常（期望dict，实际{type(r).__name__}）"
+
     # ========== 1. 头部：Symbol + 核心指标 ==========
     sym = _get(r, "symbol") or "—"
     price = _get(r, "price") or _get(r, "last")
@@ -2233,8 +2237,12 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
         side_icon = "⚪"
         side_lbl = "中性"
 
-    # v7.2数据
-    v72 = _get(r, "v72_enhancements") or {}
+    # v7.2数据（v7.2.11修复：确保v72是字典）
+    v72_raw = _get(r, "v72_enhancements")
+    if not isinstance(v72_raw, dict):
+        v72 = {}
+    else:
+        v72 = v72_raw
     P_calibrated = _get(v72, "P_calibrated") or _get(r, "probability") or 0.5
     P_pct = int(P_calibrated * 100)
     EV_net = _get(v72, "EV_net") or _get(r, "expected_value") or 0
@@ -2258,15 +2266,21 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     header += f"期望收益 {EV_net:+.1%} · 盈亏比 {RR:.1f}:1 ✅"
 
     # ========== 2. 执行参数 ==========
-    entry = price
+    # v7.2.11修复：确保price不为None
+    entry = price if price is not None else 0
     entry_s = _fmt_price(entry)
 
-    if side in ("long", "buy", "bull", "多", "做多"):
-        tp_price = entry * (1 + TP_pct)
-        sl_price = entry * (1 - SL_pct)
+    if entry > 0:
+        if side in ("long", "buy", "bull", "多", "做多"):
+            tp_price = entry * (1 + TP_pct)
+            sl_price = entry * (1 - SL_pct)
+        else:
+            tp_price = entry * (1 - TP_pct)
+            sl_price = entry * (1 + SL_pct)
     else:
-        tp_price = entry * (1 - TP_pct)
-        sl_price = entry * (1 + SL_pct)
+        # price无效时使用占位符
+        tp_price = 0
+        sl_price = 0
 
     tp_s = _fmt_price(tp_price)
     sl_s = _fmt_price(sl_price)
