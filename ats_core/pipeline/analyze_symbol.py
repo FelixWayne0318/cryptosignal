@@ -708,24 +708,25 @@ def _analyze_symbol_core(
     # ---- 6. 发布判定（4级分级标准）----
 
     # 新币特殊处理：应用分级标准
+    # v7.2.6修复：移除所有硬编码，从配置文件读取
     if is_ultra_new:
         # 超新币（1-24小时）：超级谨慎
         prime_prob_min = new_coin_cfg.get("ultra_new_prime_prob_min", 0.70)
         prime_dims_ok_min = new_coin_cfg.get("ultra_new_dims_ok_min", 6)
-        prime_dim_threshold = 70  # 提高单维度门槛
-        watch_prob_min = 0.65  # 新币不发watch信号
+        prime_dim_threshold = new_coin_cfg.get("ultra_new_prime_dim_threshold", 70)  # v7.2.6修复：从配置读取
+        watch_prob_min = new_coin_cfg.get("ultra_new_watch_prob_min", 0.65)  # v7.2.6修复：从配置读取
     elif is_phaseA:
         # 阶段A（1-7天）：极度谨慎
         prime_prob_min = new_coin_cfg.get("phaseA_prime_prob_min", 0.65)
         prime_dims_ok_min = new_coin_cfg.get("phaseA_dims_ok_min", 5)
         prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
-        watch_prob_min = 0.60
+        watch_prob_min = new_coin_cfg.get("phaseA_watch_prob_min", 0.60)  # v7.2.6修复：从配置读取
     elif is_phaseB:
         # 阶段B（7-30天）：谨慎
         prime_prob_min = new_coin_cfg.get("phaseB_prime_prob_min", 0.63)
         prime_dims_ok_min = new_coin_cfg.get("phaseB_dims_ok_min", 4)
         prime_dim_threshold = publish_cfg.get("prime_dim_threshold", 65)
-        watch_prob_min = 0.60
+        watch_prob_min = new_coin_cfg.get("phaseB_watch_prob_min", 0.60)  # v7.2.6修复：从配置读取
     else:
         # 成熟币种：正常标准
         # P2.5++修复（2025-11-05）：提高概率门槛，减少80%信号

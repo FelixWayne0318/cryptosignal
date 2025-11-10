@@ -335,12 +335,17 @@
     "ultra_new_prime_prob_min": 0.75,
     "ultra_new_dims_ok_min": 6,
     "ultra_new_prime_strength_min": 45,
+    "ultra_new_prime_dim_threshold": 70,
+    "ultra_new_watch_prob_min": 0.65,
     "phaseA_prime_prob_min": 0.72,
     "phaseA_dims_ok_min": 5,
     "phaseA_prime_strength_min": 40,
+    "phaseA_watch_prob_min": 0.60,
     "phaseB_prime_prob_min": 0.70,
     "phaseB_dims_ok_min": 4,
-    "phaseB_prime_strength_min": 35
+    "phaseB_prime_strength_min": 35,
+    "phaseB_watch_prob_min": 0.60,
+    "_comment": "v7.2.6修复：添加watch_prob_min和prime_dim_threshold配置，移除硬编码"
   },
 
   "limits": {
