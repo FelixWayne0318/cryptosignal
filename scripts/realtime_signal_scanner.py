@@ -168,9 +168,12 @@ class RealtimeSignalScanner:
 
         # 防抖动系统（AntiJitter）
         if send_telegram:
-            anti_jitter_config = get_config("1h")  # 1小时K线，1小时冷却期
+            # v7.2.8修复：使用5m激进配置（confirmation_bars=1）允许单次扫描发布
+            # 原因：1h配置需要2个历史记录，但单次扫描每个symbol只有1个数据点
+            # 结果：所有信号在首次扫描时被"历史记录不足"拒绝
+            anti_jitter_config = get_config("5m")  # confirmation_bars=1, cooldown=5min
             self.anti_jitter = AntiJitter(config=anti_jitter_config)
-            log(f"✅ 防抖动系统已启用: {anti_jitter_config.cooldown_seconds}秒冷却期")
+            log(f"✅ 防抖动系统已启用: {anti_jitter_config.cooldown_seconds}秒冷却期, K/N={anti_jitter_config.confirmation_bars}/{anti_jitter_config.total_bars}")
 
         # v7.2: 数据记录器
         if self.record_data:
