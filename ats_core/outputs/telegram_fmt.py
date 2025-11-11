@@ -2496,8 +2496,12 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     gate_details_list = gate_details_v72.get("details", [])
 
     # 构建gate字典（兼容旧格式）
+    # v7.2.17+: 添加类型检查，防止gate_info是字符串
     gates = {}
     for gate_info in gate_details_list:
+        # 确保gate_info是字典
+        if not isinstance(gate_info, dict):
+            continue  # 跳过非字典元素
         gate_num = gate_info.get("gate")
         gates[f"gate{gate_num}"] = gate_info
 
