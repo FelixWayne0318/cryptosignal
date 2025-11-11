@@ -2288,43 +2288,18 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     RR = TP_pct / SL_pct if SL_pct > 0 else 2.0
     ttl_h = int(_ttl_hours(r))
 
-    # v7.2.25: 从配置文件读取F因子蓄势阈值（修复硬编码问题）
-    if CONFIG_AVAILABLE:
-        try:
-            config = get_thresholds()
-            # 读取3级蓄势阈值
-            F_level3_threshold = config.config.get('蓄势分级配置', {}).get('level_3_极早期', {}).get('F_threshold', 70)
-            F_level2_threshold = config.config.get('蓄势分级配置', {}).get('level_2_早期', {}).get('F_threshold', 60)
-            F_level1_threshold = config.config.get('蓄势分级配置', {}).get('level_1_强势', {}).get('F_threshold', 50)
-            # 降级到旧配置（向后兼容）
-            if F_level3_threshold == 70 and F_level2_threshold == 60 and F_level1_threshold == 50:
-                F_momentum_threshold = config.config.get('F因子动量阈值', {}).get('F_strong_momentum', 40)
-            else:
-                # 使用最低级别阈值作为头部判断
-                F_momentum_threshold = F_level1_threshold
-        except:
-            # 配置加载失败，使用默认值
-            F_level3_threshold = 70
-            F_level2_threshold = 60
-            F_level1_threshold = 50
-            F_momentum_threshold = 40
-    else:
-        # 配置不可用，使用默认值
-        F_level3_threshold = 70
-        F_level2_threshold = 60
-        F_level1_threshold = 50
-        F_momentum_threshold = 40
-
-    # F因子判断蓄势待发（使用配置的阈值）
+    # v7.2.26改进：从analyze结果直接读取momentum_grading信息（避免重复计算和硬编码）
+    momentum_grading = _get(v72, "momentum_grading") or {}
+    momentum_level = momentum_grading.get("level", 0)
+    momentum_desc = momentum_grading.get("description", "正常模式")
     F_v2 = _get(v72, "F_v2") or 0
-    is_momentum_ready = F_v2 >= F_momentum_threshold
 
-    # 构建头部（根据F因子强度显示不同标题）
-    if F_v2 >= F_level3_threshold:
+    # 构建头部（根据momentum_level显示不同标题，避免硬编码阈值）
+    if momentum_level == 3:
         header = f"🚀🚀 极早期蓄势 · 强势机会\n"
-    elif F_v2 >= F_level2_threshold:
+    elif momentum_level == 2:
         header = f"🚀 早期蓄势 · 提前布局\n"
-    elif is_momentum_ready:
+    elif momentum_level == 1:
         header = f"🚀 蓄势待发\n"
     else:
         header = f"{'📍 观察信号' if is_watch else '🚀 交易信号'}\n"
@@ -2367,19 +2342,19 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     # ========== 3. v7.2核心因子 ==========
     factors = f"\n\n━━━ 🔬 v7.2核心因子 ━━━\n"
 
-    # F因子（v7.2.25优化：统一使用配置的阈值，支持3级蓄势检测）
+    # F因子（v7.2.26改进：直接使用momentum_level，避免硬编码阈值）
     F_v2 = _get(v72, "F_v2")
     if F_v2 is not None:
         F_v2_int = int(round(F_v2))
 
-        # v7.2.25: 使用配置的3级蓄势阈值（从上面加载的变量）
-        if F_v2_int >= F_level3_threshold:
+        # v7.2.26: 直接使用momentum_level判断（由analyze_symbol_v72.py计算）
+        if momentum_level == 3:  # 极早期蓄势
             F_icon = "🚀🚀"
             F_desc = "强劲资金流入 [极早期蓄势]"
-        elif F_v2_int >= F_level2_threshold:
+        elif momentum_level == 2:  # 早期蓄势
             F_icon = "🚀"
             F_desc = "偏强资金流入 [早期蓄势]"
-        elif F_v2_int >= F_level1_threshold:
+        elif momentum_level == 1:  # 蓄势待发
             F_icon = "🔥"
             F_desc = "中等资金流入 [蓄势待发]"
         elif F_v2_int >= 20:

@@ -91,9 +91,41 @@
   },
 
   "蓄势分级配置": {
-    "_description": "v7.2.25新增：F因子驱动的提前捕捉机制（3级蓄势检测）",
+    "_description": "v7.2.26改进：F因子驱动的提前捕捉机制（线性平滑降低）",
     "_theory": "资金是因，价格是果。F因子是最领先的指标（-4~8h），当F高时应降低其他阈值提前入场",
     "_enabled": true,
+    "_mode": "linear",
+    "_mode_options": ["linear", "stepped"],
+    "_mode_description": "linear=线性平滑降低（推荐，避免断崖效应），stepped=分级降低（保留向后兼容）",
+
+    "线性模式参数": {
+      "_description": "F在[F_min, F_max]区间内线性插值，避免断崖式跳变",
+      "F_threshold_min": 50,
+      "F_threshold_max": 70,
+      "_formula": "当50≤F≤70时：reduction_ratio = (F - 50) / (70 - 50)，阈值线性降低",
+      "_example": "F=60时reduction_ratio=0.5，阈值降低50%×最大降低幅度",
+
+      "最大阈值降低": {
+        "_description": "当F=70时的最大降低幅度（F=50时降低幅度为0）",
+        "confidence_reduction": 5,
+        "P_reduction": 0.08,
+        "EV_reduction": 0.007,
+        "F_min_increase": 60,
+        "position_reduction": 0.5,
+        "_result_at_F70": {
+          "confidence_min": "15 - 5 = 10",
+          "P_min": "0.50 - 0.08 = 0.42",
+          "EV_min": "0.015 - 0.007 = 0.008",
+          "F_min": "-10 + 60 = 50",
+          "position_mult": "1.0 - 0.5 = 0.5"
+        }
+      }
+    },
+
+    "分级模式参数": {
+      "_description": "保留分级配置供stepped模式使用（向后兼容）",
+      "_deprecated": "推荐使用linear模式，stepped模式存在断崖效应"
+    },
 
     "level_3_极早期": {
       "F_threshold": 70,
@@ -101,7 +133,7 @@
       "提前量": "4-8小时",
       "风险等级": "高",
       "仓位倍数": 0.5,
-      "_description": "资金大幅领先价格，蓄势最强，但价格尚未启动，风险较高",
+      "_description": "资金大幅领先价格，蓄势最强，但价格尚未启动，风险较高（仅stepped模式使用）",
 
       "权重调整": {
         "_rationale": "F高时提升领先指标（C/O/V）权重，降低滞后指标（T/B）权重",
