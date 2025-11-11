@@ -456,10 +456,73 @@ def test_linear_probability_calibration():
     return is_smooth
 
 
+def test_short_position_probability_calibration():
+    """测试8（v7.2.28新增）：概率校准空单F逻辑测试"""
+    print("=" * 70)
+    print("测试8：概率校准空单F逻辑测试（v7.2.28修复）")
+    print("=" * 70)
+
+    from ats_core.calibration.empirical_calibration import EmpiricalCalibrator
+
+    calibrator = EmpiricalCalibrator()
+    confidence = 50  # 使用中等confidence
+
+    # 测试用例：对比做多和做空时F因子的影响
+    test_cases = [
+        # (F_score, side_long, expected_behavior, description)
+        (80, True, "positive", "做多+F=80: 资金领先，蓄势待发 → 胜率应提高"),
+        (80, False, "negative", "做空+F=80: 资金流入，有人抄底 → 胜率应降低"),
+        (-80, True, "negative", "做多+F=-80: 追高风险 → 胜率应降低"),
+        (-80, False, "positive", "做空+F=-80: 资金恐慌逃离 → 胜率应提高"),
+        (50, True, "positive", "做多+F=50: 蓄势 → 胜率应提高"),
+        (50, False, "negative", "做空+F=50: 不利做空 → 胜率应降低"),
+        (-30, True, "negative", "做多+F=-30: 追高风险 → 胜率应降低"),
+        (-30, False, "positive", "做空+F=-30: 资金流出 → 胜率应提高"),
+    ]
+
+    print(f"\n{'F_score':<10} {'方向':<8} {'P_base':<10} {'P_calibrated':<14} {'变化':<12} {'预期':<10} {'说明':<40}")
+    print("-" * 110)
+
+    all_pass = True
+    for F_score, side_long, expected, desc in test_cases:
+        # 基础概率（不考虑F）
+        P_base = calibrator._bootstrap_probability(confidence, F_score=None, I_score=None, side_long=side_long)
+
+        # 校准概率（考虑F）
+        P_calibrated = calibrator._bootstrap_probability(confidence, F_score=F_score, I_score=None, side_long=side_long)
+
+        P_change = P_calibrated - P_base
+        P_change_pct = P_change * 100
+
+        # 判断是否符合预期
+        direction = "做多" if side_long else "做空"
+
+        if expected == "positive":
+            is_correct = P_change > 0
+            expected_str = "应提高"
+        else:  # negative
+            is_correct = P_change < 0
+            expected_str = "应降低"
+
+        result = "✅" if is_correct else "❌"
+        if not is_correct:
+            all_pass = False
+
+        print(f"{F_score:<10} {direction:<8} {P_base:<10.3f} {P_calibrated:<14.3f} {P_change_pct:+.2f}%     {expected_str:<10} {result} {desc:<40}")
+
+    if all_pass:
+        print("\n✅ 概率校准空单F逻辑测试全部通过（8/8）")
+        print("   关键改进：空单时F>0降低胜率，F<0提高胜率（与做多相反）")
+    else:
+        print("\n❌ 概率校准空单F逻辑测试部分失败")
+
+    return all_pass
+
+
 def main():
     """主测试函数"""
     print("\n" + "🧪" * 35)
-    print("F因子线性平滑降低机制测试（v7.2.26 + v7.2.27）")
+    print("F因子线性平滑降低机制测试（v7.2.26 + v7.2.27 + v7.2.28）")
     print("🧪" * 35 + "\n")
 
     try:
@@ -474,6 +537,9 @@ def main():
         test6 = test_F_extreme_handling()
         test7 = test_linear_probability_calibration()
 
+        # v7.2.28新增测试
+        test8 = test_short_position_probability_calibration()
+
         # 汇总结果
         print("\n" + "=" * 70)
         print("测试结果汇总")
@@ -482,15 +548,16 @@ def main():
         print(f"✅ 测试2（平滑性验证）: {'通过' if test2 else '失败'}")
         print(f"✅ 测试3（stepped对比）: {'通过' if test3 else '失败'}")
         print(f"✅ 测试4（边界条件）: {'通过' if test4 else '失败'}")
-        print(f"✅ 测试5（空单F逻辑）: {'通过' if test5 else '失败'} [v7.2.27]")
+        print(f"✅ 测试5（蓄势空单F逻辑）: {'通过' if test5 else '失败'} [v7.2.27]")
         print(f"✅ 测试6（F≥90极值警戒）: {'通过' if test6 else '失败'} [v7.2.27]")
         print(f"✅ 测试7（概率校准线性化）: {'通过' if test7 else '失败'} [v7.2.27]")
+        print(f"✅ 测试8（概率校准空单F逻辑）: {'通过' if test8 else '失败'} [v7.2.28]")
 
-        all_passed = test1 and test2 and test3 and test4 and test5 and test6 and test7
+        all_passed = test1 and test2 and test3 and test4 and test5 and test6 and test7 and test8
 
         if all_passed:
             print("\n" + "=" * 70)
-            print("🎉 所有测试通过！v7.2.27全面修复完成")
+            print("🎉 所有测试通过！v7.2.28全面修复完成")
             print("=" * 70)
             print("\n📊 v7.2.26关键改进:")
             print("  ✅ 避免断崖效应：F值变化1时，阈值平滑过渡")
@@ -498,10 +565,15 @@ def main():
             print("  ✅ 边界条件正确：F<50和F≥70处理正确")
             print("  ✅ 向后兼容：stepped模式保留，但推荐linear")
             print("\n📊 v7.2.27关键修复:")
-            print("  ✅ 空单F逻辑：做空时F取反，统一好信号方向（修复P0重大bug）")
+            print("  ✅ 蓄势空单F逻辑：做空时F取反，统一好信号方向（修复P0重大bug）")
             print("  ✅ F≥90极值警戒：反而提高质量要求，防止异常数据误导")
             print("  ✅ 概率校准线性化：移除硬编码，消除断崖效应")
             print("  ✅ 边界检查：添加NaN/Inf验证，提升系统稳定性")
+            print("\n📊 v7.2.28关键修复:")
+            print("  ✅ 概率校准空单F逻辑：修复_bootstrap_probability空单F方向错误（P0级bug）")
+            print("  ✅ 做空+F>0：降低胜率（有人抄底，不利做空）")
+            print("  ✅ 做空+F<0：提高胜率（资金恐慌逃离，利于做空）")
+            print("  ✅ 全面覆盖：蓄势分级+概率校准，所有F因子调整都已考虑多空方向")
             print("\n💡 建议：")
             print("  - 配置文件中_mode已设为'linear'，推荐保持")
             print("  - 如需测试stepped模式，修改config中的_mode为'stepped'")

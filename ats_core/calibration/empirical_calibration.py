@@ -190,9 +190,9 @@ class EmpiricalCalibrator:
         # 降级到启发式
         return self._bootstrap_probability(confidence)
 
-    def _bootstrap_probability(self, confidence: float, F_score: float = None, I_score: float = None) -> float:
+    def _bootstrap_probability(self, confidence: float, F_score: float = None, I_score: float = None, side_long: bool = True) -> float:
         """
-        启发式概率（v7.2.27改进：线性平滑校准）
+        启发式概率（v7.2.28改进：修复空单F逻辑）
 
         线性映射 + F/I因子线性调整：
         - confidence=0 → P=0.45（基准）
@@ -200,6 +200,9 @@ class EmpiricalCalibrator:
         - confidence=100 → P=0.68
         - F因子线性调整：F在[-30, 0, 70]之间线性调整P（-3% ~ +5%）
         - I因子线性调整：I在[20, 50, 80]之间线性调整P（-2% ~ +3%）
+
+        v7.2.28改进：
+        - ✅ 修复空单F逻辑：添加side_long参数，使用get_effective_F
 
         v7.2.27改进：
         - ✅ 移除硬编码的F>30/15/-30（违反规范）
@@ -211,12 +214,13 @@ class EmpiricalCalibrator:
             confidence: 信号置信度 (0-100)
             F_score: F因子分数 [-100, +100]（可选）
             I_score: I因子分数 [0, 100]（可选）
+            side_long: 做多(True)还是做空(False)，默认True
 
         Returns:
             估算的胜率 (0.40-0.75)
         """
         # 导入线性函数工具
-        from ats_core.utils.math_utils import linear_reduce
+        from ats_core.utils.math_utils import linear_reduce, get_effective_F
         from ats_core.config.threshold_config import get_thresholds
 
         # 基础线性映射（改进后的范围）
@@ -227,7 +231,7 @@ class EmpiricalCalibrator:
             config = get_thresholds()
             prob_calib_config = config.config.get('概率校准线性参数', {})
 
-            # F因子线性调整（v7.2.27改进：从硬编码改为线性+配置化）
+            # F因子线性调整（v7.2.28改进：修复空单F逻辑）
             if F_score is not None:
                 F_calib_config = prob_calib_config.get('F因子线性校准', {})
                 F_enabled = F_calib_config.get('_enabled', True)
@@ -238,16 +242,19 @@ class EmpiricalCalibrator:
                     P_bonus_max = F_calib_config.get('P_bonus_at_F_max', 0.05)
                     P_penalty_min = F_calib_config.get('P_penalty_at_F_min', -0.03)
 
+                    # v7.2.28修复：使用F_effective考虑多空方向
+                    F_effective = get_effective_F(F_score, side_long)
+
                     # 线性调整：F在[-30, 0, 70]之间线性插值
-                    if F_score >= F_max:
+                    if F_effective >= F_max:
                         P += P_bonus_max  # F≥70: +5%
-                    elif F_score >= 0:
+                    elif F_effective >= 0:
                         # F在0~70之间线性增加（0% ~ +5%）
-                        P_bonus = linear_reduce(F_score, 0, F_max, 0, P_bonus_max)
+                        P_bonus = linear_reduce(F_effective, 0, F_max, 0, P_bonus_max)
                         P += P_bonus
-                    elif F_score >= F_min:
+                    elif F_effective >= F_min:
                         # F在-30~0之间线性减少（-3% ~ 0%）
-                        P_penalty = linear_reduce(F_score, F_min, 0, P_penalty_min, 0)
+                        P_penalty = linear_reduce(F_effective, F_min, 0, P_penalty_min, 0)
                         P += P_penalty
                     else:
                         P += P_penalty_min  # F≤-30: -3%

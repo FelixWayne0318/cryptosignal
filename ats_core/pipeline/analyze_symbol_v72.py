@@ -138,10 +138,12 @@ def analyze_with_v72_enhancements(
     # P0.3修复：如果使用启发式（冷启动），传递F和I因子进行多维度评估
     if not calibrator.calibration_table:
         # 冷启动模式：使用改进的启发式公式
+        # v7.2.28修复：传入side_long参数，正确处理空单F逻辑
         P_calibrated = calibrator._bootstrap_probability(
             confidence=confidence_v72,
             F_score=F_v2,
-            I_score=I_v2
+            I_score=I_v2,
+            side_long=side_long_v72
         )
     else:
         # 统计校准模式：使用历史数据
