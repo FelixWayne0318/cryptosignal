@@ -2242,17 +2242,13 @@ def _get_factor_desc_v67(r: Dict[str, Any], factor_name: str, score: int) -> str
 
 def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     """
-    v7.2.22信号消息模板（非专业人士友好版）
+    v7.2信号消息模板（清晰简洁版）
 
-    设计理念：
-    - 用通俗语言代替专业术语
-    - 突出核心交易参数
-    - 简化技术指标，增加解释性文字
-    - 提供明确的操作建议
+    v7.2.23优化：恢复简洁格式，优化描述文字
     """
-    # v7.2.22重构：使用非专业人士友好版本
-    from ats_core.outputs.telegram_fmt_v722 import render_signal_v722
-    return render_signal_v722(r, is_watch=is_watch)
+    # v7.2.11修复：类型检查，防止v72_enhancements不是字典导致的错误
+    if not isinstance(r, dict):
+        return f"❌ 错误：信号数据类型异常（期望dict，实际{type(r).__name__}）"
 
     # ========== 1. 头部：Symbol + 核心指标 ==========
     sym = _get(r, "symbol") or "—"
@@ -2333,25 +2329,38 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     # ========== 3. v7.2核心因子 ==========
     factors = f"\n\n━━━ 🔬 v7.2核心因子 ━━━\n"
 
-    # F因子
+    # F因子（v7.2.23优化：使用通俗描述）
     F_v2 = _get(v72, "F_v2")
     if F_v2 is not None:
         F_v2_int = int(round(F_v2))
-        if F_v2_int > 30:
+        # 使用类似C因子的资金流描述风格
+        if F_v2_int >= 80:
             F_icon = "🚀"
-            F_desc = "💪资金强势领先 [蓄势待发]"
-        elif F_v2_int > 15:
+            F_desc = "强劲资金流入 [蓄势待发]"
+        elif F_v2_int >= 60:
             F_icon = "🔥"
-            F_desc = "✅资金明显领先 [即将爆发]"
-        elif F_v2_int > 0:
+            F_desc = "偏强资金流入 [即将爆发]"
+        elif F_v2_int >= 40:
             F_icon = "🟢"
-            F_desc = "✅资金温和领先"
-        elif F_v2_int > -15:
+            F_desc = "中等资金流入"
+        elif F_v2_int >= 20:
+            F_icon = "🟢"
+            F_desc = "轻微资金流入"
+        elif F_v2_int >= -20:
+            F_icon = "🟡"
+            F_desc = "资金流平衡"
+        elif F_v2_int >= -40:
             F_icon = "🟠"
-            F_desc = "⚠️资金轻微落后"
+            F_desc = "轻微资金流出"
+        elif F_v2_int >= -60:
+            F_icon = "🟠"
+            F_desc = "中等资金流出"
+        elif F_v2_int >= -80:
+            F_icon = "🔴"
+            F_desc = "偏强资金流出"
         else:
             F_icon = "🔴"
-            F_desc = "❌资金严重落后"
+            F_desc = "强劲资金流出"
 
         factors += f"\n{F_icon} F资金领先  {F_v2_int:3d}  {F_desc}"
 
