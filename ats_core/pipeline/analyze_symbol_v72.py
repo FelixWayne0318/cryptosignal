@@ -166,6 +166,89 @@ def analyze_with_v72_enhancements(
     # EV = P×TP - (1-P)×SL - cost
     EV_net = P_calibrated * TP_distance_pct - (1 - P_calibrated) * SL_distance_pct - total_cost_pct
 
+    # ===== 4.5. v7.2.25新增：F因子驱动的蓄势分级检测 =====
+    # 核心理念：F因子是最领先的指标（-4~8h），当F高时应降低其他阈值提前入场
+    #
+    # 分级策略：
+    # - level_3（F≥70）：极早期蓄势，大幅降低阈值（提前4-8h）
+    # - level_2（F≥60）：早期蓄势，适度降低阈值（提前2-4h）
+    # - level_1（F≥50）：蓄势待发，小幅降低阈值（提前1-2h）
+    # - level_0（F<50）：正常模式，保持原阈值
+
+    # 初始化默认值（防止作用域问题）
+    momentum_enabled = True
+    level_3_threshold = 70
+    level_2_threshold = 60
+    level_1_threshold = 50
+
+    try:
+        # 读取蓄势分级配置
+        momentum_config = config.config.get('蓄势分级配置', {})
+        momentum_enabled = momentum_config.get('_enabled', True)
+
+        if momentum_enabled:
+            # 获取3级阈值
+            level_3_config = momentum_config.get('level_3_极早期', {})
+            level_2_config = momentum_config.get('level_2_早期', {})
+            level_1_config = momentum_config.get('level_1_强势', {})
+
+            level_3_threshold = level_3_config.get('F_threshold', 70)
+            level_2_threshold = level_2_config.get('F_threshold', 60)
+            level_1_threshold = level_1_config.get('F_threshold', 50)
+
+            # 判断当前F因子属于哪个级别
+            if F_v2 >= level_3_threshold:
+                momentum_level = 3
+                momentum_config_active = level_3_config
+                momentum_desc = "极早期蓄势"
+            elif F_v2 >= level_2_threshold:
+                momentum_level = 2
+                momentum_config_active = level_2_config
+                momentum_desc = "早期蓄势"
+            elif F_v2 >= level_1_threshold:
+                momentum_level = 1
+                momentum_config_active = level_1_config
+                momentum_desc = "蓄势待发"
+            else:
+                momentum_level = 0
+                momentum_config_active = None
+                momentum_desc = "正常模式"
+
+            # 如果触发蓄势级别，应用动态阈值降低
+            if momentum_level > 0 and momentum_config_active:
+                threshold_config = momentum_config_active.get('阈值降低', {})
+                # 注意：这里只获取配置，实际阈值在下面的闸门检查中使用
+                momentum_confidence_min = threshold_config.get('confidence_min', 15)
+                momentum_P_min = threshold_config.get('P_min', 0.50)
+                momentum_EV_min = threshold_config.get('EV_min', 0.015)
+                momentum_F_min = threshold_config.get('F_min', -10)
+                momentum_position_mult = momentum_config_active.get('仓位倍数', 1.0)
+            else:
+                # 正常模式，使用原阈值
+                momentum_confidence_min = None
+                momentum_P_min = None
+                momentum_EV_min = None
+                momentum_F_min = None
+                momentum_position_mult = 1.0
+        else:
+            # 蓄势分级未启用
+            momentum_level = 0
+            momentum_desc = "蓄势分级未启用"
+            momentum_confidence_min = None
+            momentum_P_min = None
+            momentum_EV_min = None
+            momentum_F_min = None
+            momentum_position_mult = 1.0
+    except Exception as e:
+        # 配置加载失败，使用正常模式
+        momentum_level = 0
+        momentum_desc = f"配置加载失败: {e}"
+        momentum_confidence_min = None
+        momentum_P_min = None
+        momentum_EV_min = None
+        momentum_F_min = None
+        momentum_position_mult = 1.0
+
     # ===== 5. 五道闸门（v7.2 重构 + v3.1增强：新增I×Market联合闸门） =====
     # Q3 FIX: 修正注释编号（删除重复的I因子定义）
     # v7.2设计理念：
@@ -177,10 +260,22 @@ def analyze_with_v72_enhancements(
 
     # 方案：使用简化的五道检查（只检查关键指标）
     # 阶段2.2：从配置文件读取闸门阈值
+    # v7.2.25：如果触发蓄势级别，使用降低后的阈值
     min_klines = config.get_gate_threshold('gate1_data_quality', 'min_klines', 100)
-    P_min = config.get_gate_threshold('gate4_probability', 'P_min', 0.50)
-    EV_min = config.get_gate_threshold('gate3_ev', 'EV_min', 0.0)
-    F_min = config.get_gate_threshold('gate2_fund_support', 'F_min', -15)
+
+    # v7.2.25: 动态阈值（蓄势时降低）
+    if momentum_P_min is not None:
+        # 使用蓄势级别的降低阈值
+        P_min = momentum_P_min
+        EV_min = momentum_EV_min
+        F_min = momentum_F_min
+        # confidence_min在因子分组时使用（这里不需要）
+    else:
+        # 使用正常阈值
+        P_min = config.get_gate_threshold('gate4_probability', 'P_min', 0.50)
+        EV_min = config.get_gate_threshold('gate3_ev', 'EV_min', 0.0)
+        F_min = config.get_gate_threshold('gate2_fund_support', 'F_min', -15)
+
     I_min = config.get_gate_threshold('gate5_independence_market', 'I_min', 30)  # v3.1新增
     market_regime_threshold = config.get_gate_threshold('gate5_independence_market', 'market_regime_threshold', 30)  # v3.1新增
     # v7.2.9修复：从配置读取I因子相关阈值（避免硬编码）
@@ -301,12 +396,31 @@ def analyze_with_v72_enhancements(
 
         # v7.2增强字段
         "v72_enhancements": {
-            "version": "v7.2_stage1",
+            "version": "v7.2.25_momentum_grading",
 
             # F因子v2（资金领先性）
             # v7.2.15修复：移除F_comparison冗余结构（A1修复后基础层已统一使用v2）
             "F_v2": F_v2,
             "F_v2_meta": F_v2_meta,
+
+            # v7.2.25新增：蓄势分级信息
+            "momentum_grading": {
+                "level": momentum_level,
+                "description": momentum_desc,
+                "F_threshold_used": {
+                    "level_3": level_3_threshold if momentum_enabled else None,
+                    "level_2": level_2_threshold if momentum_enabled else None,
+                    "level_1": level_1_threshold if momentum_enabled else None
+                },
+                "dynamic_thresholds": {
+                    "P_min": P_min,
+                    "EV_min": EV_min,
+                    "F_min": F_min,
+                    "confidence_min": momentum_confidence_min
+                },
+                "position_multiplier": momentum_position_mult,
+                "enabled": momentum_enabled
+            },
 
             # I因子（市场独立性）
             "I_v2": I_v2,
