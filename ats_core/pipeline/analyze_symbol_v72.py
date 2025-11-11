@@ -21,6 +21,28 @@
 from typing import Dict, Any
 import math
 
+# v7.2.21修复：使用模块级单例，避免重复初始化和日志污染
+from ats_core.calibration.empirical_calibration import EmpiricalCalibrator
+_calibrator_singleton = None
+
+def _get_calibrator() -> EmpiricalCalibrator:
+    """
+    获取校准器单例
+
+    修复原因（v7.2.21）：
+    - 之前每次调用analyze_with_v72_enhancements都创建新实例
+    - 导致每个币种扫描都打印"数据不足(0/30)，使用启发式规则"
+    - 406个币种 = 406条重复警告，严重污染日志
+    - 且浪费性能（重复加载calibration_history.json）
+
+    Returns:
+        全局单例校准器实例
+    """
+    global _calibrator_singleton
+    if _calibrator_singleton is None:
+        _calibrator_singleton = EmpiricalCalibrator()
+    return _calibrator_singleton
+
 def analyze_with_v72_enhancements(
     original_result: Dict[str, Any],
     symbol: str,
@@ -102,9 +124,8 @@ def analyze_with_v72_enhancements(
     I_meta = original_result.get('scores_meta', {}).get('I', {})
 
     # ===== 3. 统计校准概率（P0.3增强：支持F/I因子）=====
-    from ats_core.calibration.empirical_calibration import EmpiricalCalibrator
-
-    calibrator = EmpiricalCalibrator()
+    # v7.2.21修复：使用模块级单例，避免重复初始化
+    calibrator = _get_calibrator()
 
     # P0.3修复：如果使用启发式（冷启动），传递F和I因子进行多维度评估
     if not calibrator.calibration_table:
