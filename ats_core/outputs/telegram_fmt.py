@@ -102,6 +102,36 @@ def _get(d: Any, key: str, default: Any = None) -> Any:
             return default
     return cur
 
+def _get_dict(d: Any, key: str, default: dict = None) -> dict:
+    """
+    安全获取字典类型值（v7.2.17修复）
+
+    解决'str' object has no attribute 'get'错误：
+    - 如果返回值是字典：正常返回
+    - 如果返回值是非字典（包括字符串）：返回空字典
+
+    Args:
+        d: 源字典
+        key: 键（支持点分路径，如"v72.scores"）
+        default: 默认值（None时使用{}）
+
+    Returns:
+        dict: 安全的字典对象
+
+    Example:
+        # Before (v7.2.16 - 可能失败)
+        scores = _get_dict(r, "scores")  # 如果scores="string"，or返回"string"
+        T = scores.get("T")  # AttributeError: 'str' object has no attribute 'get'
+
+        # After (v7.2.17 - 安全)
+        scores = _get_dict(r, "scores")  # 如果scores="string"，返回{}
+        T = scores.get("T")  # 正常工作
+    """
+    if default is None:
+        default = {}
+    result = _get(d, key)
+    return result if isinstance(result, dict) else default
+
 def _fmt_price(x: Any) -> str:
     try:
         v = float(x)
@@ -962,7 +992,7 @@ def render_four_gates(r: Dict[str, Any]) -> str:
     lines.append("━━━━━ 🚪 四门槛：质量控制 ━━━━━")
 
     # 获取gate数据
-    gates_data = _get(r, "gates") or {}
+    gates_data = _get_dict(r, "gates")
 
     # 🚪 Gate 1: DataQual（数据质量）
     data_qual = _get(r, "data_quality") or _get(r, "DataQual") or gates_data.get("data_qual", 1.0)
@@ -1053,7 +1083,7 @@ def render_modulators(r: Dict[str, Any]) -> str:
     lines.append("（权重0%，仅调节执行参数）\n")
 
     # 获取modulator_output（如果有）
-    mod_output = _get(r, "modulator_output") or {}
+    mod_output = _get_dict(r, "modulator_output")
 
     # ⚡ L流动性调制器
     L_score = _get(r, "L") or 0
@@ -1083,7 +1113,7 @@ def render_modulators(r: Dict[str, Any]) -> str:
     Teff_F = mod_output.get("Teff_F", 1.0) if mod_output else 1.0
 
     # v6.7++: 使用FIModulator的统一阈值信息
-    fi_thresholds = _get(r, "fi_thresholds") or {}
+    fi_thresholds = _get_dict(r, "fi_thresholds")
     adj_F = fi_thresholds.get("adj_F", 0.0)  # F的p_min调整量
     adj_I = fi_thresholds.get("adj_I", 0.0)  # I的p_min调整量
 
@@ -1169,7 +1199,7 @@ def _header_lines(r: Dict[str, Any], is_watch: bool) -> Tuple[str, str]:
     line1 = f"🔹 {sym} · 现价 {price_s}"
 
     # v6.7新增：蓄势待发标识
-    publish_info = _get(r, "publish") or {}
+    publish_info = _get_dict(r, "publish")
     is_accumulating = publish_info.get("is_accumulating", False)
     accumulating_reason = publish_info.get("accumulating_reason", "")
 
@@ -1206,12 +1236,12 @@ def _six_block(r: Dict[str, Any]) -> str:
     is_long = side in ("long", "buy", "bull", "多", "做多")
 
     # 获取各维度的真实数据
-    T_meta = _get(r, "scores_meta.T") or {}
-    M_meta = _get(r, "scores_meta.M") or {}
-    C_meta = _get(r, "scores_meta.C") or {}
-    V_meta = _get(r, "scores_meta.V") or {}
-    O_meta = _get(r, "scores_meta.O") or {}
-    B_meta = _get(r, "scores_meta.B") or {}
+    T_meta = _get_dict(r, "scores_meta.T")
+    M_meta = _get_dict(r, "scores_meta.M")
+    C_meta = _get_dict(r, "scores_meta.C")
+    V_meta = _get_dict(r, "scores_meta.V")
+    O_meta = _get_dict(r, "scores_meta.O")
+    B_meta = _get_dict(r, "scores_meta.B")
 
     # 提取A层具体指标
     Tm = T_meta.get("Tm")
@@ -1263,10 +1293,10 @@ def _six_block(r: Dict[str, Any]) -> str:
 
     # L流动性调制器（💧 水滴图标）
     if B_scores['L'] != 0:
-        L_meta = _get(r, "scores_meta.L") or {}
+        L_meta = _get_dict(r, "scores_meta.L")
         spread_bps = L_meta.get("spread_bps")
         obi = L_meta.get("obi")
-        mod_output = _get(r, "modulator_output") or {}
+        mod_output = _get_dict(r, "modulator_output")
         # 修复：从嵌套结构中提取position_mult（如果有）
         position_mult = mod_output.get("L", {}).get("position_mult", mod_output.get("position_mult", 1.0))
         desc = _desc_liquidity(B_scores['L'], spread_bps, obi)
@@ -1274,9 +1304,9 @@ def _six_block(r: Dict[str, Any]) -> str:
 
     # S结构调制器（🏗️ 建筑图标）
     if B_scores['S'] != 0:
-        S_meta = _get(r, "scores_meta.S") or {}
+        S_meta = _get_dict(r, "scores_meta.S")
         theta = S_meta.get("theta")
-        mod_output = _get(r, "modulator_output") or {}
+        mod_output = _get_dict(r, "modulator_output")
         # 修复：从嵌套结构中提取Teff值
         Teff_S = mod_output.get("S", {}).get("Teff_mult", 1.0)
         desc = _desc_structure(B_scores['S'], theta)
@@ -1284,9 +1314,9 @@ def _six_block(r: Dict[str, Any]) -> str:
 
     # F资金领先调制器（💰 钱袋图标）
     if B_scores['F'] != 0:
-        F_meta = _get(r, "scores_meta.F") or {}
+        F_meta = _get_dict(r, "scores_meta.F")
         leading_raw = F_meta.get("leading_raw")
-        mod_output = _get(r, "modulator_output") or {}
+        mod_output = _get_dict(r, "modulator_output")
         # 修复：从嵌套结构中提取Teff值
         Teff_F = mod_output.get("F", {}).get("Teff_mult", 1.0)
         desc = _desc_fund_leading(B_scores['F'], leading_raw)
@@ -1294,9 +1324,9 @@ def _six_block(r: Dict[str, Any]) -> str:
 
     # I独立性调制器（🎯 靶心图标）
     if B_scores['I'] != 0:
-        I_meta = _get(r, "scores_meta.I") or {}
+        I_meta = _get_dict(r, "scores_meta.I")
         beta_sum = I_meta.get("beta_sum")
-        mod_output = _get(r, "modulator_output") or {}
+        mod_output = _get_dict(r, "modulator_output")
         # 修复：从嵌套结构中提取Teff值
         Teff_I = mod_output.get("I", {}).get("Teff_mult", 1.0)
         desc = _desc_independence(B_scores['I'], beta_sum)
@@ -1310,7 +1340,7 @@ def _six_block(r: Dict[str, Any]) -> str:
 
     # ========== 📊 大盘环境 ==========
     market_regime = _get(r, "market_regime")
-    market_meta = _get(r, "market_meta") or {}
+    market_meta = _get_dict(r, "market_meta")
 
     if market_regime is not None:
         regime_desc = market_meta.get("regime_desc", "未知")
@@ -1341,9 +1371,9 @@ def _pricing_block(r: Dict[str, Any]) -> str:
     """
     # 获取价格数据
     price = _get(r, "price") or _get(r, "last") or 0
-    stop_loss = _get(r, "stop_loss") or {}
-    take_profit = _get(r, "take_profit") or {}
-    pricing = _get(r, "pricing") or {}
+    stop_loss = _get_dict(r, "stop_loss")
+    take_profit = _get_dict(r, "take_profit")
+    pricing = _get_dict(r, "pricing")
 
     lines = []
 
@@ -1400,7 +1430,7 @@ def _core_metrics_block(r: Dict[str, Any]) -> str:
     显示：期望收益和盈亏比（一行）
     """
     # 期望收益
-    publish_info = _get(r, "publish") or {}
+    publish_info = _get_dict(r, "publish")
     EV = publish_info.get("EV") or _get(r, "expected_value") or 0
 
     # v6.7类型安全
@@ -1408,7 +1438,7 @@ def _core_metrics_block(r: Dict[str, Any]) -> str:
         EV = 0
 
     # 盈亏比
-    take_profit = _get(r, "take_profit") or {}
+    take_profit = _get_dict(r, "take_profit")
     rr_ratio = take_profit.get("rr_ratio", 0)
 
     # 盈亏比emoji
@@ -1429,7 +1459,7 @@ def _position_block(r: Dict[str, Any]) -> str:
     显示：基准、调制、分配策略
     """
     position_mult = _get(r, "position_mult") or 1.0
-    modulation = _get(r, "modulation") or {}
+    modulation = _get_dict(r, "modulation")
     L_score = modulation.get("L", 50)
 
     base_position = 10000
@@ -1455,9 +1485,9 @@ def _risk_alerts_block(r: Dict[str, Any]) -> str:
     根据各项指标自动生成风险警告
     """
     alerts = []
-    modulation = _get(r, "modulation") or {}
-    modulator_output = _get(r, "modulator_output") or {}
-    publish_info = _get(r, "publish") or {}
+    modulation = _get_dict(r, "modulation")
+    modulator_output = _get_dict(r, "modulator_output")
+    publish_info = _get_dict(r, "publish")
 
     # 风险1：流动性
     L_score = modulation.get("L", 50)
@@ -1673,7 +1703,7 @@ def render_five_piece_report(r: Dict[str, Any], is_watch: bool = False) -> str:
             piece5.append(f"ATR: {atr:.2f}")
 
     # 止损止盈
-    pricing = _get(r, "pricing") or {}
+    pricing = _get_dict(r, "pricing")
     entry_lo = pricing.get("entry_lo")
     entry_hi = pricing.get("entry_hi")
     sl = pricing.get("sl")
@@ -1786,7 +1816,7 @@ def render_v67_rich(r: Dict[str, Any]) -> str:
     if isinstance(confidence, dict):
         confidence = 0
 
-    publish_info = _get(r, "publish") or {}
+    publish_info = _get_dict(r, "publish")
     EV = _get(publish_info, "EV") or 0
     if isinstance(EV, dict):
         EV = 0
@@ -1800,7 +1830,7 @@ def render_v67_rich(r: Dict[str, Any]) -> str:
 """
 
     # ============ Block 3: 因子明细 (使用专业描述) ============
-    factor_contribs = _get(r, "factor_contributions") or {}
+    factor_contribs = _get_dict(r, "factor_contributions")
     factor_detail = ""
 
     if factor_contribs:
@@ -1853,7 +1883,7 @@ def render_v67_rich(r: Dict[str, Any]) -> str:
 """
 
     # ============ Block 4: 调制器状态 ============
-    modulator_output = _get(r, "modulator_output") or {}
+    modulator_output = _get_dict(r, "modulator_output")
     modulator_status = ""
 
     if modulator_output:
@@ -1863,7 +1893,7 @@ def render_v67_rich(r: Dict[str, Any]) -> str:
         I_data = modulator_output.get("I", {})
         fusion = modulator_output.get("fusion", {})
 
-        modulation = _get(r, "modulation") or {}
+        modulation = _get_dict(r, "modulation")
         L_score = modulation.get("L", 0)
         S_score = modulation.get("S", 0)
         F_score = modulation.get("F", 0)
@@ -1893,8 +1923,8 @@ def render_v67_rich(r: Dict[str, Any]) -> str:
 
     # ============ Block 5: 入场止损止盈 (带RR比emoji) ============
     price = _get(r, "price") or _get(r, "last") or 0
-    stop_loss_data = _get(r, "stop_loss") or {}
-    take_profit_data = _get(r, "take_profit") or {}
+    stop_loss_data = _get_dict(r, "stop_loss")
+    take_profit_data = _get_dict(r, "take_profit")
 
     sl_price = stop_loss_data.get("stop_price", 0)
     sl_distance_pct = stop_loss_data.get("distance_pct", 0)
@@ -1937,7 +1967,7 @@ def render_v67_rich(r: Dict[str, Any]) -> str:
     else:
         position_note = "流动性较差，建议小仓位试探"
 
-    modulation = _get(r, "modulation") or {}
+    modulation = _get_dict(r, "modulation")
     position_block = f"""
 💼 **仓位建议**
 • 基准仓位: ${base_position:.0f}
@@ -1993,7 +2023,7 @@ def render_v67_rich(r: Dict[str, Any]) -> str:
 """
 
     # ============ Block 8: 市场环境 ============
-    market_meta = _get(r, "market_meta") or {}
+    market_meta = _get_dict(r, "market_meta")
     btc_trend_val = market_meta.get("btc_trend", 0)
     market_regime = _get(r, "market_regime") or 0
 
@@ -2089,7 +2119,7 @@ def render_v67_compact(r: Dict[str, Any]) -> str:
 """
 
     # Block 3: 因子Top 3
-    factor_contribs = _get(r, "factor_contributions") or {}
+    factor_contribs = _get_dict(r, "factor_contributions")
     if factor_contribs:
         # 过滤汇总键
         summary_keys = {"total_weight", "weighted_score", "confidence", "edge"}
@@ -2158,7 +2188,7 @@ def _get_strength_emoji_v67(score: float) -> str:
 
 def _get_factor_desc_v67(r: Dict[str, Any], factor_name: str, score: int) -> str:
     """获取因子专业描述 (v6.7)"""
-    scores_meta = _get(r, "scores_meta") or {}
+    scores_meta = _get_dict(r, "scores_meta")
 
     if factor_name == "T":
         Tm = _get(scores_meta, "T.Tm")
