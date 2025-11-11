@@ -450,6 +450,13 @@ class RealtimeSignalScanner:
             symbol = top_signal.get('symbol') if isinstance(top_signal, dict) else str(top_signal)[:20]
             error(f"   ❌ 发送失败 {symbol}: {e}")
 
+            # v7.2.17+: 打印完整traceback用于诊断
+            import traceback
+            error("   完整错误堆栈:")
+            for line in traceback.format_exc().split('\n'):
+                if line.strip():
+                    error(f"   {line}")
+
         # 记录跳过的信号（参与下一轮竞争）
         if len(sorted_signals) > 1:
             log(f"\n   ⏭️  跳过 {len(sorted_signals) - 1} 个信号（等待下一轮）：")
