@@ -2242,13 +2242,17 @@ def _get_factor_desc_v67(r: Dict[str, Any], factor_name: str, score: int) -> str
 
 def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     """
-    v7.2信号消息模板（清晰简洁版）
+    v7.2.22信号消息模板（非专业人士友好版）
 
-    设计理念：适合非专业人士，清晰分层，突出核心
+    设计理念：
+    - 用通俗语言代替专业术语
+    - 突出核心交易参数
+    - 简化技术指标，增加解释性文字
+    - 提供明确的操作建议
     """
-    # v7.2.11修复：类型检查，防止v72_enhancements不是字典导致的错误
-    if not isinstance(r, dict):
-        return f"❌ 错误：信号数据类型异常（期望dict，实际{type(r).__name__}）"
+    # v7.2.22重构：使用非专业人士友好版本
+    from ats_core.outputs.telegram_fmt_v722 import render_signal_v722
+    return render_signal_v722(r, is_watch=is_watch)
 
     # ========== 1. 头部：Symbol + 核心指标 ==========
     sym = _get(r, "symbol") or "—"
