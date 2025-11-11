@@ -2364,7 +2364,7 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
 
         factors += f"\n{F_icon} F资金领先  {F_v2_int:3d}  {F_desc}"
 
-    # I因子（v3.1增强：显示Beta值和市场对齐分析）
+    # I因子（v7.2.24优化：通俗描述+丰富emoji）
     I_v2 = _get(v72, "I_v2")
     if I_v2 is not None:
         I_v2_int = int(round(I_v2))
@@ -2384,19 +2384,34 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
         alignment = market_analysis.get("alignment", "正常")
         confidence_mult = market_analysis.get("confidence_multiplier", 1.0)
 
-        # I因子状态
-        if I_v2_int > 70:
+        # I因子状态（v7.2.24优化：9级分类，通俗描述）
+        if I_v2_int >= 80:
             I_icon = "💎"
-            I_desc = "高度独立"
-        elif I_v2_int > 50:
-            I_icon = "✅"
+            I_desc = "完全独立走势"
+        elif I_v2_int >= 60:
+            I_icon = "✨"
+            I_desc = "强独立走势"
+        elif I_v2_int >= 40:
+            I_icon = "🟢"
             I_desc = "中度独立"
-        elif I_v2_int > 30:
+        elif I_v2_int >= 20:
+            I_icon = "🟢"
+            I_desc = "轻度独立"
+        elif I_v2_int >= -20:
+            I_icon = "🟡"
+            I_desc = "跟随大盘"
+        elif I_v2_int >= -40:
             I_icon = "🟠"
-            I_desc = "轻微相关"
+            I_desc = "高度跟随"
+        elif I_v2_int >= -60:
+            I_icon = "🟠"
+            I_desc = "强烈跟随"
+        elif I_v2_int >= -80:
+            I_icon = "🔴"
+            I_desc = "完全跟随"
         else:
             I_icon = "🔴"
-            I_desc = "高度相关"
+            I_desc = "极端跟随"
 
         # 市场趋势描述
         if market_regime > 30:
@@ -2440,16 +2455,46 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     O = _as_int_score(scores.get("O"), 0)
     B_raw = _as_int_score(scores.get("B"), 0)
 
-    # 辅助函数：因子状态
-    def _factor_status(val: int) -> tuple:
-        if val > 50:
-            return "🟢", "强势" if val > 75 else "温和"
-        elif val > 0:
-            return "🟡", "中性"
-        elif val > -50:
-            return "🟠", "偏弱"
+    # v7.2.24优化：统一颜色方案（5色）+ 不同区域用不同图形
+    # TC组使用方块 ■□，VOM组使用菱形 ◆◇，B组使用三角 ▲△
+    def _factor_status_tc(val: int) -> tuple:
+        """TC组因子状态（方块图形）"""
+        if val >= 60:
+            return "🟩", "强劲上涨" if val > 75 else "稳步上涨"
+        elif val >= 20:
+            return "🟢", "温和上涨"
+        elif val >= -20:
+            return "🟡", "横盘震荡"
+        elif val >= -60:
+            return "🟠", "温和下跌"
         else:
-            return "🔴", "疲弱"
+            return "🔴", "强劲下跌" if val < -75 else "稳步下跌"
+
+    def _factor_status_vom(val: int) -> tuple:
+        """VOM组因子状态（菱形图形）"""
+        if val >= 60:
+            return "💚", "活跃放量" if val > 75 else "温和放量"
+        elif val >= 20:
+            return "🟢", "小幅放量"
+        elif val >= -20:
+            return "🟡", "量能平衡"
+        elif val >= -60:
+            return "🟠", "小幅缩量"
+        else:
+            return "🔻", "显著缩量" if val < -75 else "温和缩量"
+
+    def _factor_status_b(val: int) -> tuple:
+        """B组因子状态（三角图形）"""
+        if val >= 60:
+            return "⬆️", "强烈正溢价" if val > 75 else "明显正溢价"
+        elif val >= 20:
+            return "🟢", "温和正溢价"
+        elif val >= -20:
+            return "🟡", "溢价平衡"
+        elif val >= -60:
+            return "🟠", "温和负溢价"
+        else:
+            return "⬇️", "强烈负溢价" if val < -75 else "明显负溢价"
 
     # TC组(50%)
     # v7.2.16修复：确保类型安全
@@ -2460,16 +2505,16 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
         TC_int = int(round(TC_score))
         details += f"\nTC组(50%)  {TC_int:3d}  [趋势+资金流]"
 
-        # T趋势
-        T_icon, T_desc = _factor_status(T)
+        # T趋势（v7.2.24优化：通俗描述）
+        T_icon, T_desc = _factor_status_tc(T)
         details += f"\n  {T_icon} 趋势 T  {T:3d}  {T_desc}"
 
-        # M动量 (注意：M在TC和VOM都有)
-        M_icon, M_desc = _factor_status(M)
+        # M动量（v7.2.24优化：通俗描述）
+        M_icon, M_desc = _factor_status_tc(M)
         details += f"\n  {M_icon} 动量 M  {M:3d}  {M_desc}"
 
-        # C资金
-        C_icon, C_desc = _factor_status(C)
+        # C资金（v7.2.24优化：通俗描述）
+        C_icon, C_desc = _factor_status_tc(C)
         details += f"\n  {C_icon} 资金 C  {C:3d}  {C_desc}"
 
     # VOM组(35%)
@@ -2478,12 +2523,12 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
         VOM_int = int(round(VOM_score))
         details += f"\n\nVOM组(35%) {VOM_int:3d}  [量能+持仓+动量]"
 
-        # V量能
-        V_icon, V_desc = _factor_status(V)
+        # V量能（v7.2.24优化：通俗描述）
+        V_icon, V_desc = _factor_status_vom(V)
         details += f"\n  {V_icon} 量能 V  {V:3d}  {V_desc}"
 
-        # O持仓
-        O_icon, O_desc = _factor_status(O)
+        # O持仓（v7.2.24优化：通俗描述）
+        O_icon, O_desc = _factor_status_vom(O)
         details += f"\n  {O_icon} 持仓 O  {O:3d}  {O_desc}"
 
         # M动量（已在TC组显示，这里可以省略或注释）
@@ -2495,8 +2540,8 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
         B_int = int(round(B_score))
         details += f"\n\nB组(15%)   {B_int:3d}  [基差]"
 
-        # B基差
-        B_icon, B_desc = _factor_status(B_raw)
+        # B基差（v7.2.24优化：通俗描述）
+        B_icon, B_desc = _factor_status_b(B_raw)
         details += f"\n  {B_icon} 基差 B  {B_raw:3d}  {B_desc}"
 
     # ========== 5. 质量检查（v3.1增强：五道闸门）==========
