@@ -283,14 +283,9 @@ def analyze_with_v72_enhancements(
             "version": "v7.2_stage1",
 
             # F因子v2（资金领先性）
+            # v7.2.15修复：移除F_comparison冗余结构（A1修复后基础层已统一使用v2）
             "F_v2": F_v2,
             "F_v2_meta": F_v2_meta,
-            "F_original": original_result.get('F', 0),
-            "F_comparison": {
-                "v1": original_result.get('F', 0),
-                "v2": F_v2,
-                "diff": F_v2 - original_result.get('F', 0)
-            },
 
             # I因子（市场独立性）
             "I_v2": I_v2,
@@ -406,7 +401,7 @@ def batch_analyze_with_v72(symbols: list, data_getter_func) -> Dict[str, Any]:
         "total": len(symbols),
         "v72_improved": 0,  # v7.2判定与原始不同
         "gates_rejected": 0,  # 四道闸门拒绝
-        "F_changed_sign": 0,  # F因子符号改变
+        # v7.2.15移除：F_changed_sign（A1修复后F已统一为v2，不再有符号变化）
     }
 
     for symbol in symbols:
@@ -431,9 +426,7 @@ def batch_analyze_with_v72(symbols: list, data_getter_func) -> Dict[str, Any]:
             if not v72_enhancements["gates"]["pass_all"]:
                 stats["gates_rejected"] += 1
 
-            F_comp = v72_enhancements["F_comparison"]
-            if (F_comp["v1"] > 0) != (F_comp["v2"] > 0):
-                stats["F_changed_sign"] += 1
+            # v7.2.15修复：移除F_changed_sign统计（A1修复后F已统一为v2）
 
             results[symbol] = result_v72
 
@@ -492,10 +485,9 @@ if __name__ == "__main__":
     print("\nv7.2增强结果:")
     v72 = result["v72_enhancements"]
 
-    print(f"\n1. F因子对比:")
-    print(f"   原始F: {v72['F_comparison']['v1']}")
-    print(f"   v2 F: {v72['F_comparison']['v2']}")
-    print(f"   差异: {v72['F_comparison']['diff']}")
+    print(f"\n1. F因子:")
+    print(f"   F_v2: {v72['F_v2']}")
+    print(f"   元数据: {v72['F_v2_meta']}")
 
     print(f"\n2. 分数对比:")
     print(f"   原始分数: {v72['score_comparison']['original']}")
