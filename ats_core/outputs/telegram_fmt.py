@@ -2327,12 +2327,16 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
         I_v2_int = int(round(I_v2))
 
         # 获取Beta值和市场对齐分析
-        I_meta = _get(v72, "I_meta") or {}
+        # v7.2.16修复：确保类型安全，防止字符串导致的.get()错误
+        I_meta_raw = _get(v72, "I_meta")
+        I_meta = I_meta_raw if isinstance(I_meta_raw, dict) else {}
         beta_btc = I_meta.get("beta_btc", 0)
         beta_eth = I_meta.get("beta_eth", 0)
 
         # v3.1新增：市场对齐分析
-        market_analysis = _get(v72, "independence_market_analysis") or {}
+        # v7.2.16修复：确保类型安全
+        market_analysis_raw = _get(v72, "independence_market_analysis")
+        market_analysis = market_analysis_raw if isinstance(market_analysis_raw, dict) else {}
         market_regime = market_analysis.get("market_regime", 0)
         alignment = market_analysis.get("alignment", "正常")
         confidence_mult = market_analysis.get("confidence_multiplier", 1.0)
@@ -2383,7 +2387,9 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     details = f"\n\n━━━ 📊 因子分组详情 ━━━\n"
 
     # 获取原始因子
-    scores = _get(r, "scores") or {}
+    # v7.2.16修复：确保类型安全，防止字符串导致的.get()错误
+    scores_raw = _get(r, "scores")
+    scores = scores_raw if isinstance(scores_raw, dict) else {}
     T = _as_int_score(scores.get("T"), 0)
     M = _as_int_score(scores.get("M"), 0)
     C = _as_int_score(scores.get("C"), 0)
@@ -2403,7 +2409,9 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
             return "🔴", "疲弱"
 
     # TC组(50%)
-    group_scores = _get(v72, "group_scores") or {}
+    # v7.2.16修复：确保类型安全
+    group_scores_raw = _get(v72, "group_scores")
+    group_scores = group_scores_raw if isinstance(group_scores_raw, dict) else {}
     TC_score = group_scores.get("TC")
     if TC_score is not None:
         TC_int = int(round(TC_score))
@@ -2452,7 +2460,9 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     quality = f"\n\n━━━ ✅ 质量检查（五道闸门）━━━\n"
 
     # 获取gate_details（v7.2新格式）
-    gate_details_v72 = _get(v72, "gates") or {}
+    # v7.2.16修复：确保类型安全
+    gate_details_v72_raw = _get(v72, "gates")
+    gate_details_v72 = gate_details_v72_raw if isinstance(gate_details_v72_raw, dict) else {}
     gate_details_list = gate_details_v72.get("details", [])
 
     # 构建gate字典（兼容旧格式）
