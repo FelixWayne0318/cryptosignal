@@ -66,11 +66,11 @@
       "comment": "提高胜率要求：40%→60%"
     },
     "gate5_independence_market": {
-      "I_min": 20,
+      "I_min": 0,
       "market_regime_threshold": 30,
       "I_high_independence": 60,
       "confidence_boost_aligned": 1.2,
-      "description": "提高独立性要求：I≥20（有独立性）"
+      "description": "I×Market联合检查：只检查强相关大盘(I<0)的逆势风险，中等独立性正常通过"
     },
     "gate_pass_threshold": 0.5
   },
