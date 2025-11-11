@@ -1,25 +1,25 @@
 {
-  "version": "v7.2.19_data_driven",
-  "description": "基于实际数据的平衡配置 - 方案B",
+  "version": "v7.2_high_quality_recommended",
+  "description": "高质量信号推荐配置 - 优质信号标准（等级3）",
 
   "_说明": {
-    "目的": "基于实际市场数据分布，平衡信号质量与数量",
-    "适合": "追求质量提升但需要足够信号数量的投资者",
-    "预期": "基础层通过40-80个候选(10-20%)，Gate过滤后5-15个信号",
-    "数据依据": "2025-11-11扫描报告：405个币种，confidence中位=9/P75=15/Max=32"
+    "目的": "提高信号质量，降低假信号和低质量信号",
+    "适合": "稳健型投资者，追求高胜率和高收益",
+    "预期": "信号数量减少50-70%，但质量显著提升",
+    "如何应用": "cp signal_thresholds_RECOMMENDED.json signal_thresholds.json && 重启系统"
   },
 
   "基础分析阈值": {
     "mature_coin": {
-      "prime_strength_min": 42,
-      "confidence_min": 15,
-      "edge_min": 0.12,
-      "prime_prob_min": 0.50,
-      "gate_multiplier_min": 0.84,
-      "base_strength_min": 40,
-      "dims_ok_min": 3,
-      "prime_dim_threshold": 50,
-      "_comment": "数据驱动配置：基于P75水平(confidence=15,prime=42)，edge略高于中位(0.09)"
+      "prime_strength_min": 50,
+      "confidence_min": 50,
+      "edge_min": 0.20,
+      "prime_prob_min": 0.60,
+      "gate_multiplier_min": 0.90,
+      "base_strength_min": 45,
+      "dims_ok_min": 4,
+      "prime_dim_threshold": 60,
+      "_comment": "高质量标准：胜率≥60%，信心度≥50，期望收益≥20%"
     },
     "newcoin_phaseB": {
       "prime_strength_min": 40,
@@ -50,27 +50,27 @@
   "v72闸门阈值": {
     "gate1_data_quality": {
       "min_klines": 150,
-      "_comment": "保持150根K线要求（实际数据min=191，合理）"
+      "_comment": "提高数据质量要求：100→150根K线"
     },
     "gate2_fund_support": {
-      "F_min": -10,
+      "F_min": 10,
       "F_extreme_min": -60,
-      "comment": "基于数据调整：F≥-10（允许适度流出，中位=-1,P75=1）"
+      "comment": "提高资金要求：F≥10（明显资金流入），极端值-60（原-80）"
     },
     "gate3_ev": {
-      "EV_min": 0.015,
-      "_comment": "期望收益1.5%（略低于实际中位2%，EV是小数形式0.015=1.5%）"
+      "EV_min": 2.0,
+      "_comment": "提高期望收益要求：0%→2%"
     },
     "gate4_probability": {
-      "P_min": 0.50,
-      "comment": "胜率50%（适度提升，原40%→50%）"
+      "P_min": 0.60,
+      "comment": "提高胜率要求：40%→60%"
     },
     "gate5_independence_market": {
-      "I_min": 0,
+      "I_min": 20,
       "market_regime_threshold": 30,
       "I_high_independence": 60,
       "confidence_boost_aligned": 1.2,
-      "description": "I×Market联合检查：只检查强相关大盘(I<0)的逆势风险，中等独立性正常通过"
+      "description": "提高独立性要求：I≥20（有独立性）"
     },
     "gate_pass_threshold": 0.5
   },

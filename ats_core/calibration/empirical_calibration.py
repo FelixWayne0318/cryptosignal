@@ -42,17 +42,26 @@ class EmpiricalCalibrator:
     使用历史信号的实际结果，校准confidence到真实胜率的映射
     """
 
-    def __init__(self, storage_path: str = "data/calibration_history.json"):
+    def __init__(self, storage_path: str = "data/calibration_history.json", silent: bool = False):
         """
         初始化校准器
 
         Args:
             storage_path: 历史记录存储路径
+            silent: 是否静默模式（不打印初始化日志）
         """
         self.storage_path = storage_path
         self.history = self._load_history()
         self.calibration_table = {}
+        self._silent = silent
         self._update_table()
+
+        # v7.2.21：只在初始化时打印一次状态信息
+        if not self._silent:
+            if len(self.history) < 30:
+                print(f"[Calibration] 初始化完成：数据不足({len(self.history)}/30)，使用启发式规则")
+            else:
+                print(f"[Calibration] 初始化完成：已加载 {len(self.history)} 条历史记录，使用统计校准")
 
     def _load_history(self) -> List[Dict[str, Any]]:
         """加载历史记录"""
@@ -106,8 +115,8 @@ class EmpiricalCalibrator:
         分桶统计：把confidence分成10个桶，计算每个桶的实际胜率
         """
         # P0.3修复：降低启用阈值从50→30，加快冷启动
+        # v7.2.21修复：移除重复日志，只在初始化时打印一次
         if len(self.history) < 30:  # 至少30个样本
-            print(f"[Calibration] 数据不足({len(self.history)}/30)，使用启发式规则")
             return
 
         # 分桶统计

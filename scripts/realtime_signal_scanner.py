@@ -300,13 +300,17 @@ class RealtimeSignalScanner:
     def _apply_v72_enhancements(self, result: dict) -> dict:
         """应用v7.2增强分析"""
         symbol = result.get('symbol')
-        klines = result.get('klines', [])
-        oi_data = result.get('oi_data', [])
-        cvd_series = result.get('cvd_series', [])
-        atr = result.get('atr', 0)
+
+        # v7.2.12修复：优先从intermediate_data读取数据（batch_scan_optimized将数据存储在此）
+        intermediate = result.get('intermediate_data', {})
+        klines = intermediate.get('klines') or result.get('klines', [])
+        oi_data = intermediate.get('oi_data') or result.get('oi_data', [])
+        cvd_series = intermediate.get('cvd_series') or result.get('cvd_series', [])
+        atr = intermediate.get('atr_now') or result.get('atr', 0)
 
         # v7.2.9修复：从配置读取数据质量阈值（避免硬编码）
         from ats_core.config.threshold_config import get_thresholds
+        from ats_core.logging import log as debug_log
         config = get_thresholds()
         try:
             min_klines_for_v72 = config.config.get('v72增强参数', {}).get('min_klines_for_v72', 100)
@@ -314,6 +318,10 @@ class RealtimeSignalScanner:
         except:
             min_klines_for_v72 = 100
             min_cvd_points = 10
+
+        # v7.2.12修复：添加诊断日志
+        if len(klines) < min_klines_for_v72 or len(cvd_series) < min_cvd_points:
+            debug_log(f"   ⚠️  {symbol} 数据不足: klines={len(klines)}/{min_klines_for_v72}, cvd={len(cvd_series)}/{min_cvd_points}")
 
         if len(klines) >= min_klines_for_v72 and len(cvd_series) >= min_cvd_points:
             try:
@@ -328,8 +336,14 @@ class RealtimeSignalScanner:
                 return v72_enhanced
             except Exception as e:
                 warn(f"v7.2增强失败 {symbol}: {e}")
+                # v7.2.11修复：确保返回的result有v72_enhancements字段（即使为空）
+                if 'v72_enhancements' not in result:
+                    result['v72_enhancements'] = {}
                 return result
         else:
+            # v7.2.11修复：数据不足时也添加空的v72_enhancements
+            if 'v72_enhancements' not in result:
+                result['v72_enhancements'] = {}
             return result
 
     def _filter_prime_signals_v72(self, results: list) -> list:
@@ -432,7 +446,16 @@ class RealtimeSignalScanner:
             log(f"      F={F_v2:.0f}, I={I_v2:.0f}")
 
         except Exception as e:
-            error(f"   ❌ 发送失败 {top_signal.get('symbol')}: {e}")
+            # v7.2.11修复：安全获取symbol，防止top_signal不是字典
+            symbol = top_signal.get('symbol') if isinstance(top_signal, dict) else str(top_signal)[:20]
+            error(f"   ❌ 发送失败 {symbol}: {e}")
+
+            # v7.2.17+: 打印完整traceback用于诊断
+            import traceback
+            error("   完整错误堆栈:")
+            for line in traceback.format_exc().split('\n'):
+                if line.strip():
+                    error(f"   {line}")
 
         # 记录跳过的信号（参与下一轮竞争）
         if len(sorted_signals) > 1:
