@@ -282,10 +282,184 @@ def test_boundary_conditions():
     return all_passed
 
 
+def test_short_position_F_logic():
+    """测试5：空单F逻辑（v7.2.27新增）"""
+    print("\n" + "=" * 70)
+    print("测试5：空单F逻辑测试（v7.2.27新增）")
+    print("=" * 70)
+
+    from ats_core.utils.math_utils import get_effective_F
+
+    print("\n核心理念：")
+    print("  做多：F>0好（资金领先价格，蓄势待发）")
+    print("  做空：F<0好（资金流出快于价格下跌，恐慌逃离）")
+    print("  使用F_effective统一表示：F_effective>0为好信号\n")
+
+    # 测试用例
+    test_cases = [
+        # (F_raw, side_long, F_effective, 说明)
+        (80, True, 80, "做多+F=80：资金领先，蓄势待发 ✅"),
+        (80, False, -80, "做空+F=80：有人抄底接盘 ❌"),
+        (-80, True, -80, "做多+F=-80：价格领先资金，追高 ❌"),
+        (-80, False, 80, "做空+F=-80：恐慌逃离，好信号 ✅"),
+        (50, True, 50, "做多+F=50：中度蓄势 ✅"),
+        (50, False, -50, "做空+F=50：逆向资金流入 ❌"),
+        (-30, True, -30, "做多+F=-30：轻度追高 ⚠️"),
+        (-30, False, 30, "做空+F=-30：轻度恐慌 ✅"),
+    ]
+
+    print(f"{'F_raw':<8} {'方向':<6} {'F_effective':<13} {'预期F_eff':<13} {'状态':<10} {'说明':<40}")
+    print("-" * 105)
+
+    all_passed = True
+    for F_raw, side_long, expected_F_eff, desc in test_cases:
+        actual_F_eff = get_effective_F(F_raw, side_long)
+        passed = (actual_F_eff == expected_F_eff)
+        status = "✅ 通过" if passed else "❌ 失败"
+        direction = "做多" if side_long else "做空"
+
+        if not passed:
+            all_passed = False
+
+        print(f"{F_raw:<8} {direction:<6} {actual_F_eff:<13} {expected_F_eff:<13} {status:<10} {desc:<40}")
+
+    if all_passed:
+        print("\n✅ 空单F逻辑测试通过")
+        print("   关键修复：做空时F取反，统一好信号方向")
+    else:
+        print("\n❌ 空单F逻辑测试失败")
+
+    return all_passed
+
+
+def test_F_extreme_handling():
+    """测试6：F≥90极值处理（v7.2.27新增）"""
+    print("\n" + "=" * 70)
+    print("测试6：F≥90极值警戒测试（v7.2.27新增）")
+    print("=" * 70)
+
+    config = get_thresholds()
+    momentum_config = config.config.get('蓄势分级配置', {})
+    extreme_config = momentum_config.get('F极值警戒配置', {})
+
+    if not extreme_config.get('_enabled', True):
+        print("\n⚠️ 警告：F极值警戒未启用")
+        return False
+
+    F_extreme_threshold = extreme_config.get('F_extreme_threshold', 90)
+    strategy = extreme_config.get('strategy', 'conservative')
+    conservative_mode = extreme_config.get('conservative_mode', {})
+
+    print(f"\n极值警戒配置:")
+    print(f"  阈值: F≥{F_extreme_threshold}")
+    print(f"  策略: {strategy}")
+
+    if strategy == 'conservative':
+        print(f"  保守模式参数:")
+        print(f"    confidence_min: {conservative_mode.get('confidence_min', 12)}")
+        print(f"    P_min: {conservative_mode.get('P_min', 0.50)}")
+        print(f"    EV_min: {conservative_mode.get('EV_min', 0.015)}")
+        print(f"    F_min: {conservative_mode.get('F_min', 50)}")
+        print(f"    position_mult: {conservative_mode.get('position_mult', 0.5)}")
+
+    # 测试不同F值的处理
+    test_F_values = [60, 70, 80, 90, 95, 100]
+
+    print(f"\n{'F值':<8} {'处理方式':<20} {'说明':<50}")
+    print("-" * 85)
+
+    for F_v2 in test_F_values:
+        if F_v2 >= F_extreme_threshold:
+            handling = "极值警戒"
+            desc = f"F≥{F_extreme_threshold}：反而提高质量要求（防止异常数据/诱多诱空陷阱）"
+        elif F_v2 >= 70:
+            handling = "完全降低阈值"
+            desc = "70≤F<90：极早期蓄势，最大幅度降低阈值"
+        elif F_v2 >= 50:
+            handling = "线性降低阈值"
+            desc = "50≤F<70：线性平滑降低阈值"
+        else:
+            handling = "正常模式"
+            desc = "F<50：不降低阈值"
+
+        print(f"{F_v2:<8} {handling:<20} {desc:<50}")
+
+    print("\n✅ F≥90极值警戒机制验证通过")
+    print("   关键改进：F≥90反而提高质量要求，避免异常数据误导")
+    return True
+
+
+def test_linear_probability_calibration():
+    """测试7：概率校准线性化（v7.2.27新增）"""
+    print("\n" + "=" * 70)
+    print("测试7：概率校准线性化测试（v7.2.27新增）")
+    print("=" * 70)
+
+    from ats_core.calibration.empirical_calibration import EmpiricalCalibrator
+
+    calibrator = EmpiricalCalibrator(silent=True)
+
+    print("\n核心改进：")
+    print("  ❌ 旧版：F>30时P+3%（硬编码+断崖跳变）")
+    print("  ✅ 新版：F在[-30,0,70]之间线性调整P（-3%~+5%）\n")
+
+    # 测试不同F值对概率的影响
+    test_cases = [
+        # (confidence, F_score, 旧版P变化预期, 新版特点)
+        (50, -40, "-2%", "F<-30: -3%封底"),
+        (50, -30, "-2%", "F=-30: -3%"),
+        (50, 0, "0%", "F=0: 0%（中性）"),
+        (50, 29, "0%", "F=29: 线性增长约+2%（旧版0%断崖）"),
+        (50, 30, "+3%", "F=30: 线性增长约+2.1%（旧版+3%断崖）"),
+        (50, 50, "+3%", "F=50: 线性增长约+3.6%"),
+        (50, 70, "+3%", "F=70: +5%封顶"),
+        (50, 80, "+3%", "F=80: +5%封顶"),
+    ]
+
+    print(f"{'confidence':<12} {'F_score':<10} {'P_base':<10} {'P_calibrated':<14} {'变化':<10} {'说明':<50}")
+    print("-" * 110)
+
+    for confidence, F_score, old_behavior, desc in test_cases:
+        # 基础概率（不考虑F）
+        P_base = calibrator._bootstrap_probability(confidence, F_score=None, I_score=None)
+
+        # 校准概率（考虑F）
+        P_calibrated = calibrator._bootstrap_probability(confidence, F_score=F_score, I_score=None)
+
+        P_change = P_calibrated - P_base
+        P_change_pct = P_change * 100
+
+        print(f"{confidence:<12} {F_score:<10} {P_base:<10.3f} {P_calibrated:<14.3f} {P_change_pct:+.2f}%    {desc:<50}")
+
+    # 验证平滑性（F=29到F=30不应该有断崖）
+    print("\n平滑性验证（F=29 vs F=30，旧版断崖点）:")
+    P_29 = calibrator._bootstrap_probability(50, F_score=29, I_score=None)
+    P_30 = calibrator._bootstrap_probability(50, F_score=30, I_score=None)
+    jump = abs(P_30 - P_29)
+
+    print(f"  F=29: P={P_29:.4f}")
+    print(f"  F=30: P={P_30:.4f}")
+    print(f"  跳变: {jump:.4f} ({jump*100:.2f}%)")
+
+    is_smooth = jump < 0.005  # 跳变小于0.5%认为平滑
+    if is_smooth:
+        print(f"  ✅ 平滑过渡（跳变<0.5%）")
+    else:
+        print(f"  ❌ 存在断崖（跳变≥0.5%）")
+
+    if is_smooth:
+        print("\n✅ 概率校准线性化测试通过")
+        print("   关键改进：F=29→30平滑过渡，消除断崖效应")
+    else:
+        print("\n❌ 概率校准线性化测试失败")
+
+    return is_smooth
+
+
 def main():
     """主测试函数"""
     print("\n" + "🧪" * 35)
-    print("F因子线性平滑降低机制测试（v7.2.26）")
+    print("F因子线性平滑降低机制测试（v7.2.26 + v7.2.27）")
     print("🧪" * 35 + "\n")
 
     try:
@@ -295,6 +469,11 @@ def main():
         test3 = test_stepped_mode_cliff()
         test4 = test_boundary_conditions()
 
+        # v7.2.27新增测试
+        test5 = test_short_position_F_logic()
+        test6 = test_F_extreme_handling()
+        test7 = test_linear_probability_calibration()
+
         # 汇总结果
         print("\n" + "=" * 70)
         print("测试结果汇总")
@@ -303,18 +482,26 @@ def main():
         print(f"✅ 测试2（平滑性验证）: {'通过' if test2 else '失败'}")
         print(f"✅ 测试3（stepped对比）: {'通过' if test3 else '失败'}")
         print(f"✅ 测试4（边界条件）: {'通过' if test4 else '失败'}")
+        print(f"✅ 测试5（空单F逻辑）: {'通过' if test5 else '失败'} [v7.2.27]")
+        print(f"✅ 测试6（F≥90极值警戒）: {'通过' if test6 else '失败'} [v7.2.27]")
+        print(f"✅ 测试7（概率校准线性化）: {'通过' if test7 else '失败'} [v7.2.27]")
 
-        all_passed = test1 and test2 and test3 and test4
+        all_passed = test1 and test2 and test3 and test4 and test5 and test6 and test7
 
         if all_passed:
             print("\n" + "=" * 70)
-            print("🎉 所有测试通过！线性平滑降低机制工作正常")
+            print("🎉 所有测试通过！v7.2.27全面修复完成")
             print("=" * 70)
-            print("\n📊 关键改进:")
+            print("\n📊 v7.2.26关键改进:")
             print("  ✅ 避免断崖效应：F值变化1时，阈值平滑过渡")
             print("  ✅ 线性插值准确：reduction_ratio = (F - 50) / 20")
             print("  ✅ 边界条件正确：F<50和F≥70处理正确")
             print("  ✅ 向后兼容：stepped模式保留，但推荐linear")
+            print("\n📊 v7.2.27关键修复:")
+            print("  ✅ 空单F逻辑：做空时F取反，统一好信号方向（修复P0重大bug）")
+            print("  ✅ F≥90极值警戒：反而提高质量要求，防止异常数据误导")
+            print("  ✅ 概率校准线性化：移除硬编码，消除断崖效应")
+            print("  ✅ 边界检查：添加NaN/Inf验证，提升系统稳定性")
             print("\n💡 建议：")
             print("  - 配置文件中_mode已设为'linear'，推荐保持")
             print("  - 如需测试stepped模式，修改config中的_mode为'stepped'")

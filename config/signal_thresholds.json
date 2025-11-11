@@ -281,6 +281,80 @@
       "止损收紧": "蓄势信号止损收紧20%（因为入场更早，波动更大）",
       "持续性检查": "要求F≥70持续2-3根K线（2-3小时）才触发level_3",
       "监控指标": "提前量、胜率、收益、假信号率"
+    },
+
+    "F极值警戒配置": {
+      "_description": "v7.2.27新增：F≥90异常警戒机制",
+      "_enabled": true,
+      "F_extreme_threshold": 90,
+      "strategy": "conservative",
+      "_strategy_options": ["aggressive", "conservative"],
+      "_strategy_description": "aggressive=继续降低阈值, conservative=提高质量要求(推荐)",
+
+      "conservative_mode": {
+        "_description": "F≥90时反而提高质量要求（防止异常数据）",
+        "confidence_min": 12,
+        "P_min": 0.50,
+        "EV_min": 0.015,
+        "F_min": 50,
+        "position_mult": 0.5,
+        "_rationale": "F过高可能是数据异常或陷阱，需要更强确认"
+      },
+
+      "aggressive_mode": {
+        "_description": "F≥90时继续降低阈值（激进策略）",
+        "enable_over_max_boost": true,
+        "over_max_reduction_rate": 0.5,
+        "max_reduction_ratio": 1.5,
+        "_formula": "ratio = 1.0 + (F - 70) / 10 * 0.5, 上限1.5",
+        "_example": "F=90时ratio=1.5, confidence降至7.5",
+        "_rationale": "F极高表示超强蓄势，应更激进"
+      }
+    }
+  },
+
+  "概率校准线性参数": {
+    "_description": "v7.2.27改进：概率校准改为线性平滑（移除硬编码断崖）",
+    "_version": "v2.0_linear",
+    "_enabled": true,
+    "_old_version_deprecated": "v1.0使用硬编码F>30/15/-30（已废弃）",
+
+    "F因子线性校准": {
+      "_description": "F因子对概率的线性调整（平滑无断崖）",
+      "_enabled": true,
+      "F_bonus_threshold_max": 70,
+      "F_bonus_threshold_min": -30,
+      "P_bonus_at_F_max": 0.05,
+      "P_penalty_at_F_min": -0.03,
+      "_formula": "F在[-30, 0, 70]之间线性插值",
+      "_example": {
+        "F=70": "+5%",
+        "F=50": "+3.6%",
+        "F=30": "+2.1%",
+        "F=0": "0%",
+        "F=-15": "-1.5%",
+        "F=-30": "-3%"
+      },
+      "_rationale": "F越高胜率越高，线性增长符合直觉"
+    },
+
+    "I因子线性校准": {
+      "_description": "I因子对概率的线性调整",
+      "_enabled": true,
+      "I_bonus_threshold_max": 80,
+      "I_bonus_threshold_min": 20,
+      "P_bonus_at_I_max": 0.03,
+      "P_penalty_at_I_min": -0.02,
+      "_formula": "I在[20, 50, 80]之间线性插值",
+      "_example": {
+        "I=80": "+3%",
+        "I=60": "+2%",
+        "I=40": "+1%",
+        "I=20": "0%",
+        "I=10": "-1%",
+        "I=0": "-2%"
+      },
+      "_rationale": "I越高独立性越强，Alpha机会越大"
     }
   },
 

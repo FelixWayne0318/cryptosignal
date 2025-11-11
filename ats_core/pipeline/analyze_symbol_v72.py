@@ -21,6 +21,9 @@
 from typing import Dict, Any
 import math
 
+# v7.2.27新增：导入线性函数工具和F多空适配函数
+from ats_core.utils.math_utils import linear_reduce, get_effective_F
+
 # v7.2.21修复：使用模块级单例，避免重复初始化和日志污染
 from ats_core.calibration.empirical_calibration import EmpiricalCalibrator
 _calibrator_singleton = None
@@ -116,6 +119,11 @@ def analyze_with_v72_enhancements(
     confidence_v72 = abs(weighted_score_v72)
     side_long_v72 = (weighted_score_v72 > 0)
 
+    # ===== 2.3 v7.2.27修复：计算有效F（考虑做多/做空方向）=====
+    # 做多时F>0好（资金领先价格，蓄势），做空时F<0好（资金流出快于价格下跌，恐慌逃离）
+    # 因此做空时将F取反，使F>0统一表示好信号
+    F_effective = get_effective_F(F_v2, side_long_v72)
+
     # ===== 2.5 提取I因子（C1 CRITICAL FIX：必须在统计校准之前定义）=====
     # v7.2增强：显式提取I因子用于展示和校准
     # I因子在基础分析中已计算（通过calculate_independence）
@@ -194,6 +202,7 @@ def analyze_with_v72_enhancements(
         if momentum_enabled:
             # ==== 模式1：线性平滑降低（推荐，避免断崖效应） ====
             if momentum_mode == "linear":
+                # v7.2.27修复：使用F_effective考虑多空方向
                 # 读取线性模式参数
                 linear_params = momentum_config.get('线性模式参数', {})
                 F_threshold_min = linear_params.get('F_threshold_min', 50)
@@ -206,20 +215,75 @@ def analyze_with_v72_enhancements(
                 F_min_increase = max_reduction.get('F_min_increase', 60)
                 position_reduction = max_reduction.get('position_reduction', 0.5)
 
-                # 计算线性降低比例
-                if F_v2 >= F_threshold_max:
-                    # F≥70：完全降低
-                    reduction_ratio = 1.0
+                # v7.2.27新增：F≥90极值警戒处理
+                extreme_config = momentum_config.get('F极值警戒配置', {})
+                F_extreme_threshold = extreme_config.get('F_extreme_threshold', 90)
+
+                if F_effective >= F_extreme_threshold and extreme_config.get('_enabled', True):
+                    # F≥90：极值警戒（保守策略：反而提高质量要求）
+                    if extreme_config.get('strategy') == 'conservative':
+                        conservative_mode = extreme_config.get('conservative_mode', {})
+                        momentum_confidence_min = conservative_mode.get('confidence_min', 12)
+                        momentum_P_min = conservative_mode.get('P_min', 0.50)
+                        momentum_EV_min = conservative_mode.get('EV_min', 0.015)
+                        momentum_F_min = conservative_mode.get('F_min', 50)
+                        momentum_position_mult = conservative_mode.get('position_mult', 0.5)
+                        momentum_level = 3
+                        momentum_desc = "极限蓄势（警戒）"
+                elif F_effective >= F_threshold_max:
+                    # 70≤F<90：完全降低
                     momentum_level = 3
                     momentum_desc = "极早期蓄势"
-                elif F_v2 >= F_threshold_min:
+
+                    # 获取基准阈值
+                    base_confidence = config.get_mature_threshold('confidence_min', 15)
+                    base_P = config.get_gate_threshold('gate4_probability', 'P_min', 0.50)
+                    base_EV = config.get_gate_threshold('gate3_ev', 'EV_min', 0.015)
+                    base_F = config.get_gate_threshold('gate2_fund_support', 'F_min', -10)
+
+                    # 应用最大降低
+                    momentum_confidence_min = base_confidence - confidence_reduction
+                    momentum_P_min = base_P - P_reduction
+                    momentum_EV_min = base_EV - EV_reduction
+                    momentum_F_min = base_F + F_min_increase
+                    momentum_position_mult = 1.0 - position_reduction
+                elif F_effective >= F_threshold_min:
                     # 50≤F<70：线性插值（平滑过渡）
-                    reduction_ratio = (F_v2 - F_threshold_min) / (F_threshold_max - F_threshold_min)
+                    # v7.2.27改进：使用linear_reduce简化计算
+
+                    # 获取基准阈值
+                    base_confidence = config.get_mature_threshold('confidence_min', 15)
+                    base_P = config.get_gate_threshold('gate4_probability', 'P_min', 0.50)
+                    base_EV = config.get_gate_threshold('gate3_ev', 'EV_min', 0.015)
+                    base_F = config.get_gate_threshold('gate2_fund_support', 'F_min', -10)
+
+                    # 使用linear_reduce进行线性插值
+                    momentum_confidence_min = linear_reduce(
+                        F_effective, F_threshold_min, F_threshold_max,
+                        base_confidence, base_confidence - confidence_reduction
+                    )
+                    momentum_P_min = linear_reduce(
+                        F_effective, F_threshold_min, F_threshold_max,
+                        base_P, base_P - P_reduction
+                    )
+                    momentum_EV_min = linear_reduce(
+                        F_effective, F_threshold_min, F_threshold_max,
+                        base_EV, base_EV - EV_reduction
+                    )
+                    momentum_F_min = linear_reduce(
+                        F_effective, F_threshold_min, F_threshold_max,
+                        base_F, base_F + F_min_increase
+                    )
+                    momentum_position_mult = linear_reduce(
+                        F_effective, F_threshold_min, F_threshold_max,
+                        1.0, 1.0 - position_reduction
+                    )
+
                     # 根据F值判定显示级别（仅用于Telegram显示）
-                    if F_v2 >= 65:
+                    if F_effective >= 65:
                         momentum_level = 3
                         momentum_desc = "极早期蓄势"
-                    elif F_v2 >= 55:
+                    elif F_effective >= 55:
                         momentum_level = 2
                         momentum_desc = "早期蓄势"
                     else:
@@ -227,27 +291,12 @@ def analyze_with_v72_enhancements(
                         momentum_desc = "蓄势待发"
                 else:
                     # F<50：正常模式
-                    reduction_ratio = 0.0
                     momentum_level = 0
                     momentum_desc = "正常模式"
 
-                # 线性计算降低后的阈值
-                if reduction_ratio > 0:
-                    # 获取基准阈值
-                    base_confidence = config.get_mature_threshold('confidence_min', 15)
-                    base_P = config.get_gate_threshold('gate4_probability', 'P_min', 0.50)
-                    base_EV = config.get_gate_threshold('gate3_ev', 'EV_min', 0.015)
-                    base_F = config.get_gate_threshold('gate2_fund_support', 'F_min', -10)
-
-                    # 应用线性降低（平滑过渡）
-                    momentum_confidence_min = base_confidence - reduction_ratio * confidence_reduction
-                    momentum_P_min = base_P - reduction_ratio * P_reduction
-                    momentum_EV_min = base_EV - reduction_ratio * EV_reduction
-                    momentum_F_min = base_F + reduction_ratio * F_min_increase
-                    momentum_position_mult = 1.0 - reduction_ratio * position_reduction
-
             # ==== 模式2：分级降低（向后兼容，保留断崖式） ====
             elif momentum_mode == "stepped":
+                # v7.2.27修复：使用F_effective考虑多空方向
                 # 读取分级阈值
                 level_3_config = momentum_config.get('level_3_极早期', {})
                 level_2_config = momentum_config.get('level_2_早期', {})
@@ -258,15 +307,15 @@ def analyze_with_v72_enhancements(
                 level_1_threshold = level_1_config.get('F_threshold', 50)
 
                 # 判断当前F因子属于哪个级别（明确区间，提升可读性）
-                if F_v2 >= level_3_threshold:  # F≥70
+                if F_effective >= level_3_threshold:  # F≥70
                     momentum_level = 3
                     momentum_config_active = level_3_config
                     momentum_desc = "极早期蓄势"
-                elif level_2_threshold <= F_v2 < level_3_threshold:  # 60≤F<70
+                elif level_2_threshold <= F_effective < level_3_threshold:  # 60≤F<70
                     momentum_level = 2
                     momentum_config_active = level_2_config
                     momentum_desc = "早期蓄势"
-                elif level_1_threshold <= F_v2 < level_2_threshold:  # 50≤F<60
+                elif level_1_threshold <= F_effective < level_2_threshold:  # 50≤F<60
                     momentum_level = 1
                     momentum_config_active = level_1_config
                     momentum_desc = "蓄势待发"
@@ -338,9 +387,10 @@ def analyze_with_v72_enhancements(
     gates_probability = 1.0 if P_calibrated >= P_min else 0.0
 
     # F因子闸门（v7.2特有：使用F_v2）
-    # F >= F_min: 资金支撑合格
-    # F < F_min: 价格领先资金，追高风险
-    gates_fund_support = 1.0 if F_v2 >= F_min else 0.0
+    # v7.2.27修复：使用F_effective考虑多空方向
+    # 做多：F_effective >= F_min (资金领先价格，蓄势待发)
+    # 做空：F_effective >= F_min (资金逃离快于价格下跌，恐慌抛售)
+    gates_fund_support = 1.0 if F_effective >= F_min else 0.0
 
     # Gate 5: I×Market联合闸门（v3.1新增）
     # 过滤"低独立性+逆势"的危险信号

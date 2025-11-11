@@ -149,6 +149,16 @@ def score_fund_leading(
 
     leading_raw = fund_momentum - price_momentum
 
+    # v7.2.27新增：边界检查（防止NaN/Inf）
+    from ats_core.utils.math_utils import is_valid_number
+    if not is_valid_number(leading_raw):
+        return 0, {
+            "degradation_reason": "invalid_leading_raw",
+            "leading_raw": str(leading_raw),
+            "fund_momentum": fund_momentum,
+            "price_momentum": price_momentum
+        }
+
     # 映射到 -100 到 +100（带符号）
     # 正数 = 资金领先价格（蓄势待发）
     # 负数 = 价格领先资金（追高风险）
@@ -363,6 +373,16 @@ def score_fund_leading_v2(
 
     # === 7. F原始值（资金 - 价格）===
     F_raw = fund_momentum - price_momentum
+
+    # v7.2.27新增：边界检查（防止NaN/Inf）
+    from ats_core.utils.math_utils import is_valid_number
+    if not is_valid_number(F_raw):
+        return 0, {
+            "degradation_reason": "invalid_F_raw",
+            "F_raw": str(F_raw),
+            "fund_momentum": fund_momentum,
+            "price_momentum": price_momentum
+        }
 
     # === 8. 映射到±100（tanh平滑）===
     F_normalized = math.tanh(F_raw / p["scale"])

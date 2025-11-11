@@ -192,19 +192,20 @@ class EmpiricalCalibrator:
 
     def _bootstrap_probability(self, confidence: float, F_score: float = None, I_score: float = None) -> float:
         """
-        启发式概率（冷启动 - P0.3增强版）
+        启发式概率（v7.2.27改进：线性平滑校准）
 
-        线性映射 + F/I因子调整：
+        线性映射 + F/I因子线性调整：
         - confidence=0 → P=0.45（基准）
         - confidence=50 → P=0.52
         - confidence=100 → P=0.68
-        - F > 30 → +0.03（资金领先，蓄势待发）
-        - I > 60 → +0.02（高独立性，Alpha机会）
+        - F因子线性调整：F在[-30, 0, 70]之间线性调整P（-3% ~ +5%）
+        - I因子线性调整：I在[20, 50, 80]之间线性调整P（-2% ~ +3%）
 
-        改进理由（P0.3）：
-        - 0.45基准：比之前的0.40更保守，避免弱信号过度乐观
-        - 0.68上限：比之前的0.70更现实，避免强信号过度自信
-        - F/I调整：结合关键因子，提供多维度评估
+        v7.2.27改进：
+        - ✅ 移除硬编码的F>30/15/-30（违反规范）
+        - ✅ 改为线性平滑调整（避免断崖效应）
+        - ✅ 参数从配置文件读取（可调整）
+        - ✅ 与v7.2.26蓄势分级一致（都使用线性）
 
         Args:
             confidence: 信号置信度 (0-100)
@@ -214,24 +215,72 @@ class EmpiricalCalibrator:
         Returns:
             估算的胜率 (0.40-0.75)
         """
+        # 导入线性函数工具
+        from ats_core.utils.math_utils import linear_reduce
+        from ats_core.config.threshold_config import get_thresholds
+
         # 基础线性映射（改进后的范围）
         P = 0.45 + (confidence / 100.0) * 0.23  # 45%-68%范围
 
-        # F因子调整（蓄势待发检测）
-        if F_score is not None:
-            if F_score > 30:  # 强势蓄势
-                P += 0.03
-            elif F_score > 15:  # 温和蓄势
-                P += 0.01
-            elif F_score < -30:  # 追高风险
-                P -= 0.02
+        # 读取概率校准配置（v7.2.27新增）
+        try:
+            config = get_thresholds()
+            prob_calib_config = config.config.get('概率校准线性参数', {})
 
-        # I因子调整（独立性Alpha）
-        if I_score is not None:
-            if I_score > 60:  # 高独立性
-                P += 0.02
-            elif I_score < 30:  # 高相关性，需跟随大盘
-                P -= 0.01
+            # F因子线性调整（v7.2.27改进：从硬编码改为线性+配置化）
+            if F_score is not None:
+                F_calib_config = prob_calib_config.get('F因子线性校准', {})
+                F_enabled = F_calib_config.get('_enabled', True)
+
+                if F_enabled:
+                    F_max = F_calib_config.get('F_bonus_threshold_max', 70)
+                    F_min = F_calib_config.get('F_bonus_threshold_min', -30)
+                    P_bonus_max = F_calib_config.get('P_bonus_at_F_max', 0.05)
+                    P_penalty_min = F_calib_config.get('P_penalty_at_F_min', -0.03)
+
+                    # 线性调整：F在[-30, 0, 70]之间线性插值
+                    if F_score >= F_max:
+                        P += P_bonus_max  # F≥70: +5%
+                    elif F_score >= 0:
+                        # F在0~70之间线性增加（0% ~ +5%）
+                        P_bonus = linear_reduce(F_score, 0, F_max, 0, P_bonus_max)
+                        P += P_bonus
+                    elif F_score >= F_min:
+                        # F在-30~0之间线性减少（-3% ~ 0%）
+                        P_penalty = linear_reduce(F_score, F_min, 0, P_penalty_min, 0)
+                        P += P_penalty
+                    else:
+                        P += P_penalty_min  # F≤-30: -3%
+
+            # I因子线性调整（v7.2.27改进：同样改为线性）
+            if I_score is not None:
+                I_calib_config = prob_calib_config.get('I因子线性校准', {})
+                I_enabled = I_calib_config.get('_enabled', True)
+
+                if I_enabled:
+                    I_max = I_calib_config.get('I_bonus_threshold_max', 80)
+                    I_min = I_calib_config.get('I_bonus_threshold_min', 20)
+                    P_bonus_max = I_calib_config.get('P_bonus_at_I_max', 0.03)
+                    P_penalty_min = I_calib_config.get('P_penalty_at_I_min', -0.02)
+
+                    # 线性调整：I在[20, 50, 80]之间线性插值
+                    if I_score >= I_max:
+                        P += P_bonus_max  # I≥80: +3%
+                    elif I_score >= 50:
+                        # I在50~80之间线性增加（0% ~ +3%）
+                        P_bonus = linear_reduce(I_score, 50, I_max, 0, P_bonus_max)
+                        P += P_bonus
+                    elif I_score >= I_min:
+                        # I在20~50之间保持0%（中性）
+                        pass
+                    else:
+                        # I<20: 线性减少至-2%
+                        P_penalty = linear_reduce(I_score, 0, I_min, P_penalty_min, 0)
+                        P += P_penalty
+
+        except Exception as e:
+            # 配置加载失败，使用保守的默认值（不调整）
+            pass
 
         # 限制范围
         return max(0.40, min(0.75, P))
