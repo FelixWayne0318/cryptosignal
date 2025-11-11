@@ -158,13 +158,8 @@ def _analyze_symbol_core(
     params = CFG.params or {}
 
     # v7.2.3: 从配置文件读取阈值（移除硬编码）
-    try:
-        config = get_thresholds()
-    except Exception as e:
-        # 配置加载失败时使用None，后续使用默认值
-        config = None
-        from ats_core.logging import warn
-        warn(f"⚠️  配置文件加载失败，使用默认阈值: {e}")
+    # v7.2.20修复：移除冗余的配置加载（第193行有正确的加载逻辑）
+    # 此处不再加载，避免与函数内部的重复导入冲突
 
     # 移除候选池先验逻辑（已废弃）
     elite_prior = {}
@@ -190,7 +185,7 @@ def _analyze_symbol_core(
 
     # ---- v6.6: DataQual硬门槛检查（唯一硬拒绝）----
     # v7.2.10修复：从配置读取阈值（避免硬编码）
-    from ats_core.config.threshold_config import get_thresholds
+    # v7.2.20修复：使用模块级导入的get_thresholds（第32行），避免重复导入
     config = get_thresholds()
     min_bars_1h = config.config.get('数据质量阈值', {}).get('min_bars_1h', 200)
     data_qual_min = config.config.get('数据质量阈值', {}).get('data_qual_min', 0.90)
@@ -1742,7 +1737,7 @@ def _calc_quality(scores: Dict, n_klines: int, n_oi: int) -> float:
     Q = 1.0
 
     # v7.2.10修复：从配置读取因子质量检查阈值（避免硬编码）
-    from ats_core.config.threshold_config import get_thresholds
+    # v7.2.20修复：使用模块级导入的get_thresholds（第32行），避免重复导入
     config = get_thresholds()
     factor_quality_cfg = config.config.get('因子质量检查', {})
     n_klines_min = factor_quality_cfg.get('n_klines_min', 100)
