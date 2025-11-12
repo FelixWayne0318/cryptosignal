@@ -100,7 +100,24 @@ def cvd_from_klines(
 
         return cvd
     else:
-        # 旧方法：Tick Rule估算（兼容性）
+        # ⚠️ DEPRECATED: 旧方法Tick Rule估算（不准确，仅保留兼容性）
+        # v7.2.32警告：此方法使用"阳线=买盘、阴线=卖盘"判断，会系统性误判！
+        #
+        # 问题：阳线（close>=open）≠买盘，阴线≠卖盘
+        # 例如：主动买盘推高后回落形成阴线，但前期都是买盘
+        #
+        # 解决方案：确保K线数据包含takerBuyVolume（第9列），设置use_taker_buy=True
+        #
+        # 此分支将在未来版本中移除！
+        import warnings
+        warnings.warn(
+            "CVD计算正在使用不准确的Tick Rule估算（阳线=买盘、阴线=卖盘）！"
+            "\n这会导致系统性误判资金流向。"
+            "\n请确保K线数据包含takerBuyVolume（第9列），并使用use_taker_buy=True。"
+            "\n此方法将在未来版本中移除。",
+            DeprecationWarning,
+            stacklevel=2
+        )
         o = _col(klines, 1)
         c = _col(klines, 4)
         v = _col(klines, 5)
@@ -112,7 +129,7 @@ def cvd_from_klines(
             if not (math.isfinite(oi) and math.isfinite(ci) and math.isfinite(vi)):
                 cvd.append(s)
                 continue
-            sign = 1.0 if ci >= oi else -1.0
+            sign = 1.0 if ci >= oi else -1.0  # ⚠️ 错误：阳线≠买盘
             s += sign * vi
             cvd.append(s)
         return cvd
