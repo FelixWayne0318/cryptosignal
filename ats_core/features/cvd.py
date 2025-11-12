@@ -1,6 +1,6 @@
 # coding: utf-8
 from __future__ import annotations
-from typing import List, Sequence, Tuple, Optional
+from typing import List, Sequence, Tuple, Optional, Union
 import math
 from ats_core.utils.outlier_detection import detect_volume_outliers, apply_outlier_weights
 
@@ -45,8 +45,9 @@ def cvd_from_klines(
     use_taker_buy: bool = True,
     use_quote: bool = True,
     filter_outliers: bool = True,
-    outlier_weight: float = 0.5
-) -> List[float]:
+    outlier_weight: float = 0.5,
+    expose_meta: bool = False
+) -> Union[List[float], Tuple[List[float], dict]]:
     """
     计算CVD (Cumulative Volume Delta)
 
@@ -68,11 +69,16 @@ def cvd_from_klines(
                         True: 对异常值降权（推荐）
                         False: 不处理异常值
         outlier_weight: 异常值权重（0-1），默认0.5表示降低50%
+        expose_meta: v7.2.36新增 - 是否暴露meta信息（包括imbalance_ratio）
+                    True: 返回 (cvd, meta)
+                    False: 仅返回 cvd（兼容旧版）
 
     Returns:
         CVD序列：Σ(买入量 - 卖出量)
+        如果expose_meta=True，返回 (cvd, meta)
 
     改进（v2.2）:
+        - v7.2.36: 新增imbalance_ratio支持（尺度异方差对冲）
         - v7.2.34: 新增Quote CVD支持（USDT单位，更准确反映资金流）
         - v2.1: 添加IQR异常值检测
         - v2.1: 对巨量K线降权，避免被单笔大额交易误导
@@ -114,7 +120,26 @@ def cvd_from_klines(
             s += delta
             cvd.append(s)
 
-        return cvd
+        # v7.2.36: 计算imbalance_ratio（条件1 - 尺度异方差对冲）
+        if expose_meta:
+            epsilon = 1.0  # 防止除零，1 USDT
+            imbalance_ratios: List[float] = []
+            for i in range(n):
+                delta = deltas[i]
+                vol = total_vol[i]
+                # imbalance_ratio = ΔC / max(quoteVol, ε)
+                # 理论边界 [-1, 1]
+                ratio = delta / max(vol, epsilon) if vol > 0 else 0.0
+                imbalance_ratios.append(ratio)
+
+            meta = {
+                "imbalance_ratios": imbalance_ratios,
+                "use_quote": use_quote,
+                "filter_outliers": filter_outliers
+            }
+            return cvd, meta
+        else:
+            return cvd
     else:
         # ⚠️ DEPRECATED: 旧方法Tick Rule估算（不准确，仅保留兼容性）
         # v7.2.32警告：此方法使用"阳线=买盘、阴线=卖盘"判断，会系统性误判！
@@ -195,10 +220,11 @@ def cvd_combined(
     min_quote_factor: float = 0.05,
     min_quote_window: int = 96,
     min_quote_fallback: float = 10000,
-    max_discard_ratio: float = 0.05
-) -> List[float]:
+    max_discard_ratio: float = 0.05,
+    return_meta: bool = False
+) -> Union[List[float], Tuple[List[float], dict]]:
     """
-    组合现货+合约CVD（v7.2.35增强版）
+    组合现货+合约CVD（v7.2.36增强版）
 
     Args:
         futures_klines: 合约K线数据
@@ -213,9 +239,21 @@ def cvd_combined(
         min_quote_window: 动态阈值计算窗口（96根1h K线 = 4天）
         min_quote_fallback: 最小回退阈值（10k USDT）
         max_discard_ratio: K线对齐最大丢弃比例（默认5%），超过自动降级
+        return_meta: v7.2.36新增 - 是否返回meta信息（包括degraded标志）
+                    True: 返回 (cvd, meta)
+                    False: 仅返回 cvd（兼容旧版）
 
     Returns:
-        组合后的CVD序列
+        如果return_meta=False: 组合后的CVD序列
+        如果return_meta=True: (cvd_series, meta_dict)
+            meta_dict包含:
+                - degraded: bool（是否降级）
+                - degrade_reason: str（降级原因）
+                - discard_ratio: float（丢弃率）
+                - futures_weight: float（合约权重）
+                - spot_weight: float（现货权重）
+                - skipped_count: int（跳过K线数）
+                - skipped_ratio: float（跳过比率）
 
     改进（v7.2.34）：
         - P1-1: openTime对齐检查（防止现货/合约K线错位）
@@ -226,6 +264,9 @@ def cvd_combined(
         - 动态最小成交额阈值（小币友好）
         - 自动降级逻辑（丢弃率>5%时自动切换单侧CVD）
         - 增强日志可观测性
+
+    改进（v7.2.36）：
+        - 条件4: 降级回写标记（degraded标志可观测）
 
     说明：
         - 动态权重：根据合约和现货的实际成交额（USDT）比例计算权重
@@ -244,7 +285,19 @@ def cvd_combined(
 
     if spot_klines is None or len(spot_klines) == 0:
         # 如果没有现货数据，只返回合约CVD
-        return cvd_f
+        if return_meta:
+            meta = {
+                "degraded": True,
+                "degrade_reason": "no_spot_data",
+                "discard_ratio": 0.0,
+                "futures_weight": 1.0,
+                "spot_weight": 0.0,
+                "skipped_count": 0,
+                "skipped_ratio": 0.0
+            }
+            return cvd_f, meta
+        else:
+            return cvd_f
 
     # v7.2.35: 计算动态最小成交额阈值
     dynamic_min_quote = compute_dynamic_min_quote(
@@ -262,7 +315,21 @@ def cvd_combined(
     # v7.2.35: 自动降级逻辑
     if is_degraded or not aligned_f:
         warn("⚠️  自动降级为单侧CVD（仅使用合约数据）")
-        return cvd_f
+        if return_meta:
+            total = len(futures_klines) + len(spot_klines)
+            discard_ratio = discarded / total if total > 0 else 0.0
+            meta = {
+                "degraded": True,
+                "degrade_reason": "high_discard_ratio" if is_degraded else "alignment_failed",
+                "discard_ratio": discard_ratio,
+                "futures_weight": 1.0,
+                "spot_weight": 0.0,
+                "skipped_count": 0,
+                "skipped_ratio": 0.0
+            }
+            return cvd_f, meta
+        else:
+            return cvd_f
 
     # 计算对齐后的CVD
     cvd_f = cvd_from_klines(aligned_f, use_taker_buy=True, use_quote=use_quote)
@@ -333,11 +400,26 @@ def cvd_combined(
             result.append(result[-1] + combined_delta)
 
     # v7.2.35: 成交额过滤统计
+    skip_ratio = skipped_count / n if n > 0 else 0.0
     if skipped_count > 0:
-        skip_ratio = skipped_count / n
         log(f"📊 CVD成交额过滤: 跳过{skipped_count}/{n}根 ({skip_ratio:.2%})")
 
-    return result
+    # v7.2.36: 构建meta字典
+    if return_meta:
+        total = len(futures_klines) + len(spot_klines)
+        discard_ratio = discarded / total if total > 0 else 0.0
+        meta = {
+            "degraded": False,
+            "degrade_reason": "",
+            "discard_ratio": discard_ratio,
+            "futures_weight": futures_weight,
+            "spot_weight": spot_weight,
+            "skipped_count": skipped_count,
+            "skipped_ratio": skip_ratio
+        }
+        return result, meta
+    else:
+        return result
 
 
 def cvd_mix_with_oi_price(
@@ -346,10 +428,13 @@ def cvd_mix_with_oi_price(
     spot_klines: Sequence[Sequence] = None,
     use_quote: bool = True,
     rolling_window: int = 96,
-    use_robust: bool = True
-) -> Tuple[List[float], List[float]]:
+    use_robust: bool = True,
+    use_strict_oi_align: bool = False,
+    oi_align_tolerance_ms: int = 5000,
+    return_meta: bool = False
+) -> Union[Tuple[List[float], List[float]], Tuple[List[float], List[float], dict]]:
     """
-    组合信号：CVD（现货+合约）+ 价格收益 + OI 变化（v7.2.35修复版）
+    组合信号：CVD（现货+合约）+ 价格收益 + OI 变化（v7.2.36增强版）
 
     Args:
         klines: 合约K线数据
@@ -363,11 +448,20 @@ def cvd_mix_with_oi_price(
         use_robust: 是否使用稳健Z-score（MAD）
                    True: 使用MAD（对异常值稳健）
                    False: 使用std（传统方法）
+        use_strict_oi_align: v7.2.36新增 - 是否使用严格OI对齐（取前不取后）
+                            True: 使用align_oi_to_klines_strict（条件2）
+                            False: 使用简单对齐（兼容旧版）
+        oi_align_tolerance_ms: OI对齐时间容忍度（毫秒），默认5000ms
+        return_meta: v7.2.36新增 - 是否返回mix_meta信息
+                    True: 返回 (cvd, mix, meta)
+                    False: 返回 (cvd, mix)（兼容旧版）
 
     Returns:
-        (cvd_series, mix_series)
-        - cvd_series: 组合后的CVD（如果有现货数据则为现货+合约）
-        - mix_series: 综合强度（标准化），越大代表量价+OI同向越强
+        如果return_meta=False: (cvd_series, mix_series)
+        如果return_meta=True: (cvd_series, mix_series, mix_meta)
+            - cvd_series: 组合后的CVD（如果有现货数据则为现货+合约）
+            - mix_series: 综合强度（标准化），越大代表量价+OI同向越强
+            - mix_meta: 统计信息（均值、标准差、偏度、OI缺失率等）
 
     改进（v7.2.34）：
         - P1-2: 滚动Z标准化（避免前视偏差）
@@ -379,9 +473,16 @@ def cvd_mix_with_oi_price(
         - OI数据对齐到K线（按closeTime匹配）
         - 删除冗余window参数
         - 增加mix统计日志
+
+    改进（v7.2.36）：
+        - 条件2: 取前不取后OI对齐（align_oi_to_klines_strict）
+        - 条件6: 统一索引切齐（在变换前对齐所有序列）
+        - 增加mix_meta输出（可观测性）
     """
     # 导入工具函数
-    from ats_core.utils.cvd_utils import rolling_z, _diff, align_oi_to_klines
+    from ats_core.utils.cvd_utils import (
+        rolling_z, _diff, align_oi_to_klines, align_oi_to_klines_strict
+    )
     from ats_core.logging import log
     import math
 
@@ -394,11 +495,27 @@ def cvd_mix_with_oi_price(
     # 提取价格序列
     closes = _close_prices(klines)
 
-    # v7.2.35: OI数据对齐到K线（按closeTime）
-    oi_vals = align_oi_to_klines(oi_hist, klines)
+    # v7.2.36: 严格OI对齐（条件2 - 取前不取后）
+    oi_missing_ratio = 0.0
+    if use_strict_oi_align:
+        oi_vals, oi_missing_ratio = align_oi_to_klines_strict(
+            oi_hist, klines, tolerance_ms=oi_align_tolerance_ms
+        )
+    else:
+        # v7.2.35: 简单OI对齐（兼容旧版）
+        oi_vals = align_oi_to_klines(oi_hist, klines)
 
-    # 统一长度
+    # v7.2.36: 条件6 - 统一索引切齐（在变换前对齐所有序列）
+    # 确保cvd, closes, oi_vals长度完全一致
     n = min(len(cvd), len(closes), len(oi_vals))
+    if n == 0:
+        # 空数据，返回空序列
+        if return_meta:
+            meta = {"error": "empty_data", "oi_missing_ratio": 1.0}
+            return [], [], meta
+        else:
+            return [], []
+
     cvd = cvd[-n:]
     closes = closes[-n:]
     oi_vals = oi_vals[-n:]
@@ -421,14 +538,28 @@ def cvd_mix_with_oi_price(
     mix = [1.2 * z_cvd[i] + 0.4 * z_p[i] + 0.4 * z_oi[i] for i in range(n)]
 
     # v7.2.35: mix统计日志（可观测性）
-    mean_mix = sum(mix) / len(mix)
+    mean_mix = sum(mix) / len(mix) if len(mix) > 0 else 0.0
     variance_mix = sum((m - mean_mix)**2 for m in mix) / len(mix) if len(mix) > 0 else 0
     std_mix = math.sqrt(variance_mix)
     skewness_mix = sum((m - mean_mix)**3 for m in mix) / (len(mix) * std_mix**3) if std_mix > 0 and len(mix) > 0 else 0
 
     log(f"📊 CVD Mix统计: 均值={mean_mix:.2f}, 标准差={std_mix:.2f}, 偏度={skewness_mix:.2f}")
 
-    return cvd, mix
+    # v7.2.36: 构建mix_meta
+    if return_meta:
+        meta = {
+            "mean": mean_mix,
+            "std": std_mix,
+            "skewness": skewness_mix,
+            "oi_missing_ratio": oi_missing_ratio,
+            "sequence_length": n,
+            "rolling_window": rolling_window,
+            "use_robust": use_robust,
+            "use_strict_oi_align": use_strict_oi_align
+        }
+        return cvd, mix, meta
+    else:
+        return cvd, mix
 
 __all__ = [
     "cvd_from_klines",
