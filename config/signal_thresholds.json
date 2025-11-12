@@ -542,11 +542,12 @@
   },
 
   "CVD计算参数": {
-    "_description": "v7.2.35更新：CVD专家复核修复配置",
-    "_version": "v3.0",
+    "_description": "v7.2.36更新：CVD专家深度复核-必补条件",
+    "_version": "v4.0",
     "_enhancements": [
       "v7.2.34: P1-openTime对齐, P1-滚动Z, P2-Quote CVD, P2-成交额容错",
-      "v7.2.35: P1-CVD增量修复, P1-OI对齐, P1-动态阈值, P1-防御性编程"
+      "v7.2.35: P1-CVD增量修复, P1-OI对齐, P1-动态阈值, P1-防御性编程",
+      "v7.2.36: 6个必补条件（尺度异方差对冲、取前不取后、IQR护栏、降级标记、未收盘过滤、窗口一致性）+3个高性价比改进"
     ],
 
     "use_quote": true,
@@ -573,13 +574,25 @@
     "_min_quote_fallback_comment": "最小回退阈值（10k USDT），防止动态阈值过低",
     "_min_quote_fallback_rationale": "对于超低流动性币种，保证最低质量标准",
 
+    "min_quote_iqr_floor_enable": true,
+    "_min_quote_iqr_floor_enable_comment": "v7.2.36条件3：是否启用IQR护栏（防止节假日阈值过低）",
+    "_min_quote_iqr_floor_enable_rationale": "IQR护栏=max(0, Q1-1.5×IQR)，防止极端情况下动态阈值被异常压低",
+
     "max_discard_ratio": 0.05,
     "_max_discard_ratio_comment": "K线对齐最大丢弃比例（5%），超过自动降级为单侧CVD",
     "_max_discard_ratio_rationale": "v7.2.35增强：从0.1%提升到5%，超过5%自动降级（不仅警告）",
 
+    "safety_lag_ms": 5000,
+    "_safety_lag_ms_comment": "v7.2.36条件5：未收盘K线过滤延迟（毫秒）",
+    "_safety_lag_ms_rationale": "规则: now < closeTime + safety_lag_ms 则过滤该K线，防止正在形成的K线参与计算",
+
+    "weight_mode": "block_total",
+    "_weight_mode_comment": "v7.2.36改进1：权重模式声明（block_total=区间权重，per_kline=逐K权重）",
+    "_weight_mode_rationale": "明确声明当前策略为区间权重，避免未来混淆",
+
     "use_per_kline_weight": false,
     "_use_per_kline_weight_comment": "是否使用逐K权重（false=区间权重，推荐）",
-    "_use_per_kline_weight_rationale": "区间权重更稳定，避免逐K权重噪音",
+    "_use_per_kline_weight_rationale": "区间权重更稳定，避免逐K权重噪音；实现保留但默认关闭",
 
     "weight_smoothing_alpha": 0.2,
     "_weight_smoothing_alpha_comment": "EMA平滑系数（仅use_per_kline_weight=true时生效）",
@@ -589,13 +602,33 @@
     "_outlier_handling_comment": "异常值处理方法: iqr（默认）, tanh, mad_winsor, none",
     "_outlier_handling_rationale": "v7.2.35新增：配置化异常值处理策略",
 
+    "outlier_apply_to": "delta_cvd",
+    "_outlier_apply_to_comment": "v7.2.36改进2：异常值处理仅对ΔC生效（价格/OI天然受限无需处理）",
+    "_outlier_apply_to_rationale": "价格收益和ΔOI是百分比变化，天然在合理范围；只有ΔC（绝对值）需要软截断",
+
     "tanh_scale": 3.0,
     "_tanh_scale_comment": "tanh软截断尺度（outlier_handling=tanh时生效）",
     "_tanh_scale_rationale": "ΔC' = tanh(ΔC/3σ)·σ，保持符号，限制幅度",
 
     "winsor_percentile": 0.01,
     "_winsor_percentile_comment": "Winsorize百分位（outlier_handling=mad_winsor时生效）",
-    "_winsor_percentile_rationale": "截断极端1%的异常值"
+    "_winsor_percentile_rationale": "截断极端1%的异常值",
+
+    "expose_meta_imbalance_ratio": true,
+    "_expose_meta_imbalance_ratio_comment": "v7.2.36条件1：是否在meta中输出imbalance_ratio特征",
+    "_expose_meta_imbalance_ratio_rationale": "imbalance_ratio = ΔC / max(quoteVol, ε)，理论边界[-1,1]，对冲尺度异方差问题",
+
+    "oi_align_mode": "backward_fill",
+    "_oi_align_mode_comment": "v7.2.36条件2：OI对齐模式（backward_fill=向下取邻+延迟1栈）",
+    "_oi_align_mode_rationale": "取前不取后规则：对齐采用last OI timestamp <= closeTime，禁止向后预取",
+
+    "oi_align_tolerance_ms": 5000,
+    "_oi_align_tolerance_ms_comment": "v7.2.36条件2：OI对齐最大容忍时间差（毫秒）",
+    "_oi_align_tolerance_ms_rationale": "允许OI timestamp与closeTime的最大差异，超过则认为缺失",
+
+    "log_aggregate_every": 60,
+    "_log_aggregate_every_comment": "v7.2.36改进3：日志聚合间隔（每N根输出一次统计）",
+    "_log_aggregate_every_rationale": "避免日志风暴，每60根K线聚合输出一次统计信息，并强制带上symbol/interval"
   },
 
   "_调整说明": {
