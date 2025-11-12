@@ -100,24 +100,46 @@
 
     "线性模式参数": {
       "_description": "F在[F_min, F_max]区间内线性插值，避免断崖式跳变",
-      "F_threshold_min": 50,
-      "F_threshold_max": 70,
-      "_formula": "当50≤F≤70时：reduction_ratio = (F - 50) / (70 - 50)，阈值线性降低",
-      "_example": "F=60时reduction_ratio=0.5，阈值降低50%×最大降低幅度",
+      "F_threshold_min": 35,
+      "F_threshold_max": 60,
+      "_formula": "当35≤F≤60时：reduction_ratio = (F - 35) / (60 - 35)，阈值线性降低",
+      "_example": "F=47.5时reduction_ratio=0.5，阈值降低50%×最大降低幅度",
+      "_v7.2.29": "降低阈值(50→35, 70→60)，提前捕捉蓄势待发期信号",
 
       "最大阈值降低": {
-        "_description": "当F=70时的最大降低幅度（F=50时降低幅度为0）",
+        "_description": "当F=60时的最大降低幅度（F=35时降低幅度为0）",
         "confidence_reduction": 5,
         "P_reduction": 0.08,
         "EV_reduction": 0.007,
         "F_min_increase": 60,
         "position_reduction": 0.5,
-        "_result_at_F70": {
+        "_result_at_F60": {
           "confidence_min": "15 - 5 = 10",
           "P_min": "0.50 - 0.08 = 0.42",
           "EV_min": "0.015 - 0.007 = 0.008",
           "F_min": "-10 + 60 = 50",
           "position_mult": "1.0 - 0.5 = 0.5"
+        }
+      },
+
+      "默认组内权重": {
+        "_description": "v7.2.29新增：默认组内权重（提高领先指标C/V，降低滞后指标T/M）",
+        "TC_T_weight": 0.50,
+        "TC_C_weight": 0.50,
+        "VOM_V_weight": 0.55,
+        "VOM_O_weight": 0.30,
+        "VOM_M_weight": 0.15,
+        "_rationale": "T和C平衡(50:50)，V主导提升(50%→55%)，M辅助降低(20%→15%)",
+        "_final_weights": {
+          "T": "0.50×0.50 = 25%",
+          "C": "0.50×0.50 = 25%",
+          "V": "0.38×0.55 = 20.9%",
+          "O": "0.38×0.30 = 11.4%",
+          "M": "0.38×0.15 = 5.7%",
+          "B": "12%",
+          "_total": "100%",
+          "_leading": "C+V+O = 57.3% (领先指标)",
+          "_lagging": "T+B = 37% (滞后指标)"
         }
       }
     },
@@ -284,9 +306,10 @@
     },
 
     "F极值警戒配置": {
-      "_description": "v7.2.27新增：F≥90异常警戒机制",
+      "_description": "v7.2.27新增：F≥75异常警戒机制",
       "_enabled": true,
-      "F_extreme_threshold": 90,
+      "F_extreme_threshold": 75,
+      "_v7.2.29": "降低阈值(90→75)，更早警戒极端蓄势情况",
       "strategy": "conservative",
       "_strategy_options": ["aggressive", "conservative"],
       "_strategy_description": "aggressive=继续降低阈值, conservative=提高质量要求(推荐)",
@@ -322,8 +345,9 @@
     "F因子线性校准": {
       "_description": "F因子对概率的线性调整（平滑无断崖）",
       "_enabled": true,
-      "F_bonus_threshold_max": 70,
-      "F_bonus_threshold_min": -30,
+      "F_bonus_threshold_max": 60,
+      "F_bonus_threshold_min": -20,
+      "_v7.2.29": "降低阈值(70→60, -30→-20)，更早给予概率加成/惩罚",
       "P_bonus_at_F_max": 0.05,
       "P_penalty_at_F_min": -0.03,
       "_formula": "F在[-30, 0, 70]之间线性插值",
@@ -385,11 +409,36 @@
 
   "分组权重": {
     "TC_weight": 0.50,
-    "VOM_weight": 0.35,
-    "B_weight": 0.15,
+    "VOM_weight": 0.38,
+    "B_weight": 0.12,
     "_tc_threshold": 50,
     "_vom_threshold": 45,
-    "_comment": "增加分组阈值要求"
+    "_comment": "v7.2.29优化：提高VOM权重(0.35→0.38)，降低B权重(0.15→0.12)，增强领先指标"
+  },
+
+  "因子分组权重": {
+    "_description": "v7.2.29新增：完整的因子权重配置（供analyze_symbol_v72.py使用）",
+    "TC_weight": 0.50,
+    "VOM_weight": 0.38,
+    "B_weight": 0.12,
+    "TC_T_weight": 0.50,
+    "TC_C_weight": 0.50,
+    "VOM_V_weight": 0.55,
+    "VOM_O_weight": 0.30,
+    "VOM_M_weight": 0.15,
+    "_final_equivalent_weights": {
+      "T": "0.50×0.50 = 25%",
+      "C": "0.50×0.50 = 25%",
+      "V": "0.38×0.55 = 20.9%",
+      "O": "0.38×0.30 = 11.4%",
+      "M": "0.38×0.15 = 5.7%",
+      "B": "12%",
+      "_total": "100%",
+      "_leading_indicators": "C+V+O = 57.3%",
+      "_lagging_indicators": "T+B = 37%",
+      "_synchronous_indicators": "M = 5.7%"
+    },
+    "_rationale": "提高领先指标（C/V/O）权重，降低滞后指标（T/B）权重，提前捕捉信号"
   },
 
   "_调整说明": {
