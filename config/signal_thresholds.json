@@ -542,13 +542,11 @@
   },
 
   "CVD计算参数": {
-    "_description": "v7.2.34新增：CVD计算增强配置",
-    "_version": "v2.0",
+    "_description": "v7.2.35更新：CVD专家复核修复配置",
+    "_version": "v3.0",
     "_enhancements": [
-      "P1-1: openTime对齐检查（防止现货/合约K线错位）",
-      "P1-2: 滚动Z标准化（避免前视偏差）",
-      "P2-3: Quote CVD支持（USDT单位，更准确）",
-      "P2-4: 缺失/极值容错（成交额过小时处理）"
+      "v7.2.34: P1-openTime对齐, P1-滚动Z, P2-Quote CVD, P2-成交额容错",
+      "v7.2.35: P1-CVD增量修复, P1-OI对齐, P1-动态阈值, P1-防御性编程"
     ],
 
     "use_quote": true,
@@ -559,17 +557,45 @@
     "_rolling_window_comment": "滚动Z标准化窗口大小（96根1h K线 = 4天）",
     "_rolling_window_rationale": "避免前视偏差，只使用历史数据计算均值/方差",
 
-    "min_total_quote": 100000,
-    "_min_total_quote_comment": "最小成交额阈值（USDT），低于此值的K线降权或跳过",
-    "_min_total_quote_rationale": "成交额过小的K线可能是异常数据，不应参与CVD组合",
-
-    "max_discard_ratio": 0.001,
-    "_max_discard_ratio_comment": "K线对齐最大丢弃比例（0.1%），超过此值发出警告",
-    "_max_discard_ratio_rationale": "现货/合约K线时间不同步时，inner join会丢弃部分K线，丢弃过多说明数据质量问题",
-
     "use_robust_zscore": true,
     "_use_robust_zscore_comment": "true=使用MAD（中位数绝对偏差）稳健标准化，false=使用标准差",
-    "_use_robust_zscore_rationale": "MAD对异常值更稳健，避免极端值影响Z-score计算"
+    "_use_robust_zscore_rationale": "MAD对异常值更稳健，避免极端值影响Z-score计算",
+
+    "min_quote_factor": 0.05,
+    "_min_quote_factor_comment": "动态最小成交额阈值系数（0.05 = 5%的成交额中位数）",
+    "_min_quote_factor_rationale": "v7.2.35新增：小币友好，基于历史成交额自适应阈值",
+
+    "min_quote_window": 96,
+    "_min_quote_window_comment": "动态阈值计算窗口（96根1h K线 = 4天）",
+    "_min_quote_window_rationale": "使用最近4天数据计算中位数，平衡稳定性和敏感性",
+
+    "min_quote_fallback": 10000,
+    "_min_quote_fallback_comment": "最小回退阈值（10k USDT），防止动态阈值过低",
+    "_min_quote_fallback_rationale": "对于超低流动性币种，保证最低质量标准",
+
+    "max_discard_ratio": 0.05,
+    "_max_discard_ratio_comment": "K线对齐最大丢弃比例（5%），超过自动降级为单侧CVD",
+    "_max_discard_ratio_rationale": "v7.2.35增强：从0.1%提升到5%，超过5%自动降级（不仅警告）",
+
+    "use_per_kline_weight": false,
+    "_use_per_kline_weight_comment": "是否使用逐K权重（false=区间权重，推荐）",
+    "_use_per_kline_weight_rationale": "区间权重更稳定，避免逐K权重噪音",
+
+    "weight_smoothing_alpha": 0.2,
+    "_weight_smoothing_alpha_comment": "EMA平滑系数（仅use_per_kline_weight=true时生效）",
+    "_weight_smoothing_alpha_rationale": "若启用逐K权重，EMA平滑降噪",
+
+    "outlier_handling": "iqr",
+    "_outlier_handling_comment": "异常值处理方法: iqr（默认）, tanh, mad_winsor, none",
+    "_outlier_handling_rationale": "v7.2.35新增：配置化异常值处理策略",
+
+    "tanh_scale": 3.0,
+    "_tanh_scale_comment": "tanh软截断尺度（outlier_handling=tanh时生效）",
+    "_tanh_scale_rationale": "ΔC' = tanh(ΔC/3σ)·σ，保持符号，限制幅度",
+
+    "winsor_percentile": 0.01,
+    "_winsor_percentile_comment": "Winsorize百分位（outlier_handling=mad_winsor时生效）",
+    "_winsor_percentile_rationale": "截断极端1%的异常值"
   },
 
   "_调整说明": {

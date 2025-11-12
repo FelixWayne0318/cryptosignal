@@ -192,11 +192,13 @@ def cvd_combined(
     spot_klines: Sequence[Sequence] = None,
     use_dynamic_weight: bool = True,
     use_quote: bool = True,
-    min_total_quote: float = 100000,
-    max_discard_ratio: float = 0.001
+    min_quote_factor: float = 0.05,
+    min_quote_window: int = 96,
+    min_quote_fallback: float = 10000,
+    max_discard_ratio: float = 0.05
 ) -> List[float]:
     """
-    组合现货+合约CVD（v7.2.34增强版）
+    组合现货+合约CVD（v7.2.35增强版）
 
     Args:
         futures_klines: 合约K线数据
@@ -207,10 +209,10 @@ def cvd_combined(
         use_quote: 是否使用Quote CVD（USDT单位）
                   True: 使用USDT单位（推荐）
                   False: 使用币数量单位（兼容旧版）
-        min_total_quote: 最小成交额阈值（USDT），低于此值的K线降权或跳过
-                        默认100000（10万USDT）
-        max_discard_ratio: K线对齐最大丢弃比例（0.001 = 0.1%）
-                          超过此值发出警告
+        min_quote_factor: 动态最小成交额系数（默认0.05 = 5%中位数）
+        min_quote_window: 动态阈值计算窗口（96根1h K线 = 4天）
+        min_quote_fallback: 最小回退阈值（10k USDT）
+        max_discard_ratio: K线对齐最大丢弃比例（默认5%），超过自动降级
 
     Returns:
         组合后的CVD序列
@@ -220,14 +222,22 @@ def cvd_combined(
         - P2-4: 缺失/极值容错（成交额过小时处理）
         - P2-3: Quote CVD支持（USDT单位）
 
+    改进（v7.2.35）：
+        - 动态最小成交额阈值（小币友好）
+        - 自动降级逻辑（丢弃率>5%时自动切换单侧CVD）
+        - 增强日志可观测性
+
     说明：
         - 动态权重：根据合约和现货的实际成交额（USDT）比例计算权重
         - 这样能真实反映不同市场的资金流向权重
         - 例如：某币合约日成交10亿，现货1亿 → 权重自动为 90.9% : 9.1%
     """
     # 导入工具函数
-    from ats_core.utils.cvd_utils import align_klines_by_open_time
-    from ats_core.logging import warn
+    from ats_core.utils.cvd_utils import (
+        align_klines_by_open_time,
+        compute_dynamic_min_quote
+    )
+    from ats_core.logging import warn, log
 
     # 计算合约CVD
     cvd_f = cvd_from_klines(futures_klines, use_taker_buy=True, use_quote=use_quote)
@@ -236,19 +246,23 @@ def cvd_combined(
         # 如果没有现货数据，只返回合约CVD
         return cvd_f
 
-    # v7.2.34: P1-1 - openTime对齐检查
-    aligned_f, aligned_s, discarded = align_klines_by_open_time(futures_klines, spot_klines)
+    # v7.2.35: 计算动态最小成交额阈值
+    dynamic_min_quote = compute_dynamic_min_quote(
+        futures_klines,
+        window=min_quote_window,
+        factor=min_quote_factor,
+        min_fallback=min_quote_fallback
+    )
 
-    if not aligned_f:
-        # 完全没有交集，只返回合约CVD
-        warn("⚠️  现货/合约K线时间完全不匹配，只使用合约CVD")
+    # v7.2.35: P1-1 - openTime对齐检查（带自动降级）
+    aligned_f, aligned_s, discarded, is_degraded = align_klines_by_open_time(
+        futures_klines, spot_klines, max_discard_ratio=max_discard_ratio
+    )
+
+    # v7.2.35: 自动降级逻辑
+    if is_degraded or not aligned_f:
+        warn("⚠️  自动降级为单侧CVD（仅使用合约数据）")
         return cvd_f
-
-    # 检查丢弃比例
-    total_klines = len(futures_klines) + len(spot_klines)
-    discard_ratio = discarded / total_klines if total_klines > 0 else 0
-    if discard_ratio > max_discard_ratio:
-        warn(f"⚠️  K线对齐丢弃{discarded}根（{discard_ratio:.2%}），超过阈值{max_discard_ratio:.2%}")
 
     # 计算对齐后的CVD
     cvd_f = cvd_from_klines(aligned_f, use_taker_buy=True, use_quote=use_quote)
@@ -258,7 +272,7 @@ def cvd_combined(
 
     # 计算权重
     if use_dynamic_weight:
-        # 方法1：按成交额（USDT）比例动态计算权重
+        # 方法1：按成交额（USDT）比例动态计算权重（区间权重）
         # K线第7列：quoteAssetVolume（成交额，单位USDT）
         f_quote_volume = sum([_to_f(k[7]) for k in aligned_f])
         s_quote_volume = sum([_to_f(k[7]) for k in aligned_s])
@@ -276,8 +290,15 @@ def cvd_combined(
         futures_weight = 0.7
         spot_weight = 0.3
 
-    # v7.2.34: P2-4 - 加权组合CVD增量（成交额过小时处理）
+    # v7.2.35: 日志可观测性
+    log(f"📊 CVD组合统计: 丢弃{discarded}根, "
+        f"期货权重={futures_weight:.2%}, 现货权重={spot_weight:.2%}, "
+        f"动态阈值={dynamic_min_quote:.0f} USDT")
+
+    # v7.2.35: P2-4 - 加权组合CVD增量（动态成交额过滤）
     result: List[float] = []
+    skipped_count = 0
+
     for i in range(n):
         # 获取当前K线的成交额
         f_quote = _to_f(aligned_f[i][7])
@@ -292,9 +313,10 @@ def cvd_combined(
             delta_f = cvd_f[i] - cvd_f[i-1]
             delta_s = cvd_s[i] - cvd_s[i-1]
 
-        # 成交额过小时处理
-        if total_quote_i < min_total_quote:
+        # v7.2.35: 动态成交额过滤
+        if total_quote_i < dynamic_min_quote:
             # 成交额过小，使用上一根CVD值（跳过组合）
+            skipped_count += 1
             if i == 0:
                 result.append(0.0)
             else:
@@ -310,25 +332,28 @@ def cvd_combined(
         else:
             result.append(result[-1] + combined_delta)
 
+    # v7.2.35: 成交额过滤统计
+    if skipped_count > 0:
+        skip_ratio = skipped_count / n
+        log(f"📊 CVD成交额过滤: 跳过{skipped_count}/{n}根 ({skip_ratio:.2%})")
+
     return result
 
 
 def cvd_mix_with_oi_price(
     klines: Sequence[Sequence],
     oi_hist: Sequence[dict],
-    window: int = 20,
     spot_klines: Sequence[Sequence] = None,
     use_quote: bool = True,
     rolling_window: int = 96,
     use_robust: bool = True
 ) -> Tuple[List[float], List[float]]:
     """
-    组合信号：CVD（现货+合约）+ 价格收益 + OI 变化（v7.2.34增强版）
+    组合信号：CVD（现货+合约）+ 价格收益 + OI 变化（v7.2.35修复版）
 
     Args:
         klines: 合约K线数据
         oi_hist: 持仓量历史数据
-        window: 窗口大小（保留兼容，实际使用rolling_window）
         spot_klines: 现货K线数据（可选）
         use_quote: 是否使用Quote CVD（USDT单位）
                   True: 使用USDT单位（推荐）
@@ -348,9 +373,17 @@ def cvd_mix_with_oi_price(
         - P1-2: 滚动Z标准化（避免前视偏差）
         - 对增量（ΔC, ΔP, ΔOI）做标准化，而不是累计值
         - 使用rolling_z替代全局_z_all
+
+    改进（v7.2.35）：
+        - 修复CVD增量计算bug（使用diff而不是pct_change）
+        - OI数据对齐到K线（按closeTime匹配）
+        - 删除冗余window参数
+        - 增加mix统计日志
     """
     # 导入工具函数
-    from ats_core.utils.cvd_utils import rolling_z
+    from ats_core.utils.cvd_utils import rolling_z, _diff, align_oi_to_klines
+    from ats_core.logging import log
+    import math
 
     # 计算CVD（现货+合约组合，如果有现货数据）
     if spot_klines and len(spot_klines) > 0:
@@ -358,40 +391,43 @@ def cvd_mix_with_oi_price(
     else:
         cvd = cvd_from_klines(klines, use_taker_buy=True, use_quote=use_quote)
 
+    # 提取价格序列
     closes = _close_prices(klines)
+
+    # v7.2.35: OI数据对齐到K线（按closeTime）
+    oi_vals = align_oi_to_klines(oi_hist, klines)
+
+    # 统一长度
+    n = min(len(cvd), len(closes), len(oi_vals))
+    cvd = cvd[-n:]
+    closes = closes[-n:]
+    oi_vals = oi_vals[-n:]
+
+    # v7.2.35: 修复CVD增量计算bug
+    # 对于累计量CVD，应该使用diff而不是pct_change
+    # pct_change在CVD接近0时会爆炸，且对负数没有意义
+    delta_cvd = _diff(cvd)  # ✅ 使用一阶差分
+
+    # 价格和OI使用百分比变化（正确）
     ret_p = _pct_change(closes)
+    d_oi = _pct_change(oi_vals) if any(oi > 0 for oi in oi_vals) else [0.0] * n
 
-    oi_vals: List[float] = []
-    if isinstance(oi_hist, (list, tuple)):
-        for d in oi_hist:
-            if not isinstance(d, dict):
-                continue
-            v = d.get("sumOpenInterest") or d.get("sumOpenInterestValue") or d.get("openInterest") or 0.0
-            oi_vals.append(_to_f(v))
-
-    if oi_vals:
-        n = min(len(cvd), len(ret_p), len(oi_vals))
-        cvd = cvd[-n:]
-        ret_p = ret_p[-n:]
-        oi_vals = oi_vals[-n:]
-        d_oi = _pct_change(oi_vals)
-    else:
-        n = min(len(cvd), len(ret_p))
-        cvd = cvd[-n:]
-        ret_p = ret_p[-n:]
-        d_oi = [0.0] * n
-
-    # v7.2.34: P1-2 - 滚动Z标准化（对增量做标准化）
-    # 计算CVD增量（而不是累计CVD）
-    delta_cvd = _pct_change(cvd)  # CVD增量百分比
-
-    # 使用滚动窗口Z-score标准化（无前视偏差）
+    # v7.2.34: P1-2 - 滚动Z标准化（无前视偏差）
     z_cvd = rolling_z(delta_cvd, window=rolling_window, robust=use_robust)
     z_p = rolling_z(ret_p, window=rolling_window, robust=use_robust)
     z_oi = rolling_z(d_oi, window=rolling_window, robust=use_robust)
 
     # 组合权重：CVD权重提升（更重要）
     mix = [1.2 * z_cvd[i] + 0.4 * z_p[i] + 0.4 * z_oi[i] for i in range(n)]
+
+    # v7.2.35: mix统计日志（可观测性）
+    mean_mix = sum(mix) / len(mix)
+    variance_mix = sum((m - mean_mix)**2 for m in mix) / len(mix) if len(mix) > 0 else 0
+    std_mix = math.sqrt(variance_mix)
+    skewness_mix = sum((m - mean_mix)**3 for m in mix) / (len(mix) * std_mix**3) if std_mix > 0 and len(mix) > 0 else 0
+
+    log(f"📊 CVD Mix统计: 均值={mean_mix:.2f}, 标准差={std_mix:.2f}, 偏度={skewness_mix:.2f}")
+
     return cvd, mix
 
 __all__ = [
