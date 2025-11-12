@@ -64,9 +64,76 @@ from ats_core.features.accumulation_detection import detect_accumulation_v1, det
 
 # ============ 工具函数 ============
 
-def _get_threshold_by_phase(config, coin_phase: str, key: str, default: Any = None) -> Any:
+def _apply_phase_transition_smooth(config, bars_1h: int, phase_old: str, phase_new: str,
+                                    key: str, default: Any = None) -> Any:
     """
-    根据币种阶段获取对应阈值（统一函数）
+    v7.2.31修复P0-2断层：在阶段切换时应用平滑过渡
+
+    在过渡期内，阈值从旧阶段线性插值到新阶段，避免突变
+
+    Args:
+        config: ThresholdConfig实例
+        bars_1h: 当前K线数量
+        phase_old: 旧阶段名称 (ultra/phaseA/phaseB)
+        phase_new: 新阶段名称 (phaseA/phaseB/mature)
+        key: 阈值名称
+        default: 默认值
+
+    Returns:
+        平滑过渡后的阈值
+
+    Example:
+        # bars=390，处于phaseB→mature过渡期（376-424）
+        # confidence从60线性插值至15
+        confidence = _apply_phase_transition_smooth(config, 390, 'phaseB', 'mature', 'confidence_min', 15)
+        # → 60 - (390-376)/(424-376) * (60-15) = 60 - 0.29*45 = 46.95
+    """
+    if not config:
+        return default
+
+    # 获取过渡参数
+    transition_config = config.config.get('阶段过渡参数', {})
+
+    # 确定过渡配置键
+    transition_key = None
+    if phase_old == 'ultra' and phase_new == 'phaseA':
+        transition_key = 'ultra_to_phaseA'
+    elif phase_old == 'phaseA' and phase_new == 'phaseB':
+        transition_key = 'phaseA_to_phaseB'
+    elif phase_old == 'phaseB' and phase_new == 'mature':
+        transition_key = 'phaseB_to_mature'
+
+    if not transition_key or transition_key not in transition_config:
+        # 无过渡配置，返回新阶段阈值
+        return _get_threshold_by_phase_direct(config, f"newcoin_{phase_new}" if phase_new != 'mature' else 'mature', key, default)
+
+    # 获取过渡区间
+    trans = transition_config[transition_key]
+    start = trans.get('transition_start', 0)
+    end = trans.get('transition_end', 0)
+
+    if bars_1h < start:
+        # 未进入过渡期，使用旧阶段阈值
+        return _get_threshold_by_phase_direct(config, f"newcoin_{phase_old}" if phase_old != 'mature' else 'mature', key, default)
+    elif bars_1h >= end:
+        # 已离开过渡期，使用新阶段阈值
+        return _get_threshold_by_phase_direct(config, f"newcoin_{phase_new}" if phase_new != 'mature' else 'mature', key, default)
+    else:
+        # 在过渡期内，线性插值
+        old_val = _get_threshold_by_phase_direct(config, f"newcoin_{phase_old}" if phase_old != 'mature' else 'mature', key, default)
+        new_val = _get_threshold_by_phase_direct(config, f"newcoin_{phase_new}" if phase_new != 'mature' else 'mature', key, default)
+
+        # 计算插值比例
+        ratio = (bars_1h - start) / (end - start) if (end - start) > 0 else 0.0
+
+        # 线性插值
+        smoothed_val = old_val - ratio * (old_val - new_val)
+        return smoothed_val
+
+
+def _get_threshold_by_phase_direct(config, coin_phase: str, key: str, default: Any = None) -> Any:
+    """
+    直接获取指定阶段的阈值（无平滑过渡）
 
     Args:
         config: ThresholdConfig实例
@@ -76,13 +143,6 @@ def _get_threshold_by_phase(config, coin_phase: str, key: str, default: Any = No
 
     Returns:
         对应阶段的阈值
-
-    Example:
-        confidence_min = _get_threshold_by_phase(config, coin_phase, 'confidence_min', 20)
-        # coin_phase='mature' → 15
-        # coin_phase='newcoin_phaseB' → 60
-        # coin_phase='newcoin_phaseA' → 65
-        # coin_phase='newcoin_ultra' → 70
     """
     if not config:
         return default
@@ -97,6 +157,59 @@ def _get_threshold_by_phase(config, coin_phase: str, key: str, default: Any = No
     else:
         # mature或其他情况
         return config.get_mature_threshold(key, default)
+
+
+def _get_threshold_by_phase(config, coin_phase: str, key: str, default: Any = None,
+                           bars_1h: int = None) -> Any:
+    """
+    根据币种阶段获取对应阈值（统一函数）
+
+    v7.2.31增强：支持阶段过渡平滑（当提供bars_1h时）
+
+    Args:
+        config: ThresholdConfig实例
+        coin_phase: 币种阶段 (mature/newcoin_ultra/newcoin_phaseA/newcoin_phaseB/等)
+        key: 阈值名称
+        default: 默认值
+        bars_1h: K线数量（可选，用于平滑过渡）
+
+    Returns:
+        对应阶段的阈值（可能经过平滑过渡）
+
+    Example:
+        # 无平滑
+        confidence_min = _get_threshold_by_phase(config, coin_phase, 'confidence_min', 20)
+        # coin_phase='mature' → 15
+        # coin_phase='newcoin_phaseB' → 60
+
+        # 有平滑（提供bars_1h）
+        confidence_min = _get_threshold_by_phase(config, 'newcoin_phaseB', 'confidence_min', 20, bars_1h=390)
+        # bars=390处于phaseB→mature过渡期，返回插值后的值
+    """
+    if not config:
+        return default
+
+    # 如果提供了bars_1h，检查是否在过渡期
+    if bars_1h is not None:
+        # 检查各个过渡区间
+        # ultra → phaseA (中心24h)
+        if 12 <= bars_1h < 36:
+            if "newcoin_ultra" in coin_phase or coin_phase == "newcoin_ultra":
+                return _apply_phase_transition_smooth(config, bars_1h, 'ultra', 'phaseA', key, default)
+
+        # phaseA → phaseB (中心168h)
+        if 144 <= bars_1h < 192:
+            if "newcoin_phaseA" in coin_phase or coin_phase == "newcoin_phaseA":
+                return _apply_phase_transition_smooth(config, bars_1h, 'phaseA', 'phaseB', key, default)
+
+        # phaseB → mature (中心400h) - 最关键
+        if 376 <= bars_1h < 424:
+            if "newcoin_phaseB" in coin_phase or coin_phase == "newcoin_phaseB":
+                return _apply_phase_transition_smooth(config, bars_1h, 'phaseB', 'mature', key, default)
+
+    # 非过渡期或未提供bars_1h，使用直接获取
+    return _get_threshold_by_phase_direct(config, coin_phase, key, default)
+
 
 def _to_f(x) -> float:
     try:
@@ -666,20 +779,46 @@ def _analyze_symbol_core(
     # - phaseA: 小幅补偿（0.85 → 0.88），保留12%惩罚
     # - phaseB: 微调补偿（0.85 → 0.87），保留13%惩罚
     # - mature: 无补偿
-    if is_new_coin and len(k1) < 100:
+    #
+    # v7.2.31修复P2断层：补偿平滑退出（bars 100-150）
+    # 原逻辑：bars<100完全补偿，bars≥100突然无补偿 → 断崖效应
+    # 新逻辑：bars<100完全补偿，bars=100-150线性退出，bars≥150无补偿
+    compensation_config = config.config.get('新币质量补偿', {})
+    full_apply_bars = compensation_config.get('compensation_full_apply_bars', 100)
+    exit_complete_bars = compensation_config.get('compensation_exit_complete_bars', 150)
+
+    if is_new_coin and len(k1) < exit_complete_bars:
         original_quality = quality_score
         # v7.2.10修复：从配置读取质量补偿参数（避免硬编码）
-        ultra_new_compensate_from = config.config.get('新币质量补偿', {}).get('ultra_new_compensate_from', 0.85)
-        ultra_new_compensate_to = config.config.get('新币质量补偿', {}).get('ultra_new_compensate_to', 0.90)
+        ultra_new_compensate_from = compensation_config.get('ultra_new_compensate_from', 0.85)
+        ultra_new_compensate_to = compensation_config.get('ultra_new_compensate_to', 0.90)
+        phaseA_compensate_to = compensation_config.get('phaseA_compensate_to', 0.88)
+        phaseB_compensate_to = compensation_config.get('phaseB_compensate_to', 0.87)
+
+        # 确定完全补偿时的目标值
         if is_ultra_new:
-            # 超新币：从0.85补偿到0.90（配置化）
-            quality_score = min(1.0, quality_score / ultra_new_compensate_from * ultra_new_compensate_to)
+            full_compensate_to = ultra_new_compensate_to  # 0.90
         elif is_phaseA:
-            # 阶段A：从0.85补偿到0.88
-            quality_score = min(1.0, quality_score / 0.85 * 0.88)
+            full_compensate_to = phaseA_compensate_to  # 0.88
         elif is_phaseB:
-            # 阶段B：从0.85补偿到0.87
-            quality_score = min(1.0, quality_score / 0.85 * 0.87)
+            full_compensate_to = phaseB_compensate_to  # 0.87
+        else:
+            full_compensate_to = ultra_new_compensate_from  # 无补偿（0.85）
+
+        # 计算当前补偿目标值（考虑平滑退出）
+        if len(k1) < full_apply_bars:
+            # bars < 100：完全补偿
+            compensate_to = full_compensate_to
+        else:
+            # bars = 100-150：线性退出补偿
+            exit_ratio = (len(k1) - full_apply_bars) / (exit_complete_bars - full_apply_bars)
+            compensate_to = full_compensate_to - exit_ratio * (full_compensate_to - ultra_new_compensate_from)
+            # 例如：phaseA, bars=125
+            # exit_ratio = (125-100)/(150-100) = 0.5
+            # compensate_to = 0.88 - 0.5*(0.88-0.85) = 0.88 - 0.015 = 0.865
+
+        # 应用补偿
+        quality_score = min(1.0, quality_score / ultra_new_compensate_from * compensate_to)
         # 注：补偿不能超过1.0，且仍保留一定惩罚（体现数据少的风险）
 
     # v6.6: 使用调制器链的Teff（替代get_adaptive_temperature）
@@ -1064,22 +1203,25 @@ def _analyze_symbol_core(
     # 质量门槛2：综合置信度（A层6因子加权）
     # v7.2.3修复：从配置文件读取，移除硬编码
     # v7.2.30修复：使用币种阶段特定阈值（新币使用更严格的阈值）
-    confidence_threshold = _get_threshold_by_phase(config, coin_phase, 'confidence_min', 20)
+    # v7.2.31增强：支持阶段过渡平滑（bars_1h传入）
+    confidence_threshold = _get_threshold_by_phase(config, coin_phase, 'confidence_min', 20, bars_1h=bars_1h)
 
     quality_check_2 = confidence >= confidence_threshold
 
     # 质量门槛3：四门槛综合质量（gate_multiplier）
     # v7.2.4修复：从配置文件读取，移除硬编码0.84
     # v7.2.30修复：使用币种阶段特定阈值
-    gate_multiplier_threshold = _get_threshold_by_phase(config, coin_phase, 'gate_multiplier_min', 0.84)
+    # v7.2.31增强：支持阶段过渡平滑
+    gate_multiplier_threshold = _get_threshold_by_phase(config, coin_phase, 'gate_multiplier_min', 0.84, bars_1h=bars_1h)
 
     quality_check_3 = gate_multiplier >= gate_multiplier_threshold
 
     # 质量门槛4：edge优势边际
     # v7.2.4修复：从配置文件读取，移除硬编码0.48
     # v7.2.30修复：使用币种阶段特定阈值（新币要求更高edge）
+    # v7.2.31增强：支持阶段过渡平滑
     # 实际数据分布：Edge P75=0.14, 中位=0.07, Max=0.31
-    edge_threshold = _get_threshold_by_phase(config, coin_phase, 'edge_min', 0.15)
+    edge_threshold = _get_threshold_by_phase(config, coin_phase, 'edge_min', 0.15, bars_1h=bars_1h)
 
     quality_check_4 = abs(edge) >= edge_threshold
 
@@ -1094,7 +1236,8 @@ def _analyze_symbol_core(
     # v7.2.30修复：使用币种阶段特定阈值
 
     # 获取base_strength_min阈值（用于拒绝原因显示）
-    base_strength_threshold = _get_threshold_by_phase(config, coin_phase, 'base_strength_min', 30)
+    # v7.2.31增强：支持阶段过渡平滑
+    base_strength_threshold = _get_threshold_by_phase(config, coin_phase, 'base_strength_min', 30, bars_1h=bars_1h)
 
     rejection_reason = []
     if not is_prime:

@@ -61,6 +61,42 @@
     "_comment": "用于识别新币阶段，应用不同的阈值和质量补偿"
   },
 
+  "阶段过渡参数": {
+    "_description": "v7.2.31修复P0-2断层：各阶段切换时的平滑过渡配置",
+    "_rationale": "避免阶段切换时阈值突变（如bars=400时confidence从60骤降至15）",
+
+    "ultra_to_phaseA": {
+      "_transition_center": 24,
+      "_transition_window": 12,
+      "transition_start": 12,
+      "transition_end": 36,
+      "_description": "ultra → phaseA 过渡期（12-36小时，中心24h）",
+      "_effect": "confidence从70线性降至65，edge从0.60降至0.55"
+    },
+
+    "phaseA_to_phaseB": {
+      "_transition_center": 168,
+      "_transition_window": 24,
+      "transition_start": 144,
+      "transition_end": 192,
+      "_description": "phaseA → phaseB 过渡期（144-192小时，中心168h）",
+      "_effect": "confidence从65线性降至60，edge从0.55降至0.50"
+    },
+
+    "phaseB_to_mature": {
+      "_transition_center": 400,
+      "_transition_window": 48,
+      "transition_start": 376,
+      "transition_end": 424,
+      "_description": "phaseB → mature 过渡期（376-424小时，中心400h）",
+      "_effect": "confidence从60线性降至15（最关键，避免暴跌45分），edge从0.50降至0.12",
+      "_priority": "P0 - 最严重断层，必须修复"
+    },
+
+    "_formula": "ratio = (bars - start) / (end - start), threshold = old - ratio * (old - new)",
+    "_comment": "线性插值实现平滑过渡，避免临界点处的断崖效应"
+  },
+
   "新币质量补偿": {
     "_description": "新币数据少被惩罚（quality_score×0.85），给予补偿",
     "_rationale": "新币天然数据少，适度补偿但仍保留惩罚（数据少确实是风险）",
@@ -75,18 +111,33 @@
       "phase_A": "0.85 → 0.88（补偿3%，仍保留12%惩罚）",
       "phase_B": "0.85 → 0.87（补偿2%，仍保留13%惩罚）",
       "mature": "不补偿"
+    },
+
+    "_v7.2.31_gap_fix": "修复P2断层：补偿平滑退出配置",
+    "compensation_full_apply_bars": 100,
+    "compensation_exit_complete_bars": 150,
+    "_smooth_exit": {
+      "_description": "bars=100-150之间线性退出补偿，避免bars=100时突然消失",
+      "_formula": "ratio = (bars - 100) / 50, compensate_to = full_value - ratio * (full_value - 0.85)",
+      "_example": {
+        "bars_100": "完全补偿（如phaseA: 0.88）",
+        "bars_125": "补偿退出50%（0.88 → 0.865）",
+        "bars_150": "补偿完全退出（→ 0.85）"
+      },
+      "_effect": "quality_score从bars=100的补偿值平滑降至bars=150的无补偿（0.85）"
     }
   },
 
   "数据质量阈值": {
     "_description": "数据质量硬门槛（入场检查）",
     "min_bars_1h": 200,
-    "data_qual_min": 0.90,
+    "data_qual_min": 0.85,
     "data_qual_newcoin_min": 0.95,
     "_rejection_rule": "data_qual = min(1.0, bars_1h / min_bars_1h)",
     "_hard_gate": "data_qual < data_qual_min → 直接拒绝",
     "_newcoin_stricter": "新币要求更高的data_qual_newcoin_min（0.95 vs 0.90）",
-    "_comment": "最低200根1h K线，数据质量≥90%（新币≥95%）"
+    "_comment": "v7.2.31修复P0-1断层：降低至0.85（170根K线=7.1天），从0.90降低0.4天捕捉时间",
+    "_gap_fix": "bars=170时data_qual=0.85，提前0.4天进入分析（原需180根/7.5天）"
   },
 
   "执行闸门阈值": {

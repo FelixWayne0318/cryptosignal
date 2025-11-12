@@ -25,11 +25,61 @@ import math
 from ats_core.utils.math_utils import linear_reduce, get_effective_F
 
 # v7.2.30新增：新币阈值统一获取函数
-def _get_threshold_by_phase(config, coin_phase: str, key: str, default: Any = None) -> Any:
+def _apply_phase_transition_smooth(config, bars_1h: int, phase_old: str, phase_new: str,
+                                    key: str, default: Any = None) -> Any:
     """
-    根据币种阶段获取对应阈值（统一函数）
+    v7.2.31修复P0-2断层：在阶段切换时应用平滑过渡
+
+    在过渡期内，阈值从旧阶段线性插值到新阶段，避免突变
 
     与analyze_symbol.py中的同名函数保持一致
+    """
+    if not config:
+        return default
+
+    # 获取过渡参数
+    transition_config = config.config.get('阶段过渡参数', {})
+
+    # 确定过渡配置键
+    transition_key = None
+    if phase_old == 'ultra' and phase_new == 'phaseA':
+        transition_key = 'ultra_to_phaseA'
+    elif phase_old == 'phaseA' and phase_new == 'phaseB':
+        transition_key = 'phaseA_to_phaseB'
+    elif phase_old == 'phaseB' and phase_new == 'mature':
+        transition_key = 'phaseB_to_mature'
+
+    if not transition_key or transition_key not in transition_config:
+        # 无过渡配置，返回新阶段阈值
+        return _get_threshold_by_phase_direct(config, f"newcoin_{phase_new}" if phase_new != 'mature' else 'mature', key, default)
+
+    # 获取过渡区间
+    trans = transition_config[transition_key]
+    start = trans.get('transition_start', 0)
+    end = trans.get('transition_end', 0)
+
+    if bars_1h < start:
+        # 未进入过渡期，使用旧阶段阈值
+        return _get_threshold_by_phase_direct(config, f"newcoin_{phase_old}" if phase_old != 'mature' else 'mature', key, default)
+    elif bars_1h >= end:
+        # 已离开过渡期，使用新阶段阈值
+        return _get_threshold_by_phase_direct(config, f"newcoin_{phase_new}" if phase_new != 'mature' else 'mature', key, default)
+    else:
+        # 在过渡期内，线性插值
+        old_val = _get_threshold_by_phase_direct(config, f"newcoin_{phase_old}" if phase_old != 'mature' else 'mature', key, default)
+        new_val = _get_threshold_by_phase_direct(config, f"newcoin_{phase_new}" if phase_new != 'mature' else 'mature', key, default)
+
+        # 计算插值比例
+        ratio = (bars_1h - start) / (end - start) if (end - start) > 0 else 0.0
+
+        # 线性插值
+        smoothed_val = old_val - ratio * (old_val - new_val)
+        return smoothed_val
+
+
+def _get_threshold_by_phase_direct(config, coin_phase: str, key: str, default: Any = None) -> Any:
+    """
+    直接获取指定阶段的阈值（无平滑过渡）
     """
     if not config:
         return default
@@ -44,6 +94,40 @@ def _get_threshold_by_phase(config, coin_phase: str, key: str, default: Any = No
     else:
         # mature或其他情况
         return config.get_mature_threshold(key, default)
+
+
+def _get_threshold_by_phase(config, coin_phase: str, key: str, default: Any = None,
+                           bars_1h: int = None) -> Any:
+    """
+    根据币种阶段获取对应阈值（统一函数）
+
+    v7.2.31增强：支持阶段过渡平滑（当提供bars_1h时）
+
+    与analyze_symbol.py中的同名函数保持一致
+    """
+    if not config:
+        return default
+
+    # 如果提供了bars_1h，检查是否在过渡期
+    if bars_1h is not None:
+        # 检查各个过渡区间
+        # ultra → phaseA (中心24h)
+        if 12 <= bars_1h < 36:
+            if "newcoin_ultra" in coin_phase or coin_phase == "newcoin_ultra":
+                return _apply_phase_transition_smooth(config, bars_1h, 'ultra', 'phaseA', key, default)
+
+        # phaseA → phaseB (中心168h)
+        if 144 <= bars_1h < 192:
+            if "newcoin_phaseA" in coin_phase or coin_phase == "newcoin_phaseA":
+                return _apply_phase_transition_smooth(config, bars_1h, 'phaseA', 'phaseB', key, default)
+
+        # phaseB → mature (中心400h) - 最关键
+        if 376 <= bars_1h < 424:
+            if "newcoin_phaseB" in coin_phase or coin_phase == "newcoin_phaseB":
+                return _apply_phase_transition_smooth(config, bars_1h, 'phaseB', 'mature', key, default)
+
+    # 非过渡期或未提供bars_1h，使用直接获取
+    return _get_threshold_by_phase_direct(config, coin_phase, key, default)
 
 # v7.2.21修复：使用模块级单例，避免重复初始化和日志污染
 from ats_core.calibration.empirical_calibration import EmpiricalCalibrator
@@ -111,6 +195,9 @@ def analyze_with_v72_enhancements(
     # v7.2.30新增：获取币种阶段信息（用于阈值选择）
     metadata = original_result.get('metadata', {})
     coin_phase = metadata.get('coin_phase', 'mature')  # 默认为成熟币
+
+    # v7.2.31新增：获取bars_1h（用于阶段过渡平滑）
+    bars_1h = len(klines) if klines else 0
 
     # v7.2.9修复：加载F因子动量阈值（避免硬编码）
     try:
@@ -263,7 +350,8 @@ def analyze_with_v72_enhancements(
                     momentum_desc = "极早期蓄势"
 
                     # 获取基准阈值（v7.2.30修复：使用币种阶段特定阈值）
-                    base_confidence = _get_threshold_by_phase(config, coin_phase, 'confidence_min', 15)
+                    # v7.2.31增强：支持阶段过渡平滑
+                    base_confidence = _get_threshold_by_phase(config, coin_phase, 'confidence_min', 15, bars_1h=bars_1h)
                     base_P = config.get_gate_threshold('gate4_probability', 'P_min', 0.50)
                     base_EV = config.get_gate_threshold('gate3_ev', 'EV_min', 0.015)
                     base_F = config.get_gate_threshold('gate2_fund_support', 'F_min', -10)
@@ -279,7 +367,8 @@ def analyze_with_v72_enhancements(
                     # v7.2.27改进：使用linear_reduce简化计算
 
                     # 获取基准阈值（v7.2.30修复：使用币种阶段特定阈值）
-                    base_confidence = _get_threshold_by_phase(config, coin_phase, 'confidence_min', 15)
+                    # v7.2.31增强：支持阶段过渡平滑
+                    base_confidence = _get_threshold_by_phase(config, coin_phase, 'confidence_min', 15, bars_1h=bars_1h)
                     base_P = config.get_gate_threshold('gate4_probability', 'P_min', 0.50)
                     base_EV = config.get_gate_threshold('gate3_ev', 'EV_min', 0.015)
                     base_F = config.get_gate_threshold('gate2_fund_support', 'F_min', -10)
