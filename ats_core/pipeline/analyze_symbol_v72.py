@@ -24,6 +24,27 @@ import math
 # v7.2.27新增：导入线性函数工具和F多空适配函数
 from ats_core.utils.math_utils import linear_reduce, get_effective_F
 
+# v7.2.30新增：新币阈值统一获取函数
+def _get_threshold_by_phase(config, coin_phase: str, key: str, default: Any = None) -> Any:
+    """
+    根据币种阶段获取对应阈值（统一函数）
+
+    与analyze_symbol.py中的同名函数保持一致
+    """
+    if not config:
+        return default
+
+    # 提取阶段标识
+    if "newcoin_ultra" in coin_phase or coin_phase == "newcoin_ultra":
+        return config.get_newcoin_threshold('ultra', key, default)
+    elif "newcoin_phaseA" in coin_phase or coin_phase == "newcoin_phaseA":
+        return config.get_newcoin_threshold('phaseA', key, default)
+    elif "newcoin_phaseB" in coin_phase or coin_phase == "newcoin_phaseB":
+        return config.get_newcoin_threshold('phaseB', key, default)
+    else:
+        # mature或其他情况
+        return config.get_mature_threshold(key, default)
+
 # v7.2.21修复：使用模块级单例，避免重复初始化和日志污染
 from ats_core.calibration.empirical_calibration import EmpiricalCalibrator
 _calibrator_singleton = None
@@ -86,6 +107,10 @@ def analyze_with_v72_enhancements(
     # ===== 0.5 加载配置（阶段2.2：使用配置文件）=====
     from ats_core.config.threshold_config import get_thresholds
     config = get_thresholds()
+
+    # v7.2.30新增：获取币种阶段信息（用于阈值选择）
+    metadata = original_result.get('metadata', {})
+    coin_phase = metadata.get('coin_phase', 'mature')  # 默认为成熟币
 
     # v7.2.9修复：加载F因子动量阈值（避免硬编码）
     try:
@@ -237,8 +262,8 @@ def analyze_with_v72_enhancements(
                     momentum_level = 3
                     momentum_desc = "极早期蓄势"
 
-                    # 获取基准阈值
-                    base_confidence = config.get_mature_threshold('confidence_min', 15)
+                    # 获取基准阈值（v7.2.30修复：使用币种阶段特定阈值）
+                    base_confidence = _get_threshold_by_phase(config, coin_phase, 'confidence_min', 15)
                     base_P = config.get_gate_threshold('gate4_probability', 'P_min', 0.50)
                     base_EV = config.get_gate_threshold('gate3_ev', 'EV_min', 0.015)
                     base_F = config.get_gate_threshold('gate2_fund_support', 'F_min', -10)
@@ -253,8 +278,8 @@ def analyze_with_v72_enhancements(
                     # 50≤F<70：线性插值（平滑过渡）
                     # v7.2.27改进：使用linear_reduce简化计算
 
-                    # 获取基准阈值
-                    base_confidence = config.get_mature_threshold('confidence_min', 15)
+                    # 获取基准阈值（v7.2.30修复：使用币种阶段特定阈值）
+                    base_confidence = _get_threshold_by_phase(config, coin_phase, 'confidence_min', 15)
                     base_P = config.get_gate_threshold('gate4_probability', 'P_min', 0.50)
                     base_EV = config.get_gate_threshold('gate3_ev', 'EV_min', 0.015)
                     base_F = config.get_gate_threshold('gate2_fund_support', 'F_min', -10)

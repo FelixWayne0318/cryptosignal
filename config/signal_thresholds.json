@@ -47,6 +47,55 @@
     }
   },
 
+  "新币阶段识别": {
+    "_description": "新币阶段划分标准（基于币龄小时数）",
+    "ultra_new_hours": 24,
+    "phase_A_hours": 168,
+    "phase_B_hours": 400,
+    "_stages": {
+      "ultra_new": "< 24小时（1天）",
+      "phase_A": "24-168小时（1-7天）",
+      "phase_B": "168-400小时（7-16.7天）",
+      "mature": "≥ 400小时（16.7天+）"
+    },
+    "_comment": "用于识别新币阶段，应用不同的阈值和质量补偿"
+  },
+
+  "新币质量补偿": {
+    "_description": "新币数据少被惩罚（quality_score×0.85），给予补偿",
+    "_rationale": "新币天然数据少，适度补偿但仍保留惩罚（数据少确实是风险）",
+    "ultra_new_compensate_from": 0.85,
+    "ultra_new_compensate_to": 0.90,
+    "phaseA_compensate_from": 0.85,
+    "phaseA_compensate_to": 0.88,
+    "phaseB_compensate_from": 0.85,
+    "phaseB_compensate_to": 0.87,
+    "_补偿策略": {
+      "ultra_new": "0.85 → 0.90（补偿5%，仍保留10%惩罚）",
+      "phase_A": "0.85 → 0.88（补偿3%，仍保留12%惩罚）",
+      "phase_B": "0.85 → 0.87（补偿2%，仍保留13%惩罚）",
+      "mature": "不补偿"
+    }
+  },
+
+  "数据质量阈值": {
+    "_description": "数据质量硬门槛（入场检查）",
+    "min_bars_1h": 200,
+    "data_qual_min": 0.90,
+    "data_qual_newcoin_min": 0.95,
+    "_rejection_rule": "data_qual = min(1.0, bars_1h / min_bars_1h)",
+    "_hard_gate": "data_qual < data_qual_min → 直接拒绝",
+    "_newcoin_stricter": "新币要求更高的data_qual_newcoin_min（0.95 vs 0.90）",
+    "_comment": "最低200根1h K线，数据质量≥90%（新币≥95%）"
+  },
+
+  "执行闸门阈值": {
+    "_description": "执行质量门槛（流动性/滑点相关）",
+    "execution_gate_min": 0.70,
+    "_formula": "execution_gate = 0.5 + L / 200.0",
+    "_comment": "L因子影响执行质量，新币流动性差需要更高执行质量"
+  },
+
   "v72闸门阈值": {
     "gate1_data_quality": {
       "min_klines": 150,

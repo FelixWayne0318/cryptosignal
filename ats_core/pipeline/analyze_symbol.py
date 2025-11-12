@@ -64,6 +64,40 @@ from ats_core.features.accumulation_detection import detect_accumulation_v1, det
 
 # ============ 工具函数 ============
 
+def _get_threshold_by_phase(config, coin_phase: str, key: str, default: Any = None) -> Any:
+    """
+    根据币种阶段获取对应阈值（统一函数）
+
+    Args:
+        config: ThresholdConfig实例
+        coin_phase: 币种阶段 (mature/newcoin_ultra/newcoin_phaseA/newcoin_phaseB/等)
+        key: 阈值名称
+        default: 默认值
+
+    Returns:
+        对应阶段的阈值
+
+    Example:
+        confidence_min = _get_threshold_by_phase(config, coin_phase, 'confidence_min', 20)
+        # coin_phase='mature' → 15
+        # coin_phase='newcoin_phaseB' → 60
+        # coin_phase='newcoin_phaseA' → 65
+        # coin_phase='newcoin_ultra' → 70
+    """
+    if not config:
+        return default
+
+    # 提取阶段标识
+    if "newcoin_ultra" in coin_phase or coin_phase == "newcoin_ultra":
+        return config.get_newcoin_threshold('ultra', key, default)
+    elif "newcoin_phaseA" in coin_phase or coin_phase == "newcoin_phaseA":
+        return config.get_newcoin_threshold('phaseA', key, default)
+    elif "newcoin_phaseB" in coin_phase or coin_phase == "newcoin_phaseB":
+        return config.get_newcoin_threshold('phaseB', key, default)
+    else:
+        # mature或其他情况
+        return config.get_mature_threshold(key, default)
+
 def _to_f(x) -> float:
     try:
         return float(x)
@@ -1029,31 +1063,23 @@ def _analyze_symbol_core(
 
     # 质量门槛2：综合置信度（A层6因子加权）
     # v7.2.3修复：从配置文件读取，移除硬编码
-    # 默认值20来自config/signal_thresholds.json中的mature_coin.confidence_min
-    if config:
-        confidence_threshold = config.get_mature_threshold('confidence_min', 20)
-    else:
-        confidence_threshold = 20  # 配置加载失败时的默认值
+    # v7.2.30修复：使用币种阶段特定阈值（新币使用更严格的阈值）
+    confidence_threshold = _get_threshold_by_phase(config, coin_phase, 'confidence_min', 20)
 
     quality_check_2 = confidence >= confidence_threshold
 
     # 质量门槛3：四门槛综合质量（gate_multiplier）
     # v7.2.4修复：从配置文件读取，移除硬编码0.84
-    if config:
-        gate_multiplier_threshold = config.get_mature_threshold('gate_multiplier_min', 0.84)
-    else:
-        gate_multiplier_threshold = 0.84  # 配置加载失败时的默认值
+    # v7.2.30修复：使用币种阶段特定阈值
+    gate_multiplier_threshold = _get_threshold_by_phase(config, coin_phase, 'gate_multiplier_min', 0.84)
 
     quality_check_3 = gate_multiplier >= gate_multiplier_threshold
 
     # 质量门槛4：edge优势边际
     # v7.2.4修复：从配置文件读取，移除硬编码0.48
+    # v7.2.30修复：使用币种阶段特定阈值（新币要求更高edge）
     # 实际数据分布：Edge P75=0.14, 中位=0.07, Max=0.31
-    # 阈值0.48 > Max，导致100%被拒！应使用配置的0.15（接近P75）
-    if config:
-        edge_threshold = config.get_mature_threshold('edge_min', 0.15)
-    else:
-        edge_threshold = 0.15  # 配置加载失败时的默认值
+    edge_threshold = _get_threshold_by_phase(config, coin_phase, 'edge_min', 0.15)
 
     quality_check_4 = abs(edge) >= edge_threshold
 
@@ -1065,12 +1091,10 @@ def _analyze_symbol_core(
     # v6.3.2修复：使用币种特定的prime_strength_threshold
     # P2.5++修复（2025-11-05）：增加新质量门槛的拒绝原因
     # v7.2.4修复：移除硬编码，使用配置文件阈值
+    # v7.2.30修复：使用币种阶段特定阈值
 
     # 获取base_strength_min阈值（用于拒绝原因显示）
-    if config:
-        base_strength_threshold = config.get_mature_threshold('base_strength_min', 30)
-    else:
-        base_strength_threshold = 30
+    base_strength_threshold = _get_threshold_by_phase(config, coin_phase, 'base_strength_min', 30)
 
     rejection_reason = []
     if not is_prime:
