@@ -541,6 +541,37 @@
     "_rationale": "提高领先指标（C/V/O）权重，降低滞后指标（T/B）权重，提前捕捉信号"
   },
 
+  "CVD计算参数": {
+    "_description": "v7.2.34新增：CVD计算增强配置",
+    "_version": "v2.0",
+    "_enhancements": [
+      "P1-1: openTime对齐检查（防止现货/合约K线错位）",
+      "P1-2: 滚动Z标准化（避免前视偏差）",
+      "P2-3: Quote CVD支持（USDT单位，更准确）",
+      "P2-4: 缺失/极值容错（成交额过小时处理）"
+    ],
+
+    "use_quote": true,
+    "_use_quote_comment": "true=使用Quote CVD（USDT单位），false=使用Base CVD（币数量单位）",
+    "_use_quote_rationale": "Quote CVD直接反映资金流（USDT），不受币价波动影响，更准确",
+
+    "rolling_window": 96,
+    "_rolling_window_comment": "滚动Z标准化窗口大小（96根1h K线 = 4天）",
+    "_rolling_window_rationale": "避免前视偏差，只使用历史数据计算均值/方差",
+
+    "min_total_quote": 100000,
+    "_min_total_quote_comment": "最小成交额阈值（USDT），低于此值的K线降权或跳过",
+    "_min_total_quote_rationale": "成交额过小的K线可能是异常数据，不应参与CVD组合",
+
+    "max_discard_ratio": 0.001,
+    "_max_discard_ratio_comment": "K线对齐最大丢弃比例（0.1%），超过此值发出警告",
+    "_max_discard_ratio_rationale": "现货/合约K线时间不同步时，inner join会丢弃部分K线，丢弃过多说明数据质量问题",
+
+    "use_robust_zscore": true,
+    "_use_robust_zscore_comment": "true=使用MAD（中位数绝对偏差）稳健标准化，false=使用标准差",
+    "_use_robust_zscore_rationale": "MAD对异常值更稳健，避免极端值影响Z-score计算"
+  },
+
   "_调整说明": {
     "主要变化": [
       "1. 胜率要求：45%→60%（提升15%）",
