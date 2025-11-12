@@ -24,8 +24,8 @@ from ats_core.logging import log, warn, error
 from ats_core.analysis.scan_statistics import get_global_stats, reset_global_stats
 from ats_core.config.threshold_config import get_thresholds
 
-# UTC+8时区（北京时间）
-TZ_UTC8 = timezone(timedelta(hours=8))
+# UTC时区（统一使用UTC，与Binance API保持一致）
+TZ_UTC = timezone.utc
 
 
 class OptimizedBatchScanner:
@@ -467,7 +467,7 @@ class OptimizedBatchScanner:
         # ═══════════════════════════════════════════════════════════
         # Phase 1: 三层智能数据更新
         # ═══════════════════════════════════════════════════════════
-        current_time = datetime.now(TZ_UTC8)
+        current_time = datetime.now(TZ_UTC)
         current_minute = current_time.minute
 
         # Layer 1: 价格更新（每次都执行，最轻量）
@@ -977,7 +977,7 @@ class OptimizedBatchScanner:
 
                         if enabled and bot_token and chat_id and send_scan_summary:
                             # 生成简短的电报消息
-                            timestamp = datetime.now(TZ_UTC8).strftime('%Y-%m-%d %H:%M:%S')
+                            timestamp = datetime.now(TZ_UTC).strftime('%Y-%m-%d %H:%M:%S UTC')
                             total_symbols = summary_data.get('scan_info', {}).get('total_symbols', 0)
 
                             # 获取信号列表（显示所有信号）

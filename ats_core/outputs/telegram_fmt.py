@@ -2058,10 +2058,9 @@ def render_v67_rich(r: Dict[str, Any]) -> str:
 """
 
     # ============ Block 9: 元数据 (v6.7新增Binance链接) ============
-    from datetime import datetime, timedelta, timezone
-    # UTC+8时区（北京时间）
-    tz_utc8 = timezone(timedelta(hours=8))
-    timestamp = datetime.now(tz_utc8).strftime("%Y-%m-%d %H:%M:%S")
+    from datetime import datetime, timezone
+    # UTC时区（统一使用UTC，与Binance API保持一致）
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     version = "v6.7"
     binance_url = f"https://www.binance.com/en/futures/{symbol}"
 
