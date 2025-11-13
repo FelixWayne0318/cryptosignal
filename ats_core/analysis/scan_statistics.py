@@ -24,6 +24,10 @@ class ScanStatistics:
         self.symbols_data = []  # 所有币种的详细数据
         self.signals = []  # 发出的信号
         self.rejections = {}  # 拒绝原因统计
+        # v7.2.39新增：v7.2增强统计
+        self.v72_enhanced_count = 0  # v7.2增强成功数量
+        self.v72_failed_count = 0  # v7.2增强失败数量
+        self.v72_decision_changed_count = 0  # v7.2决策变更数量（拒绝了基础层通过的信号）
 
     def add_symbol_result(self, symbol: str, result: Dict[str, Any]):
         """
@@ -80,6 +84,21 @@ class ScanStatistics:
         }
 
         self.symbols_data.append(data)
+
+        # v7.2.39新增：统计v7.2增强情况
+        v72_enhancements = result.get('v72_enhancements', {})
+        if v72_enhancements:
+            self.v72_enhanced_count += 1
+            # 检查决策是否变更
+            final_decision = v72_enhancements.get('final_decision', {})
+            decision_changed = final_decision.get('decision_changed', False)
+            original_was_prime = final_decision.get('original_was_prime', False)
+            current_is_prime = final_decision.get('is_prime', False)
+            # 如果基础层通过但v7.2拒绝，记录为决策变更
+            if original_was_prime and not current_is_prime:
+                self.v72_decision_changed_count += 1
+        else:
+            self.v72_failed_count += 1
 
         # 统计信号
         if data['is_prime']:
@@ -312,6 +331,37 @@ class ScanStatistics:
         report.append(f"📉 过滤数量: {len(self.symbols_data) - len(self.signals)} 个")
         report.append("")
 
+        # v7.2.39新增：配置诊断区块（建议1）
+        report.append("⚙️  【系统配置】")
+        try:
+            from ats_core.config.threshold_config import get_thresholds
+            config = get_thresholds()
+            confidence_min = config.get_gate_threshold('gate6_综合质量', 'confidence_min', 20)
+            prime_strength_min = config.get_gate_threshold('gate6_综合质量', 'prime_strength_min', 45)
+            report.append(f"  v7.2版本: v7.2.39 (Gate6/7真正生效)")
+            report.append(f"  Gate6阈值: confidence_min={confidence_min}, prime_strength_min={prime_strength_min}")
+            report.append(f"  配置文件: ✅ 已加载 (config/signal_thresholds.json)")
+            report.append(f"  七道闸门: Gate1数据质量 + Gate2资金支持 + Gate3期望收益 + Gate4概率 + Gate5独立性 + Gate6综合质量(2项)")
+        except Exception as e:
+            report.append(f"  ⚠️  配置加载失败: {e}")
+        report.append("")
+
+        # v7.2.39新增：v7.2增强统计区块（建议2）
+        if self.v72_enhanced_count > 0 or self.v72_failed_count > 0:
+            total_count = self.v72_enhanced_count + self.v72_failed_count
+            enhanced_pct = self.v72_enhanced_count / total_count * 100 if total_count > 0 else 0
+            failed_pct = self.v72_failed_count / total_count * 100 if total_count > 0 else 0
+            changed_pct = self.v72_decision_changed_count / total_count * 100 if total_count > 0 else 0
+            signals_pct = len(self.signals) / total_count * 100 if total_count > 0 else 0
+
+            report.append("🔧 【v7.2增强统计】")
+            report.append(f"  v7.2增强成功: {self.v72_enhanced_count}个 ({enhanced_pct:.1f}%)")
+            if self.v72_failed_count > 0:
+                report.append(f"  v7.2增强失败: {self.v72_failed_count}个 ({failed_pct:.1f}%) ⚠️")
+            report.append(f"  决策变更: {self.v72_decision_changed_count}个 (v7.2拒绝了基础层通过的信号)")
+            report.append(f"  七道闸门全部通过: {len(self.signals)}个 ({signals_pct:.1f}%)")
+            report.append("")
+
         # v7.2+: 因子异常检测
         anomalies = self._detect_factor_anomalies()
 
@@ -337,15 +387,31 @@ class ScanStatistics:
 
             report.append("")
 
-        # 1. 信号列表
+        # 1. 信号列表（v7.2.39新增：Gate6/7通过标记 - 建议3）
         if self.signals:
             report.append("🎯 【发出的信号】")
+            # 获取Gate6阈值用于标记
+            try:
+                from ats_core.config.threshold_config import get_thresholds
+                config = get_thresholds()
+                confidence_min = config.get_gate_threshold('gate6_综合质量', 'confidence_min', 20)
+                prime_strength_min = config.get_gate_threshold('gate6_综合质量', 'prime_strength_min', 45)
+            except:
+                confidence_min = 25
+                prime_strength_min = 50
+
             for sig in sorted(self.signals, key=lambda x: x['edge'], reverse=True)[:10]:
+                # 检查是否通过Gate6阈值，添加✓标记
+                conf_val = sig['confidence']
+                conf_mark = "✓" if conf_val >= confidence_min else ""
+                prime_val = sig['prime_strength']
+                prime_mark = "✓" if prime_val >= prime_strength_min else ""
+
                 report.append(
                     f"  {sig['symbol']}: "
                     f"Edge={sig['edge']:.2f}, "
-                    f"Conf={sig['confidence']:.1f}, "
-                    f"Prime={sig['prime_strength']:.1f}, "
+                    f"Conf={conf_val:.1f}{conf_mark}, "
+                    f"Prime={prime_val:.1f}{prime_mark}, "
                     f"P={sig['P_chosen']:.3f}"
                 )
             if len(self.signals) > 10:
