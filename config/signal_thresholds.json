@@ -178,12 +178,13 @@
     "gate6_综合质量": {
       "_v7.2.37_new": "新增第六道闸门：综合质量指标直接检查",
       "_description": "v7.2计算了confidence和prime_strength但未用于最终过滤，导致低质量信号通过",
-      "confidence_min": 25,
-      "prime_strength_min": 50,
+      "confidence_min": 23,
+      "prime_strength_min": 45,
+      "_v7.2.42_optimization": "从25/50降低到23/45，基于v7.2.41实测数据：confidence P75=10.22/Max=28.88，prime_strength P75=42/Max=62",
       "_v7.2.37_optimization": "从20/45提升到25/50，基于实际数据：184个信号(46%)过多，大量21-26/49-57擦边信号",
-      "_rationale": "confidence≥25（P75水平），prime_strength≥50（优质信号），预期信号数量降至5-15个(1-4%)",
-      "_data_driven": "实际分布：Conf P75=13→设25合理；Prime P75=41,Max=57→设50可筛选Top10%",
-      "_comment": "基于2025-11-13扫描：184个信号质量分析，提高阈值确保只发布真正高质量信号"
+      "_rationale": "v7.2.42数据驱动调整：confidence_min=25时0个信号通过（过严），降至23确保1-4%通过率；prime_strength=45基于P75=42",
+      "_data_driven": "v7.2.42实测：Conf P75=10.22,Max=28.88（仅1个>25）→降至23；Prime P75=42,Max=62→降至45回归v7.2.37水平",
+      "_comment": "基于2025-11-13 v7.2.41扫描：0个信号通过，但266个币种接近阈值，数据驱动降低阈值至合理水平"
     },
     "gate_pass_threshold": 0.5
   },
