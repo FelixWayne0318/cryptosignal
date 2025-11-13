@@ -178,15 +178,18 @@
     "gate6_综合质量": {
       "_v7.2.37_new": "新增第六道闸门：综合质量指标直接检查",
       "_description": "v7.2计算了confidence和prime_strength但未用于最终过滤，导致低质量信号通过",
-      "confidence_min": 18,
-      "prime_strength_min": 35,
+      "confidence_min": 12,
+      "prime_strength_min": 25,
+      "_v7.2.43_iteration4": "从15/30降低到12/25，基于15:02扫描：Conf P75=11.20/Max=54.13，Prime P75=36/Max=67，决策变更=7，但交集仍空，降至12(P75)/25(P50-P75)扩大交集",
+      "_v7.2.43_iteration3": "从18/35降低到15/30，基于14:09扫描深度诊断：根本原因是阈值与市场脱节（Max=32.34但要求35），降至15(P90)/30(P65)匹配现实",
       "_v7.2.43_iteration2": "从20/40降低到18/35，基于14:09扫描：Conf P75=10.47/Max=32.34，Prime P75=43/Max=62，仍然0个信号（交集空）",
       "_v7.2.43_optimization": "从23/45降低到20/40，基于v7.2.42实测数据：confidence P75=11.37/Max=29.85，prime_strength P75=43/Max=61",
       "_v7.2.42_optimization": "从25/50降低到23/45，基于v7.2.41实测数据：confidence P75=10.22/Max=28.88，prime_strength P75=42/Max=62",
       "_v7.2.37_optimization": "从20/45提升到25/50，基于实际数据：184个信号(46%)过多，大量21-26/49-57擦边信号",
-      "_rationale": "v7.2.43二次调整：20/40时仍0个信号，Max=32.34仅1-2个>20但prime<40，降至18/35扩大交集",
-      "_data_driven": "实测14:09：Conf Max=32.34(极少数>20)，Prime P75=43(25%>40)，但交集为0→降至18(P85)/35(P65)确保交集",
-      "_comment": "同日第二次迭代：交集优化策略，confidence降2分(11%)，prime降5分(13%)，预期交集5-15个"
+      "_root_cause_analysis": "决策变更=0→7表明Gate6/7开始生效，但交集仍空说明阈值仍偏高",
+      "_rationale": "v7.2.43四次调整：15/30时决策变更7但交集仍空，降至12(接近P75)/25(P50-P75)确保有效交集",
+      "_data_driven": "实测15:02：Conf P75=11.20/Max=54.13，Prime P75=36/Max=67，降至12/25预期10-20个信号（P75×P65交集）",
+      "_comment": "同日第四次迭代：激进降阈策略，confidence降3分(20%)，prime降5分(17%)，预期交集10-20个信号"
     },
     "gate_pass_threshold": 0.5
   },
