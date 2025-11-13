@@ -689,8 +689,9 @@ class OptimizedBatchScanner:
                 from ats_core.pipeline.analyze_symbol_v72 import analyze_with_v72_enhancements
 
                 # 从配置读取v7.2数据要求（避免硬编码）
-                min_klines_for_v72 = config.get('v72增强参数', {}).get('min_klines_for_v72', 150)
-                min_cvd_points = config.get('v72增强参数', {}).get('min_cvd_points', 20)
+                # v7.2.41修复：config是ThresholdConfig对象，需要使用config.config.get()
+                min_klines_for_v72 = config.config.get('v72增强参数', {}).get('min_klines_for_v72', 150)
+                min_cvd_points = config.config.get('v72增强参数', {}).get('min_cvd_points', 20)
 
                 # 从intermediate_data获取数据（v7.2.40已修复，确保数据存在）
                 intermediate = result.get('intermediate_data', {})
