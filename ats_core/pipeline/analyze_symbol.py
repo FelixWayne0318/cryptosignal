@@ -487,7 +487,7 @@ def _analyze_symbol_core(
 
     # CVD（现货+合约组合，如果有现货数据）
     t0 = time.time()
-    cvd_series, cvd_mix = cvd_mix_with_oi_price(k1, oi_data, window=20, spot_klines=spot_k1)
+    cvd_series, cvd_mix = cvd_mix_with_oi_price(k1, oi_data, rolling_window=20, spot_klines=spot_k1)
     perf['CVD计算'] = time.time() - t0
 
     # ---- 2. 计算v6.6因子（6因子 + 4调制器，统一±100系统）----
