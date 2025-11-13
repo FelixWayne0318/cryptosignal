@@ -54,7 +54,7 @@ sys.path.insert(0, str(project_root))
 from ats_core.pipeline.batch_scan_optimized import OptimizedBatchScanner
 from ats_core.logging import log, warn, error
 from ats_core.outputs.telegram_fmt import render_trade_v72
-from ats_core.pipeline.analyze_symbol_v72 import analyze_with_v72_enhancements
+# v7.2.41修复：不再导入analyze_with_v72_enhancements（batch_scan直接应用v7.2增强）
 from ats_core.publishing.anti_jitter import AntiJitter
 from ats_core.config.anti_jitter_config import get_config
 from ats_core.analysis.report_writer import get_report_writer
@@ -236,57 +236,27 @@ class RealtimeSignalScanner:
             warn("扫描无结果")
             return
 
-        # v7.2增强：对每个信号应用v7.2分析
-        v72_results = []
-        for result in results:
-            try:
-                # 应用v7.2增强
-                v72_result = self._apply_v72_enhancements(result)
-                v72_results.append(v72_result)
+        # v7.2.41修复：batch_scan已应用v7.2增强，无需重复调用
+        # 之前逻辑：realtime_scanner读取batch_scan结果 → 应用v7.2增强 → 重写scan_detail.json
+        # 新逻辑：batch_scan直接应用v7.2增强 → realtime_scanner直接使用结果
+        # 优点：架构清晰，避免重复计算，scan_summary.md统计正确
 
-                # 记录到数据库
-                if self.record_data:
-                    self.recorder.record_signal_snapshot(v72_result)
-                    self.analysis_db.write_complete_signal(v72_result)
+        # 记录到数据库（v7.2增强已在batch_scan中完成）
+        if self.record_data:
+            for result in results:
+                try:
+                    self.recorder.record_signal_snapshot(result)
+                    self.analysis_db.write_complete_signal(result)
+                except Exception as e:
+                    error(f"数据记录失败 {result.get('symbol')}: {e}")
 
-            except Exception as e:
-                error(f"v7.2增强失败 {result.get('symbol')}: {e}")
-                continue
-
-        # 🔧 关键修复：重写报告，包含v7.2增强数据
-        # 原始scan()方法写的scan_detail.json没有v7.2数据，这里覆盖它
-        try:
-            writer = get_report_writer()
-            latest_detail_path = writer.latest_dir / "scan_detail.json"
-
-            # 读取原始报告结构
-            if latest_detail_path.exists():
-                with open(latest_detail_path, 'r', encoding='utf-8') as f:
-                    original_detail = json.load(f)
-
-                # 用v7.2增强结果替换symbols数组
-                original_detail['symbols'] = v72_results
-                original_detail['v72_enhanced'] = True
-                original_detail['enhancement_timestamp'] = datetime.now(TZ_UTC).isoformat()
-
-                # 写回文件
-                with open(latest_detail_path, 'w', encoding='utf-8') as f:
-                    json.dump(original_detail, f, indent=2, ensure_ascii=False)
-
-                log(f"✅ 已更新scan_detail.json（含v7.2数据）")
-            else:
-                warn("⚠️ scan_detail.json不存在，无法更新")
-
-        except Exception as e:
-            warn(f"⚠️ 更新scan_detail.json失败: {e}")
-
-        # 过滤Prime信号（四道闸门 + AntiJitter）
-        prime_signals = self._filter_prime_signals_v72(v72_results)
+        # 过滤Prime信号（七道闸门 + AntiJitter）
+        # results已包含v7.2增强数据（含v72_enhancements字段）
+        prime_signals = self._filter_prime_signals_v72(results)
 
         # 统计
         log(f"\n📊 扫描统计:")
         log(f"   总币种数: {len(results)}")
-        log(f"   v7.2增强: {len(v72_results)}")
         log(f"   Prime信号: {len(prime_signals)}")
         if prime_signals:
             log(f"   Prime列表: {', '.join([s['symbol'] for s in prime_signals])}")
@@ -297,54 +267,7 @@ class RealtimeSignalScanner:
 
         log("=" * 60 + "\n")
 
-    def _apply_v72_enhancements(self, result: dict) -> dict:
-        """应用v7.2增强分析"""
-        symbol = result.get('symbol')
-
-        # v7.2.12修复：优先从intermediate_data读取数据（batch_scan_optimized将数据存储在此）
-        intermediate = result.get('intermediate_data', {})
-        klines = intermediate.get('klines') or result.get('klines', [])
-        oi_data = intermediate.get('oi_data') or result.get('oi_data', [])
-        cvd_series = intermediate.get('cvd_series') or result.get('cvd_series', [])
-        atr = intermediate.get('atr_now') or result.get('atr', 0)
-
-        # v7.2.9修复：从配置读取数据质量阈值（避免硬编码）
-        from ats_core.config.threshold_config import get_thresholds
-        from ats_core.logging import log as debug_log
-        config = get_thresholds()
-        try:
-            min_klines_for_v72 = config.config.get('v72增强参数', {}).get('min_klines_for_v72', 100)
-            min_cvd_points = config.config.get('v72增强参数', {}).get('min_cvd_points', 10)
-        except:
-            min_klines_for_v72 = 100
-            min_cvd_points = 10
-
-        # v7.2.12修复：添加诊断日志
-        if len(klines) < min_klines_for_v72 or len(cvd_series) < min_cvd_points:
-            debug_log(f"   ⚠️  {symbol} 数据不足: klines={len(klines)}/{min_klines_for_v72}, cvd={len(cvd_series)}/{min_cvd_points}")
-
-        if len(klines) >= min_klines_for_v72 and len(cvd_series) >= min_cvd_points:
-            try:
-                v72_enhanced = analyze_with_v72_enhancements(
-                    original_result=result,
-                    symbol=symbol,
-                    klines=klines,
-                    oi_data=oi_data,
-                    cvd_series=cvd_series,
-                    atr_now=atr
-                )
-                return v72_enhanced
-            except Exception as e:
-                warn(f"v7.2增强失败 {symbol}: {e}")
-                # v7.2.11修复：确保返回的result有v72_enhancements字段（即使为空）
-                if 'v72_enhancements' not in result:
-                    result['v72_enhancements'] = {}
-                return result
-        else:
-            # v7.2.11修复：数据不足时也添加空的v72_enhancements
-            if 'v72_enhancements' not in result:
-                result['v72_enhancements'] = {}
-            return result
+    # v7.2.41修复：_apply_v72_enhancements已废弃（batch_scan直接应用v7.2增强）
 
     def _filter_prime_signals_v72(self, results: list) -> list:
         """

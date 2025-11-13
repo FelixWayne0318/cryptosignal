@@ -682,6 +682,46 @@ class OptimizedBatchScanner:
                     kline_cache=self.kline_cache  # v6.6: 四门DataQual检查
                 )
 
+                # v7.2.41修复：batch_scan直接应用v7.2增强（P1-High）
+                # 根因：之前batch_scan只做基础分析，realtime_scanner再应用v7.2增强
+                # 结果：scan_summary.md显示"v7.2增强失败100%"（错误统计）
+                # 修复：batch_scan扫描时直接应用v7.2增强，确保统计正确
+                from ats_core.pipeline.analyze_symbol_v72 import analyze_with_v72_enhancements
+
+                # 从配置读取v7.2数据要求（避免硬编码）
+                # v7.2.41修复：config是ThresholdConfig对象，需要使用config.config.get()
+                min_klines_for_v72 = config.config.get('v72增强参数', {}).get('min_klines_for_v72', 150)
+                min_cvd_points = config.config.get('v72增强参数', {}).get('min_cvd_points', 20)
+
+                # 从intermediate_data获取数据（v7.2.40已修复，确保数据存在）
+                intermediate = result.get('intermediate_data', {})
+                result_klines = intermediate.get('klines', [])
+                result_cvd = intermediate.get('cvd_series', [])
+                result_oi = intermediate.get('oi_data', [])
+                result_atr = intermediate.get('atr_now', 0)
+
+                # 检查数据是否满足v7.2要求
+                if len(result_klines) >= min_klines_for_v72 and len(result_cvd) >= min_cvd_points:
+                    try:
+                        # 应用v7.2增强（包含Gate6/7检查）
+                        result = analyze_with_v72_enhancements(
+                            original_result=result,
+                            symbol=symbol,
+                            klines=result_klines,
+                            oi_data=result_oi,
+                            cvd_series=result_cvd,
+                            atr_now=result_atr
+                        )
+                    except Exception as e:
+                        warn(f"   ⚠️  v7.2增强失败 {symbol}: {e}")
+                        # 失败时确保有v72_enhancements字段（供统计使用）
+                        if 'v72_enhancements' not in result:
+                            result['v72_enhancements'] = {}
+                else:
+                    # 数据不足时添加空的v72_enhancements（供统计使用）
+                    if 'v72_enhancements' not in result:
+                        result['v72_enhancements'] = {}
+
                 analysis_time = time.time() - analysis_start
 
                 # 性能详情（慢速币种，根据配置）

@@ -1,61 +1,315 @@
-# Claude Project 超精简导入配置
-# 策略：只导入文档、规范、配置（~1M）
-# 代码：在对话中用Read工具按需查看
+# Claude Project 完整数据流导入配置
+# 策略：导入从数据获取到信号输出的完整链路核心文件
+# 目标：约30-35个文件，~630-720K
 
-# 版本控制
+# ========================================
+# 基础排除
+# ========================================
 .git/
 .gitignore
-
-# Python缓存
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.so
+*.egg-info/
+.pytest_cache/
 
-# 运行时数据
+# ========================================
+# 运行时数据（完全不需要）
+# ========================================
 data/
 reports/
+logs/
 *.log
+*.csv
+*.parquet
+*.db
+*.sqlite
+*.sqlite3
+
+# ========================================
+# 归档和测试（本地运行）
+# ========================================
 archived/
-
-# 临时文件
-*.tmp
-*.bak
-*.swp
-*~
-
-# 敏感配置
-config/binance_credentials.json
-config/telegram.json
-
-# IDE配置
-.vscode/
-.idea/
-
-# 系统文件
-.DS_Store
-Thumbs.db
-
-# ========================================
-# 超精简模式：排除所有代码
-# 只保留：文档、规范、配置
-# ========================================
-
-# 核心代码（对话中用Read查看）
-ats_core/
-
-# 运行脚本（对话中查看）
-scripts/*.py
-scripts/**/*.py
-
-# 测试文件（对话中查看）
+backup/
 tests/
-
-# 诊断工具（对话中查看）
 diagnose/
+notebooks/
+ats_backtest/
 
-# 其他配置文件（只保留signal_thresholds.json）
+# ========================================
+# 启动脚本（在仓库中，作为接口调用方）
+# ========================================
+setup.sh
+auto_restart.sh
+deploy_and_run.sh
+start_live.sh
+
+# ========================================
+# scripts/ 排除扫描器（在仓库中调用Project代码）
+# ========================================
+scripts/realtime_signal_scanner.py
+scripts/init_databases.py
+scripts/batch*.py
+scripts/analysis*.py
+scripts/diagnose*.py
+scripts/backtest*.py
+
+# 保留：
+# （scripts/下暂时全部排除，因为都是调用方）
+
+# ========================================
+# config/ 只保留signal_thresholds.json
+# ========================================
 config/binance_credentials.json
 config/telegram.json
 config/params.json
 config/factors_unified.json
+config/*.backup
+config/*.bak
+config/*.example
+
+# 保留：
+# ✅ config/signal_thresholds.json
+
+# ========================================
+# docs/ 全部排除（详细文档需要时查阅）
+# ========================================
+docs/
+
+# ========================================
+# standards/ 只保留核心规范
+# ========================================
+standards/01_SYSTEM_OVERVIEW.md
+standards/02_ARCHITECTURE.md
+standards/03_VERSION_HISTORY.md
+standards/CORE_STANDARDS.md
+standards/DEVELOPMENT_WORKFLOW.md
+standards/DOCUMENTATION_RULES.md
+standards/MODIFICATION_RULES.md
+standards/deployment/
+standards/specifications/
+
+# 保留：
+# ✅ standards/00_INDEX.md
+# ✅ standards/SYSTEM_ENHANCEMENT_STANDARD.md
+
+# ========================================
+# ats_core/ 完整数据流文件
+# ========================================
+
+# ─────────────────────────────────────
+# 第1层：数据获取（保留）
+# ─────────────────────────────────────
+# ✅ ats_core/sources/binance_futures_client.py
+# ✅ ats_core/sources/binance.py
+# ✅ ats_core/sources/binance_safe.py
+# ✅ ats_core/data/unified_data_manager.py
+# ✅ ats_core/data/realtime_kline_cache.py
+# ✅ ats_core/data/quality.py
+
+# 排除data/中的其他文件（不常修改）
+ats_core/data/analysis_db.py
+ats_core/data/trade_recorder.py
+ats_core/data/binance_async_client.py
+ats_core/data/binance_websocket_client.py
+
+# ─────────────────────────────────────
+# 第2层：数据预处理（保留）
+# ─────────────────────────────────────
+# ✅ ats_core/preprocessing/standardization.py
+# （preprocessing/下的其他文件如果存在也保留）
+
+# ─────────────────────────────────────
+# 第3层：因子计算（保留所有核心因子）
+# ─────────────────────────────────────
+# ✅ ats_core/features/fund_leading.py
+# ✅ ats_core/features/trend.py
+# ✅ ats_core/features/momentum.py
+# ✅ ats_core/features/cvd.py
+# ✅ ats_core/features/volume.py
+# ✅ ats_core/features/open_interest.py
+# ✅ ats_core/features/basis.py
+
+# ✅ ats_core/features/scoring_utils.py（被fund_leading.py导入）
+
+# 排除features/中的非核心文件
+ats_core/features/liquidity_priceband.py
+ats_core/features/orderbook_depth.py
+ats_core/features/advanced_scoring.py
+ats_core/features/accumulation_detection.py
+ats_core/features/risk_filters.py
+ats_core/features/market_regime.py
+ats_core/features/ta_core.py
+ats_core/features/cvd_flow.py
+ats_core/features/multi_timeframe.py
+ats_core/features/environment.py
+ats_core/features/accel.py
+ats_core/features/microconfirm_15m.py
+ats_core/features/pricing.py
+ats_core/features/funding_rate.py
+ats_core/features/structure_sq.py
+
+# ─────────────────────────────────────
+# 第4层：评分和分组（保留）
+# ─────────────────────────────────────
+# ✅ ats_core/scoring/factor_groups.py
+# ✅ ats_core/scoring/integrated_score.py
+# ✅ ats_core/scoring/expected_value.py（被integrated_gates.py导入）
+
+# 排除scoring/中的其他文件
+ats_core/scoring/adaptive_weights.py
+ats_core/scoring/probability.py
+ats_core/scoring/probability_v2.py
+ats_core/scoring/scorecard.py
+
+# ─────────────────────────────────────
+# 第5层：过滤系统（保留）
+# ─────────────────────────────────────
+# ✅ ats_core/gates/integrated_gates.py
+
+# ─────────────────────────────────────
+# 第6层：统计校准（保留）
+# ─────────────────────────────────────
+# ✅ ats_core/calibration/empirical_calibration.py
+
+# ─────────────────────────────────────
+# 第7层：v7.2集成引擎（保留）
+# ─────────────────────────────────────
+# ✅ ats_core/pipeline/analyze_symbol_v72.py
+
+# 排除pipeline/中的其他文件（调用方，在仓库中）
+ats_core/pipeline/analyze_symbol.py
+ats_core/pipeline/batch_scan_optimized.py
+ats_core/pipeline/realtime_scanner.py
+ats_core/pipeline/scanner_*.py
+ats_core/pipeline/gates.py
+
+# ─────────────────────────────────────
+# 第8层：输出层（可选，如果太大可排除）
+# ─────────────────────────────────────
+# 如果telegram_fmt.py太大（89K），可以排除
+# ats_core/outputs/telegram_fmt.py
+
+# ─────────────────────────────────────
+# 核心依赖：配置管理（保留）
+# ─────────────────────────────────────
+# ✅ ats_core/config/threshold_config.py
+# ✅ ats_core/config/factor_config.py
+# ✅ ats_core/config/anti_jitter_config.py
+
+# 排除config/中的其他文件
+ats_core/config/config_validator.py
+
+# ─────────────────────────────────────
+# 核心依赖：工具函数（保留常用的）
+# ─────────────────────────────────────
+# ✅ ats_core/utils/math_utils.py
+# ✅ ats_core/utils/cvd_utils.py
+# ✅ ats_core/utils/factor_normalizer.py
+# ✅ ats_core/utils/outlier_detection.py
+
+# 排除utils/中的其他文件
+ats_core/utils/adaptive_params.py
+ats_core/utils/degradation.py
+ats_core/utils/rate_limiter.py
+
+# ─────────────────────────────────────
+# 核心依赖：日志模块（保留）
+# ─────────────────────────────────────
+# ✅ ats_core/logging.py
+
+# ─────────────────────────────────────
+# execution/ 只保留闸门所需
+# ─────────────────────────────────────
+# ✅ ats_core/execution/metrics_estimator.py（被integrated_gates.py导入）
+
+# 排除execution/中的其他文件
+ats_core/execution/binance_futures_client.py
+ats_core/execution/stop_loss_calculator.py
+
+# ─────────────────────────────────────
+# modulators/ 只保留闸门所需
+# ─────────────────────────────────────
+# ✅ ats_core/modulators/fi_modulators.py（被integrated_gates.py导入）
+
+# 排除modulators/中的其他文件
+ats_core/modulators/modulator_chain.py
+
+# ─────────────────────────────────────
+# 排除的其他模块（不在数据流中）
+# ─────────────────────────────────────
+ats_core/publishing/
+ats_core/analysis/
+ats_core/monitoring/
+ats_core/shadow/
+ats_core/tools/
+ats_core/factors_v2/
+ats_core/rl/
+ats_core/risk/
+ats_core/streaming/
+ats_core/backoff.py
+
+# ========================================
+# 资源文件
+# ========================================
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.pdf
+*.zip
+*.tar
+*.gz
+*.tmp
+*.bak
+*.backup
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# ========================================
+# IDE配置
+# ========================================
+.vscode/
+.idea/
+*.sublime-*
+
+# ========================================
+# 最终保留清单（约30-35个文件）
+# ========================================
+#
+# 根目录（3个）：
+# ✅ CLAUDE_PROJECT_CONTEXT.md
+# ✅ CLAUDE_PROJECT_INTERFACE.md
+# ✅ README.md
+#
+# config/（1个）：
+# ✅ signal_thresholds.json
+#
+# standards/（2个）：
+# ✅ 00_INDEX.md
+# ✅ SYSTEM_ENHANCEMENT_STANDARD.md
+#
+# ats_core/数据流（约30个）：
+#   数据获取（6个）
+#   预处理（1个）
+#   因子计算（7+1个，含scoring_utils）
+#   评分分组（3个，含expected_value）
+#   闸门（1个）
+#   校准（1个）
+#   v7.2引擎（1个）
+#   输出（1个，可选）
+#   execution/（1个metrics_estimator）
+#   modulators/（1个fi_modulators）
+#
+# ats_core/依赖（约10个）：
+#   配置（3个）
+#   工具（4个）
+#   日志（1个）
+#   __init__.py（若干）
+#
+# 总计：约35-40个文件，~690-780K
+# ========================================

@@ -550,14 +550,28 @@ def analyze_with_v72_enhancements(
         conflict_reason = "normal"
         conflict_mult = 1.0
 
-    # 综合判定（所有五道闸门都通过才发布）
+    # Gate 6: 综合质量闸门（v7.2.37新增）
+    # 直接检查confidence和prime_strength，防止低质量信号通过
+    # v7.2.37修复：从original_result获取prime_strength（基础层计算）
+    prime_strength = original_result.get('publish', {}).get('prime_strength', 0)
+
+    confidence_min_gate6 = config.get_gate_threshold('gate6_综合质量', 'confidence_min', 20)
+    prime_strength_min_gate6 = config.get_gate_threshold('gate6_综合质量', 'prime_strength_min', 45)
+
+    gates_confidence = 1.0 if confidence_v72 >= confidence_min_gate6 else 0.0
+    gates_prime_strength = 1.0 if prime_strength >= prime_strength_min_gate6 else 0.0
+
+    # 综合判定（所有六道闸门都通过才发布）
     # v7.2.10修复：使用配置的gate_pass_threshold替代硬编码0.5
+    # v7.2.37增强：新增Gate6综合质量检查
     pass_gates = all([
         gates_data_quality > gate_pass_threshold,
         gates_ev > gate_pass_threshold,
         gates_probability > gate_pass_threshold,
         gates_fund_support > gate_pass_threshold,
-        gates_independence_market > gate_pass_threshold  # v3.1新增
+        gates_independence_market > gate_pass_threshold,  # v3.1新增
+        gates_confidence > gate_pass_threshold,  # v7.2.37新增
+        gates_prime_strength > gate_pass_threshold  # v7.2.37新增
     ])
 
     # 闸门原因
@@ -576,6 +590,11 @@ def analyze_with_v72_enhancements(
             direction = "做多" if side_long_v72 else "做空"
             market_trend = "牛市" if market_regime > 0 else "熊市"
             failed_gates.append(f"I×Market冲突({direction}+{market_trend}, I={I_v2:.0f}<{I_min}, Market={market_regime:.0f})")
+        # v7.2.37新增：Gate6综合质量检查
+        if gates_confidence <= gate_pass_threshold:
+            failed_gates.append(f"置信度过低({confidence_v72:.1f}, 需要>={confidence_min_gate6})")
+        if gates_prime_strength <= gate_pass_threshold:
+            failed_gates.append(f"Prime强度不足({prime_strength:.1f}, 需要>={prime_strength_min_gate6})")
         gate_reason = "; ".join(failed_gates)
     else:
         gate_reason = "all_gates_passed"
@@ -585,12 +604,14 @@ def analyze_with_v72_enhancements(
         "all_pass": pass_gates,
         "details": [
             {"gate": 1, "name": "data_quality", "pass": gates_data_quality > gate_pass_threshold, "value": gates_data_quality},
-            {"gate": 2, "name": "fund_support", "pass": gates_fund_support > gate_pass_threshold, "value": F_v2, "threshold": -15},
-            {"gate": 3, "name": "ev", "pass": gates_ev > gate_pass_threshold, "value": EV_net, "threshold": 0.0},
-            {"gate": 4, "name": "probability", "pass": gates_probability > gate_pass_threshold, "value": P_calibrated, "threshold": 0.50},
+            {"gate": 2, "name": "fund_support", "pass": gates_fund_support > gate_pass_threshold, "value": F_v2, "threshold": F_min},
+            {"gate": 3, "name": "ev", "pass": gates_ev > gate_pass_threshold, "value": EV_net, "threshold": EV_min},
+            {"gate": 4, "name": "probability", "pass": gates_probability > gate_pass_threshold, "value": P_calibrated, "threshold": P_min},
             {"gate": 5, "name": "independence_market", "pass": gates_independence_market > gate_pass_threshold,
              "value": I_v2, "market_regime": market_regime, "conflict_reason": conflict_reason,
-             "threshold": I_min}  # v3.1新增
+             "threshold": I_min},  # v3.1新增
+            {"gate": 6, "name": "confidence", "pass": gates_confidence > gate_pass_threshold, "value": confidence_v72, "threshold": confidence_min_gate6},  # v7.2.37新增
+            {"gate": 7, "name": "prime_strength", "pass": gates_prime_strength > gate_pass_threshold, "value": prime_strength, "threshold": prime_strength_min_gate6}  # v7.2.37新增
         ]
     }
 
@@ -727,6 +748,17 @@ def analyze_with_v72_enhancements(
         "is_prime_v72": is_prime_v72,
         "signal_v72": signal_v72
     })
+
+    # v7.2.38 P0-Critical修复：更新publish字段，确保ScanStatistics使用v7.2的最终判定
+    # Bug: publish.prime使用基础层判定，未经Gate6/7过滤，导致202个低质量信号通过
+    # Fix: 强制更新publish.prime为is_prime_v72（经过所有七道闸门过滤）
+    original_publish = result_v72.get('publish', {})
+    original_publish.update({
+        "prime": is_prime_v72,  # 使用v7.2七道闸门的最终判定
+        "rejection_reason": [] if is_prime_v72 else [gate_reason],  # 更新拒绝原因
+        "_v7.2.38_fix": "publish.prime已更新为v7.2七道闸门判定结果（包含Gate6/7）"
+    })
+    result_v72["publish"] = original_publish
 
     return result_v72
 
