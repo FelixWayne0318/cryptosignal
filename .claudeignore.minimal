@@ -1,0 +1,210 @@
+# Claude Project 极简核心导入配置
+# 策略：只保留最核心的5-10个关键文件
+# 目标：压缩到1M以内，绝对不超限
+
+# ========================================
+# 基础排除（Python缓存、版本控制）
+# ========================================
+.git/
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.pytest_cache/
+
+# ========================================
+# 完全排除的大目录
+# ========================================
+data/
+reports/
+logs/
+archived/
+backup/
+tests/
+diagnose/
+notebooks/
+ats_backtest/
+analysis/
+performance/
+results/
+
+# ========================================
+# docs/ 几乎全部排除（太大）
+# ========================================
+docs/
+# 只保留 CLAUDE_PROJECT_CONTEXT.md（根目录，不在docs/中）
+
+# ========================================
+# standards/ 几乎全部排除（太大）
+# ========================================
+# 只保留最核心的2个文件，其他全部排除
+standards/deployment/
+standards/specifications/
+standards/01_SYSTEM_OVERVIEW.md
+standards/02_ARCHITECTURE.md
+standards/03_VERSION_HISTORY.md
+standards/CORE_STANDARDS.md
+standards/DEVELOPMENT_WORKFLOW.md
+standards/DOCUMENTATION_RULES.md
+standards/MODIFICATION_RULES.md
+
+# 保留：
+# ✅ standards/00_INDEX.md
+# ✅ standards/SYSTEM_ENHANCEMENT_STANDARD.md
+
+# ========================================
+# config/ 只保留1个最重要的配置
+# ========================================
+config/binance_credentials.json
+config/telegram.json
+config/params.json
+config/factors_unified.json
+config/*.backup
+config/*.bak
+
+# 保留：
+# ✅ config/signal_thresholds.json
+
+# ========================================
+# scripts/ 只保留1-2个核心脚本
+# ========================================
+scripts/backtest*.py
+scripts/analysis*.py
+scripts/diagnose*.py
+scripts/test*.py
+scripts/batch*.py
+scripts/monitor*.py
+
+# 保留：
+# ✅ scripts/realtime_signal_scanner.py
+
+# ========================================
+# ats_core/ 只保留核心算法文件
+# ========================================
+
+# 完全排除这些子目录
+ats_core/analysis/
+ats_core/monitoring/
+ats_core/shadow/
+ats_core/risk/
+ats_core/rl/
+ats_core/streaming/
+ats_core/factors_v2/
+ats_core/tools/
+ats_core/utils/
+ats_core/sources/
+ats_core/execution/
+ats_core/publishing/
+ats_core/data/
+
+# pipeline/ 只保留v7.2分析器
+ats_core/pipeline/analyze_symbol.py
+ats_core/pipeline/batch_scan_optimized.py
+ats_core/pipeline/realtime_scanner.py
+ats_core/pipeline/scanner_*.py
+
+# 保留：
+# ✅ ats_core/pipeline/analyze_symbol_v72.py
+
+# outputs/ 全部排除（太大）
+ats_core/outputs/
+
+# features/ 只保留核心因子
+ats_core/features/trend.py
+ats_core/features/momentum.py
+ats_core/features/cvd.py
+ats_core/features/volume.py
+ats_core/features/open_interest.py
+ats_core/features/basis.py
+ats_core/features/liquidity*.py
+ats_core/features/orderbook*.py
+
+# 保留：
+# ✅ ats_core/features/fund_leading.py
+
+# scoring/ 只保留因子分组
+ats_core/scoring/integrated_score.py
+ats_core/scoring/risk_score.py
+ats_core/scoring/probability*.py
+
+# 保留：
+# ✅ ats_core/scoring/factor_groups.py
+
+# gates/ 只保留闸门
+# ✅ ats_core/gates/integrated_gates.py
+
+# calibration/ 只保留校准器
+# ✅ ats_core/calibration/empirical_calibration.py
+
+# preprocessing/ 全部排除
+ats_core/preprocessing/
+
+# config/ (ats_core内部配置)
+ats_core/config/
+
+# modulators/ 全部排除
+ats_core/modulators/
+
+# ========================================
+# 资源文件全部排除
+# ========================================
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.pdf
+*.zip
+*.tar
+*.gz
+*.csv
+*.parquet
+*.db
+*.sqlite
+*.sqlite3
+*.log
+*.tmp
+*.bak
+*.backup
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# ========================================
+# IDE配置
+# ========================================
+.vscode/
+.idea/
+*.sublime-*
+
+# ========================================
+# 最终保留清单（约10个文件，<1M）
+# ========================================
+#
+# 根目录：
+# ✅ CLAUDE_PROJECT_CONTEXT.md
+# ✅ README.md
+# ✅ setup.sh
+#
+# config/（1个）：
+# ✅ signal_thresholds.json
+#
+# standards/（2个）：
+# ✅ 00_INDEX.md
+# ✅ SYSTEM_ENHANCEMENT_STANDARD.md
+#
+# scripts/（1个）：
+# ✅ realtime_signal_scanner.py
+#
+# ats_core/（5个核心算法）：
+# ✅ pipeline/analyze_symbol_v72.py
+# ✅ features/fund_leading.py
+# ✅ scoring/factor_groups.py
+# ✅ gates/integrated_gates.py
+# ✅ calibration/empirical_calibration.py
+#
+# 总计：约10-12个文件
+# ========================================
