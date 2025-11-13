@@ -30,6 +30,13 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, Tuple, List
 import math
 
+# v7.2.25: 导入配置管理器（用于F因子蓄势阈值）
+try:
+    from ats_core.config.threshold_config import get_thresholds
+    CONFIG_AVAILABLE = True
+except ImportError:
+    CONFIG_AVAILABLE = False
+
 # Public API
 __all__ = [
     'render_signal',
@@ -2051,10 +2058,9 @@ def render_v67_rich(r: Dict[str, Any]) -> str:
 """
 
     # ============ Block 9: 元数据 (v6.7新增Binance链接) ============
-    from datetime import datetime, timedelta, timezone
-    # UTC+8时区（北京时间）
-    tz_utc8 = timezone(timedelta(hours=8))
-    timestamp = datetime.now(tz_utc8).strftime("%Y-%m-%d %H:%M:%S")
+    from datetime import datetime, timezone
+    # UTC时区（统一使用UTC，与Binance API保持一致）
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     version = "v6.7"
     binance_url = f"https://www.binance.com/en/futures/{symbol}"
 
@@ -2281,12 +2287,18 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     RR = TP_pct / SL_pct if SL_pct > 0 else 2.0
     ttl_h = int(_ttl_hours(r))
 
-    # F因子判断蓄势待发
+    # v7.2.26改进：从analyze结果直接读取momentum_grading信息（避免重复计算和硬编码）
+    momentum_grading = _get(v72, "momentum_grading") or {}
+    momentum_level = momentum_grading.get("level", 0)
+    momentum_desc = momentum_grading.get("description", "正常模式")
     F_v2 = _get(v72, "F_v2") or 0
-    is_momentum_ready = F_v2 > 30
 
-    # 构建头部
-    if is_momentum_ready:
+    # 构建头部（根据momentum_level显示不同标题，避免硬编码阈值）
+    if momentum_level == 3:
+        header = f"🚀🚀 极早期蓄势 · 强势机会\n"
+    elif momentum_level == 2:
+        header = f"🚀 早期蓄势 · 提前布局\n"
+    elif momentum_level == 1:
         header = f"🚀 蓄势待发\n"
     else:
         header = f"{'📍 观察信号' if is_watch else '🚀 交易信号'}\n"
@@ -2329,20 +2341,21 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     # ========== 3. v7.2核心因子 ==========
     factors = f"\n\n━━━ 🔬 v7.2核心因子 ━━━\n"
 
-    # F因子（v7.2.23优化：使用通俗描述）
+    # F因子（v7.2.26改进：直接使用momentum_level，避免硬编码阈值）
     F_v2 = _get(v72, "F_v2")
     if F_v2 is not None:
         F_v2_int = int(round(F_v2))
-        # 使用类似C因子的资金流描述风格
-        if F_v2_int >= 80:
+
+        # v7.2.26: 直接使用momentum_level判断（由analyze_symbol_v72.py计算）
+        if momentum_level == 3:  # 极早期蓄势
+            F_icon = "🚀🚀"
+            F_desc = "强劲资金流入 [极早期蓄势]"
+        elif momentum_level == 2:  # 早期蓄势
             F_icon = "🚀"
-            F_desc = "强劲资金流入 [蓄势待发]"
-        elif F_v2_int >= 60:
+            F_desc = "偏强资金流入 [早期蓄势]"
+        elif momentum_level == 1:  # 蓄势待发
             F_icon = "🔥"
-            F_desc = "偏强资金流入 [即将爆发]"
-        elif F_v2_int >= 40:
-            F_icon = "🟢"
-            F_desc = "中等资金流入"
+            F_desc = "中等资金流入 [蓄势待发]"
         elif F_v2_int >= 20:
             F_icon = "🟢"
             F_desc = "轻微资金流入"
@@ -2354,13 +2367,13 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
             F_desc = "轻微资金流出"
         elif F_v2_int >= -60:
             F_icon = "🟠"
-            F_desc = "中等资金流出"
+            F_desc = "中等资金流出 [追高风险]"
         elif F_v2_int >= -80:
             F_icon = "🔴"
-            F_desc = "偏强资金流出"
+            F_desc = "偏强资金流出 [高风险]"
         else:
             F_icon = "🔴"
-            F_desc = "强劲资金流出"
+            F_desc = "强劲资金流出 [极高风险]"
 
         factors += f"\n{F_icon} F资金领先  {F_v2_int:3d}  {F_desc}"
 

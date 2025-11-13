@@ -21,6 +21,114 @@
 from typing import Dict, Any
 import math
 
+# v7.2.27新增：导入线性函数工具和F多空适配函数
+from ats_core.utils.math_utils import linear_reduce, get_effective_F
+
+# v7.2.30新增：新币阈值统一获取函数
+def _apply_phase_transition_smooth(config, bars_1h: int, phase_old: str, phase_new: str,
+                                    key: str, default: Any = None) -> Any:
+    """
+    v7.2.31修复P0-2断层：在阶段切换时应用平滑过渡
+
+    在过渡期内，阈值从旧阶段线性插值到新阶段，避免突变
+
+    与analyze_symbol.py中的同名函数保持一致
+    """
+    if not config:
+        return default
+
+    # 获取过渡参数
+    transition_config = config.config.get('阶段过渡参数', {})
+
+    # 确定过渡配置键
+    transition_key = None
+    if phase_old == 'ultra' and phase_new == 'phaseA':
+        transition_key = 'ultra_to_phaseA'
+    elif phase_old == 'phaseA' and phase_new == 'phaseB':
+        transition_key = 'phaseA_to_phaseB'
+    elif phase_old == 'phaseB' and phase_new == 'mature':
+        transition_key = 'phaseB_to_mature'
+
+    if not transition_key or transition_key not in transition_config:
+        # 无过渡配置，返回新阶段阈值
+        return _get_threshold_by_phase_direct(config, f"newcoin_{phase_new}" if phase_new != 'mature' else 'mature', key, default)
+
+    # 获取过渡区间
+    trans = transition_config[transition_key]
+    start = trans.get('transition_start', 0)
+    end = trans.get('transition_end', 0)
+
+    if bars_1h < start:
+        # 未进入过渡期，使用旧阶段阈值
+        return _get_threshold_by_phase_direct(config, f"newcoin_{phase_old}" if phase_old != 'mature' else 'mature', key, default)
+    elif bars_1h >= end:
+        # 已离开过渡期，使用新阶段阈值
+        return _get_threshold_by_phase_direct(config, f"newcoin_{phase_new}" if phase_new != 'mature' else 'mature', key, default)
+    else:
+        # 在过渡期内，线性插值
+        old_val = _get_threshold_by_phase_direct(config, f"newcoin_{phase_old}" if phase_old != 'mature' else 'mature', key, default)
+        new_val = _get_threshold_by_phase_direct(config, f"newcoin_{phase_new}" if phase_new != 'mature' else 'mature', key, default)
+
+        # 计算插值比例
+        ratio = (bars_1h - start) / (end - start) if (end - start) > 0 else 0.0
+
+        # 线性插值
+        smoothed_val = old_val - ratio * (old_val - new_val)
+        return smoothed_val
+
+
+def _get_threshold_by_phase_direct(config, coin_phase: str, key: str, default: Any = None) -> Any:
+    """
+    直接获取指定阶段的阈值（无平滑过渡）
+    """
+    if not config:
+        return default
+
+    # 提取阶段标识
+    if "newcoin_ultra" in coin_phase or coin_phase == "newcoin_ultra":
+        return config.get_newcoin_threshold('ultra', key, default)
+    elif "newcoin_phaseA" in coin_phase or coin_phase == "newcoin_phaseA":
+        return config.get_newcoin_threshold('phaseA', key, default)
+    elif "newcoin_phaseB" in coin_phase or coin_phase == "newcoin_phaseB":
+        return config.get_newcoin_threshold('phaseB', key, default)
+    else:
+        # mature或其他情况
+        return config.get_mature_threshold(key, default)
+
+
+def _get_threshold_by_phase(config, coin_phase: str, key: str, default: Any = None,
+                           bars_1h: int = None) -> Any:
+    """
+    根据币种阶段获取对应阈值（统一函数）
+
+    v7.2.31增强：支持阶段过渡平滑（当提供bars_1h时）
+
+    与analyze_symbol.py中的同名函数保持一致
+    """
+    if not config:
+        return default
+
+    # 如果提供了bars_1h，检查是否在过渡期
+    if bars_1h is not None:
+        # 检查各个过渡区间
+        # ultra → phaseA (中心24h)
+        if 12 <= bars_1h < 36:
+            if "newcoin_ultra" in coin_phase or coin_phase == "newcoin_ultra":
+                return _apply_phase_transition_smooth(config, bars_1h, 'ultra', 'phaseA', key, default)
+
+        # phaseA → phaseB (中心168h)
+        if 144 <= bars_1h < 192:
+            if "newcoin_phaseA" in coin_phase or coin_phase == "newcoin_phaseA":
+                return _apply_phase_transition_smooth(config, bars_1h, 'phaseA', 'phaseB', key, default)
+
+        # phaseB → mature (中心400h) - 最关键
+        if 376 <= bars_1h < 424:
+            if "newcoin_phaseB" in coin_phase or coin_phase == "newcoin_phaseB":
+                return _apply_phase_transition_smooth(config, bars_1h, 'phaseB', 'mature', key, default)
+
+    # 非过渡期或未提供bars_1h，使用直接获取
+    return _get_threshold_by_phase_direct(config, coin_phase, key, default)
+
 # v7.2.21修复：使用模块级单例，避免重复初始化和日志污染
 from ats_core.calibration.empirical_calibration import EmpiricalCalibrator
 _calibrator_singleton = None
@@ -84,6 +192,13 @@ def analyze_with_v72_enhancements(
     from ats_core.config.threshold_config import get_thresholds
     config = get_thresholds()
 
+    # v7.2.30新增：获取币种阶段信息（用于阈值选择）
+    metadata = original_result.get('metadata', {})
+    coin_phase = metadata.get('coin_phase', 'mature')  # 默认为成熟币
+
+    # v7.2.31新增：获取bars_1h（用于阶段过渡平滑）
+    bars_1h = len(klines) if klines else 0
+
     # v7.2.9修复：加载F因子动量阈值（避免硬编码）
     try:
         F_strong_momentum = config.config.get('F因子动量阈值', {}).get('F_strong_momentum', 30)
@@ -116,6 +231,11 @@ def analyze_with_v72_enhancements(
     confidence_v72 = abs(weighted_score_v72)
     side_long_v72 = (weighted_score_v72 > 0)
 
+    # ===== 2.3 v7.2.27修复：计算有效F（考虑做多/做空方向）=====
+    # 做多时F>0好（资金领先价格，蓄势），做空时F<0好（资金流出快于价格下跌，恐慌逃离）
+    # 因此做空时将F取反，使F>0统一表示好信号
+    F_effective = get_effective_F(F_v2, side_long_v72)
+
     # ===== 2.5 提取I因子（C1 CRITICAL FIX：必须在统计校准之前定义）=====
     # v7.2增强：显式提取I因子用于展示和校准
     # I因子在基础分析中已计算（通过calculate_independence）
@@ -130,10 +250,12 @@ def analyze_with_v72_enhancements(
     # P0.3修复：如果使用启发式（冷启动），传递F和I因子进行多维度评估
     if not calibrator.calibration_table:
         # 冷启动模式：使用改进的启发式公式
+        # v7.2.28修复：传入side_long参数，正确处理空单F逻辑
         P_calibrated = calibrator._bootstrap_probability(
             confidence=confidence_v72,
             F_score=F_v2,
-            I_score=I_v2
+            I_score=I_v2,
+            side_long=side_long_v72
         )
     else:
         # 统计校准模式：使用历史数据
@@ -166,6 +288,181 @@ def analyze_with_v72_enhancements(
     # EV = P×TP - (1-P)×SL - cost
     EV_net = P_calibrated * TP_distance_pct - (1 - P_calibrated) * SL_distance_pct - total_cost_pct
 
+    # ===== 4.5. v7.2.26改进：F因子驱动的蓄势检测（线性平滑降低） =====
+    # 核心理念：F因子是最领先的指标（-4~8h），当F高时应降低其他阈值提前入场
+    #
+    # v7.2.26改进：从断崖式分级改为线性平滑降低
+    # - 避免F=69.9和F=70之间的阈值突变（断崖效应）
+    # - 线性公式：reduction_ratio = (F - 50) / 20，当F在50-70区间时线性插值
+    # - 支持两种模式：linear（推荐）和 stepped（向后兼容）
+
+    # 初始化默认值（防止作用域问题）
+    momentum_enabled = True
+    momentum_mode = "linear"
+    momentum_level = 0
+    momentum_desc = "正常模式"
+    momentum_confidence_min = None
+    momentum_P_min = None
+    momentum_EV_min = None
+    momentum_F_min = None
+    momentum_position_mult = 1.0
+
+    try:
+        # 读取蓄势配置
+        momentum_config = config.config.get('蓄势分级配置', {})
+        momentum_enabled = momentum_config.get('_enabled', True)
+        momentum_mode = momentum_config.get('_mode', 'linear')
+
+        if momentum_enabled:
+            # ==== 模式1：线性平滑降低（推荐，避免断崖效应） ====
+            if momentum_mode == "linear":
+                # v7.2.27修复：使用F_effective考虑多空方向
+                # 读取线性模式参数
+                linear_params = momentum_config.get('线性模式参数', {})
+                F_threshold_min = linear_params.get('F_threshold_min', 50)
+                F_threshold_max = linear_params.get('F_threshold_max', 70)
+
+                max_reduction = linear_params.get('最大阈值降低', {})
+                confidence_reduction = max_reduction.get('confidence_reduction', 5)
+                P_reduction = max_reduction.get('P_reduction', 0.08)
+                EV_reduction = max_reduction.get('EV_reduction', 0.007)
+                F_min_increase = max_reduction.get('F_min_increase', 60)
+                position_reduction = max_reduction.get('position_reduction', 0.5)
+
+                # v7.2.27新增：F≥90极值警戒处理
+                extreme_config = momentum_config.get('F极值警戒配置', {})
+                F_extreme_threshold = extreme_config.get('F_extreme_threshold', 90)
+
+                if F_effective >= F_extreme_threshold and extreme_config.get('_enabled', True):
+                    # F≥90：极值警戒（保守策略：反而提高质量要求）
+                    if extreme_config.get('strategy') == 'conservative':
+                        conservative_mode = extreme_config.get('conservative_mode', {})
+                        momentum_confidence_min = conservative_mode.get('confidence_min', 12)
+                        momentum_P_min = conservative_mode.get('P_min', 0.50)
+                        momentum_EV_min = conservative_mode.get('EV_min', 0.015)
+                        momentum_F_min = conservative_mode.get('F_min', 50)
+                        momentum_position_mult = conservative_mode.get('position_mult', 0.5)
+                        momentum_level = 3
+                        momentum_desc = "极限蓄势（警戒）"
+                elif F_effective >= F_threshold_max:
+                    # 70≤F<90：完全降低
+                    momentum_level = 3
+                    momentum_desc = "极早期蓄势"
+
+                    # 获取基准阈值（v7.2.30修复：使用币种阶段特定阈值）
+                    # v7.2.31增强：支持阶段过渡平滑
+                    base_confidence = _get_threshold_by_phase(config, coin_phase, 'confidence_min', 15, bars_1h=bars_1h)
+                    base_P = config.get_gate_threshold('gate4_probability', 'P_min', 0.50)
+                    base_EV = config.get_gate_threshold('gate3_ev', 'EV_min', 0.015)
+                    base_F = config.get_gate_threshold('gate2_fund_support', 'F_min', -10)
+
+                    # 应用最大降低
+                    momentum_confidence_min = base_confidence - confidence_reduction
+                    momentum_P_min = base_P - P_reduction
+                    momentum_EV_min = base_EV - EV_reduction
+                    momentum_F_min = base_F + F_min_increase
+                    momentum_position_mult = 1.0 - position_reduction
+                elif F_effective >= F_threshold_min:
+                    # 50≤F<70：线性插值（平滑过渡）
+                    # v7.2.27改进：使用linear_reduce简化计算
+
+                    # 获取基准阈值（v7.2.30修复：使用币种阶段特定阈值）
+                    # v7.2.31增强：支持阶段过渡平滑
+                    base_confidence = _get_threshold_by_phase(config, coin_phase, 'confidence_min', 15, bars_1h=bars_1h)
+                    base_P = config.get_gate_threshold('gate4_probability', 'P_min', 0.50)
+                    base_EV = config.get_gate_threshold('gate3_ev', 'EV_min', 0.015)
+                    base_F = config.get_gate_threshold('gate2_fund_support', 'F_min', -10)
+
+                    # 使用linear_reduce进行线性插值
+                    momentum_confidence_min = linear_reduce(
+                        F_effective, F_threshold_min, F_threshold_max,
+                        base_confidence, base_confidence - confidence_reduction
+                    )
+                    momentum_P_min = linear_reduce(
+                        F_effective, F_threshold_min, F_threshold_max,
+                        base_P, base_P - P_reduction
+                    )
+                    momentum_EV_min = linear_reduce(
+                        F_effective, F_threshold_min, F_threshold_max,
+                        base_EV, base_EV - EV_reduction
+                    )
+                    momentum_F_min = linear_reduce(
+                        F_effective, F_threshold_min, F_threshold_max,
+                        base_F, base_F + F_min_increase
+                    )
+                    momentum_position_mult = linear_reduce(
+                        F_effective, F_threshold_min, F_threshold_max,
+                        1.0, 1.0 - position_reduction
+                    )
+
+                    # 根据F值判定显示级别（仅用于Telegram显示）
+                    if F_effective >= 65:
+                        momentum_level = 3
+                        momentum_desc = "极早期蓄势"
+                    elif F_effective >= 55:
+                        momentum_level = 2
+                        momentum_desc = "早期蓄势"
+                    else:
+                        momentum_level = 1
+                        momentum_desc = "蓄势待发"
+                else:
+                    # F<50：正常模式
+                    momentum_level = 0
+                    momentum_desc = "正常模式"
+
+            # ==== 模式2：分级降低（向后兼容，保留断崖式） ====
+            elif momentum_mode == "stepped":
+                # v7.2.27修复：使用F_effective考虑多空方向
+                # 读取分级阈值
+                level_3_config = momentum_config.get('level_3_极早期', {})
+                level_2_config = momentum_config.get('level_2_早期', {})
+                level_1_config = momentum_config.get('level_1_强势', {})
+
+                level_3_threshold = level_3_config.get('F_threshold', 70)
+                level_2_threshold = level_2_config.get('F_threshold', 60)
+                level_1_threshold = level_1_config.get('F_threshold', 50)
+
+                # 判断当前F因子属于哪个级别（明确区间，提升可读性）
+                if F_effective >= level_3_threshold:  # F≥70
+                    momentum_level = 3
+                    momentum_config_active = level_3_config
+                    momentum_desc = "极早期蓄势"
+                elif level_2_threshold <= F_effective < level_3_threshold:  # 60≤F<70
+                    momentum_level = 2
+                    momentum_config_active = level_2_config
+                    momentum_desc = "早期蓄势"
+                elif level_1_threshold <= F_effective < level_2_threshold:  # 50≤F<60
+                    momentum_level = 1
+                    momentum_config_active = level_1_config
+                    momentum_desc = "蓄势待发"
+                else:  # F<50
+                    momentum_level = 0
+                    momentum_config_active = None
+                    momentum_desc = "正常模式"
+
+                # 应用分级阈值
+                if momentum_level > 0 and momentum_config_active:
+                    threshold_config = momentum_config_active.get('阈值降低', {})
+                    momentum_confidence_min = threshold_config.get('confidence_min', 15)
+                    momentum_P_min = threshold_config.get('P_min', 0.50)
+                    momentum_EV_min = threshold_config.get('EV_min', 0.015)
+                    momentum_F_min = threshold_config.get('F_min', -10)
+                    momentum_position_mult = momentum_config_active.get('仓位倍数', 1.0)
+
+            else:
+                # 未知模式
+                momentum_desc = f"未知模式: {momentum_mode}"
+
+    except Exception as e:
+        # 配置加载失败，使用正常模式
+        momentum_level = 0
+        momentum_desc = f"配置加载失败: {e}"
+        momentum_confidence_min = None
+        momentum_P_min = None
+        momentum_EV_min = None
+        momentum_F_min = None
+        momentum_position_mult = 1.0
+
     # ===== 5. 五道闸门（v7.2 重构 + v3.1增强：新增I×Market联合闸门） =====
     # Q3 FIX: 修正注释编号（删除重复的I因子定义）
     # v7.2设计理念：
@@ -177,10 +474,22 @@ def analyze_with_v72_enhancements(
 
     # 方案：使用简化的五道检查（只检查关键指标）
     # 阶段2.2：从配置文件读取闸门阈值
+    # v7.2.25：如果触发蓄势级别，使用降低后的阈值
     min_klines = config.get_gate_threshold('gate1_data_quality', 'min_klines', 100)
-    P_min = config.get_gate_threshold('gate4_probability', 'P_min', 0.50)
-    EV_min = config.get_gate_threshold('gate3_ev', 'EV_min', 0.0)
-    F_min = config.get_gate_threshold('gate2_fund_support', 'F_min', -15)
+
+    # v7.2.25: 动态阈值（蓄势时降低）
+    if momentum_P_min is not None:
+        # 使用蓄势级别的降低阈值
+        P_min = momentum_P_min
+        EV_min = momentum_EV_min
+        F_min = momentum_F_min
+        # confidence_min在因子分组时使用（这里不需要）
+    else:
+        # 使用正常阈值
+        P_min = config.get_gate_threshold('gate4_probability', 'P_min', 0.50)
+        EV_min = config.get_gate_threshold('gate3_ev', 'EV_min', 0.0)
+        F_min = config.get_gate_threshold('gate2_fund_support', 'F_min', -15)
+
     I_min = config.get_gate_threshold('gate5_independence_market', 'I_min', 30)  # v3.1新增
     market_regime_threshold = config.get_gate_threshold('gate5_independence_market', 'market_regime_threshold', 30)  # v3.1新增
     # v7.2.9修复：从配置读取I因子相关阈值（避免硬编码）
@@ -194,9 +503,10 @@ def analyze_with_v72_enhancements(
     gates_probability = 1.0 if P_calibrated >= P_min else 0.0
 
     # F因子闸门（v7.2特有：使用F_v2）
-    # F >= F_min: 资金支撑合格
-    # F < F_min: 价格领先资金，追高风险
-    gates_fund_support = 1.0 if F_v2 >= F_min else 0.0
+    # v7.2.27修复：使用F_effective考虑多空方向
+    # 做多：F_effective >= F_min (资金领先价格，蓄势待发)
+    # 做空：F_effective >= F_min (资金逃离快于价格下跌，恐慌抛售)
+    gates_fund_support = 1.0 if F_effective >= F_min else 0.0
 
     # Gate 5: I×Market联合闸门（v3.1新增）
     # 过滤"低独立性+逆势"的危险信号
@@ -301,12 +611,27 @@ def analyze_with_v72_enhancements(
 
         # v7.2增强字段
         "v72_enhancements": {
-            "version": "v7.2_stage1",
+            "version": "v7.2.26_linear_momentum",
 
             # F因子v2（资金领先性）
             # v7.2.15修复：移除F_comparison冗余结构（A1修复后基础层已统一使用v2）
             "F_v2": F_v2,
             "F_v2_meta": F_v2_meta,
+
+            # v7.2.26改进：蓄势检测信息（支持线性/分级两种模式）
+            "momentum_grading": {
+                "level": momentum_level,
+                "description": momentum_desc,
+                "mode": momentum_mode,
+                "enabled": momentum_enabled,
+                "dynamic_thresholds": {
+                    "P_min": P_min,
+                    "EV_min": EV_min,
+                    "F_min": F_min,
+                    "confidence_min": momentum_confidence_min if momentum_confidence_min else config.get_mature_threshold('confidence_min', 15)
+                },
+                "position_multiplier": momentum_position_mult
+            },
 
             # I因子（市场独立性）
             "I_v2": I_v2,

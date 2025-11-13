@@ -48,16 +48,28 @@ def calculate_timeframe_score(klines: list, dimension: str) -> float:
         return min(100, max(-100, accel * 5000))
 
     elif dimension == 'C':
-        # CVD简化版 (基于tick rule)
-        opens = [float(k[1]) for k in klines]
-        volumes = [float(k[5]) for k in klines]
-        cvd = 0
-        for i in range(len(closes)):
-            sign = 1 if closes[i] >= opens[i] else -1
-            cvd += sign * volumes[i]
-        # 归一化CVD变化
-        cvd_change = cvd / sum(volumes) if sum(volumes) > 0 else 0
-        return min(100, max(-100, cvd_change * 500))
+        # CVD计算 (使用真实takerBuyVolume)
+        # 修复：v7.2.32 - 改用Binance提供的真实主动买入量
+        # 原错误：用阳线阴线判断买卖方向（close>=open）会系统性误判
+        # 正确方法：使用K线第9列takerBuyBaseAssetVolume（逐笔成交的真实买卖方向）
+        if len(klines) > 0 and len(klines[0]) >= 10:
+            # K线数据包含takerBuyVolume（第9列）
+            taker_buy_volumes = [float(k[9]) for k in klines]  # 主动买入量
+            total_volumes = [float(k[5]) for k in klines]      # 总成交量
+            cvd = 0
+            for i in range(len(taker_buy_volumes)):
+                buy_vol = taker_buy_volumes[i]
+                total_vol = total_volumes[i]
+                # CVD delta = buy_vol - sell_vol = buy_vol - (total_vol - buy_vol) = 2*buy_vol - total_vol
+                delta = 2.0 * buy_vol - total_vol
+                cvd += delta
+            # 归一化CVD变化
+            total_volume = sum(total_volumes)
+            cvd_change = cvd / total_volume if total_volume > 0 else 0
+            return min(100, max(-100, cvd_change * 500))
+        else:
+            # 数据不足或格式不对，返回0
+            return 0
 
     return 0.0
 
