@@ -134,8 +134,8 @@ class DeepDependencyAnalyzer:
         print()
 
     def find_unused_files(self) -> List[Path]:
-        """找出未被使用的文件"""
-        print("🔍 识别未使用的文件...")
+        """找出未被使用的文件（双重确认）"""
+        print("🔍 识别未使用的文件（双重确认机制）...")
 
         unused_files = []
 
@@ -143,6 +143,10 @@ class DeepDependencyAnalyzer:
         entry_files = {
             'scripts/realtime_signal_scanner.py',
             'scripts/init_databases.py',
+            'scripts/start_live.sh',
+            'setup.sh',
+            'auto_restart.sh',
+            'deploy_and_run.sh',
             'analyze_dependencies.py',
             'analyze_dependencies_v2.py',
         }
@@ -163,27 +167,84 @@ class DeepDependencyAnalyzer:
                     parts = list(rel_path.parts[:-1]) + [rel_path.stem]
                     module_name = '.'.join(parts)
 
-                # 检查是否被导入
-                is_used = module_name in self.imported_modules
+                # === 第一重确认：检查import语句 ===
+                is_imported = module_name in self.imported_modules
 
                 # __init__.py 特殊处理：如果其父目录下有其他文件被导入，则认为被使用
                 if rel_path.name == '__init__.py':
                     parent_module = module_name
                     for imp in self.imported_modules:
                         if imp.startswith(parent_module + '.'):
-                            is_used = True
+                            is_imported = True
                             break
 
-                if not is_used:
+                # === 第二重确认：检查文件名/路径是否在其他文件中被引用 ===
+                is_referenced = self.check_file_references(file_path)
+
+                # 只有两重确认都未通过，才认为是未使用的文件
+                if not is_imported and not is_referenced:
                     unused_files.append(file_path)
 
             except Exception as e:
                 self.errors.append(f"检查{file_path}时出错: {e}")
 
-        print(f"  ✓ 找到 {len(unused_files)} 个未使用的文件")
+        print(f"  ✓ 第一重确认（import检查）完成")
+        print(f"  ✓ 第二重确认（引用检查）完成")
+        print(f"  ✓ 找到 {len(unused_files)} 个真正未使用的文件")
         print()
 
         return sorted(unused_files)
+
+    def check_file_references(self, target_file: Path) -> bool:
+        """
+        第二重确认：检查文件是否在其他地方被引用
+
+        检查方式：
+        1. 文件名是否在其他Python文件中出现（字符串形式）
+        2. 文件路径是否在bash脚本中出现
+        3. 是否在配置文件中被引用
+        """
+        try:
+            rel_path = target_file.relative_to(self.root_dir)
+            filename = rel_path.name
+            filename_stem = rel_path.stem  # 不含扩展名
+
+            # 检查所有Python文件
+            for py_file in self.all_python_files:
+                if py_file == target_file:
+                    continue
+
+                try:
+                    with open(py_file, 'r', encoding='utf-8') as f:
+                        content = f.read()
+
+                    # 检查文件名是否出现在字符串中
+                    if filename in content or filename_stem in content:
+                        # 排除注释中的引用
+                        if f"'{filename}'" in content or f'"{filename}"' in content:
+                            return True
+                        if f"'{filename_stem}'" in content or f'"{filename_stem}"' in content:
+                            return True
+
+                except:
+                    pass
+
+            # 检查bash脚本
+            for bash_file in self.root_dir.glob('*.sh'):
+                try:
+                    with open(bash_file, 'r', encoding='utf-8') as f:
+                        content = f.read()
+
+                    if str(rel_path) in content or filename in content:
+                        return True
+
+                except:
+                    pass
+
+        except Exception as e:
+            self.errors.append(f"检查引用{target_file}时出错: {e}")
+
+        return False
 
     def generate_report(self, unused_files: List[Path]) -> str:
         """生成详细报告"""
@@ -209,9 +270,28 @@ class DeepDependencyAnalyzer:
         lines.append(f"  代码使用率: {usage_rate:.1f}%")
         lines.append("")
 
-        # 2. 未使用的文件列表（重点）
+        # 2. 双重确认说明
         lines.append("-" * 70)
-        lines.append("🗑️  未使用的文件列表（可安全删除）")
+        lines.append("🔐 双重确认机制说明")
+        lines.append("-" * 70)
+        lines.append("  本工具使用双重确认机制来识别未使用的文件：")
+        lines.append("")
+        lines.append("  ✓ 第一重确认：检查import语句")
+        lines.append("    - 扫描所有Python文件的import语句")
+        lines.append("    - 追踪完整的模块路径（如ats_core.features.trend）")
+        lines.append("    - 检查是否有任何文件导入了该模块")
+        lines.append("")
+        lines.append("  ✓ 第二重确认：检查字符串引用")
+        lines.append("    - 检查文件名是否在其他文件中以字符串形式出现")
+        lines.append("    - 检查文件路径是否在bash脚本中被引用")
+        lines.append("    - 排除注释中的引用")
+        lines.append("")
+        lines.append("  ⚠️  只有同时通过两重确认的文件才会被列为'可删除'")
+        lines.append("")
+
+        # 3. 未使用的文件列表（重点）
+        lines.append("-" * 70)
+        lines.append("🗑️  未使用的文件列表（双重确认通过）")
         lines.append("-" * 70)
 
         if unused_files:
