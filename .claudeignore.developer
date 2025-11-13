@@ -1,0 +1,199 @@
+# Claude Project 开发者导入配置
+# 策略：只导入经常需要修改的核心算法文件
+# 目标：约18个文件，<2M
+
+# ========================================
+# 基础排除
+# ========================================
+.git/
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.pytest_cache/
+
+# ========================================
+# 运行时数据（完全不需要）
+# ========================================
+data/
+reports/
+logs/
+*.log
+*.csv
+*.parquet
+*.db
+*.sqlite
+*.sqlite3
+
+# ========================================
+# 归档和测试（本地运行）
+# ========================================
+archived/
+backup/
+tests/
+diagnose/
+notebooks/
+ats_backtest/
+
+# ========================================
+# 启动脚本（稳定，很少修改）
+# ========================================
+setup.sh
+auto_restart.sh
+deploy_and_run.sh
+start_live.sh
+
+# ========================================
+# scripts/ 只保留标记，实际全部排除（稳定代码）
+# ========================================
+scripts/
+
+# ========================================
+# config/ 只保留signal_thresholds.json
+# ========================================
+config/binance_credentials.json
+config/telegram.json
+config/params.json
+config/factors_unified.json
+config/*.backup
+config/*.bak
+config/*.example
+
+# 保留：
+# ✅ config/signal_thresholds.json
+
+# ========================================
+# docs/ 全部排除（太多，不需要）
+# ========================================
+docs/
+
+# ========================================
+# standards/ 只保留2个核心规范
+# ========================================
+standards/01_SYSTEM_OVERVIEW.md
+standards/02_ARCHITECTURE.md
+standards/03_VERSION_HISTORY.md
+standards/CORE_STANDARDS.md
+standards/DEVELOPMENT_WORKFLOW.md
+standards/DOCUMENTATION_RULES.md
+standards/MODIFICATION_RULES.md
+standards/deployment/
+standards/specifications/
+
+# 保留：
+# ✅ standards/00_INDEX.md
+# ✅ standards/SYSTEM_ENHANCEMENT_STANDARD.md
+
+# ========================================
+# ats_core/ 精选开发文件
+# ========================================
+
+# pipeline/ 只保留v7.2分析引擎
+ats_core/pipeline/analyze_symbol.py
+ats_core/pipeline/batch_scan_optimized.py
+ats_core/pipeline/realtime_scanner.py
+ats_core/pipeline/scanner_*.py
+
+# 保留：
+# ✅ ats_core/pipeline/analyze_symbol_v72.py
+
+# features/ 保留所有因子（经常修改）
+# ✅ ats_core/features/*.py (所有因子都保留)
+
+# scoring/ 保留评分模块（经常修改）
+# ✅ ats_core/scoring/factor_groups.py
+# ✅ ats_core/scoring/integrated_score.py
+
+# gates/ 保留闸门（经常修改）
+# ✅ ats_core/gates/integrated_gates.py
+
+# calibration/ 保留校准器（经常修改）
+# ✅ ats_core/calibration/empirical_calibration.py
+
+# 以下模块全部排除（稳定，不需要经常修改）
+ats_core/data/
+ats_core/sources/
+ats_core/execution/
+ats_core/publishing/
+ats_core/utils/
+ats_core/preprocessing/
+ats_core/config/
+ats_core/outputs/
+ats_core/analysis/
+ats_core/monitoring/
+ats_core/shadow/
+ats_core/risk/
+ats_core/rl/
+ats_core/streaming/
+ats_core/factors_v2/
+ats_core/modulators/
+ats_core/tools/
+
+# ========================================
+# 资源文件
+# ========================================
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.pdf
+*.zip
+*.tar
+*.gz
+*.tmp
+*.bak
+*.backup
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# ========================================
+# IDE配置
+# ========================================
+.vscode/
+.idea/
+*.sublime-*
+
+# ========================================
+# 最终保留清单（约18个文件）
+# ========================================
+#
+# 根目录（2个）：
+# ✅ CLAUDE_PROJECT_CONTEXT.md
+# ✅ README.md
+#
+# config/（1个）：
+# ✅ signal_thresholds.json
+#
+# standards/（2个）：
+# ✅ 00_INDEX.md
+# ✅ SYSTEM_ENHANCEMENT_STANDARD.md
+#
+# ats_core/pipeline/（1个）：
+# ✅ analyze_symbol_v72.py
+#
+# ats_core/features/（7个）：
+# ✅ fund_leading.py
+# ✅ trend.py
+# ✅ momentum.py
+# ✅ cvd.py
+# ✅ volume.py
+# ✅ open_interest.py
+# ✅ basis.py
+#
+# ats_core/scoring/（2个）：
+# ✅ factor_groups.py
+# ✅ integrated_score.py
+#
+# ats_core/gates/（1个）：
+# ✅ integrated_gates.py
+#
+# ats_core/calibration/（1个）：
+# ✅ empirical_calibration.py
+#
+# 总计：约18个文件，<2M
+# ========================================
