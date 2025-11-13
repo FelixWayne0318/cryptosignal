@@ -749,6 +749,17 @@ def analyze_with_v72_enhancements(
         "signal_v72": signal_v72
     })
 
+    # v7.2.38 P0-Critical修复：更新publish字段，确保ScanStatistics使用v7.2的最终判定
+    # Bug: publish.prime使用基础层判定，未经Gate6/7过滤，导致202个低质量信号通过
+    # Fix: 强制更新publish.prime为is_prime_v72（经过所有七道闸门过滤）
+    original_publish = result_v72.get('publish', {})
+    original_publish.update({
+        "prime": is_prime_v72,  # 使用v7.2七道闸门的最终判定
+        "rejection_reason": [] if is_prime_v72 else [gate_reason],  # 更新拒绝原因
+        "_v7.2.38_fix": "publish.prime已更新为v7.2七道闸门判定结果（包含Gate6/7）"
+    })
+    result_v72["publish"] = original_publish
+
     return result_v72
 
 
