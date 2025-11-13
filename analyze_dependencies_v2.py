@@ -23,8 +23,14 @@ from typing import Set, Dict, List
 class DeepDependencyAnalyzer:
     """深度依赖分析器"""
 
-    def __init__(self, root_dir: str = "/home/user/cryptosignal"):
-        self.root_dir = Path(root_dir)
+    def __init__(self, root_dir: str = None):
+        # 自动检测当前目录
+        if root_dir is None:
+            # 获取脚本所在目录的父目录（项目根目录）
+            script_path = Path(__file__).resolve()
+            self.root_dir = script_path.parent
+        else:
+            self.root_dir = Path(root_dir)
         self.all_python_files = set()  # 所有Python文件
         self.imported_modules = set()  # 被导入的模块
         self.file_imports = defaultdict(set)  # 文件 -> 它导入的模块
