@@ -526,13 +526,30 @@ class ScanStatistics:
         Returns:
             接近阈值的币种列表，按缺口从小到大排序
         """
-        # 当前阈值（需要和analyze_symbol.py保持一致）
-        THRESHOLDS = {
-            'confidence': 45,
-            'edge': 0.48,
-            'prime_strength': 54,
-            'gate_multiplier': 0.84,  # P2.2: 从0.87降低到0.84
-        }
+        # v7.2.37修复：从配置文件读取阈值，不再硬编码
+        # 注意：v7.2实际使用五道闸门（F/EV/P/I/data_quality），但这里为了向后兼容
+        # 仍然检查confidence/prime_strength等综合指标
+        try:
+            from ats_core.config.unified_config import UnifiedConfig
+            config = UnifiedConfig()
+            # 读取Gate6综合质量阈值（v7.2.37新增）
+            confidence_min = config.get_gate_threshold('gate6_综合质量', 'confidence_min', 20)
+            prime_strength_min = config.get_gate_threshold('gate6_综合质量', 'prime_strength_min', 45)
+            # edge和gate_multiplier暂时保留旧值（向后兼容）
+            THRESHOLDS = {
+                'confidence': confidence_min,
+                'edge': 0.12,  # 从配置mature_coin.edge_min读取
+                'prime_strength': prime_strength_min,
+                'gate_multiplier': 0.84,
+            }
+        except Exception as e:
+            # 配置读取失败，使用兜底值
+            THRESHOLDS = {
+                'confidence': 20,
+                'edge': 0.12,
+                'prime_strength': 45,
+                'gate_multiplier': 0.84,
+            }
 
         close_coins = []
 

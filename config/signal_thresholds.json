@@ -153,17 +153,20 @@
       "_comment": "保持150根K线要求（实际数据min=191，合理）"
     },
     "gate2_fund_support": {
-      "F_min": -10,
+      "F_min": 10,
       "F_extreme_min": -60,
-      "comment": "基于数据调整：F≥-10（允许适度流出，中位=-1,P75=1）"
+      "_v7.2.37_fix": "从-10提升到10，要求资金明确流入（不允许流出）",
+      "comment": "v7.2.37质量提升：F≥10（要求资金流入，原-10允许流出导致低质量信号）"
     },
     "gate3_ev": {
-      "EV_min": 0.015,
-      "_comment": "期望收益1.5%（略低于实际中位2%，EV是小数形式0.015=1.5%）"
+      "EV_min": 0.025,
+      "_v7.2.37_fix": "从0.015提升到0.025，期望收益要求从1.5%提升到2.5%",
+      "_comment": "期望收益2.5%（v7.2.37提升，原1.5%过低）"
     },
     "gate4_probability": {
-      "P_min": 0.50,
-      "comment": "胜率50%（适度提升，原40%→50%）"
+      "P_min": 0.55,
+      "_v7.2.37_fix": "从0.50提升到0.55，胜率要求从50%提升到55%",
+      "comment": "胜率55%（v7.2.37提升，原50%刚好及格线，质量不足）"
     },
     "gate5_independence_market": {
       "I_min": 0,
@@ -171,6 +174,14 @@
       "I_high_independence": 60,
       "confidence_boost_aligned": 1.2,
       "description": "I×Market联合检查：只检查强相关大盘(I<0)的逆势风险，中等独立性正常通过"
+    },
+    "gate6_综合质量": {
+      "_v7.2.37_new": "新增第六道闸门：综合质量指标直接检查",
+      "_description": "v7.2计算了confidence和prime_strength但未用于最终过滤，导致低质量信号通过",
+      "confidence_min": 20,
+      "prime_strength_min": 45,
+      "_rationale": "confidence≥20（排除置信度过低信号），prime_strength≥45（排除综合强度不足信号）",
+      "_comment": "从扫描报告看，接近阈值的最高Prime=53，设置45可以放行部分优质信号同时过滤弱信号"
     },
     "gate_pass_threshold": 0.5
   },
