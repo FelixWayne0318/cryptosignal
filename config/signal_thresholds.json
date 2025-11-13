@@ -178,10 +178,12 @@
     "gate6_综合质量": {
       "_v7.2.37_new": "新增第六道闸门：综合质量指标直接检查",
       "_description": "v7.2计算了confidence和prime_strength但未用于最终过滤，导致低质量信号通过",
-      "confidence_min": 20,
-      "prime_strength_min": 45,
-      "_rationale": "confidence≥20（排除置信度过低信号），prime_strength≥45（排除综合强度不足信号）",
-      "_comment": "从扫描报告看，接近阈值的最高Prime=53，设置45可以放行部分优质信号同时过滤弱信号"
+      "confidence_min": 25,
+      "prime_strength_min": 50,
+      "_v7.2.37_optimization": "从20/45提升到25/50，基于实际数据：184个信号(46%)过多，大量21-26/49-57擦边信号",
+      "_rationale": "confidence≥25（P75水平），prime_strength≥50（优质信号），预期信号数量降至5-15个(1-4%)",
+      "_data_driven": "实际分布：Conf P75=13→设25合理；Prime P75=41,Max=57→设50可筛选Top10%",
+      "_comment": "基于2025-11-13扫描：184个信号质量分析，提高阈值确保只发布真正高质量信号"
     },
     "gate_pass_threshold": 0.5
   },
