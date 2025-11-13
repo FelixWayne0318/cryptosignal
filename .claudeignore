@@ -1,4 +1,4 @@
-# Claude Project 导入排除清单
+# Claude Project 精简导入配置（第1批：核心系统）
 
 # 版本控制
 .git/
@@ -35,3 +35,51 @@ config/telegram.json
 # 系统文件
 .DS_Store
 Thumbs.db
+
+# ========================================
+# 第1批：暂时排除以下ats_core模块
+# ========================================
+
+# 大文件（第3批导入）
+ats_core/outputs/telegram_fmt.py
+ats_core/pipeline/analyze_symbol.py
+ats_core/pipeline/batch_scan_optimized.py
+
+# 数据层（部分第2批）
+ats_core/data/unified_data_manager.py
+ats_core/data/realtime_kline_cache.py
+ats_core/data/newcoin_data.py
+ats_core/data/spot_orderbook_cache.py
+ats_core/data/orderbook_cache.py
+
+# 数据源（第2批）
+ats_core/sources/
+
+# 执行层（第3批）
+ats_core/execution/
+
+# 发布层（第3批）
+ats_core/publishing/
+
+# 工具类（第2/3批）
+ats_core/tools/
+ats_core/utils/
+
+# 分析工具（第2批）
+ats_core/analysis/
+
+# 监控（第3批）
+ats_core/monitoring/
+
+# 高级功能（第3批）
+ats_core/shadow/
+ats_core/risk/
+ats_core/rl/
+ats_core/streaming/
+
+# 旧版因子（不需要）
+ats_core/factors_v2/
+
+# 测试和诊断（第2批）
+tests/
+diagnose/
