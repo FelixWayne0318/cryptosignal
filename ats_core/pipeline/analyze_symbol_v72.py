@@ -552,6 +552,9 @@ def analyze_with_v72_enhancements(
 
     # Gate 6: 综合质量闸门（v7.2.37新增）
     # 直接检查confidence和prime_strength，防止低质量信号通过
+    # v7.2.37修复：从original_result获取prime_strength（基础层计算）
+    prime_strength = original_result.get('publish', {}).get('prime_strength', 0)
+
     confidence_min_gate6 = config.get_gate_threshold('gate6_综合质量', 'confidence_min', 20)
     prime_strength_min_gate6 = config.get_gate_threshold('gate6_综合质量', 'prime_strength_min', 45)
 
