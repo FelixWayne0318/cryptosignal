@@ -1,56 +1,37 @@
 # Claude Project 导入排除清单
-# 仅排除运行时数据和临时文件，保留所有代码和文档
 
-# === 版本控制 ===
+# 版本控制
 .git/
 .gitignore
 
-# === Python缓存 ===
+# Python缓存
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.Python
 
-# === 运行时数据 ===
-data/*.db
-data/*.db-journal
-data/*.sqlite
-data/*.sqlite3
-data/calibration_history.json
-data/trade_history.json
-
-# === 报告文件 ===
+# 运行时数据
+data/
 reports/
 *.log
 
-# === 归档文件 ===
+# 归档文件
 archived/
 
-# === 临时文件 ===
+# 临时文件
 *.tmp
 *.bak
 *.swp
-*.swo
 *~
 
-# === 敏感配置 ===
+# 敏感配置
 config/binance_credentials.json
 config/telegram.json
-# 保留示例文件
-!config/*.json.example
 
-# === IDE配置 ===
+# IDE配置
 .vscode/
 .idea/
-*.iml
 
-# === 系统文件 ===
+# 系统文件
 .DS_Store
 Thumbs.db
-
-# === 大型二进制文件 ===
-*.zip
-*.tar.gz
-*.rar
-*.7z

@@ -1,0 +1,152 @@
+# Claude Project - GitHub导入优化配置
+# 目标：将956%压缩到100%以内
+# 策略：只保留核心代码逻辑，排除数据/测试/日志
+
+# ========================================
+# 版本控制（不需要导入）
+# ========================================
+.git/
+.gitignore
+
+# ========================================
+# Python缓存和编译文件
+# ========================================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.pytest_cache/
+
+# ========================================
+# 运行时数据（占容量大，无索引价值）
+# ========================================
+data/
+reports/
+logs/
+*.log
+*.csv
+*.parquet
+*.db
+*.sqlite
+*.sqlite3
+
+# ========================================
+# 归档和备份（旧版本不需要）
+# ========================================
+archived/
+backup/
+*.bak
+*.backup
+
+# ========================================
+# 测试文件（可选，按需）
+# ========================================
+# 如果tests/很大，建议排除
+# tests/
+
+# 诊断工具（可选，按需）
+# diagnose/
+
+# ========================================
+# 临时文件
+# ========================================
+*.tmp
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# ========================================
+# 敏感配置（必须排除）
+# ========================================
+config/binance_credentials.json
+config/telegram.json
+*credentials*
+*secrets*
+*.pem
+*.key
+
+# ========================================
+# IDE配置
+# ========================================
+.vscode/
+.idea/
+*.sublime-*
+
+# ========================================
+# ats_core选择性导入（核心逻辑）
+# ========================================
+# 保留：
+# ✅ features/      - 因子计算
+# ✅ pipeline/      - 数据流
+# ✅ signals/       - 信号生成
+# ✅ gates/         - 闸门过滤
+# ✅ scoring/       - 评分
+# ✅ calibration/   - 校准
+# ✅ preprocessing/ - 预处理
+# ✅ config/        - 配置管理
+# ✅ modulators/    - 调制器
+
+# 排除（非核心或占用大）：
+ats_core/analysis/
+ats_core/monitoring/
+ats_core/shadow/
+ats_core/risk/
+ats_core/rl/
+ats_core/streaming/
+ats_core/factors_v2/
+ats_core/tools/
+
+# 排除大文件：
+ats_core/outputs/telegram_fmt.py
+ats_core/pipeline/analyze_symbol.py
+ats_core/pipeline/batch_scan_optimized.py
+
+# ========================================
+# 其他可选排除（视容量调整）
+# ========================================
+# 如果还超限，继续排除：
+# ats_core/data/
+# ats_core/execution/
+# ats_core/publishing/
+# ats_core/sources/
+# ats_core/utils/
+
+# scripts/中的大文件
+# scripts/backtest*.py
+# scripts/analysis*.py
+
+# ========================================
+# 文档选择性保留
+# ========================================
+# 保留核心文档，排除详细实现文档
+docs/archive/
+docs/analysis/
+docs/version_updates/
+
+# standards/只保留核心规范
+# standards/deployment/
+# standards/specifications/
+
+# ========================================
+# 回测和分析（完全不需要）
+# ========================================
+ats_backtest/
+notebooks/
+analysis/
+performance/
+results/
+
+# ========================================
+# 大型资源文件
+# ========================================
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.pdf
+*.zip
+*.tar
+*.gz
