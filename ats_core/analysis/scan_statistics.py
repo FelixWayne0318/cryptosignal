@@ -81,6 +81,10 @@ class ScanStatistics:
             'F_meta': scores_meta.get('F', {}),
             # v7.2+: I因子元数据
             'I_meta': scores_meta.get('I', {}),
+            # v7.2.40 P0-Critical修复：保存intermediate_data（供realtime_signal_scanner的v7.2增强使用）
+            # 根因：add_symbol_result()未保存intermediate_data导致scan_detail.json中klines/cvd_series为空
+            # 结果：realtime_signal_scanner读取时发现数据长度=0，跳过v7.2增强，导致100%失败
+            'intermediate_data': result.get('intermediate_data', {}),
         }
 
         self.symbols_data.append(data)
