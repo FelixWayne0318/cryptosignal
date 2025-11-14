@@ -509,7 +509,16 @@
     "F_bonus_value": 0.05,
     "I_bonus_threshold": 60,
     "I_bonus_value": 0.03,
-    "_comment": "提高基准概率：0.45→0.60，提高F/I加成"
+    "decay_period_days": 30,
+    "include_mtm_unrealized": true,
+    "mtm_weight_factor": 0.5,
+    "_decay_period_days_comment": "P0修复：时间衰减周期（天），用于降低旧数据权重，最近数据权重更高",
+    "_decay_period_days_rationale": "修复幸存者偏差：历史数据随时间衰减，市场环境会变化，最近数据更有参考价值",
+    "_include_mtm_unrealized_comment": "P0修复：是否包含未平仓信号的MTM（Mark-to-Market）估值",
+    "_include_mtm_unrealized_rationale": "修复幸存者偏差：统计不应只包含已平仓交易，未平仓信号也应参与校准（使用当前市价估值）",
+    "_mtm_weight_factor_comment": "未平仓信号的权重因子（0.5 = 一半权重）",
+    "_mtm_weight_factor_rationale": "未平仓信号不确定性高，给予较低权重（0.5）相比已平仓信号（1.0）",
+    "_comment": "提高基准概率：0.45→0.60，提高F/I加成，P0修复：添加时间衰减和未平仓估值"
   },
 
   "FI调制器参数": {
