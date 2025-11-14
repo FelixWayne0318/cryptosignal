@@ -70,17 +70,25 @@ echo -e "${GREEN}✅ Python缓存已清理${NC}"
 # 0.4 验证重组后的目录结构（v7.2特性）
 echo ""
 echo "🔍 验证v7.2目录结构..."
-TEST_FILES=$(ls tests/*.py 2>/dev/null | wc -l)
-DIAGNOSE_FILES=$(ls diagnose/*.py 2>/dev/null | wc -l)
-DOC_FILES=$(ls docs/*.md 2>/dev/null | wc -l)
 
-if [ "$TEST_FILES" -gt 0 ] && [ "$DIAGNOSE_FILES" -gt 0 ]; then
+# v7.2.44修复：检查目录是否存在（而非文件数量）
+# 原因：v7.2.43清理后，tests/和diagnose/只保留README.md作为占位符
+if [ -d "tests" ] && [ -d "diagnose" ] && [ -d "docs" ] && [ -d "standards" ]; then
     echo -e "${GREEN}✅ v7.2目录结构正确${NC}"
-    echo "   - tests/: $TEST_FILES 个测试文件"
-    echo "   - diagnose/: $DIAGNOSE_FILES 个诊断文件"
-    echo "   - docs/: $DOC_FILES 个文档文件"
+
+    # 统计文件数量（可选信息）
+    TEST_FILES=$(find tests -name "*.py" -o -name "*.md" 2>/dev/null | wc -l)
+    DIAGNOSE_FILES=$(find diagnose -name "*.py" -o -name "*.md" 2>/dev/null | wc -l)
+    DOC_FILES=$(find docs -name "*.md" 2>/dev/null | wc -l)
+    STANDARD_FILES=$(find standards -name "*.md" 2>/dev/null | wc -l)
+
+    echo "   - tests/: $TEST_FILES 个文件（预留目录）"
+    echo "   - diagnose/: $DIAGNOSE_FILES 个文件（预留目录）"
+    echo "   - docs/: $DOC_FILES 个文档"
+    echo "   - standards/: $STANDARD_FILES 个规范"
 else
     echo -e "${YELLOW}⚠️  目录结构可能不是v7.2版本${NC}"
+    echo "   请确保存在以下目录: tests/, diagnose/, docs/, standards/"
 fi
 
 echo ""
