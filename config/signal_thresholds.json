@@ -140,6 +140,22 @@
     "_gap_fix": "bars=170时data_qual=0.85，提前0.4天进入分析（原需180根/7.5天）"
   },
 
+  "新币种平滑处理": {
+    "_description": "v7.2.44新增P2：新币种数据不足时的平滑处理，避免因子计算不稳定",
+    "enable_newcoin_smooth": true,
+    "min_klines_for_stable": 96,
+    "newcoin_confidence_penalty": 0.8,
+    "newcoin_label_enabled": true,
+    "_enable_newcoin_smooth_comment": "P2优化：是否启用新币种平滑处理（建议启用）",
+    "_enable_newcoin_smooth_rationale": "新币种数据不足60-96根K线时，因子计算（如相关性、CVD Z-score）可能不稳定，需要降权处理",
+    "_min_klines_for_stable_comment": "稳定计算的最小K线数（96根=4天1h数据）",
+    "_min_klines_for_stable_rationale": "CVD使用96根滚动窗口，相关性建议60根，取96作为稳定阈值",
+    "_newcoin_confidence_penalty_comment": "新币种信心度惩罚系数（0.8 = 降低20%）",
+    "_newcoin_confidence_penalty_rationale": "数据不足时因子不稳定，降低信心度20%作为风险补偿",
+    "_newcoin_label_enabled_comment": "是否在元数据中添加is_newcoin标记",
+    "_newcoin_label_enabled_rationale": "标记新币种便于后续分析和监控，也可用于输出显示"
+  },
+
   "执行闸门阈值": {
     "_description": "执行质量门槛（流动性/滑点相关）",
     "execution_gate_min": 0.70,
@@ -519,6 +535,22 @@
     "_mtm_weight_factor_comment": "未平仓信号的权重因子（0.5 = 一半权重）",
     "_mtm_weight_factor_rationale": "未平仓信号不确定性高，给予较低权重（0.5）相比已平仓信号（1.0）",
     "_comment": "提高基准概率：0.45→0.60，提高F/I加成，P0修复：添加时间衰减和未平仓估值"
+  },
+
+  "VIF多重共线性监控": {
+    "_description": "v7.2.44新增P1：8个因子间多重共线性监控（Variance Inflation Factor）",
+    "enable_vif_monitoring": true,
+    "vif_threshold": 10.0,
+    "vif_warning_threshold": 5.0,
+    "vif_log_interval": 100,
+    "_enable_vif_monitoring_comment": "P1优化：是否启用VIF多重共线性监控（建议启用）",
+    "_enable_vif_monitoring_rationale": "检测8个因子(T/M/C/V/O/B/F/I)之间的多重共线性，VIF>10表示严重共线性",
+    "_vif_threshold_comment": "VIF临界值，超过此值表示严重多重共线性（需要警告）",
+    "_vif_threshold_rationale": "统计学标准：VIF>10表示严重多重共线性，会影响因子组合效果",
+    "_vif_warning_threshold_comment": "VIF警告值，超过此值开始关注（VIF=5-10为中等共线性）",
+    "_vif_warning_threshold_rationale": "VIF>5时开始有中等共线性，提前预警但不严重",
+    "_vif_log_interval_comment": "VIF诊断日志间隔（每N个信号输出一次统计）",
+    "_vif_log_interval_rationale": "避免日志风暴，每100个信号输出一次VIF统计"
   },
 
   "FI调制器参数": {

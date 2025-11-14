@@ -262,6 +262,152 @@ def calculate_independence(
     return independence_score, beta_sum, metadata
 
 
+def diagnose_multicollinearity(factors: Dict[str, float], config: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    v7.2.44 P1优化：诊断8个因子之间的多重共线性
+
+    使用VIF (Variance Inflation Factor) 检测因子间的多重共线性：
+    - VIF < 5: 低共线性（良好）
+    - 5 <= VIF < 10: 中等共线性（需要关注）
+    - VIF >= 10: 严重共线性（需要处理）
+
+    Args:
+        factors: 包含8个因子的字典 {T, M, C, V, O, B, F, I}
+        config: VIF配置（可选），包含threshold和warning_threshold
+
+    Returns:
+        诊断结果字典，包含：
+        - vif_scores: 各因子的VIF值
+        - max_vif: 最大VIF值
+        - has_severe_multicollinearity: 是否存在严重共线性
+        - warnings: 警告列表
+    """
+    try:
+        import pandas as pd
+        try:
+            from statsmodels.stats.outliers_influence import variance_inflation_factor
+        except ImportError:
+            return {
+                'error': 'statsmodels未安装，无法计算VIF',
+                'recommendation': 'pip install statsmodels',
+                'has_severe_multicollinearity': False
+            }
+
+        # 加载配置
+        if config is None:
+            try:
+                from ats_core.config.threshold_config import get_thresholds
+                thresholds = get_thresholds()
+                config = thresholds.config.get('VIF多重共线性监控', {})
+            except Exception:
+                config = {}
+
+        vif_threshold = config.get('vif_threshold', 10.0)
+        vif_warning_threshold = config.get('vif_warning_threshold', 5.0)
+
+        # 准备数据：8个因子必须都存在
+        required_factors = ['T', 'M', 'C', 'V', 'O', 'B', 'F', 'I']
+        if not all(f in factors for f in required_factors):
+            missing = [f for f in required_factors if f not in factors]
+            return {
+                'error': f'因子数据不完整，缺少: {missing}',
+                'has_severe_multicollinearity': False
+            }
+
+        # 创建DataFrame（至少需要2个观测值来计算VIF，这里我们用单个观测值，所以需要特殊处理）
+        # 注意：VIF通常需要多个样本，单个观测值无法计算。
+        # 这里我们返回一个提示，说明需要在有历史数据的地方调用
+        return {
+            'note': 'VIF计算需要多个样本（至少n_factors+1个）。请在analyze_symbol_v72.py或batch扫描中收集多个信号的因子数据后调用。',
+            'single_sample': factors,
+            'recommendation': '在batch_scan_optimized.py中收集所有币种的因子数据，然后计算VIF',
+            'has_severe_multicollinearity': False
+        }
+
+    except Exception as e:
+        return {
+            'error': f'VIF计算失败: {str(e)}',
+            'has_severe_multicollinearity': False
+        }
+
+
+def calculate_vif_from_dataframe(factors_df: 'pd.DataFrame', config: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    v7.2.44 P1优化：从DataFrame计算VIF
+
+    这个函数用于batch扫描场景，输入是多个币种的因子数据
+
+    Args:
+        factors_df: DataFrame，每行是一个币种，列是8个因子[T, M, C, V, O, B, F, I]
+        config: VIF配置（可选）
+
+    Returns:
+        VIF诊断结果
+    """
+    try:
+        import pandas as pd
+        from statsmodels.stats.outliers_influence import variance_inflation_factor
+
+        # 加载配置
+        if config is None:
+            try:
+                from ats_core.config.threshold_config import get_thresholds
+                thresholds = get_thresholds()
+                config = thresholds.config.get('VIF多重共线性监控', {})
+            except Exception:
+                config = {}
+
+        vif_threshold = config.get('vif_threshold', 10.0)
+        vif_warning_threshold = config.get('vif_warning_threshold', 5.0)
+
+        # 移除缺失值
+        factors_clean = factors_df.dropna()
+
+        if len(factors_clean) < len(factors_df.columns) + 1:
+            return {
+                'error': f'样本数不足（需要>={len(factors_df.columns)+1}，当前={len(factors_clean)}）',
+                'has_severe_multicollinearity': False
+            }
+
+        # 计算每个因子的VIF
+        vif_scores = {}
+        for i, col in enumerate(factors_clean.columns):
+            try:
+                vif_value = variance_inflation_factor(factors_clean.values, i)
+                vif_scores[col] = float(vif_value) if not np.isnan(vif_value) else 999.9
+            except Exception as e:
+                vif_scores[col] = f'计算失败: {e}'
+
+        # 分析结果
+        max_vif = max([v for v in vif_scores.values() if isinstance(v, (int, float))])
+        has_severe = max_vif >= vif_threshold
+        has_warning = max_vif >= vif_warning_threshold
+
+        warnings = []
+        for factor, vif in vif_scores.items():
+            if isinstance(vif, (int, float)):
+                if vif >= vif_threshold:
+                    warnings.append(f'{factor}因子VIF={vif:.2f}（严重共线性，阈值={vif_threshold}）')
+                elif vif >= vif_warning_threshold:
+                    warnings.append(f'{factor}因子VIF={vif:.2f}（中等共线性，警告阈值={vif_warning_threshold}）')
+
+        return {
+            'vif_scores': vif_scores,
+            'max_vif': max_vif,
+            'has_severe_multicollinearity': has_severe,
+            'has_warning': has_warning,
+            'warnings': warnings,
+            'sample_size': len(factors_clean),
+            'interpretation': '严重共线性' if has_severe else ('中等共线性' if has_warning else '低共线性')
+        }
+
+    except Exception as e:
+        return {
+            'error': f'VIF计算失败: {str(e)}',
+            'has_severe_multicollinearity': False
+        }
+
+
 # ========== 测试代码 ==========
 
 if __name__ == "__main__":
