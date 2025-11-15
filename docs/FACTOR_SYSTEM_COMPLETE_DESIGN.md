@@ -1,26 +1,76 @@
-# 因子系统完整设计文档（v7.2.44）
+# 因子系统完整设计文档（v6.6 - 6+4架构）
 
 **生成日期**: 2025-11-14
-**版本**: v7.2.44
+**版本**: v6.6 (v7.2.44代码基线)
 **文档类型**: 技术分析报告 - 从setup.sh代码追溯完整因子设计
 
 ---
 
 ## 📋 目录
 
-1. [系统调用链路](#系统调用链路)
-2. [8个因子完整设计](#8个因子完整设计)
+1. [系统架构概览](#系统架构概览)
+2. [系统调用链路](#系统调用链路)
+3. [A层：6个评分因子](#a层6个评分因子)
    - [T因子 - 趋势](#t因子---趋势trend)
    - [M因子 - 动量](#m因子---动量momentum)
    - [C因子 - CVD累积成交量差](#c因子---cvd累积成交量差)
    - [V因子 - 量能](#v因子---量能volume)
    - [O因子 - 持仓量](#o因子---持仓量open-interest)
-   - [F因子 - 资金领先性](#f因子---资金领先性fund-leading)
    - [B因子 - 基差+资金费](#b因子---基差资金费basis--funding)
-   - [I因子 - 独立性](#i因子---独立性independence)
-3. [因子标准化系统](#因子标准化系统)
-4. [因子组合逻辑](#因子组合逻辑)
-5. [配置化设计](#配置化设计)
+4. [B层：4个调制器](#b层4个调制器)
+   - [L调制器 - 流动性](#l调制器---流动性liquidity)
+   - [S调制器 - 结构](#s调制器---结构structure)
+   - [F调制器 - 资金领先性](#f调制器---资金领先性fund-leading)
+   - [I调制器 - 独立性](#i调制器---独立性independence)
+5. [因子标准化系统](#因子标准化系统)
+6. [因子组合逻辑](#因子组合逻辑)
+7. [配置化设计](#配置化设计)
+
+---
+
+## 系统架构概览
+
+### v6.6核心架构（6+4因子架构）
+
+```
+┌─────────────────────────────────────────────────────────┐
+│         A层：6个评分因子（权重总和100%）                  │
+├─────────────────────────────────────────────────────────┤
+│ Layer 1（价格行为53%）：                                 │
+│   - T（趋势）: 24%                                       │
+│   - M（动量）: 17%                                       │
+│   - V（量能）: 12%                                       │
+├─────────────────────────────────────────────────────────┤
+│ Layer 2（资金流41%）：                                   │
+│   - C（CVD）: 24%                                        │
+│   - O（持仓量）: 17%                                     │
+├─────────────────────────────────────────────────────────┤
+│ Layer 3（微观结构6%）：                                  │
+│   - B（基差+资金费）: 6%                                 │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│         B层：4个调制器（权重0%，不参与评分）              │
+├─────────────────────────────────────────────────────────┤
+│   - L（流动性Liquidity）: 调制仓位/成本                  │
+│   - S（结构Structure）: 调制止损/置信度                  │
+│   - F（资金领先Fund Leading）: 调制温度/p_min           │
+│   - I（独立性Independence）: 调制置信度/成本             │
+└─────────────────────────────────────────────────────────┘
+
+评分公式：
+  Composite Score = T×24% + M×17% + C×24% + V×12% + O×17% + B×6%
+
+调制器作用：
+  - 不参与方向评分（权重=0）
+  - 仅调制执行参数（position_size, confidence, Teff, cost）
+```
+
+### 废弃因子
+
+- **Q（清算密度）**: 数据不可靠
+- **E（环境）**: 低收益
+- **S（结构）**: 从A层评分因子移至B层调制器
 
 ---
 
@@ -36,38 +86,38 @@ scripts/realtime_signal_scanner.py (实时扫描器)
 ats_core/pipeline/batch_scan_optimized.py (批量扫描)
    ↓ 调用
 ats_core/pipeline/analyze_symbol.py (单币分析)
-   ↓ 导入8个因子计算函数
-   ├── ats_core/features/trend.py              → score_trend() → T因子
-   ├── ats_core/features/momentum.py           → score_momentum() → M因子
-   ├── ats_core/features/cvd.py                → cvd_from_klines() → C因子
-   ├── ats_core/features/volume.py             → score_volume() → V因子
-   ├── ats_core/features/open_interest.py      → score_open_interest() → O因子
-   ├── ats_core/features/fund_leading.py       → score_fund_leading_v2() → F因子
-   ├── ats_core/factors_v2/basis_funding.py    → calculate_basis_funding() → B因子
-   └── ats_core/factors_v2/independence.py     → calculate_independence() → I因子
+   ↓ 导入10个因子/调制器计算函数
+   │
+   ├── A层6个评分因子（权重100%）
+   │   ├── ats_core/features/trend.py              → score_trend() → T因子
+   │   ├── ats_core/features/momentum.py           → score_momentum() → M因子
+   │   ├── ats_core/features/cvd.py                → cvd_from_klines() → C因子
+   │   ├── ats_core/features/volume.py             → score_volume() → V因子
+   │   ├── ats_core/features/open_interest.py      → score_open_interest() → O因子
+   │   └── ats_core/factors_v2/basis_funding.py    → calculate_basis_funding() → B因子
+   │
+   └── B层4个调制器（权重0%）
+       ├── ats_core/features/liquidity_priceband.py → score_liquidity_priceband() → L调制器
+       ├── ats_core/features/structure_sq.py        → score_structure() → S调制器
+       ├── ats_core/features/fund_leading.py        → score_fund_leading_v2() → F调制器
+       └── ats_core/factors_v2/independence.py      → calculate_independence() → I调制器
 ```
-
-### 关键模块说明
-
-| 模块 | 文件 | 职责 |
-|------|------|------|
-| **系统入口** | `setup.sh` | 启动实时信号扫描器 |
-| **扫描器** | `scripts/realtime_signal_scanner.py` | 0-API-call批量扫描，调用analyze_symbol |
-| **批量处理** | `batch_scan_optimized.py` | 多币种并发分析 |
-| **单币分析** | `analyze_symbol.py` | 协调8个因子计算，生成最终信号 |
-| **因子计算** | `features/*.py`, `factors_v2/*.py` | 各因子独立计算逻辑 |
-| **标准化** | `scoring/scoring_utils.py` | StandardizationChain（5步鲁棒标准化） |
-| **配置管理** | `config/signal_thresholds.json` | 所有因子参数配置 |
 
 ---
 
-## 8个因子完整设计
+## A层：6个评分因子
+
+**特点**：
+- 参与方向评分（正值看涨，负值看跌）
+- 权重总和100%
+- 评分范围：-100 到 +100
 
 ---
 
 ### T因子 - 趋势（Trend）
 
 **文件**: `ats_core/features/trend.py`
+**权重**: 24%
 
 #### 设计理念
 
@@ -96,23 +146,16 @@ ema_up = all(ema5[-i] > ema20[-i] for i in range(1, k+1))  # 多头排列
 ema_down = all(ema5[-i] < ema20[-i] for i in range(1, k+1))  # 空头排列
 
 # === 3. 斜率强度（归一化到ATR） ===
-# 最小二乘法线性回归：y = slope * x + intercept
 slope, r2 = linreg_r2(C[-lookback:])
-
-# ATR归一化（使斜率在不同币种间可比）
 atr = ATR(H, L, C, period=14)
 slope_per_bar = slope / atr  # 每根K线的斜率（单位：ATR）
 
-# === 4. 软映射评分（directional_score） ===
-slope_score_raw = directional_score(
-    slope_per_bar,
-    neutral=0.0,        # 中性点（斜率=0）
-    scale=slope_scale   # 缩放因子（配置：0.02-0.05）
-)
+# === 4. 软映射评分 ===
+slope_score_raw = directional_score(slope_per_bar, neutral=0.0, scale=slope_scale)
 slope_score = (slope_score_raw - 50) * 2  # 0-100 → -100到+100
 
 # === 5. EMA排列加分（±40分） ===
-ema_bonus = 20  # 配置参数
+ema_bonus = 20
 if ema_up:
     ema_score = +ema_bonus * 2  # +40分
 elif ema_down:
@@ -121,10 +164,8 @@ else:
     ema_score = 0
 
 # === 6. R²置信度加权 ===
-r2_weight = 0.3  # R²权重（配置）
-confidence = r2  # 0到1（拟合优度）
-
-# 原始T分数
+r2_weight = 0.3
+confidence = r2
 T_raw = slope_score + ema_score + r2_weight * 100 * confidence
 
 # === 7. StandardizationChain标准化 ===
@@ -132,351 +173,160 @@ T_pub, diagnostics = trend_chain.standardize(T_raw)
 T = int(round(clamp(T_pub, -100, 100)))
 ```
 
-#### 关键参数（config/signal_thresholds.json）
+#### 关键参数
 
-```json
-{
-  "T因子配置": {
-    "lookback": 20,           // 回看窗口（K线数）
-    "atr_period": 14,         // ATR周期
-    "ema_short": 5,           // 短周期EMA
-    "ema_long": 20,           // 长周期EMA
-    "ema_lookback_k": 3,      // EMA排列检查深度
-    "ema_bonus": 20,          // EMA排列加分（±40）
-    "slope_scale": 0.03,      // 斜率缩放因子
-    "r2_weight": 0.3          // R²权重
-  }
-}
-```
-
-#### 应用示例
-
-```python
-from ats_core.features.trend import score_trend
-
-# 输入：K线数据（至少20根）
-klines = fetch_klines(symbol, interval='1h', limit=100)
-
-# 计算T因子
-T, metadata = score_trend(klines, params=None)
-
-print(f"T因子评分: {T}")
-print(f"斜率: {metadata['slope']:.4f}")
-print(f"R²: {metadata['r2']:.3f}")
-print(f"EMA排列: {metadata['ema_alignment']}")  # 'bullish', 'bearish', 'neutral'
-```
-
-#### 解读
-
-- **T >= +60**: 强趋势上涨（斜率陡峭 + EMA多头排列 + 高R²）
-- **T >= +30**: 温和上涨
-- **-30 < T < +30**: 震荡/无趋势
-- **T <= -30**: 温和下跌
-- **T <= -60**: 强趋势下跌
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| lookback | 20 | 回看窗口（K线数） |
+| atr_period | 14 | ATR周期 |
+| ema_short | 5 | 短周期EMA |
+| ema_long | 20 | 长周期EMA |
+| ema_bonus | 20 | EMA排列加分（±40） |
+| slope_scale | 0.03 | 斜率缩放因子 |
+| r2_weight | 0.3 | R²权重 |
 
 ---
 
 ### M因子 - 动量（Momentum）
 
 **文件**: `ats_core/features/momentum.py`
+**权重**: 17%
 
 #### 设计理念
 
 - **核心思想**: 捕捉**短期加速度**（价格变化的变化率）
 - **与T因子的正交性**: 使用EMA3/5（vs T的EMA5/20），避免信息冗余
-- **技术指标**:
-  - EMA短周期差值（动量）
-  - 加速度（动量的变化率）
-  - 相对历史归一化
 - **评分范围**: -100 到 +100
 
 #### 计算公式
 
 ```python
-# === 1. 数据准备 ===
-C = klines[:, 4]  # 收盘价序列
-lookback = 10     # 动量计算窗口
-
-# === 2. 短周期EMA差值（动量） ===
+# === 1. 短周期EMA差值（动量） ===
 ema_fast = EMA(C, period=3)
 ema_slow = EMA(C, period=5)
 momentum_raw = ema_fast - ema_slow
-
-# 平均动量（最近lookback根K线）
 momentum_now = mean(momentum_raw[-lookback:])
 
-# === 3. 加速度（动量的变化率） ===
+# === 2. 加速度 ===
 momentum_prev = mean(momentum_raw[-lookback-1:-1])
-accel = momentum_now - momentum_prev  # 加速度
+accel = momentum_now - momentum_prev
 
-# === 4. 相对历史归一化（避免绝对值偏差） ===
-# 计算历史平均斜率（用于归一化）
-historical_slopes = []
-for i in range(len(C) - lookback):
-    slope, _ = linreg_r2(C[i:i+lookback])
-    historical_slopes.append(abs(slope))
-
-avg_abs_slope = mean(historical_slopes)
-
-# 当前斜率
+# === 3. 相对历史归一化 ===
 slope_now, r2 = linreg_r2(C[-lookback:])
+avg_abs_slope = mean(|historical_slopes|)
+norm_slope = slope_now / avg_abs_slope
 
-# 归一化斜率
-if avg_abs_slope > 1e-9:
-    norm_slope = slope_now / avg_abs_slope
-else:
-    norm_slope = 0.0
-
-# === 5. 软映射到-100~+100 ===
+# === 4. 加权组合 ===
 slope_score = directional_score(norm_slope, neutral=0.0, scale=1.0)
 accel_score = directional_score(accel, neutral=0.0, scale=accel_scale)
-
-# === 6. 加权组合 ===
-slope_weight = 0.6  # 配置
-accel_weight = 0.4  # 配置
-
 M_raw = slope_weight * slope_score + accel_weight * accel_score
 
-# === 7. StandardizationChain ===
+# === 5. StandardizationChain ===
 M_pub = momentum_chain.standardize(M_raw)
 M = int(round(clamp(M_pub, -100, 100)))
 ```
-
-#### 关键参数
-
-```json
-{
-  "M因子配置": {
-    "ema_fast": 3,            // 快速EMA周期
-    "ema_slow": 5,            // 慢速EMA周期
-    "lookback": 10,           // 动量窗口
-    "slope_weight": 0.6,      // 斜率权重
-    "accel_weight": 0.4,      // 加速度权重
-    "accel_scale": 0.01       // 加速度缩放
-  }
-}
-```
-
-#### 应用示例
-
-```python
-from ats_core.features.momentum import score_momentum
-
-M, metadata = score_momentum(klines, params=None)
-
-print(f"M因子评分: {M}")
-print(f"动量: {metadata['momentum']:.4f}")
-print(f"加速度: {metadata['acceleration']:.4f}")
-print(f"相对斜率: {metadata['norm_slope']:.2f}")
-```
-
-#### 解读
-
-- **M > 0**: 价格加速上涨（动量增强）
-- **M < 0**: 价格加速下跌（动量减弱）
-- **M绝对值大**: 加速度强，可能出现V型反转或急涨急跌
 
 ---
 
 ### C因子 - CVD（累积成交量差）
 
 **文件**: `ats_core/features/cvd.py`
+**权重**: 24%
 
 #### 设计理念
 
 - **核心思想**: 通过**主动买入**与**主动卖出**的差值，识别大资金流向
 - **v7.2.34改进**: 使用Quote CVD（USDT单位），避免价格影响
 - **滚动Z标准化**: 96根窗口，避免前视偏差
-- **评分范围**: -100 到 +100
 
 #### 计算公式
 
 ```python
-# === 1. 计算CVD（Quote版本，USDT单位） ===
-taker_buy_quote = klines[:, 10]  # takerBuyQuoteVolume（主动买入USDT）
-total_quote_vol = klines[:, 7]   # quoteAssetVolume（总成交USDT）
-
-# Delta = 主动买入 - 主动卖出
+# === 1. 计算CVD（Quote版本） ===
+taker_buy_quote = klines[:, 10]  # 主动买入USDT
+total_quote_vol = klines[:, 7]   # 总成交USDT
 delta = taker_buy_quote - (total_quote_vol - taker_buy_quote)
+cvd = cumsum(delta)
 
-# 累积CVD
-cvd = cumsum(delta)  # 累积和
+# === 2. 滚动Z标准化（96根窗口） ===
+z_cvd = rolling_z_score(cvd, window=96, robust=True)
 
-# === 2. 滚动Z标准化（96根窗口，避免前视偏差） ===
-window = 96
-z_cvd = rolling_z_score(cvd, window=window, robust=True)
-
-# robust=True: 使用中位数和MAD而非均值和标准差（抗异常值）
-# rolling: 每个点只使用历史数据，无未来数据泄漏
-
-# === 3. 与OI、价格组合（可选增强） ===
-z_price = rolling_z_score(klines[:, 4], window=window)
-z_oi = rolling_z_score(oi_data, window=window) if oi_data else 0
-
-# 混合评分（CVD占主导）
+# === 3. 与OI、价格组合 ===
+z_price = rolling_z_score(prices, window=96)
+z_oi = rolling_z_score(oi_data, window=96)
 mix = 1.2 * z_cvd + 0.4 * z_price + 0.4 * z_oi
 
 # === 4. 映射到-100~+100 ===
-C_raw = mix * 100 / 3.0  # 假设3-sigma覆盖99.7%
-
-# StandardizationChain
+C_raw = mix * 100 / 3.0
 C_pub, _ = cvd_chain.standardize(C_raw)
 C = int(round(clamp(C_pub, -100, 100)))
 ```
-
-#### 关键参数
-
-```json
-{
-  "C因子配置": {
-    "window": 96,             // 滚动窗口（K线数）
-    "cvd_weight": 1.2,        // CVD权重
-    "price_weight": 0.4,      // 价格权重
-    "oi_weight": 0.4,         // OI权重
-    "use_robust_z": true,     // 使用鲁棒Z分数
-    "use_quote_cvd": true     // 使用Quote CVD（v7.2.34）
-  }
-}
-```
-
-#### 应用示例
-
-```python
-from ats_core.features.cvd import cvd_from_klines
-
-cvd_series, C, metadata = cvd_from_klines(
-    klines=klines,
-    oi_data=oi_data,  # 可选
-    params=None
-)
-
-print(f"C因子评分: {C}")
-print(f"CVD最新值: {cvd_series[-1]:.2f} USDT")
-print(f"CVD Z-score: {metadata['z_cvd'][-1]:.2f}")
-```
-
-#### 解读
-
-- **C > 0**: 资金净流入（主动买入 > 主动卖出）
-- **C < 0**: 资金净流出（主动卖出 > 主动买入）
-- **C绝对值大**: 大资金明显介入（>2sigma）
 
 ---
 
 ### V因子 - 量能（Volume）
 
 **文件**: `ats_core/features/volume.py`
+**权重**: 12%
 
 #### 设计理念
 
 - **核心思想**: 检测**量能激增**（突破平均水平）
-- **双指标**:
-  - VLevel: v5/v20（近期量能 vs 均值）
-  - VROC: 量能变化率
+- **双指标**: VLevel（v5/v20） + VROC（量能变化率）
 - **方向调整**: 结合价格方向，区分放量上涨/放量下跌
-- **评分范围**: -100 到 +100
 
 #### 计算公式
 
 ```python
 # === 1. 量能比值（VLevel） ===
-vol = klines[:, 5]  # 成交量（quoteAssetVolume）
-v5 = mean(vol[-5:])   # 近5根均值
-v20 = mean(vol[-20:]) # 近20根均值
-
-vlevel = v5 / v20 if v20 > 0 else 1.0
+v5 = mean(vol[-5:])
+v20 = mean(vol[-20:])
+vlevel = v5 / v20
 
 # === 2. 量能变化率（VROC） ===
-# 当前量能相对昨日的变化率
-v20_prev = mean(vol[-21:-1])
-vroc = log(vol[-1] / v20) - log(vol[-2] / v20_prev) if v20 > 0 else 0
+vroc = log(vol[-1]/v20) - log(vol[-2]/v20_prev)
 
-# === 3. 软映射到0-100 ===
-vlevel_score = directional_score(vlevel, neutral=1.0, scale=0.3)  # 中性点=1.0
+# === 3. 加权组合 ===
+vlevel_score = directional_score(vlevel, neutral=1.0, scale=0.3)
 vroc_score = directional_score(vroc, neutral=0.0, scale=0.1)
-
-# === 4. 加权组合 ===
-vlevel_weight = 0.7  # 配置
-vroc_weight = 0.3    # 配置
-
 V_strength = vlevel_weight * vlevel_score + vroc_weight * vroc_score
 
-# === 5. 价格方向调整 ===
-price_change = klines[-1, 4] - klines[-2, 4]
-price_up = price_change > 0
-
+# === 4. 价格方向调整 ===
 if price_up and V_strength > 0:
-    V = +V_strength  # 放量上涨（看涨）
-elif not price_up and V_strength > 0:
-    V = -V_strength  # 放量下跌（看跌）
+    V = +V_strength  # 放量上涨
+elif price_down and V_strength > 0:
+    V = -V_strength  # 放量下跌
 else:
-    V = 0  # 缩量
+    V = 0
 
-# === 6. StandardizationChain ===
+# === 5. StandardizationChain ===
 V_pub = volume_chain.standardize(V)
 V = int(round(clamp(V_pub, -100, 100)))
 ```
-
-#### 关键参数
-
-```json
-{
-  "V因子配置": {
-    "v5_period": 5,           // 短期均量
-    "v20_period": 20,         // 长期均量
-    "vlevel_weight": 0.7,     // 量能比权重
-    "vroc_weight": 0.3,       // 变化率权重
-    "vlevel_scale": 0.3,      // VLevel缩放
-    "vroc_scale": 0.1         // VROC缩放
-  }
-}
-```
-
-#### 应用示例
-
-```python
-from ats_core.features.volume import score_volume
-
-V, metadata = score_volume(klines, params=None)
-
-print(f"V因子评分: {V}")
-print(f"VLevel (v5/v20): {metadata['vlevel']:.2f}")
-print(f"VROC: {metadata['vroc']:.4f}")
-print(f"价格方向: {'上涨' if metadata['price_up'] else '下跌'}")
-```
-
-#### 解读
-
-- **V > 0**: 放量上涨（多头强势）
-- **V < 0**: 放量下跌（空头强势）
-- **V ≈ 0**: 缩量（观望）
 
 ---
 
 ### O因子 - 持仓量（Open Interest）
 
 **文件**: `ats_core/features/open_interest.py`
+**权重**: 17%
 
 #### 设计理念
 
 - **核心思想**: 持仓量（OI）上升表示**新资金进场**
-- **名义化处理**: OI × 价格（名义持仓量），消除价格波动影响
+- **名义化处理**: OI × 价格，消除价格波动影响
 - **线性回归斜率**: 量化OI变化趋势
-- **评分范围**: -100 到 +100
 
 #### 计算公式
 
 ```python
-# === 1. 名义OI（OI × 价格） ===
-oi_contracts = oi_data[:, 1]  # 持仓量（合约数）
-prices = klines[:, 4]          # 收盘价
-
-notional_oi = oi_contracts * prices  # 名义OI（USDT）
+# === 1. 名义OI ===
+notional_oi = oi_contracts * prices
 
 # === 2. 线性回归斜率 ===
 slope, r2 = linreg_r2(notional_oi[-lookback:])
 
-# === 3. 归一化斜率 ===
+# === 3. 归一化 ===
 O_score = directional_score(slope, neutral=0.0, scale=oi_scale)
 
 # === 4. StandardizationChain ===
@@ -484,45 +334,324 @@ O_pub = oi_chain.standardize(O_score)
 O = int(round(clamp(O_pub, -100, 100)))
 ```
 
+---
+
+### B因子 - 基差+资金费（Basis + Funding）
+
+**文件**: `ats_core/factors_v2/basis_funding.py`
+**权重**: 6%
+
+#### 设计理念
+
+- **核心思想**: 结合**基差**和**资金费率**，量化市场情绪
+- **P0.1改进**: 自适应阈值（基于历史百分位）
+- **评分范围**: -100 到 +100
+
+#### 计算公式
+
+```python
+# === 1. 计算基差 ===
+basis_pct = (perp_price - spot_price) / spot_price
+basis_bps = basis_pct * 10000
+
+# === 2. 自适应阈值 ===
+if len(basis_history) >= 50:
+    basis_neutral = percentile(abs(basis_history), 50)
+    basis_extreme = percentile(abs(basis_history), 90)
+else:
+    basis_neutral = 50.0
+    basis_extreme = 100.0
+
+# === 3. 归一化基差 ===
+basis_score = normalize_basis(basis_bps, basis_neutral, basis_extreme)
+
+# === 4. 归一化资金费率 ===
+funding_score = normalize_funding(funding_rate, funding_neutral, funding_extreme)
+
+# === 5. 融合评分 ===
+raw_score = basis_score * 0.6 + funding_score * 0.4
+
+# === 6. StandardizationChain ===
+B_pub, _ = basis_chain.standardize(raw_score)
+B = int(round(clamp(B_pub, -100, 100)))
+```
+
+---
+
+## B层：4个调制器
+
+**特点**：
+- **权重0%**：不参与方向评分
+- **调制作用**：调节执行参数（仓位、置信度、温度、成本）
+- **评分范围**：0 到 100（质量维度，无方向）
+
+---
+
+### L调制器 - 流动性（Liquidity）
+
+**文件**: `ats_core/features/liquidity_priceband.py`
+**作用**: 调制仓位大小（position_size）和成本（cost）
+
+#### 设计理念
+
+- **核心思想**: 使用**价格带法**（Price Band Method）评估流动性
+- **P2.5改进**: 替代固定档位数，使用±bps价格带聚合
+- **四道闸系统**: impact≤10bps、OBI≤0.30、spread≤25bps、Room≥0.6×ATR
+- **评分范围**: 0 到 100（100=优秀流动性，0=极差流动性）
+
+#### 计算公式
+
+```python
+# === 1. Spread（价差） ===
+spread_bps = ((best_ask - best_bid) / mid_price) * 10000
+
+if spread_bps <= spread_threshold:  # 25 bps
+    spread_score = 100.0
+else:
+    # 线性递减
+    spread_score = 100.0 * (1.0 - (spread_bps - threshold) / (threshold * 2))
+
+# === 2. Impact（冲击成本） ===
+# 测试订单：50,000 USDT
+buy_impact_bps, buy_avg_price, buy_sufficient = calculate_impact_bps(
+    asks, 50000, mid_price, 'ask'
+)
+sell_impact_bps, sell_avg_price, sell_sufficient = calculate_impact_bps(
+    bids, 50000, mid_price, 'bid'
+)
+
+max_impact_bps = max(buy_impact_bps, sell_impact_bps)
+
+if max_impact_bps <= 10.0:  # 10 bps阈值
+    impact_score = 100.0
+else:
+    # 线性递减
+    impact_score = 100.0 * (1.0 - (max_impact_bps - 10) / 40)
+
+# === 3. OBI（订单簿失衡度） ===
+# 在±40bps价格带内计算
+bid_qty_in_band = aggregate_within_band(bids, mid_price, 40, 'bid')
+ask_qty_in_band = aggregate_within_band(asks, mid_price, 40, 'ask')
+
+obi_value = (bid_qty_in_band - ask_qty_in_band) / (bid_qty_in_band + ask_qty_in_band)
+
+if abs(obi_value) <= 0.30:  # 30%阈值
+    obi_score = 100.0
+else:
+    # 线性递减
+    obi_score = 100.0 * (1.0 - (abs(obi_value) - 0.30) / 0.40)
+
+# === 4. Coverage（覆盖度） ===
+# 检查价格带内能否容纳测试订单
+target_qty = 50000 / mid_price
+buy_covered = check_coverage(asks, target_qty, mid_price, 40, 'ask')
+sell_covered = check_coverage(bids, target_qty, mid_price, 40, 'bid')
+
+coverage_score = 100.0 if (buy_covered and sell_covered) else partial_coverage
+
+# === 5. 加权融合 ===
+L = int(round(
+    spread_score * 0.25 +
+    impact_score * 0.40 +  # 冲击成本权重最高
+    obi_score * 0.20 +
+    coverage_score * 0.15
+))
+```
+
 #### 关键参数
 
-```json
-{
-  "O因子配置": {
-    "lookback": 20,           // 回看窗口
-    "oi_scale": 1000000,      // OI缩放因子（适配不同币种）
-    "use_notional": true      // 使用名义OI
-  }
-}
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| band_bps | 40 | 价格带宽度（30-50最有用） |
+| impact_notional_usdt | 50000 | 冲击测试规模 |
+| impact_threshold_bps | 10 | 冲击阈值（四道闸） |
+| obi_threshold | 0.30 | OBI阈值（四道闸） |
+| spread_threshold_bps | 25 | 价差阈值（四道闸） |
+| spread_weight | 0.25 | 价差权重 |
+| impact_weight | 0.40 | 冲击权重（最关键） |
+| obi_weight | 0.20 | OBI权重 |
+| coverage_weight | 0.15 | 覆盖度权重 |
+
+#### 调制作用
+
+```python
+# v6.6 ModulatorChain中的应用：
+if L >= 80:
+    position_multiplier = 1.2  # 流动性优秀，可放大仓位
+elif L >= 70:
+    position_multiplier = 1.0
+elif L >= 60:
+    position_multiplier = 0.8
+else:
+    position_multiplier = 0.5  # 流动性差，缩小仓位
 ```
 
 #### 应用示例
 
 ```python
-from ats_core.features.open_interest import score_open_interest
+from ats_core.features.liquidity_priceband import score_liquidity_priceband
 
-O, metadata = score_open_interest(
-    oi_data=oi_data,
-    klines=klines,
-    params=None
-)
+orderbook = fetch_orderbook(symbol, limit=100)
 
-print(f"O因子评分: {O}")
-print(f"OI斜率: {metadata['oi_slope']:.2f}")
-print(f"名义OI: {metadata['notional_oi'][-1]:.2f} USDT")
+L, metadata = score_liquidity_priceband(orderbook, params=None)
+
+print(f"流动性评分: {L}")
+print(f"等级: {metadata['liquidity_level']}")  # 'excellent', 'good', 'moderate', 'fair', 'poor'
+print(f"价差: {metadata['spread_bps']:.2f} bps")
+print(f"最大冲击: {metadata['max_impact_bps']:.2f} bps")
+print(f"OBI: {metadata['obi_value']:.3f}")
+print(f"四道闸: {metadata['gates_status']}")  # "3/3 (impact=True, OBI=True, spread=True)"
+```
+
+---
+
+### S调制器 - 结构（Structure）
+
+**文件**: `ats_core/features/structure_sq.py`
+**作用**: 调制止损（stop_loss）和置信度（confidence）
+
+#### 设计理念
+
+- **核心思想**: 通过**ZigZag算法**识别关键高低点，评估技术形态质量
+- **v3.1改进**: 添加迭代保护，防止无限循环
+- **评分范围**: -100 到 +100（正值=结构完整，负值=结构混乱）
+- **权重**: 在v6.6中为0%（已从A层移至B层调制器）
+
+#### 计算公式
+
+```python
+# === 1. ZigZag算法（识别关键高低点） ===
+# theta自适应计算（根据市场状态调整）
+theta = base_theta * atr_now
+# base_theta范围：0.25-0.60
+
+# 安全保护（v3.1）
+if theta < 1e-8:
+    return []  # theta过小会导致过度采样
+
+# ZigZag提取关键点
+zz_points = zigzag_last(H, L, C, theta)
+# 返回最近6个关键点（如果有的话）
+
+# === 2. 子评分计算 ===
+
+# 2.1 Consistency（一致性）
+# 检查最近4个点是否有至少2个高点或2个低点
+cons_score = 0.5
+if len(zz_points) >= 4:
+    kinds = [k for k, _, _ in zz_points[-4:]]
+    if kinds.count("H") >= 2 or kinds.count("L") >= 2:
+        cons_score = 0.8
+
+# 2.2 ICR（Impulse-Correction Ratio，冲动-修正比）
+# 最新波段 vs 上一波段的幅度比
+icr_score = 0.5
+if len(zz_points) >= 3:
+    a = abs(zz_points[-1][1] - zz_points[-2][1])
+    b = abs(zz_points[-2][1] - zz_points[-3][1])
+    if b > 1e-12:
+        icr_score = clamp(a / b, 0.0, 1.0)
+
+# 2.3 Retracement（回撤比例）
+# 回撤幅度接近50%为最佳（黄金分割理论）
+retr_score = 0.5
+if len(zz_points) >= 3:
+    rng = abs(zz_points[-2][1] - zz_points[-3][1])  # 上一波段幅度
+    ret = abs(zz_points[-1][1] - zz_points[-2][1])  # 回撤幅度
+    retr_ratio = ret / max(1e-12, rng)
+
+    # 距离50%越远，分数越低
+    d = abs(retr_ratio - 0.5)
+    retr_score = max(0.0, 1.0 - d / 0.12)
+
+# 2.4 Timing（时间间隔）
+# 波段持续时间（4-12根K线为最佳）
+timing_score = 0.5
+if len(zz_points) >= 3:
+    dt = zz_points[-1][2] - zz_points[-2][2]  # K线间隔
+
+    if dt <= 0:
+        timing_score = 0.3
+    elif dt < 4:
+        timing_score = 0.6
+    elif dt <= 12:
+        timing_score = 1.0
+    else:
+        timing_score = max(0.3, 1.2 - dt / 12.0)
+
+# 2.5 Not Overextended（未过度延伸）
+# 检查价格是否远离EMA30
+over = abs(C[-1] - ema30_last) / atr_now
+not_over_score = 1.0 if over <= 0.8 else 0.5
+
+# 2.6 M15确认（15分钟级别确认）
+m15_ok_score = 1.0 if ctx.get("m15_ok", False) else 0.0
+
+# 2.7 Penalty（惩罚）
+penalty = 0.0 if over <= 0.8 else 0.1
+
+# === 3. 聚合得分（0-1） ===
+score_raw = max(0.0, min(1.0,
+    0.22 * cons_score +
+    0.18 * icr_score +
+    0.18 * retr_score +
+    0.14 * timing_score +
+    0.20 * not_over_score +
+    0.08 * m15_ok_score -
+    penalty
+))
+
+# === 4. 转换为中心化值（0.5=0，1.0=+100，0.0=-100） ===
+S_raw = (score_raw - 0.5) * 200
+
+# === 5. StandardizationChain（v3.1优化参数） ===
+S_pub, diagnostics = structure_chain.standardize(S_raw)
+S = int(round(S_pub))
+```
+
+#### 关键参数
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| theta.big | 0.45 | 大盘币theta基准值 |
+| theta.small | 0.35 | 小盘币theta基准值 |
+| theta.overlay_add | 0.05 | 重叠市场加值 |
+| theta.new_phaseA_add | 0.10 | 新币种phaseA加值 |
+| theta.strong_regime_sub | 0.05 | 强趋势市场减值 |
+| StandardizationChain.alpha | 0.05 | Winsorization阈值（v3.1优化） |
+| StandardizationChain.lam | 3.0 | Logistic陡度（v3.1优化） |
+
+#### 调制作用
+
+```python
+# v6.6 ModulatorChain中的应用：
+if S >= 40:
+    stop_loss_multiplier = 1.0  # 结构完整，正常止损
+    confidence_boost = +0.1
+elif S >= -10:
+    stop_loss_multiplier = 1.2  # 结构一般，放宽止损
+    confidence_boost = 0.0
+else:
+    stop_loss_multiplier = 1.5  # 结构混乱，大幅放宽止损
+    confidence_boost = -0.1
 ```
 
 #### 解读
 
-- **O > 0**: OI上升（新资金进场）
-- **O < 0**: OI下降（资金离场）
-- **O绝对值大**: OI变化剧烈
+| S评分 | 解释 | 调制效果 |
+|-------|------|---------|
+| S >= +40 | 结构完整（形态清晰） | 正常止损，提升置信度 |
+| +10 <= S < +40 | 结构良好 | 略微放宽止损 |
+| -10 < S < +10 | 结构一般 | 放宽止损20% |
+| -40 < S <= -10 | 结构较差 | 放宽止损50% |
+| S <= -40 | 结构混乱（形态不清） | 放宽止损50%，降低置信度 |
 
 ---
 
-### F因子 - 资金领先性（Fund Leading）
+### F调制器 - 资金领先性（Fund Leading）
 
 **文件**: `ats_core/features/fund_leading.py`
+**作用**: 调制温度（Teff）和最小概率阈值（p_min）
 
 #### 设计理念
 
@@ -532,225 +661,80 @@ print(f"名义OI: {metadata['notional_oi'][-1]:.2f} USDT")
   - 追高风险：价格已大涨，但资金流入减弱（派发阶段）
 - **公式**: F = 资金动量 - 价格动量
 - **P0.4改进**: Crowding Veto（检测市场过热，降低F分数）
-- **评分范围**: -100 到 +100
-
-#### 计算公式（v2版本）
-
-```python
-# === 1. 资金动量（CVD + OI + Volume） ===
-# 6小时窗口（约6根1h K线）
-
-# CVD变化（相对变化率）
-cvd_6h_ago = cvd_series[-7]
-cvd_now = cvd_series[-1]
-cvd_change_pct = (cvd_now - cvd_6h_ago) / max(abs(cvd_6h_ago), 1e-9)
-
-# OI变化（名义化变化率）
-oi_now = oi_data[-1][1] * klines[-1, 4]
-oi_6h_ago = oi_data[-7][1] * klines[-7, 4]
-oi_change_6h = (oi_now - oi_6h_ago) / max(1e-9, abs(oi_6h_ago))
-
-# 资金动量 = 加权CVD + OI
-fund_momentum = cvd_weight * cvd_change_pct + oi_weight * oi_change_6h
-# 权重：cvd_weight=0.6, oi_weight=0.4（配置）
-
-# === 2. 价格动量 ===
-price_6h_ago = klines[-7, 4]
-close_now = klines[-1, 4]
-price_change_pct = (close_now - price_6h_ago) / price_6h_ago
-
-price_momentum = price_change_pct
-
-# === 3. F原始值（资金 - 价格） ===
-F_raw = fund_momentum - price_momentum
-
-# === 4. 映射到±100（tanh平滑） ===
-F_normalized = tanh(F_raw / scale)  # scale=2.0（配置）
-F_score = 100.0 * F_normalized
-
-# === 5. P0.4 Crowding Veto（可选） ===
-if crowding_veto_enabled:
-    # 检测basis或funding是否极端（>90分位）
-    if abs(basis_history[-1]) > percentile(abs(basis_history), 90):
-        F_score *= crowding_penalty  # 0.5（配置）
-    if abs(funding_history[-1]) > percentile(abs(funding_history), 90):
-        F_score *= crowding_penalty
-
-F = int(round(clamp(F_score, -100, 100)))
-```
-
-#### 关键参数
-
-```json
-{
-  "F因子配置": {
-    "cvd_weight": 0.6,                  // CVD权重
-    "oi_weight": 0.4,                   // OI权重
-    "window_hours": 6,                  // 时间窗口
-    "scale": 2.0,                       // tanh缩放
-    "crowding_veto_enabled": true,      // 启用过热检测
-    "crowding_percentile": 90,          // 过热阈值（90分位）
-    "crowding_penalty": 0.5,            // 惩罚系数
-    "crowding_min_data": 100            // 最小历史数据
-  }
-}
-```
-
-#### 应用示例
-
-```python
-from ats_core.features.fund_leading import score_fund_leading_v2
-
-F, metadata = score_fund_leading_v2(
-    cvd_series=cvd_series,
-    oi_data=oi_data,
-    klines=klines,
-    atr_now=atr,
-    params=None
-)
-
-print(f"F因子评分: {F}")
-print(f"资金动量: {metadata['fund_momentum']:.4f}")
-print(f"价格动量: {metadata['price_momentum']:.4f}")
-print(f"F_raw: {metadata['F_raw']:.4f}")
-
-if metadata.get('veto_applied'):
-    print(f"⚠️ Crowding Veto触发: {metadata['veto_reasons']}")
-```
-
-#### 解读
-
-- **F >= +60**: 资金强势领先价格（蓄势待发）✅✅✅
-- **F >= +30**: 资金温和领先价格（机会较好）✅
-- **-30 < F < +30**: 资金价格同步（一般）
-- **F <= -30**: 价格温和领先资金（追高风险）⚠️
-- **F <= -60**: 价格强势领先资金（风险很大）❌
-
----
-
-### B因子 - 基差+资金费（Basis + Funding）
-
-**文件**: `ats_core/factors_v2/basis_funding.py`
-
-#### 设计理念
-
-- **核心思想**: 结合**基差**和**资金费率**，量化市场情绪
-- **理论基础**:
-  - 基差 = (永续价格 - 现货价格) / 现货价格
-    - 正基差：市场看涨，多头愿意支付溢价
-    - 负基差：市场看跌，空头愿意支付溢价
-  - 资金费率（Funding Rate）：
-    - 正费率：多头支付空头（市场过热）
-    - 负费率：空头支付多头（市场恐慌）
-- **P0.1改进**: 自适应阈值（基于历史百分位）
-- **评分范围**: -100 到 +100
+- **评分范围**: -100 到 +100（v6.6中作为调制器，不参与评分）
 
 #### 计算公式
 
 ```python
-# === 1. 计算基差 ===
-basis_pct = (perp_price - spot_price) / spot_price
-basis_bps = basis_pct * 10000  # 转换为基点（1 bps = 0.01%）
+# === 1. 资金动量（CVD + OI） ===
+# 6小时窗口
+cvd_6h_ago = cvd_series[-7]
+cvd_now = cvd_series[-1]
+cvd_change_pct = (cvd_now - cvd_6h_ago) / max(abs(cvd_6h_ago), 1e-9)
 
-# === 2. 自适应阈值（P0.1新增） ===
-if len(basis_history) >= 50:
-    # 使用历史百分位
-    basis_neutral = percentile(abs(basis_history), 50)  # 中位数
-    basis_extreme = percentile(abs(basis_history), 90)  # 90分位
-    # 边界保护
-    basis_neutral = clamp(basis_neutral, 20.0, 200.0)
-    basis_extreme = clamp(basis_extreme, 50.0, 300.0)
-else:
-    # Fallback固定阈值
-    basis_neutral = 50.0   # 50 bps
-    basis_extreme = 100.0  # 100 bps
+oi_now = oi_data[-1][1] * klines[-1, 4]
+oi_6h_ago = oi_data[-7][1] * klines[-7, 4]
+oi_change_6h = (oi_now - oi_6h_ago) / max(1e-9, abs(oi_6h_ago))
 
-# === 3. 归一化基差到±100 ===
-if abs(basis_bps) <= basis_neutral:
-    # 中性区域：线性映射到±33
-    basis_score = (basis_bps / basis_neutral) * 33.0
-else:
-    # 极端区域：映射到±33到±100
-    if basis_bps > 0:
-        excess = basis_bps - basis_neutral
-        ratio = min(1.0, excess / (basis_extreme - basis_neutral))
-        basis_score = 33.0 + ratio * 67.0
-    else:
-        excess = abs(basis_bps) - basis_neutral
-        ratio = min(1.0, excess / (basis_extreme - basis_neutral))
-        basis_score = -33.0 - ratio * 67.0
+fund_momentum = cvd_weight * cvd_change_pct + oi_weight * oi_change_6h
+# 权重：cvd_weight=0.6, oi_weight=0.4
 
-# === 4. 归一化资金费率（类似逻辑） ===
-funding_neutral = percentile(abs(funding_history), 50) if len(funding_history)>=50 else 0.001
-funding_extreme = percentile(abs(funding_history), 90) if len(funding_history)>=50 else 0.002
+# === 2. 价格动量 ===
+price_6h_ago = klines[-7, 4]
+close_now = klines[-1, 4]
+price_momentum = (close_now - price_6h_ago) / price_6h_ago
 
-funding_score = normalize_funding(funding_rate, funding_neutral, funding_extreme)
+# === 3. F原始值 ===
+F_raw = fund_momentum - price_momentum
 
-# === 5. 融合评分 ===
-raw_score = basis_score * basis_weight + funding_score * funding_weight
-# 默认权重：basis_weight=0.6, funding_weight=0.4
+# === 4. 映射到±100 ===
+F_normalized = tanh(F_raw / scale)  # scale=2.0
+F_score = 100.0 * F_normalized
 
-# === 6. FWI增强（可选） ===
-if fwi_enabled and len(funding_history) >= 2:
-    # 检测资金费率快速变化（30分钟内）
-    funding_change_pct = abs(funding_history[-1] - funding_history[-30]) / abs(funding_history[-30])
-    if funding_change_pct > 0.5:  # >50%变化
-        fwi_boost = min(20, funding_change_pct * 20)  # 最大+20分
-        raw_score += fwi_boost
+# === 5. P0.4 Crowding Veto ===
+if crowding_veto_enabled:
+    if abs(basis_history[-1]) > percentile(abs(basis_history), 90):
+        F_score *= 0.5
+    if abs(funding_history[-1]) > percentile(abs(funding_history), 90):
+        F_score *= 0.5
 
-# === 7. StandardizationChain ===
-B_pub, _ = basis_chain.standardize(raw_score)
-B = int(round(clamp(B_pub, -100, 100)))
+F = int(round(clamp(F_score, -100, 100)))
 ```
 
-#### 关键参数
-
-```json
-{
-  "B因子配置": {
-    "basis_weight": 0.6,                    // 基差权重
-    "funding_weight": 0.4,                  // 资金费权重
-    "adaptive_threshold_mode": "hybrid",    // 自适应阈值模式
-    "fwi_enabled": false,                   // FWI增强（Funding Window Impact）
-    "fwi_window_minutes": 30,               // FWI窗口
-    "fwi_boost_max": 20                     // FWI最大加分
-  }
-}
-```
-
-#### 应用示例
+#### 调制作用
 
 ```python
-from ats_core.factors_v2.basis_funding import calculate_basis_funding
-
-B, metadata = calculate_basis_funding(
-    perp_price=50500,         # 永续价格
-    spot_price=50000,         # 现货价格
-    funding_rate=0.0015,      # 0.15% 资金费
-    funding_history=funding_hist,  # 可选
-    basis_history=basis_hist,      # 可选（P0.1新增）
-    params=None
-)
-
-print(f"B因子评分: {B}")
-print(f"基差: {metadata['basis_bps']:.1f} bps ({metadata['basis_pct']:.3%})")
-print(f"资金费率: {metadata['funding_rate']:.4%}")
-print(f"情绪: {metadata['sentiment']}")  # 'very_bullish', 'bullish', 'neutral', 'bearish', 'very_bearish'
+# v6.6 ModulatorChain中的应用（v6.7统一p_min计算）：
+if F >= 60:
+    Teff_multiplier = 0.8  # 蓄势待发，降低温度（更保守）
+    p_min_boost = -0.05    # 降低概率阈值（更容易通过）
+elif F >= 30:
+    Teff_multiplier = 1.0
+    p_min_boost = 0.0
+elif F >= -30:
+    Teff_multiplier = 1.2  # 同步，略微提高温度
+    p_min_boost = 0.0
+else:
+    Teff_multiplier = 1.5  # 追高风险，大幅提高温度（更激进过滤）
+    p_min_boost = +0.10    # 提高概率阈值（更难通过）
 ```
 
 #### 解读
 
-- **B > +66**: 强烈看涨（高溢价 + 正资金费）
-- **B > +33**: 看涨
-- **-33 < B < +33**: 中性
-- **B < -33**: 看跌
-- **B < -66**: 强烈看跌（高折价 + 负资金费）
+| F评分 | 解释 | 调制效果 | 入场建议 |
+|-------|------|---------|---------|
+| F >= +60 | 资金强势领先价格 | 降低Teff，降低p_min | ✅✅✅ 蓄势待发 |
+| +30 <= F < +60 | 资金温和领先 | 正常 | ✅ 机会较好 |
+| -30 < F < +30 | 资金价格同步 | 略微提高Teff | 一般 |
+| -60 < F <= -30 | 价格温和领先资金 | 提高Teff，提高p_min | ⚠️ 追高风险 |
+| F <= -60 | 价格强势领先资金 | 大幅提高Teff和p_min | ❌ 风险很大 |
 
 ---
 
-### I因子 - 独立性（Independence）
+### I调制器 - 独立性（Independence）
 
 **文件**: `ats_core/factors_v2/independence.py`
+**作用**: 调制置信度（confidence）和成本（cost）
 
 #### 设计理念
 
@@ -766,109 +750,80 @@ print(f"情绪: {metadata['sentiment']}")  # 'very_bullish', 'bullish', 'neutral
 
 ```python
 # === 1. 计算收益率序列 ===
-window = 24  # 24小时（v7.2.8: 48→24，避免数据不足）
-
+window = 24  # 24小时
 alt_returns = calculate_returns(alt_prices[-window-1:])
 btc_returns = calculate_returns(btc_prices[-window-1:])
 eth_returns = calculate_returns(eth_prices[-window-1:])
 
 # === 2. P1.3异常值过滤（3-sigma规则） ===
-# 移除极端异常值（如闪崩、插针等）
 def remove_outliers(returns_array):
     mean = np.mean(returns_array)
     std = np.std(returns_array)
     if std == 0:
         return returns_array
-    # 保留 [mean-3*std, mean+3*std] 范围内的数据
     mask = np.abs(returns_array - mean) <= 3 * std
     return mask
 
-# 对所有序列应用相同的mask（保持时间对齐）
 mask_combined = mask_alt & mask_btc & mask_eth
 alt_clean = alt_returns[mask_combined]
 btc_clean = btc_returns[mask_combined]
 eth_clean = eth_returns[mask_combined]
 
-# === 3. OLS回归（最小二乘法） ===
+# === 3. OLS回归 ===
 # alt_return = α + β_BTC * btc_return + β_ETH * eth_return
 
-y = alt_clean  # 因变量
-X = [btc_clean, eth_clean]  # 自变量矩阵
-
-# OLS: β = (X'X)^-1 X'y
+y = alt_clean
+X = [btc_clean, eth_clean]
 X_with_intercept = [ones(len(X)), X]
-betas_with_intercept = solve(X_with_intercept.T @ X_with_intercept, X_with_intercept.T @ y)
+betas_with_intercept = solve(X^T @ X, X^T @ y)
 
 beta_btc = betas_with_intercept[1]
 beta_eth = betas_with_intercept[2]
 
-# R²（决定系数）
+# R²
 y_pred = X_with_intercept @ betas_with_intercept
 r_squared = 1 - sum((y - y_pred)^2) / sum((y - mean(y))^2)
 
 # === 4. 加权Beta ===
-btc_weight = 0.6  # 配置
-eth_weight = 0.4  # 配置
-
-beta_sum = btc_weight * abs(beta_btc) + eth_weight * abs(beta_eth)
+beta_sum = 0.6 * abs(beta_btc) + 0.4 * abs(beta_eth)
 
 # === 5. 独立性评分 ===
-# beta_sum越低，独立性越高
-# beta_sum = 0.0 → score = 100（完全独立）
-# beta_sum = 1.5 → score = 0（完全相关）
-
-beta_threshold_high = 1.5  # 配置
-
-if beta_sum >= beta_threshold_high:
+if beta_sum >= 1.5:
     raw_score = 0.0
 else:
-    raw_score = 100.0 * (1.0 - min(1.0, beta_sum / beta_threshold_high))
+    raw_score = 100.0 * (1.0 - min(1.0, beta_sum / 1.5))
 
 # === 6. StandardizationChain ===
 I_pub, _ = independence_chain.standardize(raw_score)
 I = int(round(clamp(I_pub, 0, 100)))
 ```
 
-#### 关键参数
-
-```json
-{
-  "I因子配置": {
-    "window_hours": 24,               // 回归窗口（v7.2.8: 48→24）
-    "beta_threshold_high": 1.5,       // 高Beta阈值
-    "beta_threshold_low": 0.5,        // 低Beta阈值
-    "btc_weight": 0.6,                // BTC权重
-    "eth_weight": 0.4                 // ETH权重
-  }
-}
-```
-
-#### 应用示例
+#### 调制作用
 
 ```python
-from ats_core.factors_v2.independence import calculate_independence
-
-I, beta_sum, metadata = calculate_independence(
-    alt_prices=alt_prices,
-    btc_prices=btc_prices,
-    eth_prices=eth_prices,
-    params=None
-)
-
-print(f"I因子评分: {I}")
-print(f"Beta总和: {beta_sum:.3f}")
-print(f"Beta_BTC: {metadata['beta_btc']:.3f}")
-print(f"Beta_ETH: {metadata['beta_eth']:.3f}")
-print(f"R²: {metadata['r_squared']:.3f}")
-print(f"独立性等级: {metadata['independence_level']}")  # 'high', 'moderate', 'low', 'very_low'
+# v6.6 ModulatorChain中的应用：
+if I >= 70:
+    confidence_boost = +0.15  # 高独立性，提升置信度
+    cost_multiplier = 1.0
+elif I >= 50:
+    confidence_boost = +0.05
+    cost_multiplier = 1.0
+elif I >= 30:
+    confidence_boost = 0.0
+    cost_multiplier = 1.1   # 低独立性，提高成本（更谨慎）
+else:
+    confidence_boost = -0.10  # 极低独立性，降低置信度
+    cost_multiplier = 1.2
 ```
 
 #### 解读
 
-- **I >= 70**: 高独立性（潜在Alpha机会）
-- **50 <= I < 70**: 中等独立性
-- **30 <= I < 50**: 低独立性
-- **I < 30**: 极低独立性（高度相关，需要BTC/ETH确认）
+| I评分 | 解释 | Beta Sum | 调制效果 | Alpha机会 |
+|-------|------|----------|---------|----------|
+| I >= 70 | 高独立性 | <0.5 | 提升置信度+15% | ✅ 潜在Alpha |
+| 50 <= I < 70 | 中等独立性 | 0.5-1.0 | 提升置信度+5% | 一般 |
+| 30 <= I < 50 | 低独立性 | 1.0-1.5 | 提高成本10% | 需BTC确认 |
+| I < 30 | 极低独立性 | >1.5 | 降低置信度10%，提高成本20% | ⚠️ 高相关 |
 
 ---
 
@@ -878,7 +833,7 @@ print(f"独立性等级: {metadata['independence_level']}")  # 'high', 'moderate
 
 **文件**: `ats_core/scoring/scoring_utils.py`
 
-所有因子在输出前都经过**StandardizationChain**标准化，确保：
+所有A层因子在输出前都经过**StandardizationChain**标准化，确保：
 1. **鲁棒性**: 抗异常值
 2. **一致性**: 所有因子使用相同的-100到+100范围
 3. **可解释性**: 标准化后的分数具有统计意义
@@ -895,65 +850,34 @@ class StandardizationChain:
         zmax: Soft-clipping最大值（6.0-sigma）
         lam: Logistic函数陡度
         """
-        self.alpha = alpha
-        self.tau = tau
-        self.z0 = z0
-        self.zmax = zmax
-        self.lam = lam
+        ...
 
     def standardize(self, raw_score):
-        """
-        步骤1: Winsorization（截断极端值）
-        将score限制在[15%分位, 85%分位]范围内
-        """
-        lower = percentile(raw_score, self.alpha * 100)
-        upper = percentile(raw_score, (1 - self.alpha) * 100)
+        # 步骤1: Winsorization（截断极端值）
+        lower = percentile(raw_score, 15)
+        upper = percentile(raw_score, 85)
         score_1 = clamp(raw_score, lower, upper)
 
-        """
-        步骤2: Huber Robust Mean（鲁棒均值）
-        使用Huber损失函数计算鲁棒均值和标准差
-        """
-        mu_robust = huber_mean(score_1, self.tau)
-        sigma_robust = huber_std(score_1, self.tau)
+        # 步骤2: Huber Robust Mean（鲁棒均值）
+        mu_robust = huber_mean(score_1, tau=3.0)
+        sigma_robust = huber_std(score_1, tau=3.0)
 
-        """
-        步骤3: Z-score标准化
-        """
-        z = (score_1 - mu_robust) / sigma_robust if sigma_robust > 0 else 0
+        # 步骤3: Z-score标准化
+        z = (score_1 - mu_robust) / sigma_robust
 
-        """
-        步骤4: Soft-clipping（软截断）
-        平滑截断z-score到[-zmax, +zmax]
-        """
-        if abs(z) <= self.z0:
+        # 步骤4: Soft-clipping（软截断）
+        if abs(z) <= 2.5:
             z_clipped = z
         else:
-            # Logistic平滑过渡
             sign = 1 if z > 0 else -1
-            z_excess = abs(z) - self.z0
-            z_clipped = sign * (self.z0 + (self.zmax - self.z0) * sigmoid(z_excess, self.lam))
+            z_excess = abs(z) - 2.5
+            z_clipped = sign * (2.5 + 3.5 * sigmoid(z_excess, lam=1.5))
 
-        """
-        步骤5: 映射到±100
-        """
-        score_pub = 100.0 * z_clipped / self.zmax
+        # 步骤5: 映射到±100
+        score_pub = 100.0 * z_clipped / 6.0
 
-        return score_pub, {
-            'raw_score': raw_score,
-            'winsorized': score_1,
-            'z_score': z,
-            'z_clipped': z_clipped,
-            'final_score': score_pub
-        }
+        return score_pub, diagnostics
 ```
-
-#### 标准化的好处
-
-- **抗异常值**: Winsorization + Huber均值
-- **平滑输出**: Soft-clipping避免硬截断
-- **可比性**: 所有因子都在±100范围内
-- **诊断信息**: 返回中间步骤，便于调试
 
 ---
 
@@ -966,69 +890,59 @@ class StandardizationChain:
 ```python
 def analyze_symbol_v72(symbol, klines, oi_data, ...):
     """
-    v7.2版本的单币种分析（集成8个因子）
+    v7.2版本的单币种分析（v6.6架构：6+4因子）
     """
-    # === 1. 计算8个因子 ===
-
-    # T因子（趋势）
+    # === 1. 计算A层6个评分因子 ===
     T, t_meta = score_trend(klines, params=trend_params)
-
-    # M因子（动量）
     M, m_meta = score_momentum(klines, params=momentum_params)
-
-    # C因子（CVD）
     cvd_series, C, c_meta = cvd_from_klines(klines, oi_data, params=cvd_params)
-
-    # V因子（量能）
     V, v_meta = score_volume(klines, params=volume_params)
-
-    # O因子（持仓量）
     O, o_meta = score_open_interest(oi_data, klines, params=oi_params)
+    B, b_meta = calculate_basis_funding(perp_price, spot_price, funding_rate, ...)
 
-    # F因子（资金领先性）
+    # === 2. 计算B层4个调制器 ===
+    L, l_meta = score_liquidity_priceband(orderbook, params=liquidity_params)
+    S, s_meta = score_structure(H, L, C, ema30_last, atr_now, params=structure_params)
     F, f_meta = score_fund_leading_v2(cvd_series, oi_data, klines, atr, params=fund_params)
+    I, beta_sum, i_meta = calculate_independence(alt_prices, btc_prices, eth_prices, params=independence_params)
 
-    # B因子（基差+资金费）
-    B, b_meta = calculate_basis_funding(
-        perp_price, spot_price, funding_rate,
-        funding_history, basis_history,
-        params=basis_params
-    )
+    # === 3. A层因子加权组合（总权重100%） ===
+    weights = {
+        'T': 0.24,  # 趋势
+        'M': 0.17,  # 动量
+        'C': 0.24,  # CVD
+        'V': 0.12,  # 量能
+        'O': 0.17,  # 持仓量
+        'B': 0.06   # 基差+资金费
+    }
 
-    # I因子（独立性）
-    I, beta_sum, i_meta = calculate_independence(
-        alt_prices, btc_prices, eth_prices,
-        params=independence_params
-    )
-
-    # === 2. 因子组合（加权） ===
-    # 从配置读取权重
-    weights = config.get('因子权重', {
-        'T': 0.15,
-        'M': 0.10,
-        'C': 0.20,
-        'V': 0.10,
-        'O': 0.10,
-        'F': 0.20,
-        'B': 0.10,
-        'I': 0.05
-    })
-
-    # 加权组合
     composite_score = (
         weights['T'] * T +
         weights['M'] * M +
         weights['C'] * C +
         weights['V'] * V +
         weights['O'] * O +
-        weights['F'] * F +
-        weights['B'] * B +
-        weights['I'] * I / 100  # I因子是0-100，需要归一化
+        weights['B'] * B
     )
 
-    # === 3. 信号生成 ===
-    signal_threshold = config.get('信号阈值', 50)
+    # === 4. B层调制器调制执行参数 ===
+    modulator_chain = ModulatorChain()
 
+    # L调制器：调制仓位大小
+    position_size = base_position_size * modulator_chain.apply_liquidity_modulation(L)
+
+    # S调制器：调制止损
+    stop_loss = base_stop_loss * modulator_chain.apply_structure_modulation(S)
+
+    # F调制器：调制温度和p_min（v6.7统一计算）
+    Teff = base_Teff * modulator_chain.apply_fund_leading_modulation(F)
+    p_min = modulator_chain.get_fi_modulated_pmin(F, I)
+
+    # I调制器：调制置信度
+    confidence = base_confidence + modulator_chain.apply_independence_modulation(I)
+
+    # === 5. 信号生成 ===
+    signal_threshold = 50
     if composite_score > signal_threshold:
         signal = 'LONG'
     elif composite_score < -signal_threshold:
@@ -1036,29 +950,50 @@ def analyze_symbol_v72(symbol, klines, oi_data, ...):
     else:
         signal = 'NEUTRAL'
 
-    # === 4. 返回结果 ===
+    # === 6. 返回结果 ===
     return {
         'symbol': symbol,
         'signal': signal,
         'composite_score': composite_score,
-        'factors': {
+
+        # A层因子（参与评分）
+        'factors_A': {
             'T': T,
             'M': M,
             'C': C,
             'V': V,
             'O': O,
+            'B': B
+        },
+
+        # B层调制器（不参与评分）
+        'modulators_B': {
+            'L': L,
+            'S': S,
             'F': F,
-            'B': B,
             'I': I
         },
+
+        # 调制后的执行参数
+        'execution': {
+            'position_size': position_size,
+            'stop_loss': stop_loss,
+            'Teff': Teff,
+            'p_min': p_min,
+            'confidence': confidence
+        },
+
+        # 元数据
         'metadata': {
             'T': t_meta,
             'M': m_meta,
             'C': c_meta,
             'V': v_meta,
             'O': o_meta,
-            'F': f_meta,
             'B': b_meta,
+            'L': l_meta,
+            'S': s_meta,
+            'F': f_meta,
             'I': i_meta
         }
     }
@@ -1066,16 +1001,18 @@ def analyze_symbol_v72(symbol, klines, oi_data, ...):
 
 ### 因子权重设计原则
 
-| 因子 | 默认权重 | 理由 |
-|------|---------|------|
-| **C** | 0.20 | CVD是大资金流向的直接指标，权重最高 |
-| **F** | 0.20 | 资金领先性是核心Alpha来源 |
-| **T** | 0.15 | 趋势是中期方向的主导力量 |
-| **M** | 0.10 | 动量捕捉短期加速，辅助T因子 |
-| **V** | 0.10 | 量能确认趋势，但不能单独决策 |
-| **O** | 0.10 | OI变化是辅助指标 |
-| **B** | 0.10 | 基差+资金费反映情绪，但有滞后性 |
-| **I** | 0.05 | 独立性是质量维度，权重最低 |
+| 因子 | 权重 | 层级 | 理由 |
+|------|------|------|------|
+| **C** | 24% | Layer 2（资金流） | CVD是大资金流向的直接指标 |
+| **T** | 24% | Layer 1（价格行为） | 趋势是中期方向的主导力量 |
+| **M** | 17% | Layer 1（价格行为） | 动量捕捉短期加速 |
+| **O** | 17% | Layer 2（资金流） | OI变化反映新资金进场 |
+| **V** | 12% | Layer 1（价格行为） | 量能确认趋势 |
+| **B** | 6% | Layer 3（微观结构） | 基差+资金费反映情绪 |
+| **L** | 0% | Layer B（调制器） | 仅调制仓位和成本 |
+| **S** | 0% | Layer B（调制器） | 仅调制止损和置信度 |
+| **F** | 0% | Layer B（调制器） | 仅调制温度和p_min |
+| **I** | 0% | Layer B（调制器） | 仅调制置信度和成本 |
 
 ---
 
@@ -1086,14 +1023,16 @@ def analyze_symbol_v72(symbol, klines, oi_data, ...):
 ```json
 {
   "因子权重": {
-    "T": 0.15,
-    "M": 0.10,
-    "C": 0.20,
-    "V": 0.10,
-    "O": 0.10,
-    "F": 0.20,
-    "B": 0.10,
-    "I": 0.05
+    "T": 0.24,
+    "M": 0.17,
+    "C": 0.24,
+    "V": 0.12,
+    "O": 0.17,
+    "B": 0.06,
+    "L": 0.0,
+    "S": 0.0,
+    "F": 0.0,
+    "I": 0.0
   },
 
   "T因子配置": {
@@ -1140,7 +1079,38 @@ def analyze_symbol_v72(symbol, klines, oi_data, ...):
     "use_notional": true
   },
 
-  "F因子配置": {
+  "B因子配置": {
+    "basis_weight": 0.6,
+    "funding_weight": 0.4,
+    "adaptive_threshold_mode": "hybrid",
+    "fwi_enabled": false,
+    "fwi_window_minutes": 30,
+    "fwi_boost_max": 20
+  },
+
+  "L调制器配置": {
+    "band_bps": 40,
+    "impact_notional_usdt": 50000,
+    "impact_threshold_bps": 10,
+    "obi_threshold": 0.30,
+    "spread_threshold_bps": 25,
+    "spread_weight": 0.25,
+    "impact_weight": 0.40,
+    "obi_weight": 0.20,
+    "coverage_weight": 0.15
+  },
+
+  "S调制器配置": {
+    "theta": {
+      "big": 0.45,
+      "small": 0.35,
+      "overlay_add": 0.05,
+      "new_phaseA_add": 0.10,
+      "strong_regime_sub": 0.05
+    }
+  },
+
+  "F调制器配置": {
     "cvd_weight": 0.6,
     "oi_weight": 0.4,
     "window_hours": 6,
@@ -1151,16 +1121,7 @@ def analyze_symbol_v72(symbol, klines, oi_data, ...):
     "crowding_min_data": 100
   },
 
-  "B因子配置": {
-    "basis_weight": 0.6,
-    "funding_weight": 0.4,
-    "adaptive_threshold_mode": "hybrid",
-    "fwi_enabled": false,
-    "fwi_window_minutes": 30,
-    "fwi_boost_max": 20
-  },
-
-  "I因子配置": {
+  "I调制器配置": {
     "window_hours": 24,
     "beta_threshold_high": 1.5,
     "beta_threshold_low": 0.5,
@@ -1204,79 +1165,66 @@ def analyze_symbol_v72(symbol, klines, oi_data, ...):
 }
 ```
 
-### 配置读取（v3.0模式）
-
-```python
-from ats_core.config.factor_config import get_factor_config
-
-# 读取因子配置
-config = get_factor_config()
-t_params = config.get_factor_params("T")
-
-print(t_params['lookback'])  # 20
-print(t_params['ema_short'])  # 5
-```
-
-### 向后兼容性
-
-所有因子函数都支持：
-1. **配置文件优先**: 从`signal_thresholds.json`读取默认参数
-2. **传入参数覆盖**: 函数调用时传入的`params`参数优先级更高
-
-```python
-# 使用配置文件默认值
-T, meta = score_trend(klines)
-
-# 覆盖特定参数
-T, meta = score_trend(klines, params={'lookback': 30, 'slope_scale': 0.05})
-```
-
 ---
 
 ## 📊 因子质量评估
 
-### 因子独立性（Orthogonality）
+### A层因子独立性（Orthogonality）
 
 | 因子对 | 相关性 | 设计差异 |
 |--------|--------|---------|
 | T vs M | 低 | T用EMA5/20（中期），M用EMA3/5（短期） |
-| C vs F | 低 | C是绝对流向，F是相对价格的领先性 |
-| V vs O | 低 | V是成交量，O是持仓量（不同维度） |
-| B vs I | 低 | B是情绪，I是质量（正交维度） |
+| C vs O | 低 | C是成交量流向，O是持仓量变化 |
+| V vs C | 低 | V是量能激增，C是方向性流向 |
+| B vs T | 低 | B是情绪，T是趋势（不同维度） |
+
+### B层调制器作用域
+
+| 调制器 | 调制参数 | 作用机制 |
+|--------|---------|---------|
+| **L** | position_size, cost | 流动性差→缩小仓位，提高成本 |
+| **S** | stop_loss, confidence | 结构混乱→放宽止损，降低置信度 |
+| **F** | Teff, p_min | 蓄势待发→降低温度，降低p_min |
+| **I** | confidence, cost | 高独立性→提升置信度，正常成本 |
 
 ### 因子稳定性（Stability）
 
-| 因子 | 稳定性 | 说明 |
-|------|--------|------|
+| 因子/调制器 | 稳定性 | 说明 |
+|------------|--------|------|
 | T | ⭐⭐⭐⭐⭐ | 斜率+EMA，鲁棒性高 |
 | M | ⭐⭐⭐⭐ | 加速度敏感，但有归一化 |
 | C | ⭐⭐⭐⭐⭐ | 滚动Z-score，抗异常值 |
 | V | ⭐⭐⭐ | 量能波动大，需要方向调整 |
 | O | ⭐⭐⭐⭐ | 名义化处理，稳定性好 |
-| F | ⭐⭐⭐⭐ | v2版本改进，相对变化率 |
 | B | ⭐⭐⭐⭐ | P0.1自适应阈值，适应市场变化 |
-| I | ⭐⭐⭐ | P1.3异常值过滤，但仍依赖窗口大小 |
+| L | ⭐⭐⭐⭐⭐ | 价格带法，抗订单簿噪音 |
+| S | ⭐⭐⭐ | ZigZag依赖theta，v3.1添加安全保护 |
+| F | ⭐⭐⭐⭐ | v2版本改进，相对变化率 |
+| I | ⭐⭐⭐ | P1.3异常值过滤，但依赖窗口大小 |
 
 ### 因子预测能力（Predictive Power）
 
-| 因子 | 预测能力 | 应用场景 |
-|------|---------|---------|
+| 因子/调制器 | 预测能力 | 应用场景 |
+|------------|---------|---------|
 | T | ⭐⭐⭐⭐ | 中期趋势跟踪 |
 | M | ⭐⭐⭐ | 短期反转/加速 |
 | C | ⭐⭐⭐⭐⭐ | 大资金流向预判 |
 | V | ⭐⭐⭐ | 趋势确认 |
 | O | ⭐⭐⭐ | 新资金进场信号 |
-| F | ⭐⭐⭐⭐⭐ | Alpha核心（蓄势待发点） |
 | B | ⭐⭐⭐ | 情绪极端检测 |
+| L | ⭐⭐⭐⭐⭐ | 可交易性过滤 |
+| S | ⭐⭐⭐⭐ | 形态质量评估 |
+| F | ⭐⭐⭐⭐⭐ | Alpha核心（蓄势待发点） |
 | I | ⭐⭐ | 质量过滤（辅助） |
 
 ---
 
 ## 🔍 系统健康度
 
-### v7.2.44状态
+### v6.6架构状态（v7.2.44代码基线）
 
-- ✅ **8个因子全部实现**
+- ✅ **6个评分因子全部实现**（T/M/C/V/O/B）
+- ✅ **4个调制器全部实现**（L/S/F/I）
 - ✅ **配置化完成**（无硬编码）
 - ✅ **StandardizationChain标准化**
 - ✅ **P0修复完成**（幸存者偏差、CVD前视偏差、F因子多空逻辑）
@@ -1297,6 +1245,7 @@ T, meta = score_trend(klines, params={'lookback': 30, 'slope_scale': 0.05})
 ### 技术规范
 - `standards/SYSTEM_ENHANCEMENT_STANDARD.md` v3.2.0
 - `standards/CONFIGURATION_GUIDE.md`
+- `standards/MODULATORS.md` - v6.6调制器规范
 
 ### 历史修复
 - `docs/V7.2.44_P0_P1_FIXES_SUMMARY.md` - P0/P1/P2修复
@@ -1307,19 +1256,30 @@ T, meta = score_trend(klines, params={'lookback': 30, 'slope_scale': 0.05})
 - Fama-French三因子模型（市场、规模、价值）
 - 动量因子（Jegadeesh & Titman, 1993）
 - CVD理论（On-Balance Volume扩展）
+- 价格带法流动性分析（P2.5专家建议）
 
 ---
 
 ## ✅ 总结
 
-### 因子系统核心特性
+### v6.6架构核心特性
 
-1. **多维度覆盖**: 趋势、动量、资金流、量能、持仓、情绪、独立性
+#### A层：6个评分因子（权重100%）
+1. **多维度覆盖**: 价格行为（53%）+ 资金流（41%）+ 微观结构（6%）
 2. **鲁棒标准化**: 5步StandardizationChain，抗异常值
 3. **配置化管理**: 所有参数可调，无硬编码
-4. **独立性设计**: 8个因子正交，信息互补
-5. **可追溯性**: 从setup.sh到各因子的完整调用链路
-6. **降级机制**: 数据不足时返回中性值，不中断流程
+4. **独立性设计**: 6个因子正交，信息互补
+
+#### B层：4个调制器（权重0%）
+1. **执行参数调制**: 不参与评分，仅调制执行参数
+2. **风险管理**: L/S调制仓位和止损
+3. **机会识别**: F调制入场阈值
+4. **质量过滤**: I调制置信度
+
+#### 系统集成
+1. **可追溯性**: 从setup.sh到各因子的完整调用链路
+2. **降级机制**: 数据不足时返回中性值，不中断流程
+3. **软约束系统**: EV≤0和P<p_min不硬拒绝，仅标记
 
 ### 下一步优化（v7.2.45）
 
@@ -1330,6 +1290,6 @@ T, meta = score_trend(klines, params={'lookback': 30, 'slope_scale': 0.05})
 
 ---
 
-**文档生成**: v7.2.44系统分析
+**文档生成**: v6.6系统分析（v7.2.44代码基线）
 **作者**: Claude (根据代码追溯)
 **最后更新**: 2025-11-14
