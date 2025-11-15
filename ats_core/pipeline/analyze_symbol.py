@@ -589,13 +589,20 @@ def _analyze_symbol_core(
                 alt_prices_np = np.array(c[-use_len:], dtype=float)
                 btc_prices_np = np.array([_to_f(k[4]) for k in btc_klines[-use_len:]], dtype=float)
 
+                # P0-1修复：提取timestamps用于对齐
+                alt_timestamps_np = np.array([_to_f(k[0]) for k in k1[-use_len:]], dtype=float)
+                btc_timestamps_np = np.array([_to_f(k[0]) for k in btc_klines[-use_len:]], dtype=float)
+
                 # v7.3.2-Full: 调用新接口score_independence
                 # 返回: (I_score, metadata)
                 # I_score: 0-100质量因子（0=高相关，100=高独立）
+                # P0-1修复：传入timestamps进行对齐
                 I, I_meta = score_independence(
                     alt_prices=alt_prices_np,
                     btc_prices=btc_prices_np,
-                    params=params.get("independence", {})
+                    params=params.get("independence", {}),
+                    alt_timestamps=alt_timestamps_np,
+                    btc_timestamps=btc_timestamps_np
                 )
 
                 # 补充元数据
@@ -746,14 +753,29 @@ def _analyze_symbol_core(
     # 更新confidence使用调制后的值
     confidence_modulated = modulator_output.confidence_final
 
+    # ---- P1-1修复：提前计算market_meta获取T_BTC ----
+    # 在调用I因子veto检查前，先计算BTC/ETH市场趋势
+    import time
+    cache_key = f"{int(time.time() // 60)}"  # 按分钟缓存
+
+    try:
+        from ats_core.features.market_regime import calculate_market_regime
+        # 计算市场趋势并提取T_BTC
+        market_regime, market_meta = calculate_market_regime(cache_key)
+        T_BTC_actual = market_meta.get('btc_trend', 0)
+    except Exception as e:
+        # 市场趋势计算失败时使用中性值
+        market_regime = 0
+        market_meta = {"error": str(e), "btc_trend": 0, "eth_trend": 0, "regime_desc": "计算失败"}
+        T_BTC_actual = 0
+
     # ---- v7.3.2-Full: I因子风控闸门 + 软调制 ----
     # 调用apply_independence_full()获取veto逻辑和软调制参数
-    # 注意：market_meta在后面才计算，这里先初始化T_BTC=0（中性）
-    # 正式的veto检查将在is_prime判定前进行
+    # P1-1修复：使用真实的T_BTC代替硬编码的0
     try:
         i_veto_result = modulator_chain.apply_independence_full(
             I=I,  # 0-100质量因子
-            T_BTC=0,  # 暂时设为0，后续会使用实际的market趋势
+            T_BTC=T_BTC_actual,  # P1-1修复：使用真实的BTC趋势
             T_alt=T,  # 本币T因子（-100到+100）
             composite_score=weighted_score,  # A层综合分数
             config=None  # 使用默认配置
@@ -777,7 +799,8 @@ def _analyze_symbol_core(
             'effective_threshold': i_effective_threshold,
             'confidence_boost': i_confidence_boost,
             'cost_multiplier': i_cost_multiplier,
-            'note': 'T_BTC=0（中性），最终veto检查在市场过滤后进行'
+            'T_BTC': T_BTC_actual,
+            'note': 'P1-1修复：使用真实T_BTC进行veto判定'
         }
     except Exception as e:
         from ats_core.logging import warn
@@ -1323,14 +1346,11 @@ def _analyze_symbol_core(
 
     # ---- 6. BTC/ETH市场过滤器（方案B - 独立过滤 + 避免双重惩罚）----
     # 计算市场大盘趋势，避免逆势做单
-    import time
-    cache_key = f"{int(time.time() // 60)}"  # 按分钟缓存
-
+    # P1-1注：market_meta已在前面计算（Line 756-770），此处会命中缓存
     try:
-        from ats_core.features.market_regime import calculate_market_regime, apply_market_filter
+        from ats_core.features.market_regime import apply_market_filter
 
-        # 计算市场趋势
-        market_regime, market_meta = calculate_market_regime(cache_key)
+        # P1-1注：market_regime和market_meta已在前面计算，这里直接使用
 
         # 应用市场过滤（逆势惩罚）
         P_chosen_filtered, prime_strength_filtered, market_adjustment_reason = apply_market_filter(
@@ -1363,20 +1383,15 @@ def _analyze_symbol_core(
         market_meta = {"error": str(e), "btc_trend": 0, "eth_trend": 0, "regime_desc": "计算失败"}
         penalty_reason = ""
 
-    # ---- v7.3.2-Full: I因子最终veto检查（使用实际T_BTC） ----
-    # v7.3.2-Full Phase 5: 使用统一MarketContext中的btc_trend
-    # 性能优化：T_BTC由batch_scan全局计算1次，避免400次重复计算
+    # ---- v7.3.2-Full: I因子最终veto检查（应用veto结果） ----
+    # P1-1修复：T_BTC_actual已在前面计算（Line 765），这里直接应用veto结果
+    # 注意：前面的preliminary检查（Line 776-804）已使用真实T_BTC，这里是最终应用阶段
     try:
-        # 从market_meta提取btc_trend作为T_BTC
-        if market_meta is not None:
-            T_BTC_actual = market_meta.get('btc_trend', 0)
-        else:
-            # 向后兼容：如果没有传入market_meta，使用0（中性趋势）
-            T_BTC_actual = 0
-
+        # P1-1注：T_BTC_actual已在前面计算，此处直接重用
+        # 这里再次调用apply_independence_full确保在is_prime判定后获得最新的veto结果
         i_veto_final = modulator_chain.apply_independence_full(
             I=I,  # 0-100质量因子
-            T_BTC=T_BTC_actual,  # BTC趋势（从market_meta获取）
+            T_BTC=T_BTC_actual,  # P1-1修复：使用真实的BTC趋势（已在前面计算）
             T_alt=T,  # 本币T因子
             composite_score=weighted_score,  # A层综合分数
             config=None  # 使用默认配置
@@ -1398,7 +1413,7 @@ def _analyze_symbol_core(
             'veto_reasons': i_veto_final_reasons,
             'T_BTC': T_BTC_actual,
             'applied': i_veto_final_flag and is_prime,
-            'note': '使用实际T_BTC进行最终veto判定'
+            'note': 'P1-1修复：使用真实T_BTC进行最终veto判定'
         }
     except Exception as e:
         from ats_core.logging import warn

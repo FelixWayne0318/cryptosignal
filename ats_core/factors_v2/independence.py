@@ -121,7 +121,9 @@ def _remove_outliers_3sigma(
 def calculate_beta_btc_only(
     alt_prices: np.ndarray,
     btc_prices: np.ndarray,
-    params: Dict[str, Any]
+    params: Dict[str, Any],
+    alt_timestamps: Optional[np.ndarray] = None,
+    btc_timestamps: Optional[np.ndarray] = None
 ) -> Tuple[float, float, int, str]:
     """
     BTC-only Beta回归（v7.3.2-Full核心算法）
@@ -130,10 +132,11 @@ def calculate_beta_btc_only(
     alt_ret = α + β_BTC * btc_ret + ε
 
     流程：
-    1. 计算log-return
-    2. 3σ异常值过滤
-    3. OLS回归计算β和R²
-    4. 数据质量检查
+    1. 时间戳对齐（P0-1修复）
+    2. 计算log-return
+    3. 3σ异常值过滤
+    4. OLS回归计算β和R²
+    5. 数据质量检查
 
     Args:
         alt_prices: 山寨币价格序列（numpy数组）
@@ -143,17 +146,20 @@ def calculate_beta_btc_only(
             - min_points: 最小有效样本数
             - outlier_sigma: 异常值过滤的sigma倍数
             - use_log_return: 是否使用对数收益率
+        alt_timestamps: 山寨币时间戳序列（可选，P0-1修复）
+        btc_timestamps: BTC时间戳序列（可选，P0-1修复）
 
     Returns:
         (beta_btc, r2, n_points, status)
         - beta_btc: BTC的Beta系数
         - r2: R²决定系数
         - n_points: 有效样本数
-        - status: "ok" / "low_r2" / "insufficient_data"
+        - status: "ok" / "low_r2" / "insufficient_data" / "timestamp_mismatch"
 
     Note:
         - 所有参数从config读取，无硬编码
         - eps常量从RuntimeConfig.get_numeric_stability("independence")读取
+        - P0-1修复：如果提供timestamps，会在计算收益率前进行对齐
     """
     # 1. 加载配置
     try:
@@ -175,6 +181,26 @@ def calculate_beta_btc_only(
     # 2. 截取窗口
     alt_window = alt_prices[-window_hours-1:] if len(alt_prices) > window_hours else alt_prices
     btc_window = btc_prices[-window_hours-1:] if len(btc_prices) > window_hours else btc_prices
+
+    # P0-1修复：时间戳对齐（如果提供了timestamps）
+    if alt_timestamps is not None and btc_timestamps is not None:
+        # 截取对应的时间戳窗口
+        alt_ts_window = alt_timestamps[-window_hours-1:] if len(alt_timestamps) > window_hours else alt_timestamps
+        btc_ts_window = btc_timestamps[-window_hours-1:] if len(btc_timestamps) > window_hours else btc_timestamps
+
+        # 找到共同的时间戳
+        common_ts = np.intersect1d(alt_ts_window, btc_ts_window)
+
+        if len(common_ts) < min_points:
+            # 共同时间戳不足，无法进行回归
+            return 0.0, 0.0, len(common_ts), "timestamp_mismatch"
+
+        # 对齐价格数据到共同时间戳
+        alt_indices = np.searchsorted(alt_ts_window, common_ts)
+        btc_indices = np.searchsorted(btc_ts_window, common_ts)
+
+        alt_window = alt_window[alt_indices]
+        btc_window = btc_window[btc_indices]
 
     # 3. 计算收益率
     if use_log_return:
@@ -232,7 +258,9 @@ def calculate_beta_btc_only(
 def score_independence(
     alt_prices: np.ndarray,
     btc_prices: np.ndarray,
-    params: Optional[Dict[str, Any]] = None
+    params: Optional[Dict[str, Any]] = None,
+    alt_timestamps: Optional[np.ndarray] = None,
+    btc_timestamps: Optional[np.ndarray] = None
 ) -> Tuple[int, Dict[str, Any]]:
     """
     I（独立性）因子评分 - v7.3.2-Full BTC-only版本
@@ -254,6 +282,8 @@ def score_independence(
                 支持的参数：
                 - regression: {window_hours, min_points, outlier_sigma, use_log_return}
                 - scoring: {r2_min, beta_low, beta_high, mapping}
+        alt_timestamps: 山寨币时间戳序列（可选，P0-1修复）
+        btc_timestamps: BTC时间戳序列（可选，P0-1修复）
 
     Returns:
         (I_score, metadata)
@@ -262,7 +292,7 @@ def score_independence(
             - beta_btc: float, BTC的Beta系数
             - r2: float, R²决定系数
             - n_points: int, 有效样本数
-            - status: str, "ok" / "low_r2" / "insufficient_data"
+            - status: str, "ok" / "low_r2" / "insufficient_data" / "timestamp_mismatch"
             - I_raw: float, 未截断的原始I值（调试用）
             - mapping_category: str, β所属的映射类别
 
@@ -270,6 +300,7 @@ def score_independence(
         - 所有参数从config/factors_unified.json的I节点读取
         - eps常量从config/numeric_stability.json读取
         - 零硬编码实现
+        - P0-1修复：如果提供timestamps，会在回归前进行对齐
     """
     # === 1. 加载配置 ===
     if params is None:
@@ -293,8 +324,11 @@ def score_independence(
     mapping_params = params.get("mapping", {})  # v7.3.2-Full: mapping 从 factor_ranges.json 读取
 
     # === 2. 调用BTC-only β回归 ===
+    # P0-1修复：传入timestamps进行对齐
     beta_btc, r2, n_points, status = calculate_beta_btc_only(
-        alt_prices, btc_prices, regression_params
+        alt_prices, btc_prices, regression_params,
+        alt_timestamps=alt_timestamps,
+        btc_timestamps=btc_timestamps
     )
 
     # === 3. R²过滤 + I打分 ===
