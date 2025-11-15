@@ -81,9 +81,9 @@
     "T": {
       "name": "Trend",
       "layer": "price_action",
-      "weight": 24,
+      "weight": 23,
       "enabled": true,
-      "description": "趋势强度（EMA交叉+斜率+R²）",
+      "description": "趋势强度（EMA交叉+斜率+R²，v7.3.3权重调整）",
       "params": {
         "ema_order_min_bars": 6,
         "slope_lookback": 12,
@@ -115,9 +115,9 @@
     "C+": {
       "name": "Enhanced CVD",
       "layer": "money_flow",
-      "weight": 27,
+      "weight": 26,
       "enabled": true,
-      "description": "增强CVD（资金流+拥挤度检测，v6.7权重提升）",
+      "description": "增强CVD（资金流+拥挤度检测，v7.3.3权重调整）",
       "params": {
         "lookback_hours": 6,
         "cvd_scale": 0.15,
@@ -156,9 +156,9 @@
     "V+": {
       "name": "Volume + Trigger",
       "layer": "price_action",
-      "weight": 12,
+      "weight": 11,
       "enabled": true,
-      "description": "成交量放大（配合价格方向，自适应阈值）",
+      "description": "成交量放大（配合价格方向，自适应阈值，v7.3.3权重调整）",
       "params": {
         "vlevel_scale": 0.9,
         "vroc_scale": 0.9,
@@ -171,9 +171,9 @@
     "O+": {
       "name": "OI Regime",
       "layer": "money_flow",
-      "weight": 21,
+      "weight": 20,
       "enabled": true,
-      "description": "OI持仓量变化（名义OI，自适应阈值，v6.7权重提升）",
+      "description": "OI持仓量变化（名义OI，自适应阈值，v7.3.3权重调整）",
       "params": {
         "oi24_scale": 2.0,
         "align_scale": 4.0,
@@ -209,9 +209,9 @@
     "B": {
       "name": "Basis + Funding",
       "layer": "microstructure",
-      "weight": 6,
+      "weight": 10,
       "enabled": true,
-      "description": "基差+资金费（市场情绪）",
+      "description": "基差+资金费（市场情绪，v7.3.3权重提升）",
       "params": {
         "basis_neutral_bps": 50,
         "basis_extreme_bps": 100,
@@ -222,21 +222,6 @@
         "fwi_enabled": false,
         "fwi_window_minutes": 30,
         "fwi_boost_max": 20
-      }
-    },
-    "Q": {
-      "name": "Liquidation",
-      "layer": "microstructure",
-      "weight": 10,
-      "enabled": true,
-      "description": "清算密度倾斜（级联风险）",
-      "params": {
-        "interval_minutes": 5,
-        "zscore_window_hours": 1,
-        "lti_multiplier": 50,
-        "wall_detection_enabled": true,
-        "wall_min_volume_usdt": 1000000,
-        "wall_cluster_pct": 0.02
       }
     },
     "I": {
