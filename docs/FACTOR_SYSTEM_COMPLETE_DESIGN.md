@@ -1,10 +1,10 @@
-# 因子系统完整设计文档（v7.3.2-Full - I因子重构版）
+# 因子系统完整设计文档（v7.3.4 - I因子重构版）
 
 **生成日期**: 2025-11-15
-**版本**: v7.3.2-Full (I因子BTC-only重构 + MarketContext优化)
+**版本**: v7.3.4 (I因子BTC-only重构 + MarketContext优化)
 **文档类型**: 技术分析报告 - 从setup.sh代码追溯完整因子设计
 
-**v7.3.2-Full主要更新**:
+**v7.3.4主要更新**:
 - ✅ I因子BTC-only回归（移除ETH依赖）
 - ✅ I因子veto风控逻辑（高Beta币种保护）
 - ✅ MarketContext全局优化（400x性能提升）

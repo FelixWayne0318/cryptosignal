@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # coding: utf-8
 """
-实时信号扫描器（v7.3.2-Full - I因子BTC-only + MarketContext优化）
+实时信号扫描器（v7.3.4 - I因子BTC-only + MarketContext优化）
 
 功能特性:
-1. ✅ v7.3.2-Full I因子（BTC-only回归 + veto风控 + MarketContext优化）
+1. ✅ v7.3.4 I因子（BTC-only回归 + veto风控 + MarketContext优化）
 2. ✅ WebSocket批量扫描优化（0次API调用）
 3. ✅ 自动数据采集（信号快照、分析数据库）
 4. ✅ Telegram通知（v7.3.2格式 + 扫描摘要）
@@ -54,12 +54,12 @@ sys.path.insert(0, str(project_root))
 from ats_core.pipeline.batch_scan_optimized import OptimizedBatchScanner
 from ats_core.logging import log, warn, error
 from ats_core.outputs.telegram_fmt import render_trade_v72
-# v7.3.2-Full: batch_scan已集成I因子veto逻辑，无需额外处理
+# v7.3.4: batch_scan已集成I因子veto逻辑，无需额外处理
 from ats_core.publishing.anti_jitter import AntiJitter
 from ats_core.config.anti_jitter_config import get_config
 from ats_core.analysis.report_writer import get_report_writer
 
-# v7.3.2-Full: 数据采集模块
+# v7.3.4: 数据采集模块
 try:
     from ats_core.data.trade_recorder import get_recorder
     from ats_core.data.analysis_db import get_analysis_db
@@ -129,7 +129,7 @@ def telegram_send_wrapper(message: str, bot_token: str, chat_id: str):
 
 
 class RealtimeSignalScanner:
-    """实时信号扫描器（v7.3.2-Full版本）"""
+    """实时信号扫描器（v7.3.4版本）"""
 
     def __init__(
         self,
@@ -142,9 +142,9 @@ class RealtimeSignalScanner:
         初始化扫描器
 
         Args:
-            min_score: 最低confidence阈值（v7.3.2-Full信号）
+            min_score: 最低confidence阈值（v7.3.4信号）
             send_telegram: 是否发送Telegram通知
-            record_data: 是否记录数据到数据库（v7.3.2-Full特性）
+            record_data: 是否记录数据到数据库（v7.3.4特性）
             verbose: 是否显示详细输出
         """
         self.min_score = min_score
@@ -200,7 +200,7 @@ class RealtimeSignalScanner:
             return
 
         log("\n" + "=" * 60)
-        log("🚀 初始化实时信号扫描器（v7.3.2-Full - I因子BTC-only + MarketContext优化）")
+        log("🚀 初始化实时信号扫描器（v7.3.4 - I因子BTC-only + MarketContext优化）")
         log("=" * 60)
 
         # 初始化批量扫描器
@@ -223,7 +223,7 @@ class RealtimeSignalScanner:
             await self.initialize()
 
         log("\n" + "=" * 60)
-        log(f"📡 开始v7.3.2-Full扫描 - {datetime.now(TZ_UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        log(f"📡 开始v7.3.4扫描 - {datetime.now(TZ_UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}")
         log("=" * 60)
 
         # 执行批量扫描
@@ -476,7 +476,7 @@ class RealtimeSignalScanner:
 async def main():
     """主函数"""
     parser = argparse.ArgumentParser(
-        description='实时信号扫描器（v7.3.2-Full - I因子BTC-only + MarketContext优化）',
+        description='实时信号扫描器（v7.3.4 - I因子BTC-only + MarketContext优化）',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
