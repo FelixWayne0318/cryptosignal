@@ -1,9 +1,25 @@
 #!/bin/bash
 # ==========================================
-# CryptoSignal v7.3.2-Full 一键部署脚本
+# CryptoSignal v7.3.2 一键部署脚本
 # 用途：拉取代码、检测环境、安装依赖、启动系统
-# 特点：自动更新代码、清理缓存、验证结构
-# v7.3.2-Full: I因子BTC-only重构 + MarketContext优化
+# 特点：自动更新代码、清理缓存、验证结构、可配置化
+# v7.3.2: I因子BTC-only重构 + MarketContext优化
+# ==========================================
+#
+# 环境变量配置（可选）:
+#   SCANNER_SCRIPT    扫描器脚本路径（默认：scripts/realtime_signal_scanner.py）
+#   SCAN_INTERVAL     扫描间隔秒数（默认：300）
+#   AUTO_COMMIT_REPORTS 自动提交报告（默认：false）
+#
+# 使用示例:
+#   # 默认配置
+#   ./setup.sh
+#
+#   # 自定义扫描间隔（每10分钟）
+#   SCAN_INTERVAL=600 ./setup.sh
+#
+#   # 使用不同的扫描器
+#   SCANNER_SCRIPT=scripts/realtime_signal_scanner_v72.py ./setup.sh
 # ==========================================
 
 set -e
@@ -187,12 +203,19 @@ sleep 1
 # 创建日志文件名
 LOG_FILE=~/cryptosignal_$(date +%Y%m%d_%H%M%S).log
 
-# 后台启动扫描器（v7.3.2-Full版本）
-echo "📝 后台启动扫描器（v7.3.2-Full - I因子BTC-only + MarketContext优化）..."
-echo "   📍 自动提交已禁用（AUTO_COMMIT_REPORTS=false）"
+# 后台启动扫描器（v7.3.2版本）
+# 支持环境变量配置（P1-3修复）
+SCANNER_SCRIPT="${SCANNER_SCRIPT:-scripts/realtime_signal_scanner.py}"
+SCAN_INTERVAL="${SCAN_INTERVAL:-300}"
+AUTO_COMMIT_REPORTS="${AUTO_COMMIT_REPORTS:-false}"
+
+echo "📝 后台启动扫描器（v7.3.2 - I因子BTC-only + MarketContext优化）..."
+echo "   📍 扫描器脚本: $SCANNER_SCRIPT"
+echo "   ⏰ 扫描间隔: ${SCAN_INTERVAL}秒"
+echo "   📍 自动提交: $AUTO_COMMIT_REPORTS"
 echo "   📁 扫描报告保存在本地: reports/latest/"
-export AUTO_COMMIT_REPORTS=false
-nohup python3 scripts/realtime_signal_scanner.py --interval 300 > "$LOG_FILE" 2>&1 &
+export AUTO_COMMIT_REPORTS
+nohup python3 "$SCANNER_SCRIPT" --interval "$SCAN_INTERVAL" > "$LOG_FILE" 2>&1 &
 PID=$!
 
 sleep 2
