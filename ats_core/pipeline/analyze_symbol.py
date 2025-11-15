@@ -30,6 +30,7 @@ from statistics import median
 
 from ats_core.cfg import CFG
 from ats_core.config.threshold_config import get_thresholds  # v7.2.3: 配置管理器
+from ats_core.config.factor_config import get_factor_config  # v7.3.4: 配置统一方案
 from ats_core.sources.binance import get_klines, get_open_interest_hist, get_spot_klines
 from ats_core.features.cvd import cvd_from_klines, cvd_mix_with_oi_price
 from ats_core.scoring.scorecard import scorecard, get_factor_contributions
@@ -638,27 +639,34 @@ def _analyze_symbol_core(
     # v6.6架构：L/S/F/I移至B层调制器，不参与方向评分
     # 符合MODULATORS.md § 2.1规范：调制器只调制position/Teff/cost/confidence
 
-    # v6.7基础权重（6因子A层系统：总权重100%）
-    # 配置优先级：config/params.json > 硬编码默认值
-    # P0修复: fallback权重必须与params.json保持一致
-    base_weights_raw = params.get("weights", {
-        # Layer 1: 价格行为层（46%）- v6.7 P2.2调整
-        "T": 24.0,  # 趋势（v6.6: +4% from S/Q重分配）
-        "M": 10.0,  # 动量（v6.7 P2.2: 17%→10%, 降低与T的信息重叠66.4%）
-        "V": 12.0,  # 量能（v6.6: +1% from S/Q重分配）
-        # Layer 2: 资金流层（48%）- v6.7 P2.2调整
-        "C": 27.0,  # CVD资金流（v6.7 P2.2: 24%→27%, +3%）
-        "O": 21.0,  # OI持仓（v6.7 P2.2: 17%→21%, +4%）
-        # Layer 3: 微观结构层（6%）
-        "B": 6.0,   # 基差+资金费（v6.6: unchanged）
-        # B层调制器（不参与评分，权重=0）
-        "L": 0.0,   # 流动性调制器（v6.6: moved from A-layer）
-        "S": 0.0,   # 结构调制器（v6.6: moved from A-layer）
-        "F": 0.0,   # 资金领先调制器（v6.6: already B-layer）
-        "I": 0.0,   # 独立性调制器（v6.6: already B-layer）
-        # 废弃因子
-        "E": 0.0,   # 环境因子（v6.6: deprecated）
-    })  # A层6因子总计: 24+10+12+27+21+6 = 100.0 ✓
+    # v7.3.4配置统一：从factors_unified.json读取权重（唯一来源）
+    # 配置优先级：config/factors_unified.json（通过FactorConfig读取）
+    # 废弃：config/params.json的weights字段（已标记为DEPRECATED）
+    # 参考：docs/STRATEGIC_DESIGN_FIX_v7.3.3_2025-11-15.md - 配置统一方案
+    try:
+        factor_config = get_factor_config()
+        base_weights_raw = factor_config.get_weights_dict()
+        # v7.3.3权重: T23/M10/C26/V11/O20/B10 (总计100%)
+        # B层调制器: L0/S0/F0/I0 (不参与评分)
+    except Exception as e:
+        # Fallback: 如果配置加载失败，使用v7.3.3硬编码权重
+        print(f"⚠️ FactorConfig加载失败，使用fallback权重: {e}")
+        base_weights_raw = {
+            # v7.3.3权重（与factors_unified.json保持一致）
+            "T": 23.0,  # 趋势（v7.3.3: -1% for B因子提升）
+            "M": 10.0,  # 动量（v6.7 P2.2: 17%→10%, 降低与T的信息重叠）
+            "C": 26.0,  # CVD资金流（v7.3.3: -1% for B因子提升）
+            "V": 11.0,  # 量能（v7.3.3: -1% for B因子提升）
+            "O": 20.0,  # OI持仓（v7.3.3: -1% for B因子提升）
+            "B": 10.0,  # 基差+资金费（v7.3.3: 6%→10%, +67%提升）
+            # B层调制器（不参与评分，权重=0）
+            "L": 0.0,   # 流动性调制器
+            "S": 0.0,   # 结构调制器
+            "F": 0.0,   # 资金领先调制器
+            "I": 0.0,   # 独立性调制器
+            # 废弃因子
+            "E": 0.0,   # 环境因子（v6.6: deprecated）
+        }  # A层6因子总计: 23+10+26+11+20+10 = 100.0 ✓
 
     # 过滤注释字段（防止传入blend_weights时出现类型错误）
     base_weights = {k: v for k, v in base_weights_raw.items() if not k.startswith('_')}

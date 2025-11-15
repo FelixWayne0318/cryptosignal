@@ -128,21 +128,14 @@
     "tp2_room_floor_R": 1.8
   },
 
-  "weights": {
-    "_comment": "v7.3.3 - 战略设计优化：B因子权重提升（基差+资金费情绪指标）",
-    "T": 23.0,
-    "M": 10.0,
-    "C": 26.0,
-    "V": 11.0,
-    "O": 20.0,
-    "B": 10.0,
-    "_b_layer": "以下为B层调制器，不参与评分",
-    "L": 0.0,
-    "S": 0.0,
-    "F": 0.0,
-    "I": 0.0,
-    "E": 0.0,
-    "_v733_changes": "B: 6%→10%(情绪权重提升), T/C/V/O各减1%"
+  "weights_DEPRECATED": {
+    "_DEPRECATED_NOTICE": "⚠️ 此字段已废弃（v7.3.4配置统一）",
+    "_NEW_LOCATION": "所有权重配置已迁移到 config/factors_unified.json",
+    "_MIGRATION_DATE": "2025-11-15",
+    "_REASON": "统一配置管理：factors_unified.json作为唯一权威来源",
+    "_USAGE": "代码现从 FactorConfig.get_weights_dict() 读取，不再使用此字段",
+    "_BACKWARD_COMPAT": "暂时保留此字段以供参考，v8.0将完全删除",
+    "_v733_final": "T=23%, M=10%, C=26%, V=11%, O=20%, B=10% (总计100%)"
   },
   "weights_comment": {
     "_version": "v7.3.3 - 战略设计优化（基于战略评估报告）",
