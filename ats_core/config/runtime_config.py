@@ -1,11 +1,27 @@
 """
-运行时配置中心 - v7.3.2-Full
+运行时配置中心 - v7.3.2
 
-职责：
-1. 统一管理所有配置文件的加载
-2. 提供类型安全的配置访问接口
-3. 缓存配置，避免重复读取
-4. 配置校验，防止误配置导致系统异常
+✅ 职责范围（推荐使用）:
+- numeric_stability.json: 数值稳定性配置
+- factor_ranges.json: 因子范围配置
+- factors_unified.json: 因子统一配置
+- logging.json: 日志格式配置
+- signal_thresholds.json: 信号阈值配置（通过ThresholdConfig）
+
+🎯 设计模式:
+- 单例模式：全局唯一配置实例
+- 懒加载：首次访问时才加载配置
+- 缓存：加载后缓存在内存中
+- 校验：加载时验证配置格式和内容
+
+📌 何时使用:
+- ✅ 所有新代码应使用此模块
+- ✅ 替代旧的 cfg.py（逐步迁移）
+- ✅ 读取因子参数、阈值、稳定性配置
+
+⚠️ 与cfg.py的关系:
+- cfg.py: 仅负责params.json（旧系统，v8.0废弃）
+- RuntimeConfig: 负责所有其他配置（推荐）
 
 使用示例：
     from ats_core.config.runtime_config import RuntimeConfig
@@ -14,10 +30,10 @@
     stability = RuntimeConfig.get_numeric_stability("independence")
     eps_var_min = stability["eps_var_min"]
 
-    # 获取因子范围配置
-    i_range = RuntimeConfig.get_factor_range("I")
-    i_min = i_range["min"]
-    i_neutral = i_range["neutral"]
+    # 获取因子完整配置（v7.3.2新增）
+    i_config = RuntimeConfig.get_factor_config("I")
+    regression_params = i_config["regression"]
+    mapping = i_config["mapping"]
 
     # 获取日志格式配置
     fmt = RuntimeConfig.get_logging_float_format()
@@ -25,7 +41,10 @@
 
 版本：v7.3.2
 作者：Claude Code
-日期：2025-11-15
+创建日期：2025-11-15
+最后更新：2025-11-15
+
+参考: docs/health_checks/system_architecture_health_check_2025-11-15.md#P0-1
 """
 
 import json

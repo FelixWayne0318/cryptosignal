@@ -1,5 +1,25 @@
 # ats_core/cfg.py
 # coding: utf-8
+"""
+配置管理器 - 旧系统 (v6.6架构)
+
+⚠️ 职责范围（临时）:
+- 仅负责 params.json 读取
+- 仅负责因子权重校验 (6+4架构)
+- 向后兼容性支持
+
+🎯 未来计划（v8.0）:
+- 本模块将被废弃
+- 所有配置统一迁移到 RuntimeConfig
+- 权重校验迁移到 RuntimeConfig
+
+📌 何时使用:
+- ❌ 新代码不应使用此模块
+- ✅ 仅 analyze_symbol.py 历史兼容
+- ✅ 新代码请使用 ats_core.config.runtime_config.RuntimeConfig
+
+参考: docs/health_checks/system_architecture_health_check_2025-11-15.md#P0-1
+"""
 from __future__ import annotations
 
 import json
