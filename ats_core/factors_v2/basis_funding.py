@@ -67,35 +67,52 @@ def _to_f(x) -> float:
 def get_adaptive_basis_thresholds(
     basis_history: list,
     mode: str = 'hybrid',
-    min_data_points: int = 50
+    min_data_points: int = 50,
+    config_params: Dict[str, Any] = None
 ) -> Tuple[float, float]:
     """
-    计算自适应基差阈值（P0.1修复）
+    计算自适应基差阈值（v7.3.4: 完全配置化）
 
     Args:
         basis_history: 历史基差数据（bps）
         mode: 'adaptive' | 'legacy' | 'hybrid'
         min_data_points: 最小数据点数（默认50）
+        config_params: 配置参数（v7.3.4新增）
 
     Returns:
         (neutral_bps, extreme_bps)
     """
-    # Legacy模式或数据不足时使用固定阈值
+    # v7.3.4: 从配置读取参数
+    if config_params is None:
+        config_params = {}
+
+    # 读取legacy fallback阈值
+    basis_neutral_bps = config_params.get('basis_neutral_bps', 50.0)
+    basis_extreme_bps = config_params.get('basis_extreme_bps', 100.0)
+
+    # Legacy模式或数据不足时使用配置的固定阈值
     if mode == 'legacy' or len(basis_history) < min_data_points:
-        return 50.0, 100.0
+        return basis_neutral_bps, basis_extreme_bps
 
     # 计算滚动百分位
     basis_array = np.array(basis_history)
     neutral_bps = float(np.percentile(np.abs(basis_array), 50))  # 中位数
     extreme_bps = float(np.percentile(np.abs(basis_array), 90))  # 90分位
 
-    # 边界保护（防止极端市场）
-    neutral_bps = np.clip(neutral_bps, 20.0, 200.0)
-    extreme_bps = np.clip(extreme_bps, 50.0, 300.0)
+    # v7.3.4: 边界保护（从配置读取）
+    boundary = config_params.get('basis_boundary_protection', {})
+    neutral_min = boundary.get('neutral_min', 20.0)
+    neutral_max = boundary.get('neutral_max', 200.0)
+    extreme_min = boundary.get('extreme_min', 50.0)
+    extreme_max = boundary.get('extreme_max', 300.0)
 
-    # 确保extreme > neutral
+    neutral_bps = np.clip(neutral_bps, neutral_min, neutral_max)
+    extreme_bps = np.clip(extreme_bps, extreme_min, extreme_max)
+
+    # v7.3.4: 极端阈值倍数从配置读取
+    extreme_multiplier = config_params.get('extreme_multiplier', 1.5)
     if extreme_bps <= neutral_bps:
-        extreme_bps = neutral_bps * 1.5
+        extreme_bps = neutral_bps * extreme_multiplier
 
     return neutral_bps, extreme_bps
 
@@ -103,35 +120,52 @@ def get_adaptive_basis_thresholds(
 def get_adaptive_funding_thresholds(
     funding_history: list,
     mode: str = 'hybrid',
-    min_data_points: int = 50
+    min_data_points: int = 50,
+    config_params: Dict[str, Any] = None
 ) -> Tuple[float, float]:
     """
-    计算自适应资金费率阈值（P0.1修复）
+    计算自适应资金费率阈值（v7.3.4: 完全配置化）
 
     Args:
         funding_history: 历史资金费率数据
         mode: 'adaptive' | 'legacy' | 'hybrid'
         min_data_points: 最小数据点数（默认50）
+        config_params: 配置参数（v7.3.4新增）
 
     Returns:
         (neutral_rate, extreme_rate)
     """
-    # Legacy模式或数据不足时使用固定阈值
+    # v7.3.4: 从配置读取参数
+    if config_params is None:
+        config_params = {}
+
+    # 读取legacy fallback阈值
+    funding_neutral_rate = config_params.get('funding_neutral_rate', 0.001)
+    funding_extreme_rate = config_params.get('funding_extreme_rate', 0.002)
+
+    # Legacy模式或数据不足时使用配置的固定阈值
     if mode == 'legacy' or len(funding_history) < min_data_points:
-        return 0.001, 0.002
+        return funding_neutral_rate, funding_extreme_rate
 
     # 计算滚动百分位
     funding_array = np.array(funding_history)
     neutral_rate = float(np.percentile(np.abs(funding_array), 50))
     extreme_rate = float(np.percentile(np.abs(funding_array), 90))
 
-    # 边界保护
-    neutral_rate = np.clip(neutral_rate, 0.0001, 0.005)
-    extreme_rate = np.clip(extreme_rate, 0.0005, 0.01)
+    # v7.3.4: 边界保护（从配置读取）
+    boundary = config_params.get('funding_boundary_protection', {})
+    neutral_min = boundary.get('neutral_min', 0.0001)
+    neutral_max = boundary.get('neutral_max', 0.005)
+    extreme_min = boundary.get('extreme_min', 0.0005)
+    extreme_max = boundary.get('extreme_max', 0.01)
 
-    # 确保extreme > neutral
+    neutral_rate = np.clip(neutral_rate, neutral_min, neutral_max)
+    extreme_rate = np.clip(extreme_rate, extreme_min, extreme_max)
+
+    # v7.3.4: 极端阈值倍数从配置读取
+    extreme_multiplier = config_params.get('extreme_multiplier', 1.5)
     if extreme_rate <= neutral_rate:
-        extreme_rate = neutral_rate * 1.5
+        extreme_rate = neutral_rate * extreme_multiplier
 
     return neutral_rate, extreme_rate
 
@@ -139,67 +173,85 @@ def get_adaptive_funding_thresholds(
 def _normalize_basis(
     basis_bps: float,
     neutral_bps: float,
-    extreme_bps: float
+    extreme_bps: float,
+    normalization_zones: Dict[str, float] = None
 ) -> float:
     """
-    归一化基差到±100
+    归一化基差到±100（v7.3.4: 完全配置化）
 
     Args:
         basis_bps: 基差（基点）
         neutral_bps: 中性基差阈值
         extreme_bps: 极端基差阈值
+        normalization_zones: 归一化区域配置（v7.3.4新增）
 
     Returns:
         归一化评分 (-100 到 +100)
     """
+    # v7.3.4: 从配置读取归一化区域
+    if normalization_zones is None:
+        normalization_zones = {}
+
+    neutral_zone = normalization_zones.get('neutral_zone', 33.0)
+    extreme_zone = normalization_zones.get('extreme_zone', 67.0)
+
     if abs(basis_bps) <= neutral_bps:
-        # 中性区域：线性映射到±33
-        return (basis_bps / neutral_bps) * 33.0
+        # 中性区域：线性映射到±neutral_zone
+        return (basis_bps / neutral_bps) * neutral_zone
     else:
-        # 极端区域：映射到±33到±100
+        # 极端区域：映射到±neutral_zone到±100
         if basis_bps > 0:
             # 正基差（看涨）
             excess = basis_bps - neutral_bps
             ratio = min(1.0, excess / (extreme_bps - neutral_bps))
-            return 33.0 + ratio * 67.0
+            return neutral_zone + ratio * extreme_zone
         else:
             # 负基差（看跌）
             excess = abs(basis_bps) - neutral_bps
             ratio = min(1.0, excess / (extreme_bps - neutral_bps))
-            return -33.0 - ratio * 67.0
+            return -neutral_zone - ratio * extreme_zone
 
 
 def _normalize_funding(
     funding_rate: float,
     neutral_rate: float,
-    extreme_rate: float
+    extreme_rate: float,
+    normalization_zones: Dict[str, float] = None
 ) -> float:
     """
-    归一化资金费率到±100
+    归一化资金费率到±100（v7.3.4: 完全配置化）
 
     Args:
         funding_rate: 资金费率
         neutral_rate: 中性费率阈值
         extreme_rate: 极端费率阈值
+        normalization_zones: 归一化区域配置（v7.3.4新增）
 
     Returns:
         归一化评分 (-100 到 +100)
     """
+    # v7.3.4: 从配置读取归一化区域
+    if normalization_zones is None:
+        normalization_zones = {}
+
+    neutral_zone = normalization_zones.get('neutral_zone', 33.0)
+    extreme_zone = normalization_zones.get('extreme_zone', 67.0)
+
     if abs(funding_rate) <= neutral_rate:
-        # 中性区域：线性映射到±33
-        return (funding_rate / neutral_rate) * 33.0
+        # 中性区域：线性映射到±neutral_zone
+        return (funding_rate / neutral_rate) * neutral_zone
     else:
-        # 极端区域：映射到±33到±100
+        # 极端区域：映射到±neutral_zone到±100
         if funding_rate > 0:
             # 正费率（多头支付，看涨情绪）
             excess = funding_rate - neutral_rate
             ratio = min(1.0, excess / (extreme_rate - neutral_rate))
-            return 33.0 + ratio * 67.0
+            return neutral_zone + ratio * extreme_zone
         else:
             # 负费率（空头支付，看跌情绪）
             excess = abs(funding_rate) - neutral_rate
             ratio = min(1.0, excess / (extreme_rate - neutral_rate))
-            return -33.0 - ratio * 67.0
+            return -neutral_zone - ratio * extreme_zone
 
 
 def score_basis_funding(
@@ -237,13 +289,18 @@ def score_basis_funding(
     if params is None:
         params = {}
 
-    # P0.1: 自适应阈值模式
+    # v7.3.4: 自适应阈值模式（完全配置化）
     adaptive_mode = params.get('adaptive_threshold_mode', 'hybrid')
+    adaptive_min_data = params.get('adaptive_min_data_points', 50)
 
     # 计算自适应阈值（如果启用且有历史数据）
-    if adaptive_mode != 'legacy' and basis_history and len(basis_history) >= 50:
+    # v7.3.4: 传递config_params以消除函数内部硬编码
+    if adaptive_mode != 'legacy' and basis_history and len(basis_history) >= adaptive_min_data:
         basis_neutral, basis_extreme = get_adaptive_basis_thresholds(
-            basis_history, mode=adaptive_mode
+            basis_history,
+            mode=adaptive_mode,
+            min_data_points=adaptive_min_data,
+            config_params=params  # v7.3.4: 传递配置参数
         )
         threshold_source = 'adaptive'
     else:
@@ -252,9 +309,12 @@ def score_basis_funding(
         basis_extreme = params.get('basis_extreme_bps', 100)
         threshold_source = 'legacy'
 
-    if adaptive_mode != 'legacy' and funding_history and len(funding_history) >= 50:
+    if adaptive_mode != 'legacy' and funding_history and len(funding_history) >= adaptive_min_data:
         funding_neutral, funding_extreme = get_adaptive_funding_thresholds(
-            funding_history, mode=adaptive_mode
+            funding_history,
+            mode=adaptive_mode,
+            min_data_points=adaptive_min_data,
+            config_params=params  # v7.3.4: 传递配置参数
         )
     else:
         funding_neutral = params.get('funding_neutral_rate', 0.001)
@@ -263,6 +323,9 @@ def score_basis_funding(
     basis_weight = params.get('basis_weight', 0.6)
     funding_weight = params.get('funding_weight', 0.4)
     fwi_enabled = params.get('fwi_enabled', False)
+
+    # v7.3.4: 归一化区域配置
+    normalization_zones = params.get('normalization_zones', {})
 
     # === 1. 计算基差 ===
     perp_price = _to_f(perp_price)
@@ -277,12 +340,23 @@ def score_basis_funding(
     # 转换为基点（1 bps = 0.01%）
     basis_bps = basis_pct * 10000
 
-    # 归一化基差
-    basis_score = _normalize_basis(basis_bps, basis_neutral, basis_extreme)
+    # v7.3.4: 归一化基差（传递normalization_zones）
+    basis_score = _normalize_basis(
+        basis_bps,
+        basis_neutral,
+        basis_extreme,
+        normalization_zones=normalization_zones  # v7.3.4: 传递归一化区域配置
+    )
 
     # === 2. 归一化资金费率 ===
     funding_rate = _to_f(funding_rate)
-    funding_score = _normalize_funding(funding_rate, funding_neutral, funding_extreme)
+    # v7.3.4: 归一化资金费率（传递normalization_zones）
+    funding_score = _normalize_funding(
+        funding_rate,
+        funding_neutral,
+        funding_extreme,
+        normalization_zones=normalization_zones  # v7.3.4: 传递归一化区域配置
+    )
 
     # === 3. FWI增强（可选）===
     fwi_boost = 0.0

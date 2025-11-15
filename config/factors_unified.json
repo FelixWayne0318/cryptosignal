@@ -91,6 +91,15 @@
         "slope_scale": 0.08,
         "ema_bonus": 12.5,
         "r2_weight": 0.15
+      },
+      "fallback_params": {
+        "_comment": "配置加载失败时的降级默认值",
+        "ema_order_min_bars": 6,
+        "slope_lookback": 12,
+        "atr_period": 14,
+        "slope_scale": 0.08,
+        "ema_bonus": 12.5,
+        "r2_weight": 0.15
       }
     },
     "M": {
@@ -100,6 +109,19 @@
       "enabled": true,
       "description": "价格动量（加速度，短窗口EMA3/5，v6.7降权重减少与T重叠）",
       "params": {
+        "ema_fast": 3,
+        "ema_slow": 5,
+        "slope_lookback": 6,
+        "slope_scale": 2.0,
+        "accel_scale": 2.0,
+        "slope_weight": 0.6,
+        "accel_weight": 0.4,
+        "atr_period": 14,
+        "normalization_method": "relative_historical",
+        "min_historical_samples": 30
+      },
+      "fallback_params": {
+        "_comment": "配置加载失败时的降级默认值",
         "ema_fast": 3,
         "ema_slow": 5,
         "slope_lookback": 6,
@@ -175,6 +197,11 @@
         },
         "overextension_threshold": 0.8,
         "overextension_penalty": 0.1
+      },
+      "fallback_params": {
+        "_comment": "配置加载失败时的降级默认值",
+        "overextension_threshold": 0.8,
+        "overextension_penalty": 0.1
       }
     },
     "V+": {
@@ -190,6 +217,15 @@
         "vroc_weight": 0.4,
         "price_lookback": 5,
         "adaptive_threshold_mode": "hybrid"
+      },
+      "fallback_params": {
+        "_comment": "配置加载失败时的降级默认值",
+        "vlevel_scale": 0.9,
+        "vroc_scale": 0.9,
+        "vlevel_weight": 0.6,
+        "vroc_weight": 0.4,
+        "price_lookback": 5,
+        "adaptive_threshold_mode": "hybrid"
       }
     },
     "O+": {
@@ -199,6 +235,17 @@
       "enabled": true,
       "description": "OI持仓量变化（名义OI，自适应阈值，v7.3.3权重调整）",
       "params": {
+        "oi24_scale": 2.0,
+        "align_scale": 4.0,
+        "oi_weight": 0.7,
+        "align_weight": 0.3,
+        "crowding_p95_penalty": 10,
+        "adaptive_threshold_mode": "hybrid",
+        "use_notional_oi": true,
+        "contract_multiplier": 1.0
+      },
+      "fallback_params": {
+        "_comment": "配置加载失败时的降级默认值",
         "oi24_scale": 2.0,
         "align_scale": 4.0,
         "oi_weight": 0.7,
@@ -228,6 +275,21 @@
         "obi_weight": 0.1,
         "ldi_enabled": false,
         "ldi_penalty_max": 20
+      },
+      "fallback_params": {
+        "_comment": "配置加载失败时的降级默认值",
+        "spread_good_bps": 2.0,
+        "spread_bad_bps": 10.0,
+        "depth_target_usdt": 1000000,
+        "impact_notional_usdt": 100000,
+        "impact_max_pct": 0.01,
+        "orderbook_depth_levels": 10,
+        "spread_weight": 0.3,
+        "depth_weight": 0.3,
+        "impact_weight": 0.3,
+        "obi_weight": 0.1,
+        "ldi_enabled": false,
+        "ldi_penalty_max": 20
       }
     },
     "B": {
@@ -235,7 +297,7 @@
       "layer": "microstructure",
       "weight": 10,
       "enabled": true,
-      "description": "基差+资金费（市场情绪，v7.3.3权重提升）",
+      "description": "基差+资金费（市场情绪，v7.3.3权重提升，v7.3.4零硬编码）",
       "params": {
         "basis_neutral_bps": 50,
         "basis_extreme_bps": 100,
@@ -245,7 +307,42 @@
         "funding_weight": 0.4,
         "fwi_enabled": false,
         "fwi_window_minutes": 30,
-        "fwi_boost_max": 20
+        "fwi_boost_max": 20,
+        "adaptive_threshold_mode": "hybrid",
+        "adaptive_min_data_points": 50,
+        "basis_boundary_protection": {
+          "neutral_min": 20.0,
+          "neutral_max": 200.0,
+          "extreme_min": 50.0,
+          "extreme_max": 300.0,
+          "_comment": "自适应阈值的边界保护范围"
+        },
+        "funding_boundary_protection": {
+          "neutral_min": 0.0001,
+          "neutral_max": 0.005,
+          "extreme_min": 0.0005,
+          "extreme_max": 0.01,
+          "_comment": "资金费率自适应阈值的边界保护范围"
+        },
+        "normalization_zones": {
+          "neutral_zone": 33.0,
+          "extreme_zone": 67.0,
+          "_comment": "归一化时的区域划分：neutral区域±33，extreme区域±67"
+        },
+        "extreme_multiplier": 1.5,
+        "_comment": "v7.3.4: 完整配置化，消除硬编码"
+      },
+      "fallback_params": {
+        "_comment": "配置加载失败时的降级默认值",
+        "basis_neutral_bps": 50,
+        "basis_extreme_bps": 100,
+        "funding_neutral_rate": 0.001,
+        "funding_extreme_rate": 0.002,
+        "basis_weight": 0.6,
+        "funding_weight": 0.4,
+        "adaptive_threshold_mode": "hybrid",
+        "adaptive_min_data_points": 50,
+        "extreme_multiplier": 1.5
       }
     },
     "I": {
@@ -305,6 +402,20 @@
             "description": "|β|≥1.5，I分数0-15"
           }
         }
+      },
+      "fallback_params": {
+        "_comment": "配置加载失败时的降级默认值（简化版）",
+        "regression": {
+          "window_hours": 24,
+          "min_points": 16,
+          "outlier_sigma": 3.0,
+          "use_log_return": true
+        },
+        "scoring": {
+          "r2_min": 0.1,
+          "beta_low": 0.6,
+          "beta_high": 1.2
+        }
       }
     },
     "F": {
@@ -338,6 +449,24 @@
           "use_relative_change": true,
           "_comment": "v7.2.8修复：scale从0.10增大到0.50，避免F因子饱和（F_raw=0.47时F=74而非100）"
         }
+      },
+      "fallback_params": {
+        "_comment": "配置加载失败时的降级默认值",
+        "oi_weight": 0.4,
+        "vol_weight": 0.3,
+        "cvd_weight": 0.3,
+        "trend_weight": 0.6,
+        "slope_weight": 0.4,
+        "oi_scale": 3.0,
+        "vol_scale": 0.3,
+        "cvd_scale": 0.02,
+        "price_scale": 3.0,
+        "slope_scale": 0.01,
+        "leading_scale": 200.0,
+        "crowding_veto_enabled": true,
+        "crowding_percentile": 90,
+        "crowding_penalty": 0.5,
+        "crowding_min_data": 100
       }
     }
   },
