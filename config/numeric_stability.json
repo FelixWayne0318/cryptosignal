@@ -1,0 +1,33 @@
+{
+  "_description": "数值稳定性常量配置 - 基于IEEE 754双精度浮点数特性",
+  "_warning": "修改这些值需要深刻理解浮点运算，建议保持默认值",
+  "_version": "7.3.2",
+
+  "numeric_stability": {
+    "independence": {
+      "eps_var_min": 1e-12,
+      "eps_var_min_description": "BTC方差下限，低于此值认为无波动（防止β计算除0）",
+
+      "eps_log_price": 1e-10,
+      "eps_log_price_description": "log(price)偏移量，防止log(0)导致数值异常",
+
+      "eps_div_safe": 1e-10,
+      "eps_div_safe_description": "安全除法偏移量，防止除0异常",
+
+      "eps_r2_denominator": 1e-10,
+      "eps_r2_denominator_description": "R²分母偏移量，防止全常数序列导致除0"
+    },
+
+    "default": {
+      "eps_float_compare": 1e-9,
+      "eps_float_compare_description": "通用浮点数比较epsilon（用于区间边界判断）"
+    }
+  },
+
+  "_notes": [
+    "这些epsilon值基于IEEE 754双精度浮点数（~15位有效数字）",
+    "1e-12约为双精度浮点数的噪声水平",
+    "1e-10是常用的数值稳定性epsilon",
+    "除非遇到数值不稳定问题，否则不建议修改"
+  ]
+}

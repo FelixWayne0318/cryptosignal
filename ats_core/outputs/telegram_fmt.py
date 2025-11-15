@@ -2338,8 +2338,8 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     params += f"\n💼 仓位建议\n"
     params += f"• 基准仓位: {position_pct:.1f}%"
 
-    # ========== 3. v7.2核心因子 ==========
-    factors = f"\n\n━━━ 🔬 v7.2核心因子 ━━━\n"
+    # ========== 3. v7.3.2-Full核心因子 ==========
+    factors = f"\n\n━━━ 🔬 v7.3.2-Full核心因子 ━━━\n"
 
     # F因子（v7.2.26改进：直接使用momentum_level，避免硬编码阈值）
     F_v2 = _get(v72, "F_v2")

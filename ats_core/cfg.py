@@ -1,12 +1,39 @@
 # ats_core/cfg.py
 # coding: utf-8
+"""
+配置管理器 - 旧系统 (v6.6架构)
+
+⚠️ 职责范围（临时）:
+- 仅负责 params.json 读取
+- 仅负责因子权重校验 (6+4架构)
+- 向后兼容性支持
+
+🎯 未来计划（v8.0）:
+- 本模块将被废弃
+- 所有配置统一迁移到 RuntimeConfig
+- 权重校验迁移到 RuntimeConfig
+
+📌 何时使用:
+- ❌ 新代码不应使用此模块
+- ✅ 仅 analyze_symbol.py 历史兼容
+- ✅ 新代码请使用 ats_core.config.runtime_config.RuntimeConfig
+
+🆕 v7.3.2更新:
+- 使用统一路径解析器 (path_resolver.py)
+- 支持环境变量 CRYPTOSIGNAL_CONFIG_ROOT
+- 修复P1-4: 配置路径不一致问题
+
+参考:
+- docs/health_checks/system_architecture_health_check_2025-11-15.md#P0-1
+- /tmp/revised_fix_plan.md#Phase2-3
+"""
 from __future__ import annotations
 
 import json
-import os
 from typing import Any, Dict, Optional
 
-_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+# v7.3.2: 使用统一路径解析器
+from .config.path_resolver import get_params_file
 
 def _read_json(path: str) -> Dict[str, Any]:
     try:
@@ -102,9 +129,13 @@ def _validate_weights(params: Dict[str, Any]) -> None:
 class _Cfg:
     def __init__(self) -> None:
         self._params: Optional[Dict[str, Any]] = None
+        # v7.3.2: 使用统一路径解析器
+        # 支持 ATS_PARAMS_FILE 环境变量（向后兼容）
+        # 否则使用 path_resolver 自动解析（支持 CRYPTOSIGNAL_CONFIG_ROOT）
+        import os
         self._params_file = os.getenv(
             "ATS_PARAMS_FILE",
-            os.path.join(_REPO_ROOT, "config", "params.json"),
+            str(get_params_file()),  # 使用统一路径解析器
         )
 
     def _ensure_defaults(self, p: Dict[str, Any]) -> Dict[str, Any]:

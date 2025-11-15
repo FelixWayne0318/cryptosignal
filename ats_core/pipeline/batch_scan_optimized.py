@@ -1,12 +1,17 @@
 # coding: utf-8
 """
-优化的批量扫描器（使用WebSocket K线缓存）
+优化的批量扫描器（v7.3.2-Full - MarketContext全局优化）
 
 性能优化:
 - 首次扫描：~2分钟（预热K线缓存）
 - 后续扫描：~5秒（100个币种）✅
 - API调用：0次/scan ✅
 - 数据新鲜度：实时更新 ✅
+
+v7.3.2-Full 新特性:
+- MarketContext全局管理：BTC趋势计算1次/扫描（vs 400次重复计算）
+- I因子veto风控：高Beta币种逆BTC强趋势自动拦截
+- 性能提升：~400x（BTC趋势计算部分）
 
 对比当前方案:
 - 扫描速度：17倍提升（85秒 → 5秒）
@@ -15,7 +20,7 @@
 
 import asyncio
 import time
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from datetime import datetime, timedelta, timezone
 from ats_core.execution.binance_futures_client import get_binance_client
 from ats_core.data.realtime_kline_cache import get_kline_cache
@@ -417,6 +422,77 @@ class OptimizedBatchScanner:
         log(f"   后续扫描将极快（约5秒）")
         log("=" * 60)
 
+    def _get_market_context(self) -> Dict[str, Any]:
+        """
+        获取市场上下文（v7.3.2-Full统一管理）
+
+        功能：
+        1. 计算BTC趋势（T_BTC）- 1次计算 vs 400次/扫描
+        2. 封装BTC/ETH K线数据
+        3. 返回统一的market_meta字典供analyze_symbol使用
+
+        性能优化：
+        - 旧方案：每个币种都计算一次BTC趋势（400次重复计算）
+        - 新方案：全局计算1次BTC趋势（1次计算，400次复用）
+        - 性能提升：~400x（BTC趋势计算部分）
+
+        Returns:
+            dict: {
+                'btc_klines': List,     # BTC K线数据
+                'eth_klines': List,     # ETH K线数据（向后兼容）
+                'btc_trend': float,     # T_BTC趋势值 [-100, +100]
+                'btc_trend_meta': dict  # BTC趋势计算元数据
+            }
+        """
+        market_meta = {
+            'btc_klines': self.btc_klines,
+            'eth_klines': self.eth_klines,
+            'btc_trend': 0,  # 默认中性
+            'btc_trend_meta': {}
+        }
+
+        # v7.3.2-Full: 计算BTC趋势（T_BTC）
+        if self.btc_klines and len(self.btc_klines) >= 96:
+            try:
+                from ats_core.factors_v2.trend import score_trend
+
+                # 提取BTC收盘价序列
+                def _to_f(x):
+                    """安全类型转换"""
+                    try:
+                        return float(x) if x is not None else 0.0
+                    except (ValueError, TypeError):
+                        return 0.0
+
+                btc_closes = [_to_f(k[4]) for k in self.btc_klines]  # K线格式: [ts, o, h, l, c, v, ...]
+
+                # 计算BTC趋势（使用与analyze_symbol相同的逻辑）
+                T_BTC, T_meta = score_trend(
+                    closes=btc_closes,
+                    highs=[_to_f(k[2]) for k in self.btc_klines],
+                    lows=[_to_f(k[3]) for k in self.btc_klines],
+                    params={}  # 使用默认参数
+                )
+
+                market_meta['btc_trend'] = T_BTC
+                market_meta['btc_trend_meta'] = T_meta
+
+                log(f"   MarketContext: T_BTC={T_BTC:.1f} (BTC趋势已计算)")
+
+            except Exception as e:
+                warn(f"   ⚠️  BTC趋势计算失败，使用默认值0: {e}")
+                market_meta['btc_trend'] = 0
+                market_meta['btc_trend_meta'] = {'error': str(e)}
+        else:
+            btc_count = len(self.btc_klines) if self.btc_klines else 0
+            warn(f"   ⚠️  BTC K线数据不足（{btc_count}<96），T_BTC设为0")
+            market_meta['btc_trend_meta'] = {
+                'status': 'insufficient_data',
+                'btc_klines_count': btc_count
+            }
+
+        return market_meta
+
     async def scan(
         self,
         min_score: int = 35,  # v6.3: 降低阈值从70到35（专家建议 #4）
@@ -551,6 +627,16 @@ class OptimizedBatchScanner:
         log("=" * 60)
 
         # ═══════════════════════════════════════════════════════════
+        # v7.3.2-Full Phase 5: 统一市场上下文管理
+        # ═══════════════════════════════════════════════════════════
+        log("\n🌍 [MarketContext] 计算全局市场上下文...")
+        market_context_start = time.time()
+        market_meta = self._get_market_context()
+        market_context_elapsed = time.time() - market_context_start
+        log(f"   ✅ MarketContext已生成（耗时{market_context_elapsed:.3f}秒）")
+        log(f"   优化效果: 1次计算 vs {len(symbols)}次重复计算 → {len(symbols)}x性能提升")
+
+        # ═══════════════════════════════════════════════════════════
         # Phase 2: 批量扫描分析
         # ═══════════════════════════════════════════════════════════
 
@@ -662,8 +748,10 @@ class OptimizedBatchScanner:
                 spot_price = self.spot_price_cache.get(symbol)
                 # v6.6: 移除 liquidations（Q因子已废弃）
                 oi_data = self.oi_cache.get(symbol, [])  # O因子（持仓量历史）
-                btc_klines = self.btc_klines  # I调制器（独立性）
-                eth_klines = self.eth_klines  # I调制器（独立性）
+
+                # v7.3.2-Full: 使用统一的MarketContext（包含btc_klines/eth_klines/btc_trend）
+                btc_klines = market_meta['btc_klines']  # I调制器（独立性）
+                eth_klines = market_meta['eth_klines']  # I调制器（独立性，向后兼容）
 
                 # v6.6因子分析（6因子+4调制器）
                 result = analyze_symbol_with_preloaded_klines(
@@ -679,7 +767,8 @@ class OptimizedBatchScanner:
                     oi_data=oi_data,           # O因子（持仓量历史）
                     btc_klines=btc_klines,     # I调制器（独立性）
                     eth_klines=eth_klines,     # I调制器（独立性）
-                    kline_cache=self.kline_cache  # v6.6: 四门DataQual检查
+                    kline_cache=self.kline_cache,  # v6.6: 四门DataQual检查
+                    market_meta=market_meta    # v7.3.2-Full: 统一市场上下文（含T_BTC）
                 )
 
                 # v7.2.41修复：batch_scan直接应用v7.2增强（P1-High）

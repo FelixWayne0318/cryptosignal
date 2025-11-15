@@ -52,6 +52,11 @@ data/*.db-shm
 *.bak
 *.bak.*
 
+# --- Temporary analysis files ---
+DEPENDENCY_DEEP_ANALYSIS.txt
+dependency_tree.json
+*.analysis.txt
+
 # --- IDE / OS ---
 .vscode/
 .idea/

@@ -1,40 +1,25 @@
 # CryptoSignal 测试目录
 
-## v7.2 当前测试
+## 📋 目录说明
 
-### ✅ 活跃测试
+> **v7.2.44状态**: 预留目录（Placeholder）
 
-#### `test_v72_integration.py` - v7.2集成测试
-**用途**: 测试v7.2集成和数据采集功能
+本目录是v7.2版本仓库结构重组的一部分，用于存放单元测试、集成测试等测试文件。
 
-**测试内容**:
-- TradeRecorder数据库创建
-- v7.2扫描器（不发送Telegram）
-- 数据记录验证
-- 统计信息显示
+### 当前状态
 
-**运行方法**:
-```bash
-cd /home/user/cryptosignal
-python3 tests/test_v72_integration.py
-```
+- **v7.2.43清理**: 测试文件已被清理，只保留README.md作为占位符
+- **原因**: 系统已稳定运行，临时测试文件已不需要
+- **测试方式**: 通过 `./setup.sh` 和实际运行来验证系统功能
 
----
+### 如需添加测试
 
-#### `test_single_symbol.py` - 单币种快速测试
-**用途**: 分析单个币种并输出详细格式，验证分析流程
+如果需要添加新的测试文件，请遵循以下模板：
 
-**测试内容**:
-- 单个币种完整分析
-- 因子计算验证
-- 详细输出格式
-- 门控系统验证
-
-**运行方法**:
-```bash
-cd /home/user/cryptosignal
-python3 tests/test_single_symbol.py BTCUSDT
-```
+#### 测试文件命名规范
+- 单元测试: `test_<module_name>.py`
+- 集成测试: `test_<feature>_integration.py`
+- 性能测试: `test_<module>_performance.py`
 
 ---
 

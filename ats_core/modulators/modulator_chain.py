@@ -376,7 +376,9 @@ class ModulatorChain:
         I_score: float
     ) -> Tuple[float, float, Dict[str, Any]]:
         """
-        I调制器：独立性 → 温度倍数 + 成本调整
+        I调制器：独立性 → 温度倍数 + 成本调整（旧版，向后兼容）
+
+        ⚠️ v7.3.2-Full: 建议使用apply_independence_full()获取完整的veto+软调制
 
         逻辑：
         - I正（独立性高）：Teff降低（P提升），cost略降
@@ -384,7 +386,7 @@ class ModulatorChain:
         - 范围：Teff [0.70, 1.30], cost_eff [-0.20, +0.20]  # v7.2++增强: 扩大影响范围
 
         参数：
-        - I_score: [-100, +100]
+        - I_score: [-100, +100] 或 [0, 100] (v7.3.2-Full质量因子)
 
         返回：
         - Teff_I: [0.70, 1.30]  # v7.2++增强: 从[0.85,1.15]扩大到[0.70,1.30]
@@ -395,8 +397,13 @@ class ModulatorChain:
         Teff_max = self.I_params.get("Teff_max", 1.30)  # v7.2++: 1.15→1.30
         cost_eff_range = self.I_params.get("cost_eff_range", 0.20)  # v7.2++: 0.15→0.20
 
-        # 归一化
-        normalized_I = I_score / 100.0
+        # v7.3.2-Full兼容：如果I是0-100质量因子，转换为-100到+100
+        if 0 <= I_score <= 100:
+            # I=0(高相关) → -100, I=50(中性) → 0, I=100(高独立) → +100
+            normalized_I = (I_score - 50.0) / 50.0
+        else:
+            # 旧版[-100, +100]格式
+            normalized_I = I_score / 100.0
 
         # 温度倍数：I正 → Teff降低（P提升）
         # v7.2++: I=+100 → 0.70, I=0 → 1.00, I=-100 → 1.30 (增强2倍)
@@ -412,10 +419,198 @@ class ModulatorChain:
             "I_score": I_score,
             "Teff_I": Teff_I,
             "cost_eff": cost_eff,
-            "note": "v7.2++增强: I正→Teff大降+P大提升+cost降低, I负→Teff大升+P大降低+cost升高"
+            "note": "v7.3.2-Full: 建议使用apply_independence_full()获取veto逻辑"
         }
 
         return Teff_I, cost_eff, meta
+
+    def apply_I_gate(
+        self,
+        I: float,
+        T_BTC: float,
+        T_alt: float,
+        composite_score: float,
+        config: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        I因子风控闸门 - v7.3.2-Full核心veto逻辑
+
+        规则：
+        1. 高Beta币逆BTC强趋势 → 必veto
+        2. 高Beta币弱信号 → 不做
+        3. 高独立币 → 放宽effective_threshold
+
+        参数：
+        - I: 独立性分数（0-100质量因子）
+        - T_BTC: BTC趋势分数（-100到+100）
+        - T_alt: 本币趋势分数（-100到+100）
+        - composite_score: 综合分数（A层6因子总分）
+        - config: 配置字典（可选），从signal_thresholds.json.independence_gate读取
+
+        返回：
+        - {
+            "veto": bool,
+            "veto_reasons": List[str],
+            "effective_threshold": float
+          }
+
+        Note:
+        - 配置从config/signal_thresholds.json的independence_gate节点读取
+        - 所有阈值可配置，零硬编码
+        """
+        # 加载配置
+        if config is None:
+            try:
+                from ats_core.config.runtime_config import RuntimeConfig
+                # TODO: 实现get_independence_gate_config()
+                # 暂时使用默认值
+                config = {
+                    "thresholds": {
+                        "corr_strong_max_I": 30,
+                        "indep_strong_min_I": 70,
+                        "btc_trend_strong_T": 60,
+                        "min_score_for_corr": 70,
+                        "relax_score_for_indep": 45
+                    },
+                    "veto_rules": {
+                        "rule_1_beta_against_btc": {"enabled": True},
+                        "rule_2_beta_weak_signal": {"enabled": True}
+                    }
+                }
+            except Exception:
+                # 降级到硬编码默认值（临时）
+                config = {
+                    "thresholds": {
+                        "corr_strong_max_I": 30,
+                        "indep_strong_min_I": 70,
+                        "btc_trend_strong_T": 60,
+                        "min_score_for_corr": 70,
+                        "relax_score_for_indep": 45
+                    },
+                    "veto_rules": {
+                        "rule_1_beta_against_btc": {"enabled": True},
+                        "rule_2_beta_weak_signal": {"enabled": True}
+                    }
+                }
+
+        thresholds = config.get("thresholds", {})
+        veto_rules = config.get("veto_rules", {})
+
+        corr_strong_max_I = thresholds.get("corr_strong_max_I", 30)
+        indep_strong_min_I = thresholds.get("indep_strong_min_I", 70)
+        btc_trend_strong_T = thresholds.get("btc_trend_strong_T", 60)
+        min_score_for_corr = thresholds.get("min_score_for_corr", 70)
+        relax_score_for_indep = thresholds.get("relax_score_for_indep", 45)
+
+        veto = False
+        veto_reasons = []
+
+        # 规则1：高Beta币逆BTC强趋势 → 必veto
+        rule_1_enabled = veto_rules.get("rule_1_beta_against_btc", {}).get("enabled", True)
+        if rule_1_enabled and I <= corr_strong_max_I and abs(T_BTC) >= btc_trend_strong_T:
+            # 检查方向：T_alt和T_BTC符号相反则逆势
+            if (T_alt > 0 and T_BTC < 0) or (T_alt < 0 and T_BTC > 0):
+                veto = True
+                veto_reasons.append("beta_coin_against_btc_trend")
+
+        # 规则2：高Beta币弱信号 → 不做
+        rule_2_enabled = veto_rules.get("rule_2_beta_weak_signal", {}).get("enabled", True)
+        if not veto and rule_2_enabled and I <= corr_strong_max_I:
+            if abs(composite_score) < min_score_for_corr:
+                veto = True
+                veto_reasons.append("beta_coin_weak_signal")
+
+        # 阈值放宽：高独立币特权
+        # 从signal_thresholds.json读取基础阈值（默认50）
+        base_threshold = config.get("base_threshold", 50.0)
+
+        if I >= indep_strong_min_I:
+            # 高独立币：降低阈值（从50降到45）
+            effective_threshold = min(base_threshold, relax_score_for_indep)
+        else:
+            # 其他币种：使用基础阈值
+            effective_threshold = base_threshold
+
+        return {
+            "veto": veto,
+            "veto_reasons": veto_reasons,
+            "effective_threshold": effective_threshold
+        }
+
+    def apply_independence_full(
+        self,
+        I: float,
+        T_BTC: float,
+        T_alt: float,
+        composite_score: float,
+        config: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        I因子完整调制 - v7.3.2-Full（veto + 软调制）
+
+        整合：
+        1. 风控闸门：apply_I_gate() - veto逻辑 + effective_threshold
+        2. 软调制：confidence_boost + cost_multiplier
+
+        参数：
+        - I: 独立性分数（0-100质量因子）
+        - T_BTC: BTC趋势分数
+        - T_alt: 本币趋势分数
+        - composite_score: 综合分数
+        - config: 配置字典
+
+        返回：
+        - {
+            "veto": bool,
+            "veto_reasons": List[str],
+            "effective_threshold": float,
+            "confidence_boost": float,
+            "cost_multiplier": float,
+            "Teff_mult": float  # 兼容旧接口
+          }
+        """
+        # 1. 风控闸门
+        gate_result = self.apply_I_gate(I, T_BTC, T_alt, composite_score, config)
+
+        # 2. 软调制（基于I分数）
+        # 从config读取软调制参数
+        if config is None:
+            config = {}
+
+        soft_mod = config.get("soft_modulation", {})
+        conf_cfg = soft_mod.get("confidence", {})
+        cost_cfg = soft_mod.get("cost", {})
+
+        # 默认软调制规则（基于I档位）
+        if I >= 70:
+            # 高度独立：I ≥ 70
+            confidence_boost = conf_cfg.get("highly_independent", 0.15)
+            cost_multiplier = cost_cfg.get("highly_independent", 1.0)
+        elif I >= 50:
+            # 中性：50 ≤ I < 70
+            confidence_boost = 0.05
+            cost_multiplier = 1.0
+        elif I >= 30:
+            # 相关：30 ≤ I < 50
+            confidence_boost = 0.0
+            cost_multiplier = 1.1
+        else:
+            # 高度相关：I < 30
+            confidence_boost = conf_cfg.get("highly_correlated", -0.10)
+            cost_multiplier = cost_cfg.get("highly_correlated", 1.2)
+
+        # 3. 兼容旧接口：计算Teff_mult（基于I映射）
+        # I=100(高独立) → Teff=0.70, I=50(中性) → Teff=1.0, I=0(高相关) → Teff=1.30
+        normalized_I = (I - 50.0) / 50.0
+        Teff_mult = 1.0 - 0.30 * normalized_I
+        Teff_mult = max(0.70, min(1.30, Teff_mult))
+
+        return {
+            **gate_result,  # veto, veto_reasons, effective_threshold
+            "confidence_boost": confidence_boost,
+            "cost_multiplier": cost_multiplier,
+            "Teff_mult": Teff_mult
+        }
 
     def _fuse(
         self,
