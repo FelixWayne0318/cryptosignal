@@ -1,8 +1,9 @@
 #!/bin/bash
 # ==========================================
-# CryptoSignal v7.2 一键部署脚本
+# CryptoSignal v7.3.2-Full 一键部署脚本
 # 用途：拉取代码、检测环境、安装依赖、启动系统
 # 特点：自动更新代码、清理缓存、验证结构
+# v7.3.2-Full: I因子BTC-only重构 + MarketContext优化
 # ==========================================
 
 set -e
@@ -13,7 +14,8 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 echo "=============================================="
-echo "🚀 CryptoSignal v7.2 一键部署"
+echo "🚀 CryptoSignal v7.3.2-Full 一键部署"
+echo "   I因子BTC-only重构 + MarketContext优化"
 echo "=============================================="
 echo ""
 
@@ -67,14 +69,14 @@ find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 find . -name "*.pyc" -delete 2>/dev/null || true
 echo -e "${GREEN}✅ Python缓存已清理${NC}"
 
-# 0.4 验证重组后的目录结构（v7.2特性）
+# 0.4 验证重组后的目录结构（v7.3.2-Full特性）
 echo ""
-echo "🔍 验证v7.2目录结构..."
+echo "🔍 验证v7.3.2-Full目录结构..."
 
-# v7.2.44修复：检查目录是否存在（而非文件数量）
-# 原因：v7.2.43清理后，tests/和diagnose/只保留README.md作为占位符
+# v7.3.2-Full: 检查目录是否存在
+# 必需目录: tests/, diagnose/, docs/, standards/, config/
 if [ -d "tests" ] && [ -d "diagnose" ] && [ -d "docs" ] && [ -d "standards" ]; then
-    echo -e "${GREEN}✅ v7.2目录结构正确${NC}"
+    echo -e "${GREEN}✅ v7.3.2-Full目录结构正确${NC}"
 
     # 统计文件数量（可选信息）
     TEST_FILES=$(find tests -name "*.py" -o -name "*.md" 2>/dev/null | wc -l)
@@ -87,7 +89,7 @@ if [ -d "tests" ] && [ -d "diagnose" ] && [ -d "docs" ] && [ -d "standards" ]; t
     echo "   - docs/: $DOC_FILES 个文档"
     echo "   - standards/: $STANDARD_FILES 个规范"
 else
-    echo -e "${YELLOW}⚠️  目录结构可能不是v7.2版本${NC}"
+    echo -e "${YELLOW}⚠️  目录结构可能不是v7.3.2-Full版本${NC}"
     echo "   请确保存在以下目录: tests/, diagnose/, docs/, standards/"
 fi
 
@@ -173,19 +175,20 @@ echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━
 echo -e "${GREEN}✅ 环境准备完成！${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo "🚀 正在启动 v7.2 扫描器（后台模式 + 实时日志）..."
+echo "🚀 正在启动 v7.3.2-Full 扫描器（后台模式 + 实时日志）..."
+echo "   特性: I因子BTC-only回归 + MarketContext全局优化"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# 停止旧进程（兼容v7.2和统一版本）
+# 停止旧进程（兼容v7.3.2-Full和统一版本）
 pkill -f realtime_signal_scanner 2>/dev/null || true
 sleep 1
 
 # 创建日志文件名
 LOG_FILE=~/cryptosignal_$(date +%Y%m%d_%H%M%S).log
 
-# 后台启动扫描器（使用统一版本）
-echo "📝 后台启动扫描器（v7.2增强版 - 统一版本）..."
+# 后台启动扫描器（v7.3.2-Full版本）
+echo "📝 后台启动扫描器（v7.3.2-Full - I因子BTC-only + MarketContext优化）..."
 echo "   📍 自动提交已禁用（AUTO_COMMIT_REPORTS=false）"
 echo "   📁 扫描报告保存在本地: reports/latest/"
 export AUTO_COMMIT_REPORTS=false
@@ -209,13 +212,19 @@ if ps -p $PID > /dev/null 2>&1; then
     echo "  查看日志: tail -f $LOG_FILE"
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "⚙️  v7.2 配置:"
+    echo "⚙️  v7.3.2-Full 配置:"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "  ✅ 自动提交已禁用（AUTO_COMMIT_REPORTS=false）"
     echo "  📁 扫描报告保存位置："
     echo "     - reports/latest/scan_summary.json"
     echo "     - reports/trends.json"
     echo "  💡 如需启用自动提交，请修改 setup.sh 删除该设置"
+    echo ""
+    echo "  🆕 v7.3.2-Full 新特性："
+    echo "    - I因子BTC-only回归（移除ETH依赖）"
+    echo "    - MarketContext全局优化（400x性能提升）"
+    echo "    - I因子veto风控逻辑（高Beta币种保护）"
+    echo "    - 零硬编码架构（配置驱动）"
     echo ""
     echo "  目录结构已重组："
     echo "    - tests/     测试文件"
