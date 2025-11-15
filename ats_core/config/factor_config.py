@@ -80,6 +80,31 @@ class FactorConfig:
 
         return self.factors[factor_name]['params']
 
+    def get_fallback_params(self, factor_name: str) -> Dict[str, Any]:
+        """
+        获取因子降级参数（v7.3.4新增）
+
+        当配置加载失败时使用的默认参数
+
+        Args:
+            factor_name: 因子名称 (T, M, C+, S, V+, O+, L, B, Q, I, F)
+
+        Returns:
+            降级参数字典
+
+        Raises:
+            ValueError: 未知因子名称或无降级参数
+        """
+        if factor_name not in self.factors:
+            raise ValueError(f"Unknown factor: {factor_name}")
+
+        fallback = self.factors[factor_name].get('fallback_params', {})
+        if not fallback:
+            # 如果没有fallback_params，返回params作为降级（向后兼容）
+            return self.factors[factor_name]['params']
+
+        return fallback
+
     def get_factor_weight(self, factor_name: str) -> int:
         """
         获取因子权重

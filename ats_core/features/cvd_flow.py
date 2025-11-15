@@ -51,13 +51,19 @@ def _get_cvd_chain() -> StandardizationChain:
                     lam=std_params['lam']
                 )
             else:
-                # 如果配置禁用，使用默认参数创建（向后兼容）
+                # 如果配置禁用，从fallback_params读取（向后兼容）
+                fallback = config.get_fallback_params("C+")
+                std_fallback = fallback.get('standardization', {})
                 _cvd_chain = StandardizationChain(
-                    alpha=0.25, tau=5.0, z0=3.0, zmax=6.0, lam=1.5
+                    alpha=std_fallback.get('alpha', 0.25),
+                    tau=std_fallback.get('tau', 5.0),
+                    z0=std_fallback.get('z0', 3.0),
+                    zmax=std_fallback.get('zmax', 6.0),
+                    lam=std_fallback.get('lam', 1.5)
                 )
         except Exception as e:
-            # 配置加载失败时使用默认参数（向后兼容）
-            print(f"⚠️ C+因子StandardizationChain配置加载失败，使用默认参数: {e}")
+            # 配置加载失败时使用硬编码最小默认值（最后降级方案）
+            print(f"⚠️ C+因子StandardizationChain配置加载失败，使用硬编码默认参数: {e}")
             _cvd_chain = StandardizationChain(
                 alpha=0.25, tau=5.0, z0=3.0, zmax=6.0, lam=1.5
             )
@@ -106,12 +112,22 @@ def score_cvd_flow(
         config_params = config.get_factor_params("C+")
         min_data_points = config.get_data_quality_threshold("C+", "min_data_points")
     except Exception as e:
-        # 配置加载失败时使用硬编码默认值（向后兼容）
-        print(f"⚠️ C+因子配置加载失败，使用默认值: {e}")
+        # 配置加载失败时使用硬编码最小默认值（最后降级方案）
+        print(f"⚠️ C+因子配置加载失败，使用硬编码默认值: {e}")
         config_params = {
             "lookback_hours": 6,
             "cvd_scale": 0.15,
             "crowding_p95_penalty": 10,
+            "r2_threshold": 0.7,
+            "outlier_weight": 0.3,
+            "relative_intensity_scale": 2.0,
+            "absolute_scale_fallback": 1000.0,
+            "crowding_percentile": 95,
+            "stability_factor_params": {
+                "base": 0.7,
+                "multiplier": 0.3,
+                "r2_baseline": 0.7
+            }
         }
         min_data_points = 7
 
@@ -151,11 +167,12 @@ def score_cvd_flow(
 
             if outliers_filtered > 0:
                 # 对异常值降权而非完全删除（保持序列长度不变）
-                # CVD对异常值更敏感，使用更低的权重（0.3 vs O+的0.5）
+                # CVD对异常值更敏感，使用更低的权重（配置化，默认0.3 vs O+的0.5）
+                outlier_weight = p.get("outlier_weight", 0.3)
                 cvd_window = apply_outlier_weights(
                     cvd_window,
                     outlier_mask,
-                    outlier_weight=0.3  # 异常值仅保留30%权重
+                    outlier_weight=outlier_weight
                 )
         except Exception as e:
             # 异常值检测失败时使用原始数据（向后兼容）
@@ -177,8 +194,10 @@ def score_cvd_flow(
     r_squared = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0
 
     # 2.3 综合判断持续性
-    # R² >= 0.7 = 持续性强（变化平稳，不被单根K线主导）
-    is_consistent = (r_squared >= 0.7)
+    # v7.3.4: 从配置读取R²阈值（默认0.7）
+    r2_threshold = p.get("r2_threshold", 0.7)
+    # R² >= r2_threshold = 持续性强（变化平稳，不被单根K线主导）
+    is_consistent = (r_squared >= r2_threshold)
 
     # ========== 3. 软映射评分（带符号，-100到+100） ==========
     # v2.5++最终方案：相对历史斜率归一化（方向+斜率，无绝对量）
@@ -210,39 +229,53 @@ def score_cvd_flow(
         avg_abs_slope = None
 
     # 3.2 归一化：相对强度（当前斜率 / 历史平均斜率）
+    # v7.3.4: 从配置读取scale参数
     if avg_abs_slope is not None:
         # 相对强度 = 当前速度 / 历史平均速度（保留正负）
         relative_intensity = slope / avg_abs_slope
-        # 使用相对强度映射（scale调大，因为relative_intensity通常在±0.5到±3范围）
-        normalized = math.tanh(relative_intensity / 2.0)  # scale=2.0
+        # 使用相对强度映射（scale可配置，默认2.0）
+        scale = p.get("relative_intensity_scale", 2.0)
+        normalized = math.tanh(relative_intensity / scale)
         cvd_score = 100.0 * normalized
         normalization_method = "relative_historical"
     else:
         # 降级方案：使用固定scale（历史数据不足时）
-        # 这时只能用绝对斜率 + 固定scale
-        normalized = math.tanh(slope / 1000.0)  # 经验值，需要调整
+        # v7.3.4: 从配置读取fallback scale
+        fallback_scale = p.get("absolute_scale_fallback", 1000.0)
+        normalized = math.tanh(slope / fallback_scale)
         cvd_score = 100.0 * normalized
         normalization_method = "absolute_fallback"
 
     # 如果R²低（震荡），降低分数（震荡意味着不稳定）
+    # v7.3.4: 从配置读取stability打折参数
     if not is_consistent:
-        # 根据R²打折：R²=0.4→70%, R²=0.6→85%, R²=0.7→100%
-        stability_factor = 0.7 + 0.3 * (r_squared / 0.7)
+        # 根据R²打折：使用配置化公式参数
+        stability_params = p.get("stability_factor_params", {
+            "base": 0.7,
+            "multiplier": 0.3,
+            "r2_baseline": 0.7
+        })
+        stability_factor = (
+            stability_params["base"] +
+            stability_params["multiplier"] * (r_squared / stability_params["r2_baseline"])
+        )
         cvd_score = cvd_score * min(1.0, stability_factor)
 
     # ========== 4. 拥挤度检测（新增v2.1，学习OI的95分位数逻辑） ==========
-    # v2.5++：使用历史斜率的95分位数判断拥挤度
+    # v2.5++：使用历史斜率的分位数判断拥挤度
+    # v7.3.4: 分位数阈值可配置（默认95）
     crowding_warn = False
     p95_slope = None
 
     if use_historical_norm and avg_abs_slope is not None and len(hist_slopes) >= 20:
-        # 使用历史斜率绝对值的95分位数
+        # 使用历史斜率绝对值的配置化分位数
         abs_slopes = [abs(s) for s in hist_slopes]
         sorted_abs_slopes = sorted(abs_slopes)
-        p95_idx = int(0.95 * (len(sorted_abs_slopes) - 1))
+        percentile = p.get("crowding_percentile", 95) / 100.0
+        p95_idx = int(percentile * (len(sorted_abs_slopes) - 1))
         p95_slope = sorted_abs_slopes[p95_idx]
 
-        # 检测当前斜率是否超过95分位数（拥挤）
+        # 检测当前斜率是否超过分位数阈值（拥挤）
         crowding_warn = (abs(slope) >= p95_slope)
 
     # 如果资金流拥挤，降权（避免追高/杀跌）
@@ -268,7 +301,8 @@ def score_cvd_flow(
         "cvd_slope": round(slope, 4),         # 斜率（原始值）
         "cvd_score": round(cvd_score, 2),     # CVD得分
         "r_squared": round(r_squared, 3),     # R²拟合优度（0-1）
-        "is_consistent": is_consistent,       # 是否持续（R²>=0.7）
+        "r2_threshold": r2_threshold,         # v7.3.4: R²阈值（配置化）
+        "is_consistent": is_consistent,       # 是否持续（R²>=r2_threshold）
         # v2.1: 拥挤度检测
         "crowding_warn": crowding_warn,       # 是否拥挤
         # v2.5++: 相对历史归一化信息

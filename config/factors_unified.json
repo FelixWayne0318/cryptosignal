@@ -124,7 +124,31 @@
         "crowding_p95_penalty": 10,
         "normalization_method": "relative_historical",
         "min_historical_samples": 30,
-        "r2_threshold": 0.7
+        "r2_threshold": 0.7,
+        "stability_factor_params": {
+          "base": 0.7,
+          "multiplier": 0.3,
+          "r2_baseline": 0.7,
+          "_comment": "低R²时的打折公式: base + multiplier * (r2 / r2_baseline)"
+        },
+        "crowding_percentile": 95,
+        "outlier_weight": 0.3,
+        "relative_intensity_scale": 2.0,
+        "absolute_scale_fallback": 1000.0,
+        "regression_window_size": 7,
+        "_comment": "v7.3.4: 完整配置化，消除硬编码"
+      },
+      "fallback_params": {
+        "_comment": "配置加载失败时的降级默认值",
+        "lookback_hours": 6,
+        "cvd_scale": 0.15,
+        "crowding_p95_penalty": 10,
+        "r2_threshold": 0.7,
+        "outlier_weight": 0.3,
+        "relative_intensity_scale": 2.0,
+        "absolute_scale_fallback": 1000.0,
+        "min_historical_samples": 30,
+        "crowding_percentile": 95
       }
     },
     "S": {
