@@ -57,7 +57,7 @@ from ats_core.execution.stop_loss_calculator import ThreeTierStopLoss
 # P2.5: 使用价格带法替代固定档位数
 from ats_core.features.liquidity_priceband import score_liquidity_priceband as calculate_liquidity
 from ats_core.factors_v2.basis_funding import calculate_basis_funding
-from ats_core.factors_v2.independence import calculate_independence
+from ats_core.factors_v2.independence import calculate_independence, score_independence
 
 # ========== P2.1: 蓄势待发检测增强 ==========
 from ats_core.features.accumulation_detection import detect_accumulation_v1, detect_accumulation_v2
@@ -570,47 +570,46 @@ def _analyze_symbol_core(
     # 结构（S）：-100（差）到 +100（好）
     # v6.6: S因子已在line 323-326计算，此处作为B层调制器使用
 
-    # 独立性（I）：0（完全相关）到 100（完全独立）→ 归一化到 ±100
-    # 越独立越好，所以高分=正分，低分=负分
+    # ---- 2.4. 独立性（I因子）- v7.3.2-Full BTC-only重构 ----
+    # v7.3.2-Full: 使用score_independence（BTC-only回归）
+    # 输出: I ∈ [0, 100] 质量因子（非方向）
+    # 移除ETH参数，仅使用BTC做β回归
     t0 = time.time()
-    if btc_klines and eth_klines and len(c) >= 25:  # 至少需要25个点（默认window=24）
+    I, I_meta = 50, {}  # 默认中性值
+    if btc_klines and len(c) >= 18:  # v7.3.2: 至少需要18个点（min_points=16+2）
         try:
-            # 提取价格数据，确保三个序列长度一致
-            # 使用最小长度来避免长度不匹配
-            min_len = min(len(c), len(btc_klines), len(eth_klines))
-            # 建议使用48小时数据，但至少需要25小时
-            use_len = min(min_len, 48) if min_len >= 25 else 0
+            # 提取价格数据
+            min_len = min(len(c), len(btc_klines))
+            # v7.3.2: 使用24-26小时数据（与config一致）
+            use_len = min(min_len, 26) if min_len >= 18 else 0
 
-            if use_len >= 25:
-                alt_prices = c[-use_len:]
-                btc_prices = [_to_f(k[4]) for k in btc_klines[-use_len:]]  # Close prices
-                eth_prices = [_to_f(k[4]) for k in eth_klines[-use_len:]]  # Close prices
+            if use_len >= 18:
+                # 转换为numpy数组（score_independence要求numpy格式）
+                import numpy as np
+                alt_prices_np = np.array(c[-use_len:], dtype=float)
+                btc_prices_np = np.array([_to_f(k[4]) for k in btc_klines[-use_len:]], dtype=float)
 
-                # v6.2修复：calculate_independence已返回标准化后的±100分数
-                # (通过StandardizationChain处理，参见independence.py:187-188)
-                # 无需再次映射，直接使用
-                I_raw, beta_sum, I_meta = calculate_independence(
-                    alt_prices=alt_prices,
-                    btc_prices=btc_prices,
-                    eth_prices=eth_prices,
+                # v7.3.2-Full: 调用新接口score_independence
+                # 返回: (I_score, metadata)
+                # I_score: 0-100质量因子（0=高相关，100=高独立）
+                I, I_meta = score_independence(
+                    alt_prices=alt_prices_np,
+                    btc_prices=btc_prices_np,
                     params=params.get("independence", {})
                 )
 
-                # v6.6修复：I_raw已经过StandardizationChain输出±100，无需再tanh
-                # 之前的tanh(I_raw/50)造成double-tanh bug，将±100压缩到±96
-                I = I_raw  # 直接使用StandardizationChain的输出
-
                 # 补充元数据
                 I_meta['data_points'] = use_len
-                I_meta['note'] = 'v6.6: I_raw直接使用，已移除double-tanh bug'
+                I_meta['version'] = 'v7.3.2-Full'
+                I_meta['note'] = 'BTC-only回归，使用log-return，零硬编码'
             else:
-                I, I_meta = 0, {"note": f"数据不足（需要25小时，实际{min_len}小时）"}
+                I, I_meta = 50, {"note": f"数据不足（需要18小时，实际{min_len}小时）", "status": "insufficient_data"}
         except Exception as e:
             from ats_core.logging import warn
             warn(f"I因子计算失败: {e}")
-            I, I_meta = 0, {"error": str(e)}
+            I, I_meta = 50, {"error": str(e), "status": "error"}
     else:
-        I, I_meta = 0, {"note": "缺少BTC/ETH K线数据"}
+        I, I_meta = 50, {"note": "缺少BTC K线数据或数据不足", "status": "no_data"}
     perf['I独立性'] = time.time() - t0
 
     # ---- 2.5. 资金领先性（F调节器）----
@@ -746,6 +745,49 @@ def _analyze_symbol_core(
 
     # 更新confidence使用调制后的值
     confidence_modulated = modulator_output.confidence_final
+
+    # ---- v7.3.2-Full: I因子风控闸门 + 软调制 ----
+    # 调用apply_independence_full()获取veto逻辑和软调制参数
+    # 注意：market_meta在后面才计算，这里先初始化T_BTC=0（中性）
+    # 正式的veto检查将在is_prime判定前进行
+    try:
+        i_veto_result = modulator_chain.apply_independence_full(
+            I=I,  # 0-100质量因子
+            T_BTC=0,  # 暂时设为0，后续会使用实际的market趋势
+            T_alt=T,  # 本币T因子（-100到+100）
+            composite_score=weighted_score,  # A层综合分数
+            config=None  # 使用默认配置
+        )
+
+        # 提取veto信息（将在is_prime判定前使用）
+        i_veto = i_veto_result.get("veto", False)
+        i_veto_reasons = i_veto_result.get("veto_reasons", [])
+        i_effective_threshold = i_veto_result.get("effective_threshold", 50.0)
+        i_confidence_boost = i_veto_result.get("confidence_boost", 0.0)
+        i_cost_multiplier = i_veto_result.get("cost_multiplier", 1.0)
+
+        # 应用软调制到confidence和cost（仅作记录，不影响现有逻辑）
+        # 注意：v7.3.2-Full的软调制是附加的，不替代ModulatorChain的现有调制
+        confidence_with_i_boost = confidence_modulated + i_confidence_boost * 100  # 转换到0-100尺度
+
+        # 更新I_meta添加veto信息
+        I_meta['veto_check_preliminary'] = {
+            'veto': i_veto,
+            'veto_reasons': i_veto_reasons,
+            'effective_threshold': i_effective_threshold,
+            'confidence_boost': i_confidence_boost,
+            'cost_multiplier': i_cost_multiplier,
+            'note': 'T_BTC=0（中性），最终veto检查在市场过滤后进行'
+        }
+    except Exception as e:
+        from ats_core.logging import warn
+        warn(f"I因子veto检查失败: {e}")
+        i_veto = False
+        i_veto_reasons = []
+        i_effective_threshold = 50.0
+        i_confidence_boost = 0.0
+        i_cost_multiplier = 1.0
+        I_meta['veto_check_error'] = str(e)
 
     # 元数据
     scores_meta = {
@@ -1320,6 +1362,48 @@ def _analyze_symbol_core(
         market_regime = 0
         market_meta = {"error": str(e), "btc_trend": 0, "eth_trend": 0, "regime_desc": "计算失败"}
         penalty_reason = ""
+
+    # ---- v7.3.2-Full: I因子最终veto检查（使用实际T_BTC） ----
+    # 现在market_meta已计算，可以使用实际的btc_trend作为T_BTC
+    # 重新调用apply_independence_full()进行最终veto判定
+    try:
+        # 从market_meta提取btc_trend作为T_BTC（近似）
+        # 注意：market_meta['btc_trend']可能不是标准T因子格式，但可以作为趋势方向的指示
+        T_BTC_actual = market_meta.get('btc_trend', 0)
+
+        # 如果market_meta中没有提供标准的T_BTC，暂时使用0
+        # TODO: 未来可以从MarketContext传入标准T_BTC
+
+        i_veto_final = modulator_chain.apply_independence_full(
+            I=I,  # 0-100质量因子
+            T_BTC=T_BTC_actual,  # BTC趋势（从market_meta获取）
+            T_alt=T,  # 本币T因子
+            composite_score=weighted_score,  # A层综合分数
+            config=None  # 使用默认配置
+        )
+
+        # 提取最终veto结果
+        i_veto_final_flag = i_veto_final.get("veto", False)
+        i_veto_final_reasons = i_veto_final.get("veto_reasons", [])
+
+        # 应用I因子veto：如果veto=True且is_prime=True，强制降级
+        if i_veto_final_flag and is_prime:
+            is_prime = False
+            is_watch = False
+            rejection_reason.append(f"🚫 I因子veto: {', '.join(i_veto_final_reasons)}")
+
+        # 更新I_meta添加最终veto信息
+        I_meta['veto_check_final'] = {
+            'veto': i_veto_final_flag,
+            'veto_reasons': i_veto_final_reasons,
+            'T_BTC': T_BTC_actual,
+            'applied': i_veto_final_flag and is_prime,
+            'note': '使用实际T_BTC进行最终veto判定'
+        }
+    except Exception as e:
+        from ats_core.logging import warn
+        warn(f"I因子最终veto检查失败: {e}")
+        I_meta['veto_check_final_error'] = str(e)
 
     # ---- 7. 15分钟微确认 ----
     m15_ok = _check_microconfirm_15m(symbol, side_long, params.get("microconfirm_15m", {}), atr_now)
