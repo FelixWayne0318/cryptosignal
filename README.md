@@ -1,9 +1,9 @@
-# CryptoSignal v7.2
+# CryptoSignal v7.3.2-Full
 
-> **加密货币信号分析系统 - v7.2规则增强版**
-> v7.2 Stage 1: F因子v2 + 因子分组 + 统计校准 + 四重门控
+> **加密货币信号分析系统 - v7.3.2-Full I因子重构版**
+> v7.3.2-Full: I因子BTC-only回归 + MarketContext全局优化 + veto风控
 >
-> **核心改进**: 精确资金主导判断 + 因子分组降维 + Bootstrap校准 + 自动数据采集
+> **核心改进**: I因子零硬编码 + BTC-only回归 + MarketContext 400x性能提升 + I因子veto风控
 
 ---
 
@@ -47,10 +47,34 @@ cd ~/cryptosignal
 
 ## 🎯 系统版本
 
-**当前版本**: v7.2 (Stage 1)
-**更新日期**: 2025-11-07
+**当前版本**: v7.3.2-Full (I因子BTC-only重构 + MarketContext优化)
+**更新日期**: 2025-11-15
 
-### v7.2 Stage 1: 规则增强
+### v7.3.2-Full: I因子系统重构
+
+✅ **I因子BTC-only回归**
+- 移除ETH依赖，使用纯BTC Beta回归
+- alt_ret = α + β_BTC * btc_ret + ε
+- 更清晰的统计模型，log-return计算
+
+✅ **I因子veto风控逻辑**
+- 规则1: 高Beta币逆BTC强趋势 → 自动拦截
+- 规则2: 高Beta币弱信号 → 不交易
+- 规则3: 高独立币 → 放宽阈值（50→45）
+
+✅ **MarketContext全局优化**
+- BTC趋势全局计算1次/扫描（vs 400次重复）
+- 性能提升：~400x（BTC趋势计算部分）
+- 统一market_meta传递到所有analyze_symbol调用
+
+✅ **零硬编码架构**
+- 所有因子参数从配置文件读取
+- RuntimeConfig统一管理，支持验证和缓存
+- 易于调优和维护
+
+---
+
+### v7.2 Stage 1: 规则增强（历史版本）
 
 ✅ **F因子v2：精确资金主导判断**
 - F_v2 = (fund_momentum - price_momentum) / ATR
