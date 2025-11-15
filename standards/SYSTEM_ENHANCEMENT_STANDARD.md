@@ -1,6 +1,10 @@
 # 系统增强标准化流程 (System Enhancement Standard)
 
-> **v3.1规范 - 确保每次系统升级都有序、可追溯、无遗漏**
+> **v3.2规范 - 确保每次系统升级都有序、可追溯、无遗漏**
+
+> **📚 相关文档**:
+> - 对于**日常代码修改**（Bug修复、小改进、参数调整），请使用 [docs/CODE_MODIFICATION_PROTOCOL.md](../docs/CODE_MODIFICATION_PROTOCOL.md)
+> - 本文档适用于**系统性升级**（新功能、大重构、架构调整）
 
 ---
 

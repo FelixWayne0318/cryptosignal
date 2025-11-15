@@ -1,9 +1,14 @@
 # 代码修改标准化流程
 
-**版本**: v1.0
+**版本**: v1.1
 **创建日期**: 2025-11-15
-**适用范围**: CryptoSignal项目所有代码修改
+**最后更新**: 2025-11-15
+**适用范围**: CryptoSignal项目日常代码修改（Bug修复、小改进、维护性修改）
 **基于经验**: Phase 1 + Phase 2 成功实践总结
+
+> **📚 相关文档**:
+> - 对于**系统性升级**（新功能、大重构），请使用 [standards/SYSTEM_ENHANCEMENT_STANDARD.md](../standards/SYSTEM_ENHANCEMENT_STANDARD.md)
+> - 本文档适用于**日常修改**（Bug修复、小改进、参数调整）
 
 ---
 
