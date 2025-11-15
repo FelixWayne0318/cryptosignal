@@ -1154,7 +1154,7 @@ def _analyze_symbol_core(
         # 一致性过滤: <阈值惩罚
         if mtf_coherence < mtf_coherence_min:
             # 时间框架不一致，降低概率和Prime评分
-            P_chosen *= 0.85  # 惩罚15%
+            P_chosen *= mtf_coherence_penalty  # v7.3.4修复：使用配置化惩罚系数（默认0.90）
             prime_strength *= mtf_coherence_penalty  # Prime评分降低（配置化）
 
             # 更新对应方向的概率
