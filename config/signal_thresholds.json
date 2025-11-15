@@ -1,20 +1,18 @@
 {
   "version": "v7.2.19_data_driven",
   "description": "基于实际数据的平衡配置 - 方案B",
-
   "_说明": {
     "目的": "基于实际市场数据分布，平衡信号质量与数量",
     "适合": "追求质量提升但需要足够信号数量的投资者",
     "预期": "基础层通过40-80个候选(10-20%)，Gate过滤后5-15个信号",
     "数据依据": "2025-11-11扫描报告：405个币种，confidence中位=9/P75=15/Max=32"
   },
-
   "基础分析阈值": {
     "mature_coin": {
       "prime_strength_min": 42,
       "confidence_min": 15,
       "edge_min": 0.12,
-      "prime_prob_min": 0.50,
+      "prime_prob_min": 0.5,
       "gate_multiplier_min": 0.84,
       "base_strength_min": 40,
       "dims_ok_min": 3,
@@ -24,7 +22,7 @@
     "newcoin_phaseB": {
       "prime_strength_min": 40,
       "confidence_min": 60,
-      "edge_min": 0.50,
+      "edge_min": 0.5,
       "prime_prob_min": 0.68,
       "dims_ok_min": 4,
       "prime_dim_threshold": 70
@@ -33,20 +31,19 @@
       "prime_strength_min": 45,
       "confidence_min": 65,
       "edge_min": 0.55,
-      "prime_prob_min": 0.70,
+      "prime_prob_min": 0.7,
       "dims_ok_min": 5,
       "prime_dim_threshold": 75
     },
     "newcoin_ultra": {
       "prime_strength_min": 50,
       "confidence_min": 70,
-      "edge_min": 0.60,
+      "edge_min": 0.6,
       "prime_prob_min": 0.75,
       "dims_ok_min": 5,
       "prime_dim_threshold": 80
     }
   },
-
   "新币阶段识别": {
     "_description": "新币阶段划分标准（基于币龄小时数）",
     "ultra_new_hours": 24,
@@ -60,11 +57,9 @@
     },
     "_comment": "用于识别新币阶段，应用不同的阈值和质量补偿"
   },
-
   "阶段过渡参数": {
     "_description": "v7.2.31修复P0-2断层：各阶段切换时的平滑过渡配置",
     "_rationale": "避免阶段切换时阈值突变（如bars=400时confidence从60骤降至15）",
-
     "ultra_to_phaseA": {
       "_transition_center": 24,
       "_transition_window": 12,
@@ -73,7 +68,6 @@
       "_description": "ultra → phaseA 过渡期（12-36小时，中心24h）",
       "_effect": "confidence从70线性降至65，edge从0.60降至0.55"
     },
-
     "phaseA_to_phaseB": {
       "_transition_center": 168,
       "_transition_window": 24,
@@ -82,7 +76,6 @@
       "_description": "phaseA → phaseB 过渡期（144-192小时，中心168h）",
       "_effect": "confidence从65线性降至60，edge从0.55降至0.50"
     },
-
     "phaseB_to_mature": {
       "_transition_center": 400,
       "_transition_window": 48,
@@ -92,16 +85,14 @@
       "_effect": "confidence从60线性降至15（最关键，避免暴跌45分），edge从0.50降至0.12",
       "_priority": "P0 - 最严重断层，必须修复"
     },
-
     "_formula": "ratio = (bars - start) / (end - start), threshold = old - ratio * (old - new)",
     "_comment": "线性插值实现平滑过渡，避免临界点处的断崖效应"
   },
-
   "新币质量补偿": {
     "_description": "新币数据少被惩罚（quality_score×0.85），给予补偿",
     "_rationale": "新币天然数据少，适度补偿但仍保留惩罚（数据少确实是风险）",
     "ultra_new_compensate_from": 0.85,
-    "ultra_new_compensate_to": 0.90,
+    "ultra_new_compensate_to": 0.9,
     "phaseA_compensate_from": 0.85,
     "phaseA_compensate_to": 0.88,
     "phaseB_compensate_from": 0.85,
@@ -112,7 +103,6 @@
       "phase_B": "0.85 → 0.87（补偿2%，仍保留13%惩罚）",
       "mature": "不补偿"
     },
-
     "_v7.2.31_gap_fix": "修复P2断层：补偿平滑退出配置",
     "compensation_full_apply_bars": 100,
     "compensation_exit_complete_bars": 150,
@@ -127,7 +117,6 @@
       "_effect": "quality_score从bars=100的补偿值平滑降至bars=150的无补偿（0.85）"
     }
   },
-
   "数据质量阈值": {
     "_description": "数据质量硬门槛（入场检查）",
     "min_bars_1h": 200,
@@ -139,7 +128,6 @@
     "_comment": "v7.2.31修复P0-1断层：降低至0.85（170根K线=7.1天），从0.90降低0.4天捕捉时间",
     "_gap_fix": "bars=170时data_qual=0.85，提前0.4天进入分析（原需180根/7.5天）"
   },
-
   "新币种平滑处理": {
     "_description": "v7.2.44新增P2：新币种数据不足时的平滑处理，避免因子计算不稳定",
     "enable_newcoin_smooth": true,
@@ -155,14 +143,12 @@
     "_newcoin_label_enabled_comment": "是否在元数据中添加is_newcoin标记",
     "_newcoin_label_enabled_rationale": "标记新币种便于后续分析和监控，也可用于输出显示"
   },
-
   "执行闸门阈值": {
     "_description": "执行质量门槛（流动性/滑点相关）",
-    "execution_gate_min": 0.70,
+    "execution_gate_min": 0.7,
     "_formula": "execution_gate = 0.5 + L / 200.0",
     "_comment": "L因子影响执行质量，新币流动性差需要更高执行质量"
   },
-
   "v72闸门阈值": {
     "gate1_data_quality": {
       "min_klines": 150,
@@ -209,14 +195,12 @@
     },
     "gate_pass_threshold": 0.5
   },
-
   "v72增强参数": {
     "description": "v7.2增强层所需的数据质量要求",
     "min_klines_for_v72": 150,
     "min_cvd_points": 20,
     "_comment": "提高数据要求：100→150根K线，10→20个CVD点"
   },
-
   "F因子动量阈值": {
     "description": "F因子动量级别判定阈值（用于蓄势待发标记）",
     "F_strong_momentum": 40,
@@ -224,15 +208,16 @@
     "_comment": "提高动量要求：强势30→40，中等15→20",
     "_deprecated": "此配置已被'蓄势分级配置'替代，保留用于向后兼容"
   },
-
   "蓄势分级配置": {
     "_description": "v7.2.26改进：F因子驱动的提前捕捉机制（线性平滑降低）",
     "_theory": "资金是因，价格是果。F因子是最领先的指标（-4~8h），当F高时应降低其他阈值提前入场",
     "_enabled": true,
     "_mode": "linear",
-    "_mode_options": ["linear", "stepped"],
+    "_mode_options": [
+      "linear",
+      "stepped"
+    ],
     "_mode_description": "linear=线性平滑降低（推荐，避免断崖效应），stepped=分级降低（保留向后兼容）",
-
     "线性模式参数": {
       "_description": "F在[F_min, F_max]区间内线性插值，避免断崖式跳变",
       "F_threshold_min": 35,
@@ -240,7 +225,6 @@
       "_formula": "当35≤F≤60时：reduction_ratio = (F - 35) / (60 - 35)，阈值线性降低",
       "_example": "F=47.5时reduction_ratio=0.5，阈值降低50%×最大降低幅度",
       "_v7.2.29": "降低阈值(50→35, 70→60)，提前捕捉蓄势待发期信号",
-
       "最大阈值降低": {
         "_description": "当F=60时的最大降低幅度（F=35时降低幅度为0）",
         "confidence_reduction": 5,
@@ -256,13 +240,12 @@
           "position_mult": "1.0 - 0.5 = 0.5"
         }
       },
-
       "默认组内权重": {
         "_description": "v7.2.29新增：默认组内权重（提高领先指标C/V，降低滞后指标T/M）",
-        "TC_T_weight": 0.50,
-        "TC_C_weight": 0.50,
+        "TC_T_weight": 0.5,
+        "TC_C_weight": 0.5,
         "VOM_V_weight": 0.55,
-        "VOM_O_weight": 0.30,
+        "VOM_O_weight": 0.3,
         "VOM_M_weight": 0.15,
         "_rationale": "T和C平衡(50:50)，V主导提升(50%→55%)，M辅助降低(20%→15%)",
         "_final_weights": {
@@ -278,12 +261,10 @@
         }
       }
     },
-
     "分级模式参数": {
       "_description": "保留分级配置供stepped模式使用（向后兼容）",
       "_deprecated": "推荐使用linear模式，stepped模式存在断崖效应"
     },
-
     "level_3_极早期": {
       "F_threshold": 70,
       "触发概率": "~2-5%",
@@ -291,17 +272,16 @@
       "风险等级": "高",
       "仓位倍数": 0.5,
       "_description": "资金大幅领先价格，蓄势最强，但价格尚未启动，风险较高（仅stepped模式使用）",
-
       "权重调整": {
         "_rationale": "F高时提升领先指标（C/O/V）权重，降低滞后指标（T/B）权重",
-        "TC_T_weight": 0.30,
-        "TC_C_weight": 0.70,
+        "TC_T_weight": 0.3,
+        "TC_C_weight": 0.7,
         "VOM_V_weight": 0.45,
         "VOM_O_weight": 0.35,
-        "VOM_M_weight": 0.20,
-        "TC_weight": 0.50,
-        "VOM_weight": 0.40,
-        "B_weight": 0.10,
+        "VOM_M_weight": 0.2,
+        "TC_weight": 0.5,
+        "VOM_weight": 0.4,
+        "B_weight": 0.1,
         "_final_weights": {
           "T": "0.50×0.30 = 15%",
           "C": "0.50×0.70 = 35%",
@@ -311,7 +291,6 @@
           "B": "10%"
         }
       },
-
       "阈值降低": {
         "_rationale": "F≥70时，资金已大量流入，可接受更低的confidence和P",
         "confidence_min": 10,
@@ -326,7 +305,6 @@
         }
       }
     },
-
     "level_2_早期": {
       "F_threshold": 60,
       "触发概率": "~5-10%",
@@ -334,14 +312,13 @@
       "风险等级": "中",
       "仓位倍数": 0.7,
       "_description": "资金明显领先价格，蓄势明显，提前布局",
-
       "权重调整": {
-        "TC_T_weight": 0.40,
-        "TC_C_weight": 0.60,
+        "TC_T_weight": 0.4,
+        "TC_C_weight": 0.6,
         "VOM_V_weight": 0.45,
-        "VOM_O_weight": 0.30,
+        "VOM_O_weight": 0.3,
         "VOM_M_weight": 0.25,
-        "TC_weight": 0.50,
+        "TC_weight": 0.5,
         "VOM_weight": 0.38,
         "B_weight": 0.12,
         "_final_weights": {
@@ -353,7 +330,6 @@
           "B": "12%"
         }
       },
-
       "阈值降低": {
         "confidence_min": 12,
         "P_min": 0.46,
@@ -367,7 +343,6 @@
         }
       }
     },
-
     "level_1_强势": {
       "F_threshold": 50,
       "触发概率": "~10-15%",
@@ -375,14 +350,13 @@
       "风险等级": "中-低",
       "仓位倍数": 0.9,
       "_description": "资金适度领先价格，蓄势初显",
-
       "权重调整": {
-        "TC_T_weight": 0.50,
-        "TC_C_weight": 0.50,
-        "VOM_V_weight": 0.50,
-        "VOM_O_weight": 0.30,
-        "VOM_M_weight": 0.20,
-        "TC_weight": 0.50,
+        "TC_T_weight": 0.5,
+        "TC_C_weight": 0.5,
+        "VOM_V_weight": 0.5,
+        "VOM_O_weight": 0.3,
+        "VOM_M_weight": 0.2,
+        "TC_weight": 0.5,
         "VOM_weight": 0.37,
         "B_weight": 0.13,
         "_final_weights": {
@@ -394,7 +368,6 @@
           "B": "13%"
         }
       },
-
       "阈值降低": {
         "confidence_min": 13,
         "P_min": 0.48,
@@ -408,13 +381,11 @@
         }
       }
     },
-
     "level_0_正常": {
       "F_threshold": -999,
       "说明": "F<50时使用正常模式，保持现有权重和阈值",
       "仓位倍数": 1.0
     },
-
     "_实施说明": {
       "阶段1_立即执行": [
         "1. 修复telegram_fmt.py中的F因子阈值混乱（已完成）",
@@ -432,33 +403,32 @@
         "9. 根据实盘表现调优"
       ]
     },
-
     "_风险控制": {
       "仓位管理": "level_3×0.5, level_2×0.7, level_1×0.9, level_0×1.0",
       "止损收紧": "蓄势信号止损收紧20%（因为入场更早，波动更大）",
       "持续性检查": "要求F≥70持续2-3根K线（2-3小时）才触发level_3",
       "监控指标": "提前量、胜率、收益、假信号率"
     },
-
     "F极值警戒配置": {
       "_description": "v7.2.27新增：F≥75异常警戒机制",
       "_enabled": true,
       "F_extreme_threshold": 75,
       "_v7.2.29": "降低阈值(90→75)，更早警戒极端蓄势情况",
       "strategy": "conservative",
-      "_strategy_options": ["aggressive", "conservative"],
+      "_strategy_options": [
+        "aggressive",
+        "conservative"
+      ],
       "_strategy_description": "aggressive=继续降低阈值, conservative=提高质量要求(推荐)",
-
       "conservative_mode": {
         "_description": "F≥90时反而提高质量要求（防止异常数据）",
         "confidence_min": 12,
-        "P_min": 0.50,
+        "P_min": 0.5,
         "EV_min": 0.015,
         "F_min": 50,
         "position_mult": 0.5,
         "_rationale": "F过高可能是数据异常或陷阱，需要更强确认"
       },
-
       "aggressive_mode": {
         "_description": "F≥90时继续降低阈值（激进策略）",
         "enable_over_max_boost": true,
@@ -470,13 +440,11 @@
       }
     }
   },
-
   "概率校准线性参数": {
     "_description": "v7.2.27改进：概率校准改为线性平滑（移除硬编码断崖）",
     "_version": "v2.0_linear",
     "_enabled": true,
     "_old_version_deprecated": "v1.0使用硬编码F>30/15/-30（已废弃）",
-
     "F因子线性校准": {
       "_description": "F因子对概率的线性调整（平滑无断崖）",
       "_enabled": true,
@@ -496,7 +464,6 @@
       },
       "_rationale": "F越高胜率越高，线性增长符合直觉"
     },
-
     "I因子线性校准": {
       "_description": "I因子对概率的线性调整",
       "_enabled": true,
@@ -516,10 +483,9 @@
       "_rationale": "I越高独立性越强，Alpha机会越大"
     }
   },
-
   "统计校准参数": {
     "calibration_min_samples": 50,
-    "bootstrap_base_p": 0.60,
+    "bootstrap_base_p": 0.6,
     "bootstrap_max_p": 0.75,
     "F_bonus_threshold": 40,
     "F_bonus_value": 0.05,
@@ -536,7 +502,6 @@
     "_mtm_weight_factor_rationale": "未平仓信号不确定性高，给予较低权重（0.5）相比已平仓信号（1.0）",
     "_comment": "提高基准概率：0.45→0.60，提高F/I加成，P0修复：添加时间衰减和未平仓估值"
   },
-
   "VIF多重共线性监控": {
     "_description": "v7.2.44新增P1：8个因子间多重共线性监控（Variance Inflation Factor）",
     "enable_vif_monitoring": true,
@@ -552,39 +517,36 @@
     "_vif_log_interval_comment": "VIF诊断日志间隔（每N个信号输出一次统计）",
     "_vif_log_interval_rationale": "避免日志风暴，每100个信号输出一次VIF统计"
   },
-
   "FI调制器参数": {
     "description": "F/I因子调制器参数（影响Teff、cost、p_min阈值）",
-    "p0_base": 0.60,
+    "p0_base": 0.6,
     "theta_F": 0.04,
     "theta_I": -0.03,
     "T0": 55.0,
-    "beta_F": 0.20,
+    "beta_F": 0.2,
     "beta_I": 0.15,
     "gamma_F": 0.12,
     "gamma_I": 0.08,
     "alpha_gate": 0.25,
     "_comment": "提高基准概率：0.45→0.60，增强F/I调制效果"
   },
-
   "分组权重": {
-    "TC_weight": 0.50,
+    "TC_weight": 0.5,
     "VOM_weight": 0.38,
     "B_weight": 0.12,
     "_tc_threshold": 50,
     "_vom_threshold": 45,
     "_comment": "v7.2.29优化：提高VOM权重(0.35→0.38)，降低B权重(0.15→0.12)，增强领先指标"
   },
-
   "因子分组权重": {
     "_description": "v7.2.29新增：完整的因子权重配置（供analyze_symbol_v72.py使用）",
-    "TC_weight": 0.50,
+    "TC_weight": 0.5,
     "VOM_weight": 0.38,
     "B_weight": 0.12,
-    "TC_T_weight": 0.50,
-    "TC_C_weight": 0.50,
+    "TC_T_weight": 0.5,
+    "TC_C_weight": 0.5,
     "VOM_V_weight": 0.55,
-    "VOM_O_weight": 0.30,
+    "VOM_O_weight": 0.3,
     "VOM_M_weight": 0.15,
     "_final_equivalent_weights": {
       "T": "0.50×0.50 = 25%",
@@ -600,7 +562,6 @@
     },
     "_rationale": "提高领先指标（C/V/O）权重，降低滞后指标（T/B）权重，提前捕捉信号"
   },
-
   "CVD计算参数": {
     "_description": "v7.2.36更新：CVD专家深度复核-必补条件",
     "_version": "v4.0",
@@ -609,88 +570,67 @@
       "v7.2.35: P1-CVD增量修复, P1-OI对齐, P1-动态阈值, P1-防御性编程",
       "v7.2.36: 6个必补条件（尺度异方差对冲、取前不取后、IQR护栏、降级标记、未收盘过滤、窗口一致性）+3个高性价比改进"
     ],
-
     "use_quote": true,
     "_use_quote_comment": "true=使用Quote CVD（USDT单位），false=使用Base CVD（币数量单位）",
     "_use_quote_rationale": "Quote CVD直接反映资金流（USDT），不受币价波动影响，更准确",
-
     "rolling_window": 96,
     "_rolling_window_comment": "滚动Z标准化窗口大小（96根1h K线 = 4天）",
     "_rolling_window_rationale": "避免前视偏差，只使用历史数据计算均值/方差",
-
     "use_robust_zscore": true,
     "_use_robust_zscore_comment": "true=使用MAD（中位数绝对偏差）稳健标准化，false=使用标准差",
     "_use_robust_zscore_rationale": "MAD对异常值更稳健，避免极端值影响Z-score计算",
-
     "min_quote_factor": 0.05,
     "_min_quote_factor_comment": "动态最小成交额阈值系数（0.05 = 5%的成交额中位数）",
     "_min_quote_factor_rationale": "v7.2.35新增：小币友好，基于历史成交额自适应阈值",
-
     "min_quote_window": 96,
     "_min_quote_window_comment": "动态阈值计算窗口（96根1h K线 = 4天）",
     "_min_quote_window_rationale": "使用最近4天数据计算中位数，平衡稳定性和敏感性",
-
     "min_quote_fallback": 10000,
     "_min_quote_fallback_comment": "最小回退阈值（10k USDT），防止动态阈值过低",
     "_min_quote_fallback_rationale": "对于超低流动性币种，保证最低质量标准",
-
     "min_quote_iqr_floor_enable": true,
     "_min_quote_iqr_floor_enable_comment": "v7.2.36条件3：是否启用IQR护栏（防止节假日阈值过低）",
     "_min_quote_iqr_floor_enable_rationale": "IQR护栏=max(0, Q1-1.5×IQR)，防止极端情况下动态阈值被异常压低",
-
     "max_discard_ratio": 0.05,
     "_max_discard_ratio_comment": "K线对齐最大丢弃比例（5%），超过自动降级为单侧CVD",
     "_max_discard_ratio_rationale": "v7.2.35增强：从0.1%提升到5%，超过5%自动降级（不仅警告）",
-
     "safety_lag_ms": 5000,
     "_safety_lag_ms_comment": "v7.2.36条件5：未收盘K线过滤延迟（毫秒）",
     "_safety_lag_ms_rationale": "规则: now < closeTime + safety_lag_ms 则过滤该K线，防止正在形成的K线参与计算",
-
     "weight_mode": "block_total",
     "_weight_mode_comment": "v7.2.36改进1：权重模式声明（block_total=区间权重，per_kline=逐K权重）",
     "_weight_mode_rationale": "明确声明当前策略为区间权重，避免未来混淆",
-
     "use_per_kline_weight": false,
     "_use_per_kline_weight_comment": "是否使用逐K权重（false=区间权重，推荐）",
     "_use_per_kline_weight_rationale": "区间权重更稳定，避免逐K权重噪音；实现保留但默认关闭",
-
     "weight_smoothing_alpha": 0.2,
     "_weight_smoothing_alpha_comment": "EMA平滑系数（仅use_per_kline_weight=true时生效）",
     "_weight_smoothing_alpha_rationale": "若启用逐K权重，EMA平滑降噪",
-
     "outlier_handling": "iqr",
     "_outlier_handling_comment": "异常值处理方法: iqr（默认）, tanh, mad_winsor, none",
     "_outlier_handling_rationale": "v7.2.35新增：配置化异常值处理策略",
-
     "outlier_apply_to": "delta_cvd",
     "_outlier_apply_to_comment": "v7.2.36改进2：异常值处理仅对ΔC生效（价格/OI天然受限无需处理）",
     "_outlier_apply_to_rationale": "价格收益和ΔOI是百分比变化，天然在合理范围；只有ΔC（绝对值）需要软截断",
-
     "tanh_scale": 3.0,
     "_tanh_scale_comment": "tanh软截断尺度（outlier_handling=tanh时生效）",
     "_tanh_scale_rationale": "ΔC' = tanh(ΔC/3σ)·σ，保持符号，限制幅度",
-
     "winsor_percentile": 0.01,
     "_winsor_percentile_comment": "Winsorize百分位（outlier_handling=mad_winsor时生效）",
     "_winsor_percentile_rationale": "截断极端1%的异常值",
-
     "expose_meta_imbalance_ratio": true,
     "_expose_meta_imbalance_ratio_comment": "v7.2.36条件1：是否在meta中输出imbalance_ratio特征",
     "_expose_meta_imbalance_ratio_rationale": "imbalance_ratio = ΔC / max(quoteVol, ε)，理论边界[-1,1]，对冲尺度异方差问题",
-
     "oi_align_mode": "backward_fill",
     "_oi_align_mode_comment": "v7.2.36条件2：OI对齐模式（backward_fill=向下取邻+延迟1栈）",
     "_oi_align_mode_rationale": "取前不取后规则：对齐采用last OI timestamp <= closeTime，禁止向后预取",
-
     "oi_align_tolerance_ms": 5000,
     "_oi_align_tolerance_ms_comment": "v7.2.36条件2：OI对齐最大容忍时间差（毫秒）",
     "_oi_align_tolerance_ms_rationale": "允许OI timestamp与closeTime的最大差异，超过则认为缺失",
-
     "log_aggregate_every": 60,
     "_log_aggregate_every_comment": "v7.2.36改进3：日志聚合间隔（每N根输出一次统计）",
     "_log_aggregate_every_rationale": "避免日志风暴，每60根K线聚合输出一次统计信息，并强制带上symbol/interval"
   },
-
   "_调整说明": {
     "主要变化": [
       "1. 胜率要求：45%→60%（提升15%）",
@@ -714,5 +654,76 @@
       "可接受信号数量减少",
       "注重风险控制"
     ]
+  },
+  "independence_gate": {
+    "version": "7.3.2",
+    "description": "I因子风控闸门参数 - v7.3.2-Full零硬编码版",
+    "thresholds": {
+      "corr_strong_max_I": 30,
+      "corr_strong_max_I_description": "高相关阈值，I≤30视为高度相关（Beta币）",
+      "indep_strong_min_I": 70,
+      "indep_strong_min_I_description": "高独立阈值，I≥70视为高度独立",
+      "btc_trend_strong_T": 60,
+      "btc_trend_strong_T_description": "BTC强趋势阈值，|T_BTC|≥60视为强趋势",
+      "min_score_for_corr": 70,
+      "min_score_for_corr_description": "高Beta币最低分数要求，|composite_score|≥70才允许",
+      "relax_score_for_indep": 45,
+      "relax_score_for_indep_description": "高独立币放宽阈值，从50降到45"
+    },
+    "veto_rules": {
+      "rule_1_beta_against_btc": {
+        "enabled": true,
+        "description": "规则1：高Beta币逆BTC强趋势 → 必杀",
+        "conditions": {
+          "max_I": 30,
+          "min_abs_T_BTC": 60,
+          "opposite_direction": true,
+          "description": "I≤30 AND |T_BTC|≥60 AND sign(T_alt)≠sign(T_BTC)"
+        },
+        "priority": "P0",
+        "rationale": "高Beta币逆势是最危险的交易场景"
+      },
+      "rule_2_beta_weak_signal": {
+        "enabled": true,
+        "description": "规则2：高Beta币弱信号 → 不做",
+        "conditions": {
+          "max_I": 30,
+          "min_abs_composite_score": 70,
+          "description": "I≤30 AND |composite_score|<70"
+        },
+        "priority": "P1",
+        "rationale": "防止高Beta币的噪音交易"
+      }
+    },
+    "threshold_adjustment": {
+      "highly_independent": {
+        "min_I": 70,
+        "adjusted_threshold": 45,
+        "description": "I≥70的币种，信号阈值从50放宽到45",
+        "rationale": "高独立币有更多Alpha机会，适当放宽准入"
+      },
+      "default": {
+        "threshold": 50,
+        "description": "默认信号阈值"
+      }
+    },
+    "soft_modulation": {
+      "confidence": {
+        "highly_independent": 0.15,
+        "independent": 0.05,
+        "neutral": 0.0,
+        "correlated": -0.05,
+        "highly_correlated": -0.1,
+        "description": "根据I因子category调整confidence（±0.15范围）"
+      },
+      "cost": {
+        "highly_independent": 1.0,
+        "independent": 1.0,
+        "neutral": 1.05,
+        "correlated": 1.1,
+        "highly_correlated": 1.2,
+        "description": "根据I因子category调整交易成本倍数"
+      }
+    }
   }
 }

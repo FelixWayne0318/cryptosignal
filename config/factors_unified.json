@@ -236,14 +236,58 @@
       "layer": "market_context",
       "weight": 10,
       "enabled": true,
-      "description": "独立性评分（vs BTC/ETH）",
-      "params": {
+      "description": "独立性评分（vs BTC，v7.3.2-Full零硬编码版）",
+      "version": "7.3.2",
+      "regression": {
         "window_hours": 24,
-        "beta_threshold_high": 1.5,
-        "beta_threshold_low": 0.5,
-        "regression_method": "ols",
-        "btc_weight": 0.6,
-        "eth_weight": 0.4
+        "window_hours_description": "β回归窗口（小时），用于截取价格序列",
+        "min_points": 16,
+        "min_points_description": "最小有效样本数，低于此值返回中性I=50",
+        "outlier_sigma": 3.0,
+        "outlier_sigma_description": "3σ去极值阈值，移除异常收益率",
+        "use_log_return": true,
+        "use_log_return_description": "是否使用log-return（true更符合金融统计）"
+      },
+      "scoring": {
+        "r2_min": 0.1,
+        "r2_min_description": "R²最小阈值，低于此值认为回归不可靠",
+        "beta_low": 0.6,
+        "beta_low_description": "低β边界，|β|≤0.6视为高独立",
+        "beta_high": 1.2,
+        "beta_high_description": "高β边界，|β|≥1.2视为高相关",
+        "extreme_beta": {
+          "enabled": true,
+          "beta_min": 2.0,
+          "beta_min_description": "极端β阈值，|β|≥2.0直接映射到I最低区间",
+          "description": "极端高相关检测"
+        },
+        "mapping": {
+          "highly_independent": {
+            "beta_max": 0.6,
+            "I_range": [85, 100],
+            "description": "|β|≤0.6，I分数85-100"
+          },
+          "independent": {
+            "beta_range": [0.6, 0.9],
+            "I_range": [70, 85],
+            "description": "0.6<|β|<0.9，I分数70-85"
+          },
+          "neutral": {
+            "beta_range": [0.9, 1.2],
+            "I_range": [30, 70],
+            "description": "0.9≤|β|<1.2，I分数30-70"
+          },
+          "correlated": {
+            "beta_range": [1.2, 1.5],
+            "I_range": [15, 30],
+            "description": "1.2≤|β|<1.5，I分数15-30"
+          },
+          "highly_correlated": {
+            "beta_min": 1.5,
+            "I_range": [0, 15],
+            "description": "|β|≥1.5，I分数0-15"
+          }
+        }
       }
     },
     "F": {

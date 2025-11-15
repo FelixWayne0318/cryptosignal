@@ -1,0 +1,42 @@
+{
+  "_description": "因子评分范围和分界线配置",
+  "_warning": "修改这些值会影响整个因子体系，属于重大版本变更",
+  "_version": "7.3.2",
+
+  "factors": {
+    "I": {
+      "min": 0,
+      "max": 100,
+      "neutral": 50,
+      "neutral_description": "数据不可靠时的中性I值（β计算失败或R²过低时使用）",
+
+      "split_beta_mid": 0.9,
+      "split_beta_mid_description": "β分界线，|β|<0.9为independent，|β|≥0.9为correlated",
+
+      "locked": true,
+      "locked_description": "范围锁定标志，修改min/max/neutral需要主版本升级",
+
+      "version": "7.3.2"
+    },
+
+    "_template_for_future_factors": {
+      "_comment": "未来可扩展其他因子的范围配置",
+      "T": { "min": -100, "max": 100, "neutral": 0, "description": "趋势因子范围" },
+      "M": { "min": -100, "max": 100, "neutral": 0, "description": "动量因子范围" },
+      "C": { "min": -100, "max": 100, "neutral": 0, "description": "CVD因子范围" },
+      "V": { "min": -100, "max": 100, "neutral": 0, "description": "成交量因子范围" },
+      "O": { "min": -100, "max": 100, "neutral": 0, "description": "持仓量因子范围" },
+      "B": { "min": -100, "max": 100, "neutral": 0, "description": "基差因子范围" }
+    }
+  },
+
+  "_notes": [
+    "I因子范围[0,100]是系统级设计，贯穿整个因子体系",
+    "修改I的min/max会影响：",
+    "  - 所有I分数的解释",
+    "  - veto规则的阈值（如I≤30）",
+    "  - 监控面板的显示",
+    "  - 历史数据的兼容性",
+    "除非进行主版本升级，否则不建议修改locked的范围参数"
+  ]
+}

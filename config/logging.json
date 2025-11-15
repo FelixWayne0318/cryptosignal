@@ -1,0 +1,27 @@
+{
+  "_description": "日志格式配置",
+  "_version": "7.3.2",
+
+  "logging": {
+    "float_format": {
+      "decimals": 2,
+      "decimals_description": "浮点数显示精度（小数位数），用于日志输出",
+
+      "fallback": "N/A",
+      "fallback_description": "非数值类型或NaN时的回退显示文本"
+    },
+
+    "level": "INFO",
+    "level_description": "日志级别：DEBUG, INFO, WARNING, ERROR, CRITICAL",
+
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "format_description": "日志消息格式模板"
+  },
+
+  "_notes": [
+    "float_format用于安全格式化浮点数，防止日志异常",
+    "decimals=2 表示显示2位小数（如1.23）",
+    "fallback='N/A' 在值为None/NaN时显示",
+    "修改这些值不影响交易逻辑，仅影响日志可读性"
+  ]
+}
