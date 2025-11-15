@@ -23,6 +23,11 @@
 - cfg.py: 仅负责params.json（旧系统，v8.0废弃）
 - RuntimeConfig: 负责所有其他配置（推荐）
 
+🆕 v7.3.2更新:
+- 使用统一路径解析器 (path_resolver.py)
+- 支持环境变量 CRYPTOSIGNAL_CONFIG_ROOT
+- 修复P1-4: 配置路径不一致问题
+
 使用示例：
     from ats_core.config.runtime_config import RuntimeConfig
 
@@ -44,14 +49,18 @@
 创建日期：2025-11-15
 最后更新：2025-11-15
 
-参考: docs/health_checks/system_architecture_health_check_2025-11-15.md#P0-1
+参考:
+- docs/health_checks/system_architecture_health_check_2025-11-15.md#P0-1
+- /tmp/revised_fix_plan.md#Phase2-3
 """
 
 import json
-import os
 from pathlib import Path
 from typing import Dict, Any, Optional
 import logging
+
+# v7.3.2: 使用统一路径解析器
+from .path_resolver import get_config_root, get_config_file
 
 logger = logging.getLogger(__name__)
 
@@ -72,58 +81,57 @@ class RuntimeConfig:
     - 校验：加载时验证配置格式和内容
     """
 
-    # 配置文件根目录
-    _config_root: Optional[Path] = None
-
     # 缓存
     _numeric_stability: Optional[Dict] = None
     _factor_ranges: Optional[Dict] = None
     _factors_unified: Optional[Dict] = None
     _logging: Optional[Dict] = None
 
+    # v7.3.2: set_config_root 和 get_config_root 已迁移到 path_resolver.py
+    # 这里保留兼容性包装方法
+
     @classmethod
     def set_config_root(cls, root_path: str):
         """
-        设置配置文件根目录
+        设置配置文件根目录（向后兼容）
 
         Args:
             root_path: 配置目录路径
 
         Raises:
             ConfigError: 目录不存在时抛出
+
+        Note:
+            v7.3.2: 此方法已委托给 path_resolver.set_config_root()
+            推荐直接使用: from ats_core.config.path_resolver import set_config_root
         """
-        cls._config_root = Path(root_path)
-        if not cls._config_root.exists():
-            raise ConfigError(f"配置目录不存在: {cls._config_root}")
-        logger.info(f"配置根目录设置为: {cls._config_root}")
+        from .path_resolver import set_config_root as _set_config_root, ConfigPathError
+        try:
+            _set_config_root(root_path)
+            logger.info(f"配置根目录设置为: {root_path}")
+        except ConfigPathError as e:
+            raise ConfigError(str(e))
 
     @classmethod
     def get_config_root(cls) -> Path:
         """
-        获取配置文件根目录
+        获取配置文件根目录（向后兼容）
 
         Returns:
             配置目录Path对象
 
         Raises:
             ConfigError: 无法找到config目录时抛出
+
+        Note:
+            v7.3.2: 此方法已委托给 path_resolver.get_config_root()
+            推荐直接使用: from ats_core.config.path_resolver import get_config_root
         """
-        if cls._config_root is None:
-            # 默认：从当前文件向上找config目录
-            current = Path(__file__).parent.parent.parent  # ats_core/config -> ats_core -> root
-            config_dir = current / "config"
-
-            if config_dir.exists():
-                cls._config_root = config_dir
-                logger.debug(f"自动发现配置目录: {cls._config_root}")
-            else:
-                raise ConfigError(
-                    f"无法找到config目录。\n"
-                    f"尝试路径: {config_dir}\n"
-                    f"请调用 RuntimeConfig.set_config_root() 手动设置"
-                )
-
-        return cls._config_root
+        from .path_resolver import ConfigPathError
+        try:
+            return get_config_root()
+        except ConfigPathError as e:
+            raise ConfigError(str(e))
 
     @classmethod
     def _load_json(cls, filename: str) -> Dict:
@@ -138,8 +146,17 @@ class RuntimeConfig:
 
         Raises:
             ConfigError: 文件不存在或格式错误时抛出
+
+        Note:
+            v7.3.2: 使用统一路径解析器获取文件路径
         """
-        config_path = cls.get_config_root() / filename
+        # v7.3.2: 使用统一路径解析器
+        from .path_resolver import ConfigPathError
+
+        try:
+            config_path = get_config_file(filename)
+        except ConfigPathError as e:
+            raise ConfigError(str(e))
 
         if not config_path.exists():
             raise ConfigError(f"配置文件不存在: {config_path}")
