@@ -13,6 +13,34 @@
       "split_beta_mid": 0.9,
       "split_beta_mid_description": "β分界线，|β|<0.9为independent，|β|≥0.9为correlated",
 
+      "mapping": {
+        "highly_independent": {
+          "beta_range": [0, 0.6],
+          "I_range": [85, 100],
+          "description": "高度独立，可能存在Alpha机会"
+        },
+        "independent": {
+          "beta_range": [0.6, 0.9],
+          "I_range": [70, 85],
+          "description": "独立性较好"
+        },
+        "neutral": {
+          "beta_range": [0.9, 1.2],
+          "I_range": [30, 70],
+          "description": "正常相关性"
+        },
+        "correlated": {
+          "beta_range": [1.2, 1.5],
+          "I_range": [15, 30],
+          "description": "高相关性，需要风控"
+        },
+        "highly_correlated": {
+          "beta_range": [1.5, 2.0],
+          "I_range": [0, 15],
+          "description": "高度相关，严格风控"
+        }
+      },
+
       "locked": true,
       "locked_description": "范围锁定标志，修改min/max/neutral需要主版本升级",
 

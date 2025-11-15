@@ -59,6 +59,7 @@ class RuntimeConfig:
     # 缓存
     _numeric_stability: Optional[Dict] = None
     _factor_ranges: Optional[Dict] = None
+    _factors_unified: Optional[Dict] = None
     _logging: Optional[Dict] = None
 
     @classmethod
@@ -298,6 +299,82 @@ class RuntimeConfig:
         logger.debug(f"获取因子范围配置[{factor_name}]: {len(result)}个参数")
         return result
 
+    # ========== 因子统一配置 (v7.3.2-Full) ==========
+
+    @classmethod
+    def load_factors_unified(cls) -> Dict:
+        """
+        加载因子统一配置（factors_unified.json）
+
+        Returns:
+            配置字典
+        """
+        if cls._factors_unified is None:
+            config = cls._load_json("factors_unified.json")
+            cls._factors_unified = config
+            logger.info("因子统一配置加载完成")
+        return cls._factors_unified
+
+    @classmethod
+    def get_factor_config(cls, factor_name: str) -> Dict:
+        """
+        获取因子的完整配置（regression + scoring + mapping）
+
+        整合来源：
+        1. factors_unified.json: regression和scoring参数
+        2. factor_ranges.json: mapping映射配置
+
+        Args:
+            factor_name: 因子名称，如"I"、"T"、"M"
+
+        Returns:
+            配置字典，包含：
+            - regression: 回归参数（如window_hours, min_points等）
+            - scoring: 评分参数（如r2_min, beta_low等）
+            - mapping: Beta映射（如果factor_ranges中有）
+
+        Raises:
+            ConfigError: 因子配置不存在时抛出
+
+        Example:
+            >>> i_cfg = RuntimeConfig.get_factor_config("I")
+            >>> regression = i_cfg["regression"]  # {'window_hours': 24, 'min_points': 16, ...}
+            >>> scoring = i_cfg["scoring"]        # {'r2_min': 0.1, 'beta_low': 0.6, ...}
+            >>> mapping = i_cfg["mapping"]        # {'highly_independent': {...}, ...}
+        """
+        # 从factors_unified.json读取regression和scoring
+        try:
+            unified_cfg = cls.load_factors_unified()
+            factors = unified_cfg.get("factors", {})
+            if factor_name not in factors:
+                raise ConfigError(f"因子配置不存在: {factor_name}")
+            factor_cfg = factors[factor_name]
+        except Exception as e:
+            raise ConfigError(f"加载因子统一配置失败: {e}")
+
+        # 从factor_ranges.json读取mapping（如果有）
+        try:
+            ranges_cfg = cls.get_factor_range(factor_name)
+            mapping = ranges_cfg.get("mapping", {})
+        except Exception:
+            # 如果factor_ranges中没有mapping，使用空字典
+            mapping = {}
+
+        # 合并配置
+        result = {
+            "regression": factor_cfg.get("regression", {}),
+            "scoring": factor_cfg.get("scoring", {}),
+            "mapping": mapping
+        }
+
+        logger.debug(
+            f"获取因子配置[{factor_name}]: "
+            f"regression={len(result['regression'])}项, "
+            f"scoring={len(result['scoring'])}项, "
+            f"mapping={len(result['mapping'])}项"
+        )
+        return result
+
     # ========== 日志配置 ==========
 
     @classmethod
@@ -373,6 +450,7 @@ class RuntimeConfig:
         """
         cls._numeric_stability = None
         cls._factor_ranges = None
+        cls._factors_unified = None
         cls._logging = None
         logger.info("所有配置缓存已清空，下次访问将重新加载")
 
@@ -392,6 +470,7 @@ class RuntimeConfig:
         return {
             "numeric_stability": cls.load_numeric_stability(),
             "factor_ranges": cls.load_factor_ranges(),
+            "factors_unified": cls.load_factors_unified(),
             "logging": cls.load_logging()
         }
 

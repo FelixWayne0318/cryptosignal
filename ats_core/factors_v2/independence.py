@@ -274,36 +274,23 @@ def score_independence(
     # === 1. 加载配置 ===
     if params is None:
         try:
-            # 从RuntimeConfig加载I因子完整配置
-            all_factors = RuntimeConfig.load_factor_ranges()
-            factors_cfg = all_factors.get("factors", {})
-            i_cfg = factors_cfg.get("I", {})
-
-            # 读取v7.3.2的regression和scoring配置块
-            # 注意：这里需要从factors_unified.json读取，暂时使用默认值
-            # TODO: 实现RuntimeConfig.get_factor_config("I")
-            params = {
-                "regression": {
-                    "window_hours": 24,
-                    "min_points": 16,
-                    "outlier_sigma": 3.0,
-                    "use_log_return": True
-                },
-                "scoring": {
-                    "r2_min": 0.1,
-                    "beta_low": 0.6,
-                    "beta_high": 1.2
-                }
-            }
+            # v7.3.2-Full: 从RuntimeConfig加载I因子完整配置
+            # 整合 factors_unified.json (regression+scoring) + factor_ranges.json (mapping)
+            params = RuntimeConfig.get_factor_config("I")
         except Exception as e:
-            # 降级到默认值
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"I因子配置加载失败: {e}，使用降级默认值")
+            # 降级到默认值（仅作后备）
             params = {
                 "regression": {"window_hours": 24, "min_points": 16, "outlier_sigma": 3.0, "use_log_return": True},
-                "scoring": {"r2_min": 0.1, "beta_low": 0.6, "beta_high": 1.2}
+                "scoring": {"r2_min": 0.1, "beta_low": 0.6, "beta_high": 1.2},
+                "mapping": {}
             }
 
     regression_params = params.get("regression", {})
     scoring_params = params.get("scoring", {})
+    mapping_params = params.get("mapping", {})  # v7.3.2-Full: mapping 从 factor_ranges.json 读取
 
     # === 2. 调用BTC-only β回归 ===
     beta_btc, r2, n_points, status = calculate_beta_btc_only(
@@ -329,8 +316,8 @@ def score_independence(
     # 使用|β|（绝对值）映射到I分数
     beta_abs = abs(beta_btc)
 
-    # 从config读取β分界点（如果有mapping配置则使用，否则使用简化版）
-    mapping = scoring_params.get("mapping", {})
+    # 从config读取β分界点（优先使用mapping_params，否则回退到scoring_params）
+    mapping = mapping_params if mapping_params else scoring_params.get("mapping", {})
 
     if mapping:
         # 使用详细mapping配置（从factors_unified.json读取）
