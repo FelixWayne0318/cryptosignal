@@ -56,7 +56,7 @@ from ats_core.execution.stop_loss_calculator import ThreeTierStopLoss
 # ========== v6.6 因子系统（6因子：T/M/C/V/O/B）==========
 # P2.5: 使用价格带法替代固定档位数
 from ats_core.features.liquidity_priceband import score_liquidity_priceband as calculate_liquidity
-from ats_core.factors_v2.basis_funding import calculate_basis_funding
+from ats_core.factors_v2.basis_funding import score_basis_funding
 from ats_core.factors_v2.independence import calculate_independence, score_independence
 
 # ========== P2.1: 蓄势待发检测增强 ==========
@@ -531,7 +531,7 @@ def _analyze_symbol_core(
     t0 = time.time()
     if mark_price is not None and spot_price is not None and funding_rate is not None:
         try:
-            B, B_meta = calculate_basis_funding(
+            B, B_meta = score_basis_funding(
                 perp_price=mark_price,
                 spot_price=spot_price,
                 funding_rate=funding_rate,
@@ -638,16 +638,17 @@ def _analyze_symbol_core(
     # v6.6架构：L/S/F/I移至B层调制器，不参与方向评分
     # 符合MODULATORS.md § 2.1规范：调制器只调制position/Teff/cost/confidence
 
-    # v6.6基础权重（6因子A层系统：总权重100%）
+    # v6.7基础权重（6因子A层系统：总权重100%）
     # 配置优先级：config/params.json > 硬编码默认值
+    # P0修复: fallback权重必须与params.json保持一致
     base_weights_raw = params.get("weights", {
-        # Layer 1: 价格行为层（53%）
+        # Layer 1: 价格行为层（46%）- v6.7 P2.2调整
         "T": 24.0,  # 趋势（v6.6: +4% from S/Q重分配）
-        "M": 17.0,  # 动量（v6.6: +3% from S/Q重分配）
+        "M": 10.0,  # 动量（v6.7 P2.2: 17%→10%, 降低与T的信息重叠66.4%）
         "V": 12.0,  # 量能（v6.6: +1% from S/Q重分配）
-        # Layer 2: 资金流层（41%）
-        "C": 24.0,  # CVD资金流（v6.6: +4% from S/Q重分配）
-        "O": 17.0,  # OI持仓（v6.6: +3% from S/Q重分配）
+        # Layer 2: 资金流层（48%）- v6.7 P2.2调整
+        "C": 27.0,  # CVD资金流（v6.7 P2.2: 24%→27%, +3%）
+        "O": 21.0,  # OI持仓（v6.7 P2.2: 17%→21%, +4%）
         # Layer 3: 微观结构层（6%）
         "B": 6.0,   # 基差+资金费（v6.6: unchanged）
         # B层调制器（不参与评分，权重=0）
@@ -657,7 +658,7 @@ def _analyze_symbol_core(
         "I": 0.0,   # 独立性调制器（v6.6: already B-layer）
         # 废弃因子
         "E": 0.0,   # 环境因子（v6.6: deprecated）
-    })  # A层6因子总计: 24+17+12+24+17+6 = 100.0 ✓
+    })  # A层6因子总计: 24+10+12+27+21+6 = 100.0 ✓
 
     # 过滤注释字段（防止传入blend_weights时出现类型错误）
     base_weights = {k: v for k, v in base_weights_raw.items() if not k.startswith('_')}

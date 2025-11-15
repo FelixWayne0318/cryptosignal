@@ -12,10 +12,10 @@ v7.2.43清理：
 - 这些功能已被features/模块替代或废弃
 """
 
-from .basis_funding import calculate_basis_funding
+from .basis_funding import score_basis_funding
 from .independence import calculate_independence
 
 __all__ = [
-    'calculate_basis_funding',
+    'score_basis_funding',
     'calculate_independence',
 ]

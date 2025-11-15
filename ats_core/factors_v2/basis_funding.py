@@ -25,9 +25,35 @@ from __future__ import annotations
 from typing import Tuple, Dict, Any, Optional
 import numpy as np
 from ats_core.scoring.scoring_utils import StandardizationChain
+from ats_core.config.factor_config import get_factor_config
 
-# 模块级StandardizationChain实例
-_basis_chain = StandardizationChain(alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5)
+# P3修复: 从配置读取StandardizationChain参数，消除硬编码
+_basis_chain = None  # 延迟初始化
+
+def _get_basis_chain() -> StandardizationChain:
+    """获取StandardizationChain实例（延迟初始化，从配置读取）"""
+    global _basis_chain
+
+    if _basis_chain is None:
+        try:
+            config = get_factor_config()
+            std_params = config.get_standardization_params("B")
+
+            _basis_chain = StandardizationChain(
+                alpha=std_params.get('alpha', 0.15),
+                tau=std_params.get('tau', 3.0),
+                z0=std_params.get('z0', 2.5),
+                zmax=std_params.get('zmax', 6.0),
+                lam=std_params.get('lam', 1.5)
+            )
+        except Exception as e:
+            # 配置加载失败时使用默认参数（向后兼容）
+            print(f"⚠️ B因子StandardizationChain配置加载失败，使用默认参数: {e}")
+            _basis_chain = StandardizationChain(
+                alpha=0.15, tau=3.0, z0=2.5, zmax=6.0, lam=1.5
+            )
+
+    return _basis_chain
 
 
 def _to_f(x) -> float:
@@ -176,16 +202,16 @@ def _normalize_funding(
             return -33.0 - ratio * 67.0
 
 
-def calculate_basis_funding(
+def score_basis_funding(
     perp_price: float,
     spot_price: float,
     funding_rate: float,
     funding_history: Optional[list] = None,
     basis_history: Optional[list] = None,
     params: Dict[str, Any] = None
-) -> Tuple[float, Dict[str, Any]]:
+) -> Tuple[int, Dict[str, Any]]:
     """
-    计算基差+资金费评分
+    计算基差+资金费评分（P1修复：统一命名规范score_*，P2修复：返回int）
 
     Args:
         perp_price: 永续合约价格
@@ -299,8 +325,8 @@ def calculate_basis_funding(
     if fwi_active:
         raw_score += fwi_boost
 
-    # v2.0合规：应用StandardizationChain
-    score_pub, diagnostics = _basis_chain.standardize(raw_score)
+    # v2.0合规：应用StandardizationChain（P3修复：从配置读取参数）
+    score_pub, diagnostics = _get_basis_chain().standardize(raw_score)
     final_score = int(round(score_pub))
 
     # === 5. 情绪等级 ===
@@ -352,7 +378,7 @@ if __name__ == "__main__":
 
     # 场景1: 正基差 + 正资金费（强烈看涨）
     print("\n[场景1] 强烈看涨（高溢价+多头支付）")
-    score_1, meta_1 = calculate_basis_funding(
+    score_1, meta_1 = score_basis_funding(
         perp_price=50500,  # 永续价格
         spot_price=50000,  # 现货价格
         funding_rate=0.0015  # 0.15% 资金费
@@ -369,7 +395,7 @@ if __name__ == "__main__":
 
     # 场景2: 负基差 + 负资金费（强烈看跌）
     print("\n[场景2] 强烈看跌（折价+空头支付）")
-    score_2, meta_2 = calculate_basis_funding(
+    score_2, meta_2 = score_basis_funding(
         perp_price=49500,  # 永续价格
         spot_price=50000,  # 现货价格
         funding_rate=-0.0018  # -0.18% 资金费
@@ -386,7 +412,7 @@ if __name__ == "__main__":
 
     # 场景3: 中性基差 + 中性资金费
     print("\n[场景3] 中性市场（平衡）")
-    score_3, meta_3 = calculate_basis_funding(
+    score_3, meta_3 = score_basis_funding(
         perp_price=50025,  # 永续价格
         spot_price=50000,  # 现货价格
         funding_rate=0.0005  # 0.05% 资金费
@@ -404,7 +430,7 @@ if __name__ == "__main__":
     # 场景4: FWI增强（资金费快速上升）
     print("\n[场景4] FWI增强（资金费快速上升）")
     funding_hist = [0.0005 + i * 0.0001 for i in range(30)]  # 费率快速上升
-    score_4, meta_4 = calculate_basis_funding(
+    score_4, meta_4 = score_basis_funding(
         perp_price=50100,
         spot_price=50000,
         funding_rate=0.0034,

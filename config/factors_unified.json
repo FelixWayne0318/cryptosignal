@@ -27,6 +27,14 @@
           "enabled": true,
           "comment": "S因子优化参数（轻平滑+低压缩，保留zigzag快速信号）",
           "lam": 3.0
+        },
+        "B": {
+          "alpha": 0.15,
+          "tau": 3.0,
+          "z0": 2.5,
+          "zmax": 6.0,
+          "lam": 1.5,
+          "comment": "B因子（基差+资金费）使用与T相同的保守参数"
         }
       }
     },
@@ -73,7 +81,7 @@
     "T": {
       "name": "Trend",
       "layer": "price_action",
-      "weight": 25,
+      "weight": 24,
       "enabled": true,
       "description": "趋势强度（EMA交叉+斜率+R²）",
       "params": {
@@ -88,9 +96,9 @@
     "M": {
       "name": "Momentum",
       "layer": "price_action",
-      "weight": 15,
+      "weight": 10,
       "enabled": true,
-      "description": "价格动量（加速度，短窗口EMA3/5）",
+      "description": "价格动量（加速度，短窗口EMA3/5，v6.7降权重减少与T重叠）",
       "params": {
         "ema_fast": 3,
         "ema_slow": 5,
@@ -107,9 +115,9 @@
     "C+": {
       "name": "Enhanced CVD",
       "layer": "money_flow",
-      "weight": 20,
+      "weight": 27,
       "enabled": true,
-      "description": "增强CVD（资金流+拥挤度检测）",
+      "description": "增强CVD（资金流+拥挤度检测，v6.7权重提升）",
       "params": {
         "lookback_hours": 6,
         "cvd_scale": 0.15,
@@ -121,10 +129,10 @@
     },
     "S": {
       "name": "Structure",
-      "layer": "price_action",
-      "weight": 10,
+      "layer": "modulator",
+      "weight": 0,
       "enabled": true,
-      "description": "支撑阻力结构质量（ZigZag模式识别）",
+      "description": "支撑阻力结构质量（ZigZag模式识别，v6.6移至B层调制器）",
       "params": {
         "theta": {
           "big": 0.4,
@@ -148,7 +156,7 @@
     "V+": {
       "name": "Volume + Trigger",
       "layer": "price_action",
-      "weight": 15,
+      "weight": 12,
       "enabled": true,
       "description": "成交量放大（配合价格方向，自适应阈值）",
       "params": {
@@ -163,9 +171,9 @@
     "O+": {
       "name": "OI Regime",
       "layer": "money_flow",
-      "weight": 20,
+      "weight": 21,
       "enabled": true,
-      "description": "OI持仓量变化（名义OI，自适应阈值）",
+      "description": "OI持仓量变化（名义OI，自适应阈值，v6.7权重提升）",
       "params": {
         "oi24_scale": 2.0,
         "align_scale": 4.0,
@@ -179,10 +187,10 @@
     },
     "L": {
       "name": "Liquidity",
-      "layer": "microstructure",
-      "weight": 20,
+      "layer": "modulator",
+      "weight": 0,
       "enabled": true,
-      "description": "流动性质量（订单簿深度）",
+      "description": "流动性质量（订单簿深度，v6.6移至B层调制器）",
       "params": {
         "spread_good_bps": 2.0,
         "spread_bad_bps": 10.0,
@@ -201,7 +209,7 @@
     "B": {
       "name": "Basis + Funding",
       "layer": "microstructure",
-      "weight": 15,
+      "weight": 6,
       "enabled": true,
       "description": "基差+资金费（市场情绪）",
       "params": {
@@ -233,10 +241,10 @@
     },
     "I": {
       "name": "Independence",
-      "layer": "market_context",
-      "weight": 10,
+      "layer": "modulator",
+      "weight": 0,
       "enabled": true,
-      "description": "独立性评分（vs BTC，v7.3.2-Full零硬编码版）",
+      "description": "独立性评分（vs BTC，v7.3.2-Full零硬编码版，v6.6移至B层调制器）",
       "version": "7.3.2",
       "regression": {
         "window_hours": 24,
