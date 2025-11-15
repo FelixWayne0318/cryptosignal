@@ -1,0 +1,191 @@
+═══════════════════════════════════════════════════════════════════
+  CryptoSignal v7.3.4 硬编码问题扫描 - 执行摘要
+═══════════════════════════════════════════════════════════════════
+
+📅 扫描时间: 2025-11-15
+📁 完整报告: HARDCODE_SCAN_REPORT_v7.3.4_2025-11-15.md
+
+───────────────────────────────────────────────────────────────────
+📊 问题统计
+───────────────────────────────────────────────────────────────────
+
+总问题数: 47个
+
+P0 (Critical - 必须立即修复):  9个
+P1 (High - 应尽快修复):       15个
+P2 (Medium - 建议修复):       18个
+P3 (Low - 可选修复):          5个
+
+───────────────────────────────────────────────────────────────────
+🔴 P0级问题清单（必须立即修复）
+───────────────────────────────────────────────────────────────────
+
+[P0-1] analyze_symbol.py:819
+       i_effective_threshold = 50.0  # 硬编码
+       → 修复: 从 factors_unified.json 读取
+
+[P0-2] analyze_symbol.py:1007,1010
+       prime_prob_min = 0.45  # 硬编码
+       watch_prob_min = 0.65  # 硬编码
+       → 修复: 从 signal_thresholds.json 读取
+
+[P0-3] data/quality.py:98-99
+       ALLOW_PRIME_THRESHOLD = 0.90  # 硬编码
+       DEGRADE_THRESHOLD = 0.88      # 硬编码
+       → 修复: 添加配置段 "数据质量阈值"
+
+[P0-4] data/quality.py:304-310
+       时间衰减系数 (0.95, 0.90, 0.85, 0.70)  # 硬编码
+       → 修复: 配置化时间衰减系数
+
+[P0-5] outputs/telegram_fmt.py:1007,1061-1065
+       闸门阈值判断 (0.90, 0.95, 0.85, 0.70)  # 硬编码
+       → 修复: 从配置读取
+
+[P0-6] outputs/telegram_fmt.py:1526,2016
+       数据质量告警 (data_qual < 0.95)  # 硬编码
+       → 修复: 从配置读取
+
+[P0-7] modulators/modulator_chain.py:245,248
+       position_mult *= 0.9  # 硬编码
+       → 修复: 添加配置项 "position_penalty_factor"
+
+[P0-8] pipeline/analyze_symbol.py:1096,1102
+       闸门乘数系数 (0.7+0.3, 0.6+0.4)  # 硬编码
+       → 修复: 配置化系数
+
+[P0-V1] outputs/telegram_fmt.py:2064
+        version = "v6.7"  # 版本号硬编码
+        → 修复: 从 RuntimeConfig 读取
+
+───────────────────────────────────────────────────────────────────
+⚡ 快速修复指南
+───────────────────────────────────────────────────────────────────
+
+第一步: 更新配置文件 (signal_thresholds.json)
+────────────────────────────────────────────────
+
+添加以下配置段:
+
+{
+  "version": "v7.3.4",  // 从 v7.2.19 更新
+
+  "数据质量阈值": {
+    "allow_prime_threshold": 0.90,
+    "degrade_threshold": 0.88,
+    "age_decay_coefficients": {
+      "slightly_old_factor": 0.95,
+      "moderately_old_factor": 0.90,
+      "old_factor": 0.85,
+      "stale_factor": 0.70
+    }
+  },
+
+  "闸门乘数系数": {
+    "data_qual_min_weight": 0.7,
+    "data_qual_max_weight": 0.3,
+    "execution_min_weight": 0.6,
+    "execution_max_weight": 0.4
+  },
+
+  "Telegram输出阈值": {
+    "gate1_data_qual_min": 0.90,
+    "gate_multiplier_excellent": 0.95,
+    "gate_multiplier_good": 0.85,
+    "gate_multiplier_acceptable": 0.70,
+    "data_qual_warning_threshold": 0.95
+  },
+
+  "概率阈值": {
+    "prime_prob_min_default": 0.45,
+    "watch_prob_min_default": 0.65
+  }
+}
+
+第二步: 更新配置文件 (factors_unified.json)
+────────────────────────────────────────────────
+
+添加以下配置段:
+
+{
+  "I因子参数": {
+    "effective_threshold": 50.0,
+    "confidence_boost_default": 0.0
+  },
+
+  "调制器参数": {
+    "position_penalty_factor": 0.9
+  }
+}
+
+第三步: 修改代码文件
+────────────────────────────────────────────────
+
+1. ats_core/pipeline/analyze_symbol.py
+   - 导入: from ats_core.config.factor_config import get_factor_config
+   - 819行: 从配置读取 i_effective_threshold
+   - 1007,1010行: 从配置读取 prime_prob_min, watch_prob_min
+   - 1096,1102行: 从配置读取闸门乘数系数
+
+2. ats_core/data/quality.py
+   - 导入: from ats_core.config.threshold_config import get_thresholds
+   - 98-99行: 从配置读取数据质量阈值
+   - 304-310行: 从配置读取时间衰减系数
+
+3. ats_core/outputs/telegram_fmt.py
+   - 导入: from ats_core.config.threshold_config import get_thresholds
+   - 2064行: 从 RuntimeConfig 读取版本号
+   - 1007行: 从配置读取 gate1_data_qual_min
+   - 1061-1065行: 从配置读取闸门乘数等级
+   - 1526,2016行: 从配置读取数据质量告警阈值
+
+4. ats_core/modulators/modulator_chain.py
+   - 245,248行: 从配置读取 position_penalty_factor
+
+───────────────────────────────────────────────────────────────────
+📋 验证清单
+───────────────────────────────────────────────────────────────────
+
+修复后运行以下命令验证:
+
+□ JSON语法验证
+  python -m json.tool config/signal_thresholds.json > /dev/null
+  python -m json.tool config/factors_unified.json > /dev/null
+
+□ 配置加载测试
+  python -c "from ats_core.config.threshold_config import get_thresholds; print('✅ OK')"
+
+□ 硬编码检测回归
+  grep -rn "i_effective_threshold.*=.*50\.0" --include="*.py" ats_core/
+  grep -rn "prime_prob_min.*=.*0\.45" --include="*.py" ats_core/
+  grep -rn "ALLOW_PRIME_THRESHOLD.*=.*0\.90" --include="*.py" ats_core/
+  (预期: 全部无结果)
+
+□ 功能测试
+  python scripts/realtime_signal_scanner.py --max-symbols 10
+
+□ 版本号检查
+  tail -100 ~/cryptosignal_*.log | grep "v7.3.4"
+
+───────────────────────────────────────────────────────────────────
+📈 修复收益
+───────────────────────────────────────────────────────────────────
+
+✅ 消除关键路径硬编码
+✅ 提高系统可配置性
+✅ 方便参数调优
+✅ 版本号统一管理
+✅ 代码质量提升
+
+预计工作量: 2-3小时
+风险等级: 低（纯配置化重构，逻辑不变）
+
+───────────────────────────────────────────────────────────────────
+🔗 相关文件
+───────────────────────────────────────────────────────────────────
+
+完整报告: HARDCODE_SCAN_REPORT_v7.3.4_2025-11-15.md
+标准文档: standards/SYSTEM_ENHANCEMENT_STANDARD.md
+配置指南: docs/CONFIG_MANAGEMENT_GUIDE.md
+
+═══════════════════════════════════════════════════════════════════

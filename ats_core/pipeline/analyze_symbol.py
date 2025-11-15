@@ -790,11 +790,16 @@ def _analyze_symbol_core(
             config=None  # 使用默认配置
         )
 
+        # v7.3.4: 从配置读取I因子参数（消除P0-1硬编码）
+        i_factor_params = factor_config.get('I因子参数', {})
+        i_effective_threshold_default = i_factor_params.get('effective_threshold', 50.0)
+        i_confidence_boost_default = i_factor_params.get('confidence_boost_default', 0.0)
+
         # 提取veto信息（将在is_prime判定前使用）
         i_veto = i_veto_result.get("veto", False)
         i_veto_reasons = i_veto_result.get("veto_reasons", [])
-        i_effective_threshold = i_veto_result.get("effective_threshold", 50.0)
-        i_confidence_boost = i_veto_result.get("confidence_boost", 0.0)
+        i_effective_threshold = i_veto_result.get("effective_threshold", i_effective_threshold_default)
+        i_confidence_boost = i_veto_result.get("confidence_boost", i_confidence_boost_default)
         i_cost_multiplier = i_veto_result.get("cost_multiplier", 1.0)
 
         # 应用软调制到confidence和cost（仅作记录，不影响现有逻辑）
@@ -816,8 +821,10 @@ def _analyze_symbol_core(
         warn(f"I因子veto检查失败: {e}")
         i_veto = False
         i_veto_reasons = []
-        i_effective_threshold = 50.0
-        i_confidence_boost = 0.0
+        # v7.3.4: 从配置读取默认值（消除P0-1硬编码）
+        i_factor_params = factor_config.get('I因子参数', {})
+        i_effective_threshold = i_factor_params.get('effective_threshold', 50.0)
+        i_confidence_boost = i_factor_params.get('confidence_boost_default', 0.0)
         i_cost_multiplier = 1.0
         I_meta['veto_check_error'] = str(e)
 
@@ -996,18 +1003,23 @@ def _analyze_symbol_core(
         # v7.3.4修复：统一使用signal_thresholds.json，移除params.json依赖
         # 修复前：使用params.json的publish配置（prime_prob_min=0.68）
         # 修复后：使用signal_thresholds.json的mature_coin配置（prime_prob_min=0.45）
+        # v7.3.4: 从配置读取概率阈值（消除P0-2硬编码）
+        prob_thresholds = config.config.get('概率阈值', {}) if config else {}
+        prime_prob_min_default = prob_thresholds.get('prime_prob_min_default', 0.45)
+        watch_prob_min_default = prob_thresholds.get('watch_prob_min_default', 0.65)
+
         if config:
-            prime_prob_min = config.get_mature_threshold('prime_prob_min', 0.45)  # v7.3.4修复
+            prime_prob_min = config.get_mature_threshold('prime_prob_min', prime_prob_min_default)  # v7.3.4修复
             prime_dims_ok_min = config.get_mature_threshold('dims_ok_min', 3)
             prime_dim_threshold = config.get_mature_threshold('prime_dim_threshold', 50)
             # watch功能已废弃，但保留兼容性
-            watch_prob_min = 0.65  # 保持原值，watch信号不再发送
+            watch_prob_min = watch_prob_min_default  # v7.3.4: 从配置读取
         else:
             # 配置加载失败时使用默认值
-            prime_prob_min = 0.45
+            prime_prob_min = prime_prob_min_default  # v7.3.4: 从配置读取
             prime_dims_ok_min = 3
             prime_dim_threshold = 50
-            watch_prob_min = 0.65
+            watch_prob_min = watch_prob_min_default  # v7.3.4: 从配置读取
 
     # ---- Prime评分系统（v4.0 - 基于10维因子系统）----
     # 重大改进：使用10维综合评分替代4维独立评分
@@ -1088,18 +1100,25 @@ def _analyze_symbol_core(
     # 这是v6.6完整集成的关键：让四门真正影响Prime强度
     gate_multiplier = 1.0
 
+    # v7.3.4: 从配置读取闸门乘数系数（消除P0-8硬编码）
+    gate_coeffs = config.config.get('闸门乘数系数', {}) if config else {}
+    data_qual_min_weight = gate_coeffs.get('data_qual_min_weight', 0.7)
+    data_qual_max_weight = gate_coeffs.get('data_qual_max_weight', 0.3)
+    execution_min_weight = gate_coeffs.get('execution_min_weight', 0.6)
+    execution_max_weight = gate_coeffs.get('execution_max_weight', 0.4)
+
     # DataQual影响（30%权重）
     # DataQual=1.0 → *1.0（无影响）
     # DataQual=0.9 → *0.97（-3%）
     # DataQual=0.8 → *0.94（-6%）
     # DataQual=0.5 → *0.85（-15%）
-    gate_multiplier *= (0.7 + 0.3 * gates_data_qual)
+    gate_multiplier *= (data_qual_min_weight + data_qual_max_weight * gates_data_qual)
 
     # Execution影响（40%权重）
     # Execution=1.0 → *1.0（无影响）
     # Execution=0.5 → *0.8（-20%）
     # Execution=0.0 → *0.6（-40%）
-    gate_multiplier *= (0.6 + 0.4 * gates_execution)
+    gate_multiplier *= (execution_min_weight + execution_max_weight * gates_execution)
 
     # EV负值时额外惩罚（最多-30%）
     if gates_ev < 0:

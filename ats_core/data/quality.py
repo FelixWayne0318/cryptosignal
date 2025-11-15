@@ -49,6 +49,9 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional, Tuple
 from datetime import datetime, timedelta, timezone
 
+# v7.3.4: 导入threshold_config用于配置化阈值
+from ats_core.config.threshold_config import get_thresholds
+
 # UTC+8时区（北京时间）
 TZ_UTC8 = timezone(timedelta(hours=8))
 
@@ -94,9 +97,18 @@ class DataQualMonitor:
         'mismatch': 0.30
     }
 
-    # Default thresholds
-    ALLOW_PRIME_THRESHOLD = 0.90
-    DEGRADE_THRESHOLD = 0.88
+    # v7.3.4: 从配置读取阈值（消除P0-3硬编码）
+    @classmethod
+    def _get_quality_thresholds(cls):
+        """从配置读取数据质量阈值"""
+        config = get_thresholds()
+        quality_config = config.get('数据质量阈值', {})
+        return {
+            'allow_prime': quality_config.get('allow_prime_threshold', 0.90),
+            'degrade': quality_config.get('degrade_threshold', 0.88)
+        }
+
+    # Default thresholds (从配置读取，保留常量作为最后降级)
     DRIFT_THRESHOLD_MS = 300  # 300ms drift threshold
 
     def __init__(
@@ -297,17 +309,27 @@ class DataQualMonitor:
 
         age = time.time() - kline_cache.last_update[symbol]
 
+        # v7.3.4: 从配置读取时间衰减系数（消除P0-4硬编码）
+        config = get_thresholds()
+        quality_config = config.get('数据质量阈值', {})
+        decay_coeffs = quality_config.get('age_decay_coefficients', {})
+
+        slightly_old_factor = decay_coeffs.get('slightly_old_factor', 0.95)
+        moderately_old_factor = decay_coeffs.get('moderately_old_factor', 0.90)
+        old_factor = decay_coeffs.get('old_factor', 0.85)
+        stale_factor = decay_coeffs.get('stale_factor', 0.70)
+
         # 根据数据年龄计算质量分数
         if age <= 30:  # 30秒内
             return 1.0, f"Data fresh ({age:.0f}s)"
         elif age <= 60:  # 1分钟内
-            return 0.95, f"Data slightly old ({age:.0f}s)"
+            return slightly_old_factor, f"Data slightly old ({age:.0f}s)"
         elif age <= 180:  # 3分钟内
-            return 0.90, f"Data moderately old ({age:.0f}s)"
+            return moderately_old_factor, f"Data moderately old ({age:.0f}s)"
         elif age <= max_age_seconds:  # 5分钟内
-            return 0.85, f"Data old ({age:.0f}s)"
+            return old_factor, f"Data old ({age:.0f}s)"
         else:  # 超过5分钟
-            return 0.70, f"Data stale ({age:.0f}s > {max_age_seconds}s)"
+            return stale_factor, f"Data stale ({age:.0f}s > {max_age_seconds}s)"
 
     def can_publish_prime(
         self,
@@ -362,13 +384,18 @@ class DataQualMonitor:
                 logger = logging.getLogger(__name__)
                 logger.info(f"[DataQual-REST] {symbol}: {dataqual:.3f} | {cache_reason}")
 
-        if dataqual >= self.ALLOW_PRIME_THRESHOLD:
+        # v7.3.4: 从配置读取阈值（消除P0-3硬编码）
+        thresholds = self._get_quality_thresholds()
+        allow_prime_threshold = thresholds['allow_prime']
+        degrade_threshold = thresholds['degrade']
+
+        if dataqual >= allow_prime_threshold:
             return True, dataqual, f"✅ Quality sufficient for Prime ({mode})" + reason_suffix
 
-        if dataqual < self.DEGRADE_THRESHOLD:
-            return False, dataqual, f"❌ Quality degraded: {dataqual:.3f} < {self.DEGRADE_THRESHOLD} ({mode})" + reason_suffix
+        if dataqual < degrade_threshold:
+            return False, dataqual, f"❌ Quality degraded: {dataqual:.3f} < {degrade_threshold} ({mode})" + reason_suffix
 
-        return False, dataqual, f"⚠️  Quality below Prime: {dataqual:.3f} < {self.ALLOW_PRIME_THRESHOLD} ({mode})" + reason_suffix
+        return False, dataqual, f"⚠️  Quality below Prime: {dataqual:.3f} < {allow_prime_threshold} ({mode})" + reason_suffix
 
     def get_all_qualities(self) -> Dict[str, float]:
         """

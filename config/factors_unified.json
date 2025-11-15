@@ -470,6 +470,24 @@
       }
     }
   },
+  "I因子参数": {
+    "_description": "v7.3.4新增：I因子(Independence)的运行时参数",
+    "effective_threshold": 50.0,
+    "confidence_boost_default": 0.0,
+    "_comment": "消除analyze_symbol.py:819硬编码",
+    "_rationale": {
+      "effective_threshold": "I因子有效阈值（用于判断是否影响confidence）",
+      "confidence_boost_default": "默认confidence加成（I>effective_threshold时的调整）"
+    }
+  },
+  "调制器参数": {
+    "_description": "v7.3.4新增：调制器模块(modulators)运行时参数",
+    "position_penalty_factor": 0.9,
+    "_comment": "消除modulator_chain.py:245,248硬编码",
+    "_rationale": {
+      "position_penalty_factor": "仓位惩罚因子（position_mult *= 0.9）"
+    }
+  },
   "weights_config": {
     "total_weight": 160,
     "normalization_factor": 1.6,

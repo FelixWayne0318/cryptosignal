@@ -31,8 +31,10 @@ from typing import Any, Dict, Optional, Tuple, List
 import math
 
 # v7.3.45: 导入配置管理器（用于F因子蓄势阈值）
+# v7.3.4: 导入RuntimeConfig（用于版本号，消除P0-V1硬编码）
 try:
     from ats_core.config.threshold_config import get_thresholds
+    from ats_core.config.runtime_config import RuntimeConfig
     CONFIG_AVAILABLE = True
 except ImportError:
     CONFIG_AVAILABLE = False
@@ -1001,10 +1003,21 @@ def render_four_gates(r: Dict[str, Any]) -> str:
     # 获取gate数据
     gates_data = _get_dict(r, "gates")
 
+    # v7.3.4: 从配置读取Telegram输出阈值（消除P0-5硬编码）
+    telegram_thresholds = {}
+    if CONFIG_AVAILABLE:
+        try:
+            config = get_thresholds()
+            telegram_thresholds = config.get('Telegram输出阈值', {})
+        except:
+            pass
+
+    gate1_data_qual_min = telegram_thresholds.get('gate1_data_qual_min', 0.90)
+
     # 🚪 Gate 1: DataQual（数据质量）
     data_qual = _get(r, "data_quality") or _get(r, "DataQual") or gates_data.get("data_qual", 1.0)
     gate1_value = data_qual
-    gate1_pass = data_qual >= 0.90
+    gate1_pass = data_qual >= gate1_data_qual_min
 
     lines.append(f"\n🚪 Gate 1：数据质量")
     lines.append(f"   {'✅' if gate1_pass else '❌'} DataQual = {data_qual:.2%} {'≥' if gate1_pass else '<'} 90%")
@@ -1057,12 +1070,17 @@ def render_four_gates(r: Dict[str, Any]) -> str:
     else:
         lines.append(f"   Prime强度调节: ×{gate_multiplier:.3f}")
 
+    # v7.3.4: 从配置读取gate multiplier等级阈值（消除P0-5硬编码）
+    gate_mult_excellent = telegram_thresholds.get('gate_multiplier_excellent', 0.95)
+    gate_mult_good = telegram_thresholds.get('gate_multiplier_good', 0.85)
+    gate_mult_acceptable = telegram_thresholds.get('gate_multiplier_acceptable', 0.70)
+
     # 总体状态
-    if gate_multiplier >= 0.95:
+    if gate_multiplier >= gate_mult_excellent:
         status = "🟢 优秀（几乎无惩罚）"
-    elif gate_multiplier >= 0.85:
+    elif gate_multiplier >= gate_mult_good:
         status = "🟡 良好（轻微惩罚）"
-    elif gate_multiplier >= 0.70:
+    elif gate_multiplier >= gate_mult_acceptable:
         status = "🟠 一般（中度惩罚）"
     else:
         status = "🔴 较差（显著惩罚）"
@@ -1491,6 +1509,16 @@ def _risk_alerts_block(r: Dict[str, Any]) -> str:
 
     根据各项指标自动生成风险警告
     """
+    # v7.3.4: 从配置读取数据质量告警阈值（消除P0-6硬编码）
+    data_qual_warning = 0.95  # 默认值
+    if CONFIG_AVAILABLE:
+        try:
+            config = get_thresholds()
+            telegram_thresholds = config.get('Telegram输出阈值', {})
+            data_qual_warning = telegram_thresholds.get('data_qual_warning_threshold', 0.95)
+        except:
+            pass
+
     alerts = []
     modulation = _get_dict(r, "modulation")
     modulator_output = _get_dict(r, "modulator_output")
@@ -1523,7 +1551,7 @@ def _risk_alerts_block(r: Dict[str, Any]) -> str:
 
     # 风险5：数据质量
     data_qual = _get(r, "data_qual") or 1.0
-    if data_qual < 0.95:
+    if data_qual < data_qual_warning:  # v7.3.4: 从配置读取阈值
         alerts.append(f"⚠️ [数据] 数据质量略低({data_qual:.0%})，建议复核")
 
     # 风险6：软约束
@@ -2013,7 +2041,7 @@ def render_v67_rich(r: Dict[str, Any]) -> str:
 
     # 风险4：数据质量
     data_qual = _get(r, "data_qual") or 1.0
-    if data_qual and data_qual < 0.95:
+    if data_qual and data_qual < data_qual_warning:  # v7.3.4: 从配置读取阈值
         alerts.append(f"⚠️ [数据] 数据质量略低({data_qual:.0%})，建议复核")
 
     # 风险5：软约束 (v6.7新增)
@@ -2061,7 +2089,15 @@ def render_v67_rich(r: Dict[str, Any]) -> str:
     from datetime import datetime, timezone
     # UTC时区（统一使用UTC，与Binance API保持一致）
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    version = "v6.7"
+
+    # v7.3.4: 从RuntimeConfig读取版本号（消除P0-V1硬编码）
+    version = "v7.3.4"  # 默认值
+    if CONFIG_AVAILABLE:
+        try:
+            version = RuntimeConfig.VERSION
+        except:
+            pass
+
     binance_url = f"https://www.binance.com/en/futures/{symbol}"
 
     footer = f"""
@@ -2088,6 +2124,16 @@ def render_v67_rich(r: Dict[str, Any]) -> str:
 
 def render_v67_compact(r: Dict[str, Any]) -> str:
     """v6.7简洁模式（6个核心块）"""
+
+    # v7.3.4: 从配置读取数据质量告警阈值（消除P0-6硬编码）
+    data_qual_warning = 0.95  # 默认值
+    if CONFIG_AVAILABLE:
+        try:
+            config = get_thresholds()
+            telegram_thresholds = config.get('Telegram输出阈值', {})
+            data_qual_warning = telegram_thresholds.get('data_qual_warning_threshold', 0.95)
+        except:
+            pass
 
     # Block 1: 头部
     direction = (_get(r, "side") or "unknown").upper()

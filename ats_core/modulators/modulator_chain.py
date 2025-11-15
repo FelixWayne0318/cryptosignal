@@ -40,6 +40,9 @@ v6.6 统一调制器链 - L/S/F/I四调制器系统
 from typing import Dict, Any, Optional, Tuple
 import math
 
+# v7.3.4: 导入factor_config用于配置化参数
+from ats_core.config.factor_config import get_factor_config
+
 
 class ModulatorOutput:
     """调制器输出数据类"""
@@ -240,13 +243,18 @@ class ModulatorChain:
             spread_bps = L_components.get("spread_bps", 0)
             impact_bps = L_components.get("impact_bps", 0)
 
+            # v7.3.4: 从配置读取仓位惩罚因子（消除P0-7硬编码）
+            config = get_factor_config()
+            modulator_params = config.get('调制器参数', {})
+            position_penalty = modulator_params.get('position_penalty_factor', 0.9)
+
             # 如果spread或impact极高，进一步降低仓位（但不低于min_position）
             if spread_bps > 30:
-                position_mult *= 0.9
-                warnings.append(f"spread高({spread_bps:.1f}bps)，仓位降低10%")
+                position_mult *= position_penalty
+                warnings.append(f"spread高({spread_bps:.1f}bps)，仓位降低{(1-position_penalty)*100:.0f}%")
             if impact_bps > 10:
-                position_mult *= 0.9
-                warnings.append(f"impact高({impact_bps:.1f}bps)，仓位降低10%")
+                position_mult *= position_penalty
+                warnings.append(f"impact高({impact_bps:.1f}bps)，仓位降低{(1-position_penalty)*100:.0f}%")
 
             # 限制在范围内
             position_mult = max(min_position, min(max_position, position_mult))
