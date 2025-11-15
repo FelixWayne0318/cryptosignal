@@ -263,7 +263,7 @@ class ScanStatistics:
         # I因子默认值检测（I=50表示数据不足或计算失败）
         I_default_coins = []
         beta_btc_values = []
-        beta_eth_values = []
+        # v7.3.2-Full: 移除beta_eth（BTC-only回归）
 
         for d in self.symbols_data:
             I_value = d.get('I', 0)
@@ -279,25 +279,20 @@ class ScanStatistics:
                         'error': error
                     })
 
-            # 收集Beta系数
+            # 收集Beta系数（v7.3.2-Full: 仅BTC）
             if I_meta and 'error' not in I_meta:
                 beta_btc = I_meta.get('beta_btc')
                 if beta_btc != 'N/A' and beta_btc is not None:
                     beta_btc_values.append(beta_btc)
 
-                beta_eth = I_meta.get('beta_eth')
-                if beta_eth != 'N/A' and beta_eth is not None:
-                    beta_eth_values.append(beta_eth)
-
         anomalies['I_default']['count'] = len(I_default_coins)
         anomalies['I_default']['pct'] = len(I_default_coins) / total * 100 if total > 0 else 0
         anomalies['I_default']['coins'] = I_default_coins[:10]
 
-        # I因子元数据统计
-        if beta_btc_values or beta_eth_values:
+        # I因子元数据统计（v7.3.2-Full: BTC-only）
+        if beta_btc_values:
             anomalies['I_meta_summary'] = {
-                'beta_btc': self._calc_simple_stats(beta_btc_values) if beta_btc_values else {},
-                'beta_eth': self._calc_simple_stats(beta_eth_values) if beta_eth_values else {}
+                'beta_btc': self._calc_simple_stats(beta_btc_values)
             }
 
         return anomalies
@@ -342,7 +337,7 @@ class ScanStatistics:
             config = get_thresholds()
             confidence_min = config.get_gate_threshold('gate6_综合质量', 'confidence_min', 20)
             prime_strength_min = config.get_gate_threshold('gate6_综合质量', 'prime_strength_min', 45)
-            report.append(f"  v7.2版本: v7.2.39 (Gate6/7真正生效)")
+            report.append(f"  v7.3.2-Full版本: I因子BTC-only + MarketContext优化")
             report.append(f"  Gate6阈值: confidence_min={confidence_min}, prime_strength_min={prime_strength_min}")
             report.append(f"  配置文件: ✅ 已加载 (config/signal_thresholds.json)")
             report.append(f"  七道闸门: Gate1数据质量 + Gate2资金支持 + Gate3期望收益 + Gate4概率 + Gate5独立性 + Gate6综合质量(2项)")
@@ -350,7 +345,7 @@ class ScanStatistics:
             report.append(f"  ⚠️  配置加载失败: {e}")
         report.append("")
 
-        # v7.2.39新增：v7.2增强统计区块（建议2）
+        # v7.3.2-Full: 增强统计区块（I因子veto + v7.2增强）
         if self.v72_enhanced_count > 0 or self.v72_failed_count > 0:
             total_count = self.v72_enhanced_count + self.v72_failed_count
             enhanced_pct = self.v72_enhanced_count / total_count * 100 if total_count > 0 else 0
@@ -358,11 +353,11 @@ class ScanStatistics:
             changed_pct = self.v72_decision_changed_count / total_count * 100 if total_count > 0 else 0
             signals_pct = len(self.signals) / total_count * 100 if total_count > 0 else 0
 
-            report.append("🔧 【v7.2增强统计】")
-            report.append(f"  v7.2增强成功: {self.v72_enhanced_count}个 ({enhanced_pct:.1f}%)")
+            report.append("🔧 【v7.3.2-Full增强统计】")
+            report.append(f"  增强成功: {self.v72_enhanced_count}个 ({enhanced_pct:.1f}%) - I因子veto风控已生效")
             if self.v72_failed_count > 0:
-                report.append(f"  v7.2增强失败: {self.v72_failed_count}个 ({failed_pct:.1f}%) ⚠️")
-            report.append(f"  决策变更: {self.v72_decision_changed_count}个 (v7.2拒绝了基础层通过的信号)")
+                report.append(f"  增强失败: {self.v72_failed_count}个 ({failed_pct:.1f}%) ⚠️")
+            report.append(f"  决策变更: {self.v72_decision_changed_count}个 (I因子veto拦截了高风险信号)")
             report.append(f"  七道闸门全部通过: {len(self.signals)}个 ({signals_pct:.1f}%)")
             report.append("")
 
@@ -387,7 +382,7 @@ class ScanStatistics:
                 default_count = anomalies['I_default']['count']
                 default_pct = anomalies['I_default']['pct']
                 report.append(f"  ⚠️  I因子降级: {default_count}个币种 ({default_pct:.1f}%) 使用默认值")
-                report.append(f"     可能原因: BTC/ETH K线数据不足（需要48h数据）")
+                report.append(f"     可能原因: BTC K线数据不足（v7.3.2-Full BTC-only回归需要48h BTC数据）")
 
             report.append("")
 
@@ -499,24 +494,14 @@ class ScanStatistics:
                 beta_btc_stats = anomalies['I_meta_summary'].get('beta_btc', {})
                 if beta_btc_stats:
                     report.append(
-                        f"  beta_btc: "
+                        f"  beta_btc (v7.3.2-Full BTC-only): "
                         f"Min={beta_btc_stats.get('min', 0):.2f}, "
                         f"Mean={beta_btc_stats.get('mean', 0):.2f}, "
                         f"Median={beta_btc_stats.get('median', 0):.2f}, "
                         f"Max={beta_btc_stats.get('max', 0):.2f} "
                         f"({beta_btc_stats.get('count', 0)}个币种)"
                     )
-
-                beta_eth_stats = anomalies['I_meta_summary'].get('beta_eth', {})
-                if beta_eth_stats:
-                    report.append(
-                        f"  beta_eth: "
-                        f"Min={beta_eth_stats.get('min', 0):.2f}, "
-                        f"Mean={beta_eth_stats.get('mean', 0):.2f}, "
-                        f"Median={beta_eth_stats.get('median', 0):.2f}, "
-                        f"Max={beta_eth_stats.get('max', 0):.2f} "
-                        f"({beta_eth_stats.get('count', 0)}个币种)"
-                    )
+                # v7.3.2-Full: 移除beta_eth显示（已废弃ETH依赖）
 
             report.append("")
 
