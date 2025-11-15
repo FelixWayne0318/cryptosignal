@@ -1364,15 +1364,15 @@ def _analyze_symbol_core(
         penalty_reason = ""
 
     # ---- v7.3.2-Full: I因子最终veto检查（使用实际T_BTC） ----
-    # 现在market_meta已计算，可以使用实际的btc_trend作为T_BTC
-    # 重新调用apply_independence_full()进行最终veto判定
+    # v7.3.2-Full Phase 5: 使用统一MarketContext中的btc_trend
+    # 性能优化：T_BTC由batch_scan全局计算1次，避免400次重复计算
     try:
-        # 从market_meta提取btc_trend作为T_BTC（近似）
-        # 注意：market_meta['btc_trend']可能不是标准T因子格式，但可以作为趋势方向的指示
-        T_BTC_actual = market_meta.get('btc_trend', 0)
-
-        # 如果market_meta中没有提供标准的T_BTC，暂时使用0
-        # TODO: 未来可以从MarketContext传入标准T_BTC
+        # 从market_meta提取btc_trend作为T_BTC
+        if market_meta is not None:
+            T_BTC_actual = market_meta.get('btc_trend', 0)
+        else:
+            # 向后兼容：如果没有传入market_meta，使用0（中性趋势）
+            T_BTC_actual = 0
 
         i_veto_final = modulator_chain.apply_independence_full(
             I=I,  # 0-100质量因子
@@ -2076,7 +2076,8 @@ def analyze_symbol_with_preloaded_klines(
     spot_price: float = None,   # v6.6: 现货价格（B - 基差）
     btc_klines: List = None,    # v6.6: BTC K线（独立性）
     eth_klines: List = None,    # v6.6: ETH K线（独立性）
-    kline_cache = None          # v6.6: K线缓存（用于四门DataQual检查）
+    kline_cache = None,         # v6.6: K线缓存（用于四门DataQual检查）
+    market_meta: Dict = None    # v7.3.2-Full: 统一市场上下文（含T_BTC）
 ) -> Dict[str, Any]:
     """
     使用预加载的K线数据分析币种（用于批量扫描优化）- v6.6
