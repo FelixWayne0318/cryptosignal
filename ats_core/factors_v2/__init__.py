@@ -7,7 +7,7 @@ v7.2精简版：
 - 调制器 (调节): L, S, F, I（在features/和modulators/中实现）
 - factors_v2保留：B因子（基差+资金费）和I因子（独立性）
 
-v7.2.43清理：
+v7.3.43清理：
 - 删除未使用模块：oi_regime, volume_trigger, liquidity, cvd_enhanced
 - 这些功能已被features/模块替代或废弃
 """

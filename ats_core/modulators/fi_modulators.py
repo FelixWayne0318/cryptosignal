@@ -50,7 +50,7 @@ class ModulatorParams:
     rew_I_high: float = -0.002  # Reward when I > 0.7
 
     # Threshold modulation
-    # v7.2.5修复：p0从硬编码0.58改为配置0.45（与prime_prob_min一致）
+    # v7.3.4修复：p0从硬编码0.58改为配置0.45（与prime_prob_min一致）
     p0: float = 0.58  # Base probability threshold (fallback default)
     theta_F: float = 0.03  # F threshold adjustment
     theta_I: float = -0.02  # I threshold adjustment (negative = easier when independent)
@@ -386,7 +386,7 @@ def get_fi_modulator(params: ModulatorParams = None) -> FIModulator:
     """
     Get global FI modulator instance.
 
-    v7.2.5修复：首次创建时如果未提供params，从配置文件加载
+    v7.3.4修复：首次创建时如果未提供params，从配置文件加载
 
     Args:
         params: Modulator parameters (only used on first call)
@@ -398,7 +398,7 @@ def get_fi_modulator(params: ModulatorParams = None) -> FIModulator:
     global _fi_modulator
 
     if _fi_modulator is None:
-        # v7.2.5修复：如果未提供参数，从配置文件加载
+        # v7.3.4修复：如果未提供参数，从配置文件加载
         if params is None:
             params = ModulatorParams.from_config()
         _fi_modulator = FIModulator(params)

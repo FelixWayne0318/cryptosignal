@@ -49,7 +49,7 @@ def calculate_timeframe_score(klines: list, dimension: str) -> float:
 
     elif dimension == 'C':
         # CVD计算 (使用真实takerBuyVolume)
-        # 修复：v7.2.32 - 改用Binance提供的真实主动买入量
+        # 修复：v7.3.42 - 改用Binance提供的真实主动买入量
         # 原错误：用阳线阴线判断买卖方向（close>=open）会系统性误判
         # 正确方法：使用K线第9列takerBuyBaseAssetVolume（逐笔成交的真实买卖方向）
         if len(klines) > 0 and len(klines[0]) >= 10:

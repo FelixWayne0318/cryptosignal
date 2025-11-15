@@ -1,7 +1,7 @@
 {
   "_description": "因子评分范围和分界线配置",
   "_warning": "修改这些值会影响整个因子体系，属于重大版本变更",
-  "_version": "7.3.2",
+  "_version": "v7.3.4",
 
   "factors": {
     "I": {
@@ -44,7 +44,7 @@
       "locked": true,
       "locked_description": "范围锁定标志，修改min/max/neutral需要主版本升级",
 
-      "version": "7.3.2"
+      "version": "v7.3.4"
     },
 
     "_template_for_future_factors": {

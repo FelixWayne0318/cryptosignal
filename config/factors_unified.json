@@ -1,5 +1,5 @@
 {
-  "version": "3.0.0",
+  "version": "v7.3.4",
   "updated_at": "2025-11-09",
   "description": "统一因子参数配置 - v3.0（配置管理优化版）",
   "global": {
@@ -230,7 +230,7 @@
       "weight": 0,
       "enabled": true,
       "description": "独立性评分（vs BTC，v7.3.2-Full零硬编码版，v6.6移至B层调制器）",
-      "version": "7.3.2",
+      "version": "v7.3.4",
       "regression": {
         "window_hours": 24,
         "window_hours_description": "β回归窗口（小时），用于截取价格序列",

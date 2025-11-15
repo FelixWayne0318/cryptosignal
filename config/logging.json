@@ -1,6 +1,6 @@
 {
   "_description": "日志格式配置",
-  "_version": "7.3.2",
+  "_version": "v7.3.4",
 
   "logging": {
     "float_format": {

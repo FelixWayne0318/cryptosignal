@@ -242,7 +242,7 @@ M = int(round(clamp(M_pub, -100, 100)))
 #### 设计理念
 
 - **核心思想**: 通过**主动买入**与**主动卖出**的差值，识别大资金流向
-- **v7.2.34改进**: 使用Quote CVD（USDT单位），避免价格影响
+- **v7.3.44改进**: 使用Quote CVD（USDT单位），避免价格影响
 - **滚动Z标准化**: 96根窗口，避免前视偏差
 
 #### 计算公式
@@ -1419,7 +1419,7 @@ def analyze_symbol_v72(symbol, klines, oi_data, ...):
 
 ## 🔍 系统健康度
 
-### v6.6架构状态（v7.2.44代码基线）
+### v6.6架构状态（v7.3.44代码基线）
 
 - ✅ **6个评分因子全部实现**（T/M/C/V/O/B）
 - ✅ **4个调制器全部实现**（L/S/F/I）
@@ -1447,8 +1447,8 @@ def analyze_symbol_v72(symbol, klines, oi_data, ...):
 
 ### 历史修复
 - `docs/V7.2.44_P0_P1_FIXES_SUMMARY.md` - P0/P1/P2修复
-- `docs/FACTOR_SYSTEM_DEEP_ANALYSIS_v7.2.44.md` - 因子深度分析
-- `docs/v7.2.3_P0_FIXES_SUMMARY.md` - 硬编码清理
+- `docs/FACTOR_SYSTEM_DEEP_ANALYSIS_v7.3.44.md` - 因子深度分析
+- `docs/v7.3.4_P0_FIXES_SUMMARY.md` - 硬编码清理
 
 ### 因子理论
 - Fama-French三因子模型（市场、规模、价值）
@@ -1479,7 +1479,7 @@ def analyze_symbol_v72(symbol, klines, oi_data, ...):
 2. **降级机制**: 数据不足时返回中性值，不中断流程
 3. **软约束系统**: EV≤0和P<p_min不硬拒绝，仅标记
 
-### 下一步优化（v7.2.45）
+### 下一步优化（v7.3.45）
 
 1. **P2实现**: 新币种平滑处理代码
 2. **VIF监控集成**: 在batch_scan中添加VIF实时监控
@@ -1488,6 +1488,6 @@ def analyze_symbol_v72(symbol, klines, oi_data, ...):
 
 ---
 
-**文档生成**: v6.6系统分析（v7.2.44代码基线）
+**文档生成**: v6.6系统分析（v7.3.44代码基线）
 **作者**: Claude (根据代码追溯)
 **最后更新**: 2025-11-14

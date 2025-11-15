@@ -168,7 +168,7 @@ class RealtimeSignalScanner:
 
         # 防抖动系统（AntiJitter）
         if send_telegram:
-            # v7.2.8修复：使用5m激进配置（confirmation_bars=1）允许单次扫描发布
+            # v7.3.4修复：使用5m激进配置（confirmation_bars=1）允许单次扫描发布
             # 原因：1h配置需要2个历史记录，但单次扫描每个symbol只有1个数据点
             # 结果：所有信号在首次扫描时被"历史记录不足"拒绝
             anti_jitter_config = get_config("5m")  # confirmation_bars=1, cooldown=5min
@@ -236,7 +236,7 @@ class RealtimeSignalScanner:
             warn("扫描无结果")
             return
 
-        # v7.2.41修复：batch_scan已应用v7.2增强，无需重复调用
+        # v7.3.41修复：batch_scan已应用v7.2增强，无需重复调用
         # 之前逻辑：realtime_scanner读取batch_scan结果 → 应用v7.2增强 → 重写scan_detail.json
         # 新逻辑：batch_scan直接应用v7.2增强 → realtime_scanner直接使用结果
         # 优点：架构清晰，避免重复计算，scan_summary.md统计正确
@@ -267,7 +267,7 @@ class RealtimeSignalScanner:
 
         log("=" * 60 + "\n")
 
-    # v7.2.41修复：_apply_v72_enhancements已废弃（batch_scan直接应用v7.2增强）
+    # v7.3.41修复：_apply_v72_enhancements已废弃（batch_scan直接应用v7.2增强）
 
     def _filter_prime_signals_v72(self, results: list) -> list:
         """
@@ -369,11 +369,11 @@ class RealtimeSignalScanner:
             log(f"      F={F_v2:.0f}, I={I_v2:.0f}")
 
         except Exception as e:
-            # v7.2.11修复：安全获取symbol，防止top_signal不是字典
+            # v7.3.41修复：安全获取symbol，防止top_signal不是字典
             symbol = top_signal.get('symbol') if isinstance(top_signal, dict) else str(top_signal)[:20]
             error(f"   ❌ 发送失败 {symbol}: {e}")
 
-            # v7.2.17+: 打印完整traceback用于诊断
+            # v7.3.47+: 打印完整traceback用于诊断
             import traceback
             error("   完整错误堆栈:")
             for line in traceback.format_exc().split('\n'):

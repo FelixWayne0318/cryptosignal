@@ -760,7 +760,7 @@ git status --short
 
 ---
 
-## 🎓 实战案例：硬编码清理系列（v7.2.3-v7.2.7）
+## 🎓 实战案例：硬编码清理系列（v7.3.4-v7.3.4）
 
 ### 案例背景
 
@@ -770,7 +770,7 @@ git status --short
 
 ### 修复历程（5个版本迭代）
 
-#### v7.2.3 - 紧急修复（2个硬编码）
+#### v7.3.4 - 紧急修复（2个硬编码）
 **问题**:
 - `confidence_threshold = 45`（配置20）
 - `prime_strength_threshold = 54`（配置35）
@@ -786,7 +786,7 @@ confidence_threshold = config.get_mature_threshold('confidence_min', 20)
 
 **结果**: 仍然0个信号（未解决）
 
-#### v7.2.4 - 系统性修复（3个硬编码）
+#### v7.3.4 - 系统性修复（3个硬编码）
 **问题发现**: 使用grep扫描发现更多硬编码
 - `edge_threshold = 0.48`（配置0.15，且0.48 > Max 0.31，100%被拒！）
 - `gate_multiplier_threshold = 0.84`（配置缺失）
@@ -803,8 +803,8 @@ edge阈值硬编码0.48 > 实际数据Max 0.31
 
 **结果**: 预期40-60个信号
 
-#### v7.2.5 - P0概率阈值（1个隐藏硬编码）
-**问题发现**: v7.2.4修复后扫描仍只有1个信号
+#### v7.3.4 - P0概率阈值（1个隐藏硬编码）
+**问题发现**: v7.3.4修复后扫描仍只有1个信号
 
 **深度调查**: FIModulator中隐藏的硬编码
 ```python
@@ -830,7 +830,7 @@ YFIUSDT: P=0.596 < 0.600 ✗ → 被拒绝
 
 **结果**: 预期40-60个信号
 
-#### v7.2.6 - 综合硬编码清理（4个新币阈值）
+#### v7.3.4 - 综合硬编码清理（4个新币阈值）
 **系统性扫描**: 从setup.sh出发全面检查
 
 **问题发现**: 新币相关阈值全部硬编码
@@ -852,7 +852,7 @@ elif is_phaseB:
 
 **结果**: 新币策略完全可配置
 
-#### v7.2.7 - 配置统一与默认值一致性（6+3个不一致）
+#### v7.3.4 - 配置统一与默认值一致性（6+3个不一致）
 **深度检查**: 配置文件冲突 + 默认值不一致
 
 **问题1 - 配置文件冲突**:
@@ -888,11 +888,11 @@ signal_thresholds.json: prime_prob_min = 0.45
 
 | 版本 | 修复内容 | 数量 | 类型 |
 |------|---------|------|------|
-| v7.2.3 | confidence, prime_strength | 2个 | 硬编码阈值 |
-| v7.2.4 | edge, gate_multiplier, base_strength | 3个 | 硬编码阈值 |
-| v7.2.5 | FIModulator p0 | 1个 | 隐藏硬编码 |
-| v7.2.6 | watch_prob_min, prime_dim_threshold | 4个 | 新币阈值 |
-| v7.2.7 | 配置统一 + 默认值一致性 | 6+3个 | 系统性问题 |
+| v7.3.4 | confidence, prime_strength | 2个 | 硬编码阈值 |
+| v7.3.4 | edge, gate_multiplier, base_strength | 3个 | 硬编码阈值 |
+| v7.3.4 | FIModulator p0 | 1个 | 隐藏硬编码 |
+| v7.3.4 | watch_prob_min, prime_dim_threshold | 4个 | 新币阈值 |
+| v7.3.4 | 配置统一 + 默认值一致性 | 6+3个 | 系统性问题 |
 | **总计** | **硬编码清理 + 配置统一** | **16个** | **✅ 完成** |
 
 ### 关键经验教训
@@ -901,9 +901,9 @@ signal_thresholds.json: prime_prob_min = 0.45
 
 **错误做法**: 逐个发现问题，头痛医头
 ```
-v7.2.3修复2个 → 仍0信号
-v7.2.4修复3个 → 仍1信号
-v7.2.5修复1个 → 发现更多问题
+v7.3.4修复2个 → 仍0信号
+v7.3.4修复3个 → 仍1信号
+v7.3.4修复1个 → 发现更多问题
 ```
 
 **正确做法**: 第一次修复时就系统性扫描
@@ -1078,7 +1078,7 @@ def check_default_consistency():
 
 ### 性能影响分析
 
-**v7.2.3-v7.2.7累计影响**:
+**v7.3.4-v7.3.4累计影响**:
 
 | 指标 | Before | After | 改善 |
 |------|--------|-------|------|
@@ -1098,11 +1098,11 @@ def check_default_consistency():
 ### 文档参考
 
 详细修复文档：
-- `docs/v7.2.3_P0_FIXES_SUMMARY.md`
-- `docs/v7.2.4_SYSTEMATIC_FIX.md`
-- `docs/v7.2.5_P0_PROBABILITY_THRESHOLD_FIX.md`
-- `docs/v7.2.6_COMPREHENSIVE_HARDCODE_CLEANUP.md`
-- `docs/v7.2.7_CONFIG_UNIFICATION.md`
+- `docs/v7.3.4_P0_FIXES_SUMMARY.md`
+- `docs/v7.3.4_SYSTEMATIC_FIX.md`
+- `docs/v7.3.4_P0_PROBABILITY_THRESHOLD_FIX.md`
+- `docs/v7.3.4_COMPREHENSIVE_HARDCODE_CLEANUP.md`
+- `docs/v7.3.4_CONFIG_UNIFICATION.md`
 
 ---
 
@@ -1124,7 +1124,7 @@ def check_default_consistency():
 
 ### v3.2.0 (2025-11-10)
 **重大更新**:
-- 新增实战案例：硬编码清理系列（v7.2.3-v7.2.7）
+- 新增实战案例：硬编码清理系列（v7.3.4-v7.3.4）
   - 完整的5个版本迭代历程
   - 16个硬编码问题的修复经验
   - 配置统一与默认值一致性修复

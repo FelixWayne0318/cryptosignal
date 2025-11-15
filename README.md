@@ -1,4 +1,4 @@
-# CryptoSignal v7.3.2-Full
+# CryptoSignal v7.3.4
 
 > **加密货币信号分析系统 - v7.3.2-Full I因子重构版**
 > v7.3.2-Full: I因子BTC-only回归 + MarketContext全局优化 + veto风控
@@ -47,7 +47,7 @@ cd ~/cryptosignal
 
 ## 🎯 系统版本
 
-**当前版本**: v7.3.2-Full (I因子BTC-only重构 + MarketContext优化)
+**当前版本**: v7.3.4-Full (I因子BTC-only重构 + MarketContext优化)
 **更新日期**: 2025-11-15
 
 ### v7.3.2-Full: I因子系统重构
@@ -271,5 +271,5 @@ python3 diagnose/diagnostic_scan.py
 ---
 
 **版本**: v6.7 P2.2
-**最后更新**: 2025-11-05
+**最后更新**: 2025-11-15
 **分支**: claude/reorganize-repo-structure-011CUrZaXUMTBXApc3jvsqTh

@@ -49,12 +49,12 @@
 ### 已归档文档（7个）
 
 #### 归档到 `docs/archived/v7.2/`（6个）:
-1. `V7.2.44_P0_P1_FIXES_SUMMARY.md` - v7.2.44版本修复总结
-2. `V7.2.45_IMPLEMENTATION_SPEC.md` - v7.2.45实现规范
-3. `V7242_P1_HIGH_GATE6_THRESHOLD_ADJUSTMENT.md` - v7.2.42 Gate6调整
-4. `REPOSITORY_CLEANUP_v7.2.43.md` - v7.2.43仓库清理记录
-5. `REPOSITORY_ORGANIZATION_v7.2.43.md` - v7.2.43仓库组织记录
-6. `FACTOR_SYSTEM_DEEP_ANALYSIS_v7.2.44.md` - v7.2.44因子系统分析
+1. `V7.2.44_P0_P1_FIXES_SUMMARY.md` - v7.3.44版本修复总结
+2. `V7.2.45_IMPLEMENTATION_SPEC.md` - v7.3.45实现规范
+3. `V7242_P1_HIGH_GATE6_THRESHOLD_ADJUSTMENT.md` - v7.3.42 Gate6调整
+4. `REPOSITORY_CLEANUP_v7.3.43.md` - v7.3.43仓库清理记录
+5. `REPOSITORY_ORGANIZATION_v7.3.43.md` - v7.3.43仓库组织记录
+6. `FACTOR_SYSTEM_DEEP_ANALYSIS_v7.3.44.md` - v7.3.44因子系统分析
 
 #### 归档到 `docs/archived/versions/`（1个）:
 7. `FACTOR_SYSTEM_COMPLETE_DESIGN_v8.md` - 未来版本规划（v8）

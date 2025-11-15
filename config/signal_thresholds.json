@@ -656,7 +656,7 @@
     ]
   },
   "independence_gate": {
-    "version": "7.3.2",
+    "version": "v7.3.4",
     "description": "I因子风控闸门参数 - v7.3.2-Full零硬编码版",
     "thresholds": {
       "corr_strong_max_I": 30,
