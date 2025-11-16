@@ -1968,6 +1968,74 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
             "phase2_note": "成熟币使用标准数据流",
         }
 
+    # ---- 4. v7.4: 四步系统集成（Dual Run模式）----
+    # 当four_step_system.enabled=true时，并行运行四步系统
+    # 旧系统（v6.6权重加分）结果保持不变，四步系统结果作为额外信息
+    if params.get("four_step_system", {}).get("enabled", False):
+        try:
+            log(f"🚀 v7.4: 启动四步系统 - {symbol}")
+
+            # 4.1 准备历史因子序列（用于Step2 Enhanced F v2）
+            from ats_core.utils.factor_history import get_factor_scores_series
+
+            factor_scores_series = get_factor_scores_series(
+                klines_1h=k1,
+                window_hours=7,
+                current_factor_scores=result["scores"],
+                params=params
+            )
+
+            # 4.2 提取所需的输入数据
+            factor_scores = result["scores"]
+            btc_factor_scores = result.get("metadata", {}).get("btc_factor_scores", {"T": 0})
+            s_factor_meta = result.get("scores_meta", {}).get("S", {})
+            l_factor_meta = result.get("scores_meta", {}).get("L", {})
+            l_score = result["scores"].get("L", 0.0)
+
+            # 4.3 调用四步系统主入口
+            from ats_core.decision.four_step_system import run_four_step_decision
+
+            four_step_result = run_four_step_decision(
+                symbol=symbol,
+                klines=k1,
+                factor_scores=factor_scores,
+                factor_scores_series=factor_scores_series,
+                btc_factor_scores=btc_factor_scores,
+                s_factor_meta=s_factor_meta,
+                l_factor_meta=l_factor_meta,
+                l_score=l_score,
+                params=params
+            )
+
+            # 4.4 添加四步系统结果到result
+            result["four_step_decision"] = four_step_result
+
+            # 4.5 Dual Run对比日志
+            old_signal = "LONG" if result.get("side_long", False) else "SHORT"
+            new_decision = four_step_result.get("decision", "UNKNOWN")
+            new_action = four_step_result.get("action", "N/A")
+
+            log(f"📊 Dual Run对比 - {symbol}:")
+            log(f"   旧系统(v6.6): {old_signal} | Prime={result.get('is_prime', False)} | 强度={result.get('prime_strength', 0):.1f}")
+            if new_decision == "ACCEPT":
+                log(f"   新系统(v7.4): {new_action} ACCEPT | Entry={four_step_result.get('entry_price'):.6f} | "
+                    f"SL={four_step_result.get('stop_loss'):.6f} | TP={four_step_result.get('take_profit'):.6f} | "
+                    f"RR={four_step_result.get('risk_reward_ratio'):.2f}")
+            else:
+                log(f"   新系统(v7.4): REJECT at {four_step_result.get('reject_stage', 'unknown')} | "
+                    f"原因: {four_step_result.get('reject_reason', 'N/A')}")
+
+        except Exception as e:
+            from ats_core.logging import warn
+            warn(f"⚠️  四步系统执行失败: {e}")
+            import traceback
+            traceback.print_exc()
+            result["four_step_decision"] = {
+                "decision": "ERROR",
+                "error": str(e),
+                "phase": "integration_error"
+            }
+
     return result
 
 
