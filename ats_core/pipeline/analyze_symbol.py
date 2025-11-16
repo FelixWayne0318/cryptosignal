@@ -608,7 +608,7 @@ def _analyze_symbol_core(
 
                 # 补充元数据
                 I_meta['data_points'] = use_len
-                I_meta['version'] = 'v7.3.2-Full'
+                I_meta['version'] = 'v7.3.47'
                 I_meta['note'] = 'BTC-only回归，使用log-return，零硬编码'
             else:
                 I, I_meta = 50, {"note": f"数据不足（需要18小时，实际{min_len}小时）", "status": "insufficient_data"}

@@ -2090,8 +2090,8 @@ def render_v67_rich(r: Dict[str, Any]) -> str:
     # UTC时区（统一使用UTC，与Binance API保持一致）
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
-    # v7.3.4: 从RuntimeConfig读取版本号（消除P0-V1硬编码）
-    version = "v7.3.4"  # 默认值
+    # v7.3.47: 从RuntimeConfig读取版本号（消除P0-V1硬编码）
+    version = "v7.3.47"  # 默认值
     if CONFIG_AVAILABLE:
         try:
             version = RuntimeConfig.VERSION

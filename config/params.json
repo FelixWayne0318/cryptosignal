@@ -129,8 +129,8 @@
   },
 
   "weights": {
-    "_source": "从 config/factors_unified.json 自动加载（v7.3.4配置统一）",
-    "_version": "v7.3.4",
+    "_source": "从 config/factors_unified.json 自动加载（v7.3.47配置统一）",
+    "_version": "v7.3.47",
     "T": 23.0,
     "M": 10.0,
     "C": 26.0,
@@ -144,7 +144,7 @@
     "E": 0.0
   },
   "weights_comment": {
-    "_version": "v7.3.3 - 战略设计优化（基于战略评估报告）",
+    "_version": "v7.3.47 - 战略设计优化（基于战略评估报告）",
     "_total_weight": "100%（A层6因子权重百分比系统）",
     "_layer1_price_action": "Layer 1 价格行为层（44%）: T(23%) + M(10%) + V(11%)",
     "_layer2_capital_flow": "Layer 2 资金流层（46%）: C(26%) + O(20%)",
