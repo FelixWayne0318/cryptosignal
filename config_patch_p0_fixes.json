@@ -1,0 +1,314 @@
+{
+  "_comment": "P0级硬编码修复 - 配置补丁文件",
+  "_usage": "将以下配置段合并到对应的配置文件中",
+  "_version": "v7.3.4",
+  "_created": "2025-11-15",
+
+  "signal_thresholds.json补丁": {
+    "version": "v7.3.4",
+    "updated_at": "2025-11-15",
+    "description": "v7.3.4配置 - I因子BTC-only + P0硬编码清理",
+
+    "数据质量阈值": {
+      "_comment": "P0-3, P0-4修复 - 数据质量评估阈值（quality.py）",
+      "allow_prime_threshold": 0.90,
+      "allow_prime_threshold_description": "允许Prime信号的最低数据质量",
+      "degrade_threshold": 0.88,
+      "degrade_threshold_description": "降级为Watch-only的数据质量阈值",
+
+      "age_decay_coefficients": {
+        "_comment": "数据新鲜度时间衰减系数",
+        "slightly_old_seconds": 60,
+        "slightly_old_factor": 0.95,
+        "slightly_old_description": "Age ≤ 60s → 0.95 (slightly old)",
+
+        "moderately_old_seconds": 180,
+        "moderately_old_factor": 0.90,
+        "moderately_old_description": "Age ≤ 180s → 0.90 (moderately old)",
+
+        "old_seconds": 300,
+        "old_factor": 0.85,
+        "old_description": "Age ≤ 300s → 0.85 (old)",
+
+        "stale_factor": 0.70,
+        "stale_description": "Age > 300s → 0.70 (stale)"
+      }
+    },
+
+    "闸门乘数系数": {
+      "_comment": "P0-8修复 - 闸门乘数计算系数（analyze_symbol.py）",
+      "data_qual_weight_config": {
+        "min_weight": 0.7,
+        "max_weight": 0.3,
+        "formula": "gate_multiplier *= (0.7 + 0.3 * gates_data_qual)",
+        "description": "数据质量对闸门乘数的影响权重"
+      },
+      "execution_weight_config": {
+        "min_weight": 0.6,
+        "max_weight": 0.4,
+        "formula": "gate_multiplier *= (0.6 + 0.4 * gates_execution)",
+        "description": "执行质量对闸门乘数的影响权重"
+      }
+    },
+
+    "Telegram输出阈值": {
+      "_comment": "P0-5, P0-6修复 - Telegram格式化显示阈值（telegram_fmt.py）",
+      "gate1_data_qual_min": 0.90,
+      "gate1_description": "Gate1数据质量通过阈值",
+
+      "gate_multiplier_levels": {
+        "excellent": 0.95,
+        "good": 0.85,
+        "acceptable": 0.70,
+        "description": "闸门乘数等级判定阈值"
+      },
+
+      "data_qual_warning_threshold": 0.95,
+      "data_qual_warning_description": "数据质量告警阈值（低于此值显示警告）"
+    },
+
+    "概率阈值": {
+      "_comment": "P0-2修复 - 信号发布概率阈值（analyze_symbol.py）",
+      "prime_prob_min_default": 0.45,
+      "prime_prob_min_description": "Prime信号最低概率要求（成熟币）",
+
+      "watch_prob_min_default": 0.65,
+      "watch_prob_min_description": "Watch信号最低概率要求",
+
+      "_rationale": "新币和成熟币的概率要求不同，此处为默认值（成熟币）"
+    }
+  },
+
+  "factors_unified.json补丁": {
+    "version": "v7.3.4",
+
+    "I因子参数": {
+      "_comment": "P0-1修复 - Independence因子配置（v7.3.4）",
+      "effective_threshold": 50.0,
+      "effective_threshold_description": "I因子有效性阈值（analyze_symbol.py:819）",
+
+      "confidence_boost_default": 0.0,
+      "confidence_boost_description": "默认信心度加成",
+
+      "beta_thresholds": {
+        "_comment": "P1-4优化 - Beta分段阈值（independence.py）",
+        "high_independence_max": 0.6,
+        "independent_max": 0.9,
+        "neutral_max": 1.2,
+        "correlated_max": 1.5,
+        "description": "Beta绝对值分段阈值，用于判定独立性等级"
+      }
+    },
+
+    "调制器参数": {
+      "_comment": "P0-7修复 - 调制器系数配置",
+      "position_penalty_factor": 0.9,
+      "position_penalty_description": "仓位惩罚系数（modulator_chain.py:245,248）",
+
+      "_rationale": "当流动性或执行质量不佳时，仓位乘以此系数降低风险"
+    },
+
+    "系统元信息": {
+      "_comment": "P0-V1修复 - 版本号统一管理",
+      "version": "v7.3.4",
+      "version_description": "I因子BTC-only重构 + MarketContext优化",
+      "release_date": "2025-11-15"
+    }
+  },
+
+  "代码修改参考": {
+    "_comment": "以下是代码修改的参考模板",
+
+    "analyze_symbol.py修改示例": {
+      "_file": "ats_core/pipeline/analyze_symbol.py",
+
+      "P0-1修复_819行": {
+        "原代码": "i_effective_threshold = 50.0",
+        "修改为": [
+          "factor_config = get_factor_config()",
+          "i_cfg = factor_config.get_factor_params('I')",
+          "i_effective_threshold = i_cfg.get('effective_threshold', 50.0)"
+        ]
+      },
+
+      "P0-2修复_1007-1010行": {
+        "原代码": [
+          "prime_prob_min = 0.45",
+          "watch_prob_min = 0.65"
+        ],
+        "修改为": [
+          "config = get_thresholds()",
+          "prob_cfg = config.get('概率阈值', {})",
+          "prime_prob_min = prob_cfg.get('prime_prob_min_default', 0.45)",
+          "watch_prob_min = prob_cfg.get('watch_prob_min_default', 0.65)"
+        ]
+      },
+
+      "P0-8修复_1096-1102行": {
+        "原代码": [
+          "gate_multiplier *= (0.7 + 0.3 * gates_data_qual)",
+          "gate_multiplier *= (0.6 + 0.4 * gates_execution)"
+        ],
+        "修改为": [
+          "config = get_thresholds()",
+          "gate_cfg = config.get('闸门乘数系数', {})",
+          "dq_cfg = gate_cfg.get('data_qual_weight_config', {})",
+          "gate_multiplier *= (dq_cfg.get('min_weight', 0.7) + dq_cfg.get('max_weight', 0.3) * gates_data_qual)",
+          "ex_cfg = gate_cfg.get('execution_weight_config', {})",
+          "gate_multiplier *= (ex_cfg.get('min_weight', 0.6) + ex_cfg.get('max_weight', 0.4) * gates_execution)"
+        ]
+      }
+    },
+
+    "quality.py修改示例": {
+      "_file": "ats_core/data/quality.py",
+
+      "P0-3修复_98-99行": {
+        "原代码": [
+          "ALLOW_PRIME_THRESHOLD = 0.90",
+          "DEGRADE_THRESHOLD = 0.88"
+        ],
+        "修改为": [
+          "# 移到函数或类初始化中",
+          "from ats_core.config.threshold_config import get_thresholds",
+          "",
+          "def get_quality_thresholds():",
+          "    config = get_thresholds()",
+          "    qual_cfg = config.get('数据质量阈值', {})",
+          "    return {",
+          "        'allow_prime': qual_cfg.get('allow_prime_threshold', 0.90),",
+          "        'degrade': qual_cfg.get('degrade_threshold', 0.88)",
+          "    }"
+        ]
+      },
+
+      "P0-4修复_304-310行": {
+        "原代码": [
+          "return 0.95, f\"Data slightly old ({age:.0f}s)\"",
+          "return 0.90, f\"Data moderately old ({age:.0f}s)\"",
+          "return 0.85, f\"Data old ({age:.0f}s)\"",
+          "return 0.70, f\"Data stale ({age:.0f}s)\""
+        ],
+        "修改为": [
+          "config = get_thresholds()",
+          "age_cfg = config.get('数据质量阈值', {}).get('age_decay_coefficients', {})",
+          "",
+          "if age <= age_cfg.get('slightly_old_seconds', 60):",
+          "    return age_cfg.get('slightly_old_factor', 0.95), f\"Data slightly old ({age:.0f}s)\"",
+          "elif age <= age_cfg.get('moderately_old_seconds', 180):",
+          "    return age_cfg.get('moderately_old_factor', 0.90), f\"Data moderately old ({age:.0f}s)\"",
+          "elif age <= age_cfg.get('old_seconds', 300):",
+          "    return age_cfg.get('old_factor', 0.85), f\"Data old ({age:.0f}s)\"",
+          "else:",
+          "    return age_cfg.get('stale_factor', 0.70), f\"Data stale ({age:.0f}s)\""
+        ]
+      }
+    },
+
+    "telegram_fmt.py修改示例": {
+      "_file": "ats_core/outputs/telegram_fmt.py",
+
+      "P0-V1修复_2064行": {
+        "原代码": "version = \"v6.7\"",
+        "修改为": [
+          "from ats_core.config.factor_config import get_factor_config",
+          "",
+          "def get_system_version():",
+          "    try:",
+          "        config = get_factor_config()",
+          "        meta = config.get('系统元信息', {})",
+          "        return meta.get('version', 'v7.3.4')",
+          "    except:",
+          "        return 'v7.3.4'",
+          "",
+          "version = get_system_version()"
+        ]
+      },
+
+      "P0-5修复_1007行": {
+        "原代码": "gate1_pass = data_qual >= 0.90",
+        "修改为": [
+          "config = get_thresholds()",
+          "tg_cfg = config.get('Telegram输出阈值', {})",
+          "gate1_threshold = tg_cfg.get('gate1_data_qual_min', 0.90)",
+          "gate1_pass = data_qual >= gate1_threshold"
+        ]
+      },
+
+      "P0-5修复_1061-1065行": {
+        "原代码": [
+          "if gate_multiplier >= 0.95:",
+          "elif gate_multiplier >= 0.85:",
+          "elif gate_multiplier >= 0.70:"
+        ],
+        "修改为": [
+          "config = get_thresholds()",
+          "tg_cfg = config.get('Telegram输出阈值', {})",
+          "levels = tg_cfg.get('gate_multiplier_levels', {})",
+          "",
+          "if gate_multiplier >= levels.get('excellent', 0.95):",
+          "elif gate_multiplier >= levels.get('good', 0.85):",
+          "elif gate_multiplier >= levels.get('acceptable', 0.70):"
+        ]
+      },
+
+      "P0-6修复_1526-2016行": {
+        "原代码": "if data_qual < 0.95:",
+        "修改为": [
+          "config = get_thresholds()",
+          "tg_cfg = config.get('Telegram输出阈值', {})",
+          "warning_threshold = tg_cfg.get('data_qual_warning_threshold', 0.95)",
+          "if data_qual < warning_threshold:"
+        ]
+      }
+    },
+
+    "modulator_chain.py修改示例": {
+      "_file": "ats_core/modulators/modulator_chain.py",
+
+      "P0-7修复_245-248行": {
+        "原代码": "position_mult *= 0.9",
+        "修改为": [
+          "# 在__init__或模块级读取配置",
+          "from ats_core.config.factor_config import get_factor_config",
+          "",
+          "config = get_factor_config()",
+          "mod_cfg = config.get('调制器参数', {})",
+          "penalty_factor = mod_cfg.get('position_penalty_factor', 0.9)",
+          "",
+          "# 使用时",
+          "position_mult *= penalty_factor"
+        ]
+      }
+    }
+  },
+
+  "验证命令": {
+    "_comment": "修复后运行以下命令验证",
+
+    "step1_json语法验证": [
+      "python -m json.tool config/signal_thresholds.json > /dev/null",
+      "python -m json.tool config/factors_unified.json > /dev/null"
+    ],
+
+    "step2_配置加载测试": [
+      "python -c \"from ats_core.config.threshold_config import get_thresholds; cfg = get_thresholds(); print('✅ signal_thresholds.json 加载成功')\"",
+      "python -c \"from ats_core.config.factor_config import get_factor_config; cfg = get_factor_config(); print('✅ factors_unified.json 加载成功')\""
+    ],
+
+    "step3_硬编码检测回归": [
+      "grep -rn 'i_effective_threshold.*=.*50\\.0' --include='*.py' ats_core/ || echo '✅ P0-1已修复'",
+      "grep -rn 'prime_prob_min.*=.*0\\.45' --include='*.py' ats_core/ || echo '✅ P0-2已修复'",
+      "grep -rn 'ALLOW_PRIME_THRESHOLD.*=.*0\\.90' --include='*.py' ats_core/ || echo '✅ P0-3已修复'",
+      "grep -rn 'version.*=.*\"v6\\.7\"' --include='*.py' ats_core/ || echo '✅ P0-V1已修复'"
+    ],
+
+    "step4_功能测试": [
+      "python scripts/realtime_signal_scanner.py --max-symbols 10"
+    ],
+
+    "step5_版本号检查": [
+      "tail -100 ~/cryptosignal_*.log | grep 'v7.3.4' && echo '✅ 版本号正确'"
+    ]
+  }
+}

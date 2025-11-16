@@ -2,12 +2,12 @@
 """
 CVD工具函数模块
 
-v7.2.34新增：沉淀CVD计算的通用工具函数
+v7.3.44新增：沉淀CVD计算的通用工具函数
 - align_klines_by_open_time: K线时间对齐（inner join）
 - rolling_z: 滚动窗口Z-score标准化（无前视偏差）
 - compute_cvd_delta: 计算CVD增量序列
 
-v7.2.35增强：CVD专家复核修复
+v7.3.45增强：CVD专家复核修复
 - _diff: 一阶差分计算（修复CVD增量bug）
 - align_oi_to_klines: OI数据对齐到K线（修复OI对齐缺失）
 - compute_dynamic_min_quote: 动态最小成交额阈值（小币友好）
@@ -31,7 +31,7 @@ def _diff(values: List[float]) -> List[float]:
         差分序列（第一个元素为0）
 
     说明:
-        - v7.2.35新增：修复CVD增量计算bug
+        - v7.3.45新增：修复CVD增量计算bug
         - 对于累计量（如CVD），应该使用diff而不是pct_change
         - pct_change在累计量接近0时会爆炸，且对负数没有意义
         - diff保持线性关系，适合后续Z标准化
@@ -66,7 +66,7 @@ def align_oi_to_klines(
         对齐后的OI值序列（与klines长度一致）
 
     说明:
-        - v7.2.35新增：修复OI对齐缺失问题
+        - v7.3.45新增：修复OI对齐缺失问题
         - OI数据的timestamp应该匹配K线的closeTime（第6列）
         - 使用inner join：只保留时间匹配的数据
         - 未匹配的K线OI值填充0（表示无数据）
@@ -133,7 +133,7 @@ def compute_dynamic_min_quote(
         动态阈值（USDT）
 
     说明:
-        - v7.2.35新增：小币友好的动态阈值
+        - v7.3.45新增：小币友好的动态阈值
         - 基于最近N根K线的成交额中位数计算阈值
         - 动态阈值 = factor × median(成交额)
         - 不低于最小回退值（防止过低）
@@ -191,8 +191,8 @@ def align_klines_by_open_time(
     说明:
         - 使用inner join：只保留两边都有的时间戳
         - 返回按时间升序排列的K线
-        - v7.2.35增强：添加断言和自动降级逻辑
-        - v7.2.36增强：添加重复时间戳检测（条件6）
+        - v7.3.45增强：添加断言和自动降级逻辑
+        - v7.3.46增强：添加重复时间戳检测（条件6）
         - 断言1：openTime严格递增
         - 断言2：两侧长度一致
         - 断言3：无重复时间戳
@@ -217,7 +217,7 @@ def align_klines_by_open_time(
     f_times_list = [int(k[0]) for k in futures_klines]
     s_times_list = [int(k[0]) for k in spot_klines]
 
-    # v7.2.36: 断言3 - 检测重复时间戳
+    # v7.3.46: 断言3 - 检测重复时间戳
     f_times_set = set(f_times_list)
     s_times_set = set(s_times_list)
     if len(f_times_list) != len(f_times_set):
@@ -240,7 +240,7 @@ def align_klines_by_open_time(
         total = len(futures_klines) + len(spot_klines)
         return [], [], total, True
 
-    # v7.2.35: 断言1 - openTime严格递增
+    # v7.3.45: 断言1 - openTime严格递增
     for i in range(1, len(common_times)):
         if common_times[i] <= common_times[i-1]:
             error(f"❌ openTime不单调递增: {common_times[i-1]} >= {common_times[i]}")
@@ -250,7 +250,7 @@ def align_klines_by_open_time(
     aligned_f = [f_times[t] for t in common_times]
     aligned_s = [s_times[t] for t in common_times]
 
-    # v7.2.35: 断言2 - 两侧长度一致
+    # v7.3.45: 断言2 - 两侧长度一致
     if len(aligned_f) != len(aligned_s):
         error(f"❌ 对齐后长度不一致: futures={len(aligned_f)}, spot={len(aligned_s)}")
         raise ValueError(f"对齐后长度不一致: futures={len(aligned_f)}, spot={len(aligned_s)}")
@@ -260,7 +260,7 @@ def align_klines_by_open_time(
     total = len(futures_klines) + len(spot_klines)
     discard_ratio = discarded / total if total > 0 else 0
 
-    # v7.2.35: 检查是否需要降级
+    # v7.3.45: 检查是否需要降级
     is_degraded = False
     if discard_ratio > max_discard_ratio:
         error(f"❌ K线对齐丢弃率过高 {discard_ratio:.2%} > {max_discard_ratio:.2%}，建议降级为单侧CVD")
@@ -366,7 +366,7 @@ def compute_cvd_delta(
         - Base CVD: delta = 2 * takerBuyBaseVolume - volume
           * takerBuyBaseVolume: 主动买入量（币数量）
           * volume: 总成交量（币数量）
-        - v7.2.35增强：添加列数校验（防御性编程）
+        - v7.3.45增强：添加列数校验（防御性编程）
 
     Example:
         >>> klines = [
@@ -376,11 +376,11 @@ def compute_cvd_delta(
         >>> deltas = compute_cvd_delta(klines, use_quote=True, symbol="BTCUSDT")
         >>> # deltas[i] = 2*takerBuyQuote[i] - quoteVolume[i]
     """
-    # v7.2.35: 防御性检查1 - K线数据不能为空
+    # v7.3.45: 防御性检查1 - K线数据不能为空
     if not klines:
         raise ValueError(f"K线数据为空 (symbol={symbol}, interval={interval})")
 
-    # v7.2.35: 防御性检查2 - K线必须至少11列（Binance标准格式12列，索引0-11）
+    # v7.3.45: 防御性检查2 - K线必须至少11列（Binance标准格式12列，索引0-11）
     if len(klines[0]) < 11:
         raise ValueError(
             f"K线格式错误: 期望至少11列，实际{len(klines[0])}列 "
@@ -417,7 +417,7 @@ def align_oi_to_klines_strict(
     tolerance_ms: int = 5000
 ) -> Tuple[List[float], float]:
     """
-    v7.2.36: 取前不取后的OI对齐规则（条件2）
+    v7.3.46: 取前不取后的OI对齐规则（条件2）
 
     对齐规则：
     - 对每个K线的closeTime，找最近的 oi_ts <= closeTime
@@ -525,11 +525,11 @@ def compute_dynamic_min_quote_enhanced(
     enable_iqr_floor: bool = True
 ) -> float:
     """
-    v7.2.36: 增强版动态最小成交额（条件3 - IQR护栏）
+    v7.3.46: 增强版动态最小成交额（条件3 - IQR护栏）
 
     公式：
         min_quote = max(
-            factor × median,      # v7.2.35原逻辑
+            factor × median,      # v7.3.45原逻辑
             iqr_floor,            # IQR护栏（新增）
             min_fallback          # 绝对下限
         )
@@ -604,7 +604,7 @@ def filter_unclosed_klines(
     safety_lag_ms: int = 5000
 ) -> Tuple[List[List], int]:
     """
-    v7.2.36: 过滤未收盘K线（条件5）
+    v7.3.46: 过滤未收盘K线（条件5）
 
     规则：
         如果 now_ms < closeTime + safety_lag_ms，则该K线被视为"正在形成中"，不参与计算
@@ -659,7 +659,7 @@ def apply_outlier_handling(
     winsor_percentile: float = 0.01
 ) -> List[float]:
     """
-    v7.2.36: 异常值软截断（改进2 - 仅对ΔC生效）
+    v7.3.46: 异常值软截断（改进2 - 仅对ΔC生效）
 
     支持方法：
     - "iqr": IQR截断（Q1-1.5×IQR, Q3+1.5×IQR）

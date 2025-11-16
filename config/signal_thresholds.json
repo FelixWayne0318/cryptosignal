@@ -1,5 +1,5 @@
 {
-  "version": "v7.2.19_data_driven",
+  "version": "v7.3.4",
   "description": "基于实际数据的平衡配置 - 方案B",
   "_说明": {
     "目的": "基于实际市场数据分布，平衡信号质量与数量",
@@ -122,11 +122,21 @@
     "min_bars_1h": 200,
     "data_qual_min": 0.85,
     "data_qual_newcoin_min": 0.95,
+    "allow_prime_threshold": 0.90,
+    "degrade_threshold": 0.88,
+    "age_decay_coefficients": {
+      "slightly_old_factor": 0.95,
+      "moderately_old_factor": 0.90,
+      "old_factor": 0.85,
+      "stale_factor": 0.70,
+      "_comment": "时间衰减系数：slightly_old(0.95), moderately_old(0.90), old(0.85), stale(0.70)"
+    },
     "_rejection_rule": "data_qual = min(1.0, bars_1h / min_bars_1h)",
     "_hard_gate": "data_qual < data_qual_min → 直接拒绝",
     "_newcoin_stricter": "新币要求更高的data_qual_newcoin_min（0.95 vs 0.90）",
     "_comment": "v7.2.31修复P0-1断层：降低至0.85（170根K线=7.1天），从0.90降低0.4天捕捉时间",
-    "_gap_fix": "bars=170时data_qual=0.85，提前0.4天进入分析（原需180根/7.5天）"
+    "_gap_fix": "bars=170时data_qual=0.85，提前0.4天进入分析（原需180根/7.5天）",
+    "_v7.3.4_additions": "新增allow_prime_threshold, degrade_threshold, age_decay_coefficients - 消除data/quality.py硬编码"
   },
   "新币种平滑处理": {
     "_description": "v7.2.44新增P2：新币种数据不足时的平滑处理，避免因子计算不稳定",
@@ -530,6 +540,41 @@
     "alpha_gate": 0.25,
     "_comment": "提高基准概率：0.45→0.60，增强F/I调制效果"
   },
+  "闸门乘数系数": {
+    "_description": "v7.3.4新增：analyze_symbol.py中gate_multiplier计算系数",
+    "data_qual_min_weight": 0.7,
+    "data_qual_max_weight": 0.3,
+    "execution_min_weight": 0.6,
+    "execution_max_weight": 0.4,
+    "_comment": "gate_multiplier = min * data_qual + max * execution_gate",
+    "_rationale": "消除analyze_symbol.py:1096,1102硬编码"
+  },
+  "Telegram输出阈值": {
+    "_description": "v7.3.4新增：Telegram格式化输出相关阈值",
+    "gate1_data_qual_min": 0.90,
+    "gate_multiplier_excellent": 0.95,
+    "gate_multiplier_good": 0.85,
+    "gate_multiplier_acceptable": 0.70,
+    "data_qual_warning_threshold": 0.95,
+    "_comment": "消除telegram_fmt.py:1007,1061-1065,1526,2016硬编码",
+    "_rationale": {
+      "gate1_data_qual_min": "Gate1数据质量最低要求（0.90）",
+      "gate_multiplier_excellent": "优秀级别闸门乘数（≥0.95）",
+      "gate_multiplier_good": "良好级别闸门乘数（≥0.85）",
+      "gate_multiplier_acceptable": "可接受级别闸门乘数（≥0.70）",
+      "data_qual_warning_threshold": "数据质量告警阈值（<0.95触发告警）"
+    }
+  },
+  "概率阈值": {
+    "_description": "v7.3.4新增：默认概率阈值配置",
+    "prime_prob_min_default": 0.45,
+    "watch_prob_min_default": 0.65,
+    "_comment": "消除analyze_symbol.py:1007,1010硬编码",
+    "_rationale": {
+      "prime_prob_min_default": "Prime信号默认最低概率要求（未指定时使用）",
+      "watch_prob_min_default": "Watch信号默认最低概率要求（未指定时使用）"
+    }
+  },
   "分组权重": {
     "TC_weight": 0.5,
     "VOM_weight": 0.38,
@@ -656,7 +701,7 @@
     ]
   },
   "independence_gate": {
-    "version": "7.3.2",
+    "version": "v7.3.4",
     "description": "I因子风控闸门参数 - v7.3.2-Full零硬编码版",
     "thresholds": {
       "corr_strong_max_I": 30,

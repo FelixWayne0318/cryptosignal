@@ -1,6 +1,6 @@
 # 配置管理指南
 
-**版本**: v7.2.44
+**版本**: v7.3.44
 **更新日期**: 2025-11-14
 **文档类型**: 配置管理和参数修改指南
 
@@ -590,7 +590,7 @@ python3 scripts/validate_config.py
 
 ```json
 {
-  "version": "v7.2.19_data_driven",
+  "version": "v7.3.49_data_driven",
   "description": "信号生成阈值配置",
 
   "基础分析阈值": {

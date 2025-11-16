@@ -466,7 +466,7 @@ def calculate_independence(
 
 def diagnose_multicollinearity(factors: Dict[str, float], config: Dict[str, Any] = None) -> Dict[str, Any]:
     """
-    v7.2.44 P1优化：诊断8个因子之间的多重共线性
+    v7.3.44 P1优化：诊断8个因子之间的多重共线性
 
     使用VIF (Variance Inflation Factor) 检测因子间的多重共线性：
     - VIF < 5: 低共线性（良好）
@@ -535,7 +535,7 @@ def diagnose_multicollinearity(factors: Dict[str, float], config: Dict[str, Any]
 
 def calculate_vif_from_dataframe(factors_df: 'pd.DataFrame', config: Dict[str, Any] = None) -> Dict[str, Any]:
     """
-    v7.2.44 P1优化：从DataFrame计算VIF
+    v7.3.44 P1优化：从DataFrame计算VIF
 
     这个函数用于batch扫描场景，输入是多个币种的因子数据
 

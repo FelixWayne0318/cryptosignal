@@ -29,7 +29,8 @@ from typing import Dict, Any, Tuple, List
 from statistics import median
 
 from ats_core.cfg import CFG
-from ats_core.config.threshold_config import get_thresholds  # v7.2.3: 配置管理器
+from ats_core.config.threshold_config import get_thresholds  # v7.3.4: 配置管理器
+from ats_core.config.factor_config import get_factor_config  # v7.3.4: 配置统一方案
 from ats_core.sources.binance import get_klines, get_open_interest_hist, get_spot_klines
 from ats_core.features.cvd import cvd_from_klines, cvd_mix_with_oi_price
 from ats_core.scoring.scorecard import scorecard, get_factor_contributions
@@ -56,7 +57,7 @@ from ats_core.execution.stop_loss_calculator import ThreeTierStopLoss
 # ========== v6.6 因子系统（6因子：T/M/C/V/O/B）==========
 # P2.5: 使用价格带法替代固定档位数
 from ats_core.features.liquidity_priceband import score_liquidity_priceband as calculate_liquidity
-from ats_core.factors_v2.basis_funding import calculate_basis_funding
+from ats_core.factors_v2.basis_funding import score_basis_funding
 from ats_core.factors_v2.independence import calculate_independence, score_independence
 
 # ========== P2.1: 蓄势待发检测增强 ==========
@@ -67,7 +68,7 @@ from ats_core.features.accumulation_detection import detect_accumulation_v1, det
 def _apply_phase_transition_smooth(config, bars_1h: int, phase_old: str, phase_new: str,
                                     key: str, default: Any = None) -> Any:
     """
-    v7.2.31修复P0-2断层：在阶段切换时应用平滑过渡
+    v7.3.41修复P0-2断层：在阶段切换时应用平滑过渡
 
     在过渡期内，阈值从旧阶段线性插值到新阶段，避免突变
 
@@ -164,7 +165,7 @@ def _get_threshold_by_phase(config, coin_phase: str, key: str, default: Any = No
     """
     根据币种阶段获取对应阈值（统一函数）
 
-    v7.2.31增强：支持阶段过渡平滑（当提供bars_1h时）
+    v7.3.41增强：支持阶段过渡平滑（当提供bars_1h时）
 
     Args:
         config: ThresholdConfig实例
@@ -304,8 +305,8 @@ def _analyze_symbol_core(
     """
     params = CFG.params or {}
 
-    # v7.2.3: 从配置文件读取阈值（移除硬编码）
-    # v7.2.20修复：移除冗余的配置加载（第193行有正确的加载逻辑）
+    # v7.3.4: 从配置文件读取阈值（移除硬编码）
+    # v7.3.40修复：移除冗余的配置加载（第193行有正确的加载逻辑）
     # 此处不再加载，避免与函数内部的重复导入冲突
 
     # 移除候选池先验逻辑（已废弃）
@@ -313,7 +314,7 @@ def _analyze_symbol_core(
     bayesian_boost = 0.0  # 不再使用贝叶斯先验
 
     # ---- 新币检测（优先判断，决定数据要求）----
-    # 🔧 v6.3.1: 按照 newstandards/NEWCOIN_SPEC.md § 1 规范修改
+    # 🔧 v7.3.4: 按照 newstandards/NEWCOIN_SPEC.md § 1 规范修改
     new_coin_cfg = params.get("new_coin", {})
 
     # 计算K线时间戳差值（用于数据受限检测）
@@ -331,8 +332,8 @@ def _analyze_symbol_core(
     coin_age_days = coin_age_hours / 24
 
     # ---- v6.6: DataQual硬门槛检查（唯一硬拒绝）----
-    # v7.2.10修复：从配置读取阈值（避免硬编码）
-    # v7.2.20修复：使用模块级导入的get_thresholds（第32行），避免重复导入
+    # v7.3.40修复：从配置读取阈值（避免硬编码）
+    # v7.3.40修复：使用模块级导入的get_thresholds（第32行），避免重复导入
     config = get_thresholds()
     min_bars_1h = config.config.get('数据质量阈值', {}).get('min_bars_1h', 200)
     data_qual_min = config.config.get('数据质量阈值', {}).get('data_qual_min', 0.90)
@@ -351,7 +352,7 @@ def _analyze_symbol_core(
             "rejection_type": "hard_gate_dataqual"
         }
 
-    # 🔧 v6.3.1规范符合性修改：按照 NEWCOIN_SPEC.md § 1 标准
+    # 🔧 v7.3.4规范符合性修改：按照 NEWCOIN_SPEC.md § 1 标准
     #
     # 规范定义：
     # - 进入新币通道: since_listing < 14d 或 bars_1h < 400 或 !has_OI/funding
@@ -383,7 +384,7 @@ def _analyze_symbol_core(
     newcoin_days_threshold = new_coin_cfg.get("newcoin_days_threshold", 14)   # 规范值：14天
 
     # 判断是否为新币（按照规范 § 1）
-    # v7.2.10修复：从配置读取新币阶段识别阈值（避免硬编码）
+    # v7.3.40修复：从配置读取新币阶段识别阈值（避免硬编码）
     ultra_new_hours = config.config.get('新币阶段识别', {}).get('ultra_new_hours', 24)
     phase_A_hours = config.config.get('新币阶段识别', {}).get('phase_A_hours', 168)
     phase_B_hours = config.config.get('新币阶段识别', {}).get('phase_B_hours', 400)
@@ -531,7 +532,7 @@ def _analyze_symbol_core(
     t0 = time.time()
     if mark_price is not None and spot_price is not None and funding_rate is not None:
         try:
-            B, B_meta = calculate_basis_funding(
+            B, B_meta = score_basis_funding(
                 perp_price=mark_price,
                 spot_price=spot_price,
                 funding_rate=funding_rate,
@@ -638,26 +639,34 @@ def _analyze_symbol_core(
     # v6.6架构：L/S/F/I移至B层调制器，不参与方向评分
     # 符合MODULATORS.md § 2.1规范：调制器只调制position/Teff/cost/confidence
 
-    # v6.6基础权重（6因子A层系统：总权重100%）
-    # 配置优先级：config/params.json > 硬编码默认值
-    base_weights_raw = params.get("weights", {
-        # Layer 1: 价格行为层（53%）
-        "T": 24.0,  # 趋势（v6.6: +4% from S/Q重分配）
-        "M": 17.0,  # 动量（v6.6: +3% from S/Q重分配）
-        "V": 12.0,  # 量能（v6.6: +1% from S/Q重分配）
-        # Layer 2: 资金流层（41%）
-        "C": 24.0,  # CVD资金流（v6.6: +4% from S/Q重分配）
-        "O": 17.0,  # OI持仓（v6.6: +3% from S/Q重分配）
-        # Layer 3: 微观结构层（6%）
-        "B": 6.0,   # 基差+资金费（v6.6: unchanged）
-        # B层调制器（不参与评分，权重=0）
-        "L": 0.0,   # 流动性调制器（v6.6: moved from A-layer）
-        "S": 0.0,   # 结构调制器（v6.6: moved from A-layer）
-        "F": 0.0,   # 资金领先调制器（v6.6: already B-layer）
-        "I": 0.0,   # 独立性调制器（v6.6: already B-layer）
-        # 废弃因子
-        "E": 0.0,   # 环境因子（v6.6: deprecated）
-    })  # A层6因子总计: 24+17+12+24+17+6 = 100.0 ✓
+    # v7.3.4配置统一：从factors_unified.json读取权重（唯一来源）
+    # 配置优先级：config/factors_unified.json（通过FactorConfig读取）
+    # 废弃：config/params.json的weights字段（已标记为DEPRECATED）
+    # 参考：docs/STRATEGIC_DESIGN_FIX_v7.3.3_2025-11-15.md - 配置统一方案
+    try:
+        factor_config = get_factor_config()
+        base_weights_raw = factor_config.get_weights_dict()
+        # v7.3.3权重: T23/M10/C26/V11/O20/B10 (总计100%)
+        # B层调制器: L0/S0/F0/I0 (不参与评分)
+    except Exception as e:
+        # Fallback: 如果配置加载失败，使用v7.3.3硬编码权重
+        print(f"⚠️ FactorConfig加载失败，使用fallback权重: {e}")
+        base_weights_raw = {
+            # v7.3.3权重（与factors_unified.json保持一致）
+            "T": 23.0,  # 趋势（v7.3.3: -1% for B因子提升）
+            "M": 10.0,  # 动量（v6.7 P2.2: 17%→10%, 降低与T的信息重叠）
+            "C": 26.0,  # CVD资金流（v7.3.3: -1% for B因子提升）
+            "V": 11.0,  # 量能（v7.3.3: -1% for B因子提升）
+            "O": 20.0,  # OI持仓（v7.3.3: -1% for B因子提升）
+            "B": 10.0,  # 基差+资金费（v7.3.3: 6%→10%, +67%提升）
+            # B层调制器（不参与评分，权重=0）
+            "L": 0.0,   # 流动性调制器
+            "S": 0.0,   # 结构调制器
+            "F": 0.0,   # 资金领先调制器
+            "I": 0.0,   # 独立性调制器
+            # 废弃因子
+            "E": 0.0,   # 环境因子（v6.6: deprecated）
+        }  # A层6因子总计: 23+10+26+11+20+10 = 100.0 ✓
 
     # 过滤注释字段（防止传入blend_weights时出现类型错误）
     base_weights = {k: v for k, v in base_weights_raw.items() if not k.startswith('_')}
@@ -781,11 +790,16 @@ def _analyze_symbol_core(
             config=None  # 使用默认配置
         )
 
+        # v7.3.4: 从配置读取I因子参数（消除P0-1硬编码）
+        i_factor_params = factor_config.get('I因子参数', {})
+        i_effective_threshold_default = i_factor_params.get('effective_threshold', 50.0)
+        i_confidence_boost_default = i_factor_params.get('confidence_boost_default', 0.0)
+
         # 提取veto信息（将在is_prime判定前使用）
         i_veto = i_veto_result.get("veto", False)
         i_veto_reasons = i_veto_result.get("veto_reasons", [])
-        i_effective_threshold = i_veto_result.get("effective_threshold", 50.0)
-        i_confidence_boost = i_veto_result.get("confidence_boost", 0.0)
+        i_effective_threshold = i_veto_result.get("effective_threshold", i_effective_threshold_default)
+        i_confidence_boost = i_veto_result.get("confidence_boost", i_confidence_boost_default)
         i_cost_multiplier = i_veto_result.get("cost_multiplier", 1.0)
 
         # 应用软调制到confidence和cost（仅作记录，不影响现有逻辑）
@@ -807,8 +821,10 @@ def _analyze_symbol_core(
         warn(f"I因子veto检查失败: {e}")
         i_veto = False
         i_veto_reasons = []
-        i_effective_threshold = 50.0
-        i_confidence_boost = 0.0
+        # v7.3.4: 从配置读取默认值（消除P0-1硬编码）
+        i_factor_params = factor_config.get('I因子参数', {})
+        i_effective_threshold = i_factor_params.get('effective_threshold', 50.0)
+        i_confidence_boost = i_factor_params.get('confidence_boost_default', 0.0)
         i_cost_multiplier = 1.0
         I_meta['veto_check_error'] = str(e)
 
@@ -835,7 +851,7 @@ def _analyze_symbol_core(
     prior_up = 0.50  # 中性先验
     quality_score = _calc_quality(scores, len(k1), len(oi_data))
 
-    # v6.3.2新增：新币质量评分补偿
+    # v7.3.4新增：新币质量评分补偿
     # 问题：_calc_quality对K线<100的币种惩罚(Q*=0.85)，新币天然数据少被惩罚
     # 解决：给予适度补偿，但仍保留一定惩罚（数据少确实是风险）
     #
@@ -845,7 +861,7 @@ def _analyze_symbol_core(
     # - phaseB: 微调补偿（0.85 → 0.87），保留13%惩罚
     # - mature: 无补偿
     #
-    # v7.2.31修复P2断层：补偿平滑退出（bars 100-150）
+    # v7.3.41修复P2断层：补偿平滑退出（bars 100-150）
     # 原逻辑：bars<100完全补偿，bars≥100突然无补偿 → 断崖效应
     # 新逻辑：bars<100完全补偿，bars=100-150线性退出，bars≥150无补偿
     compensation_config = config.config.get('新币质量补偿', {})
@@ -854,7 +870,7 @@ def _analyze_symbol_core(
 
     if is_new_coin and len(k1) < exit_complete_bars:
         original_quality = quality_score
-        # v7.2.10修复：从配置读取质量补偿参数（避免硬编码）
+        # v7.3.40修复：从配置读取质量补偿参数（避免硬编码）
         ultra_new_compensate_from = compensation_config.get('ultra_new_compensate_from', 0.85)
         ultra_new_compensate_to = compensation_config.get('ultra_new_compensate_to', 0.90)
         phaseA_compensate_to = compensation_config.get('phaseA_compensate_to', 0.88)
@@ -901,7 +917,7 @@ def _analyze_symbol_core(
     # F调制器仅通过Teff/cost调整（在integrated_gates中实现）
     # 不应直接修改概率，避免双重惩罚
     # 符合MODULATORS.md § 2.1规范："F仅调节Teff/cost/thresholds，绝不修改方向分数或概率"
-    # v7.2.10修复：从配置读取概率上限（避免硬编码）
+    # v7.3.40修复：从配置读取概率上限（避免硬编码）
     P_long_max = config.config.get('概率计算阈值', {}).get('P_long_max', 0.95)
     P_short_max = config.config.get('概率计算阈值', {}).get('P_short_max', 0.95)
     P_long = min(P_long_max, P_long_base)
@@ -939,7 +955,7 @@ def _analyze_symbol_core(
     )
 
     # FIModulator公式: p_min = p0 + θF·max(0, gF) + θI·min(0, gI)
-    # v7.2.5修复: p0从硬编码0.58改为配置0.45（与prime_prob_min一致）
+    # v7.3.4修复: p0从硬编码0.58改为配置0.45（与prime_prob_min一致）
     # 默认参数: p0=0.45, θF=0.03, θI=-0.02, range=[0.50, 0.75]
     #
     # 为了保持信号量控制，叠加安全边际调整
@@ -949,7 +965,7 @@ def _analyze_symbol_core(
 
     # 最终p_min = FIModulator计算值 + 安全边际
     p_min_adjusted = p_min_modulated + adjustment
-    # v7.2.10修复：从配置读取p_min调整范围（避免硬编码）
+    # v7.3.40修复：从配置读取p_min调整范围（避免硬编码）
     p_min_range_min = config.config.get('概率计算阈值', {}).get('p_min_range_min', 0.50)
     p_min_range_max = config.config.get('概率计算阈值', {}).get('p_min_range_max', 0.75)
     # 限制在合理范围
@@ -961,44 +977,49 @@ def _analyze_symbol_core(
     # ---- 6. 发布判定（4级分级标准）----
 
     # 新币特殊处理：应用分级标准
-    # v7.2.6修复：移除所有硬编码，从配置文件读取
+    # v7.3.4修复：移除所有硬编码，从配置文件读取
     if is_ultra_new:
         # 超新币（1-24小时）：超级谨慎
         prime_prob_min = new_coin_cfg.get("ultra_new_prime_prob_min", 0.70)
         prime_dims_ok_min = new_coin_cfg.get("ultra_new_dims_ok_min", 6)
-        prime_dim_threshold = new_coin_cfg.get("ultra_new_prime_dim_threshold", 70)  # v7.2.6修复：从配置读取
-        watch_prob_min = new_coin_cfg.get("ultra_new_watch_prob_min", 0.65)  # v7.2.6修复：从配置读取
+        prime_dim_threshold = new_coin_cfg.get("ultra_new_prime_dim_threshold", 70)  # v7.3.4修复：从配置读取
+        watch_prob_min = new_coin_cfg.get("ultra_new_watch_prob_min", 0.65)  # v7.3.4修复：从配置读取
     elif is_phaseA:
         # 阶段A（1-7天）：极度谨慎
         prime_prob_min = new_coin_cfg.get("phaseA_prime_prob_min", 0.65)
         prime_dims_ok_min = new_coin_cfg.get("phaseA_dims_ok_min", 5)
-        # v7.2.7修复：优先从signal_thresholds.json读取，回退到params.json
+        # v7.3.4修复：优先从signal_thresholds.json读取，回退到params.json
         prime_dim_threshold = config.get_newcoin_threshold('phaseA', 'prime_dim_threshold', 65) if config else 65
-        watch_prob_min = new_coin_cfg.get("phaseA_watch_prob_min", 0.60)  # v7.2.6修复：从配置读取
+        watch_prob_min = new_coin_cfg.get("phaseA_watch_prob_min", 0.60)  # v7.3.4修复：从配置读取
     elif is_phaseB:
         # 阶段B（7-30天）：谨慎
         prime_prob_min = new_coin_cfg.get("phaseB_prime_prob_min", 0.63)
         prime_dims_ok_min = new_coin_cfg.get("phaseB_dims_ok_min", 4)
-        # v7.2.7修复：优先从signal_thresholds.json读取，回退到params.json
+        # v7.3.4修复：优先从signal_thresholds.json读取，回退到params.json
         prime_dim_threshold = config.get_newcoin_threshold('phaseB', 'prime_dim_threshold', 65) if config else 65
-        watch_prob_min = new_coin_cfg.get("phaseB_watch_prob_min", 0.60)  # v7.2.6修复：从配置读取
+        watch_prob_min = new_coin_cfg.get("phaseB_watch_prob_min", 0.60)  # v7.3.4修复：从配置读取
     else:
         # 成熟币种：正常标准
-        # v7.2.7修复：统一使用signal_thresholds.json，移除params.json依赖
+        # v7.3.4修复：统一使用signal_thresholds.json，移除params.json依赖
         # 修复前：使用params.json的publish配置（prime_prob_min=0.68）
         # 修复后：使用signal_thresholds.json的mature_coin配置（prime_prob_min=0.45）
+        # v7.3.4: 从配置读取概率阈值（消除P0-2硬编码）
+        prob_thresholds = config.config.get('概率阈值', {}) if config else {}
+        prime_prob_min_default = prob_thresholds.get('prime_prob_min_default', 0.45)
+        watch_prob_min_default = prob_thresholds.get('watch_prob_min_default', 0.65)
+
         if config:
-            prime_prob_min = config.get_mature_threshold('prime_prob_min', 0.45)  # v7.2.7修复
+            prime_prob_min = config.get_mature_threshold('prime_prob_min', prime_prob_min_default)  # v7.3.4修复
             prime_dims_ok_min = config.get_mature_threshold('dims_ok_min', 3)
             prime_dim_threshold = config.get_mature_threshold('prime_dim_threshold', 50)
             # watch功能已废弃，但保留兼容性
-            watch_prob_min = 0.65  # 保持原值，watch信号不再发送
+            watch_prob_min = watch_prob_min_default  # v7.3.4: 从配置读取
         else:
             # 配置加载失败时使用默认值
-            prime_prob_min = 0.45
+            prime_prob_min = prime_prob_min_default  # v7.3.4: 从配置读取
             prime_dims_ok_min = 3
             prime_dim_threshold = 50
-            watch_prob_min = 0.65
+            watch_prob_min = watch_prob_min_default  # v7.3.4: 从配置读取
 
     # ---- Prime评分系统（v4.0 - 基于10维因子系统）----
     # 重大改进：使用10维综合评分替代4维独立评分
@@ -1066,7 +1087,7 @@ def _analyze_symbol_core(
     prime_strength += base_strength
 
     # 2. 概率加成（40分）- 2025-11-04审计优化：降低阈值从0.60到0.30
-    # v7.2.10修复：从配置读取概率加成阈值（避免硬编码）
+    # v7.3.40修复：从配置读取概率加成阈值（避免硬编码）
     P_chosen_bonus_threshold = config.config.get('概率计算阈值', {}).get('P_chosen_bonus_threshold', 0.30)
     # 30%→0分, 60%→40分, >60%截断
     # 原因：熊市时P_chosen普遍在0.32-0.44范围，0.60阈值过高导致无法获得加成
@@ -1079,18 +1100,25 @@ def _analyze_symbol_core(
     # 这是v6.6完整集成的关键：让四门真正影响Prime强度
     gate_multiplier = 1.0
 
+    # v7.3.4: 从配置读取闸门乘数系数（消除P0-8硬编码）
+    gate_coeffs = config.config.get('闸门乘数系数', {}) if config else {}
+    data_qual_min_weight = gate_coeffs.get('data_qual_min_weight', 0.7)
+    data_qual_max_weight = gate_coeffs.get('data_qual_max_weight', 0.3)
+    execution_min_weight = gate_coeffs.get('execution_min_weight', 0.6)
+    execution_max_weight = gate_coeffs.get('execution_max_weight', 0.4)
+
     # DataQual影响（30%权重）
     # DataQual=1.0 → *1.0（无影响）
     # DataQual=0.9 → *0.97（-3%）
     # DataQual=0.8 → *0.94（-6%）
     # DataQual=0.5 → *0.85（-15%）
-    gate_multiplier *= (0.7 + 0.3 * gates_data_qual)
+    gate_multiplier *= (data_qual_min_weight + data_qual_max_weight * gates_data_qual)
 
     # Execution影响（40%权重）
     # Execution=1.0 → *1.0（无影响）
     # Execution=0.5 → *0.8（-20%）
     # Execution=0.0 → *0.6（-40%）
-    gate_multiplier *= (0.6 + 0.4 * gates_execution)
+    gate_multiplier *= (execution_min_weight + execution_max_weight * gates_execution)
 
     # EV负值时额外惩罚（最多-30%）
     if gates_ev < 0:
@@ -1138,14 +1166,14 @@ def _analyze_symbol_core(
         )
         mtf_coherence = mtf_result['coherence_score']
 
-        # v7.2.10修复：从配置读取多时间框架一致性阈值（避免硬编码）
+        # v7.3.40修复：从配置读取多时间框架一致性阈值（避免硬编码）
         mtf_coherence_min = config.config.get('多维度一致性', {}).get('mtf_coherence_min', 60)
         mtf_coherence_penalty = config.config.get('多维度一致性', {}).get('mtf_coherence_penalty', 0.90)
 
         # 一致性过滤: <阈值惩罚
         if mtf_coherence < mtf_coherence_min:
             # 时间框架不一致，降低概率和Prime评分
-            P_chosen *= 0.85  # 惩罚15%
+            P_chosen *= mtf_coherence_penalty  # v7.3.4修复：使用配置化惩罚系数（默认0.90）
             prime_strength *= mtf_coherence_penalty  # Prime评分降低（配置化）
 
             # 更新对应方向的概率
@@ -1161,7 +1189,7 @@ def _analyze_symbol_core(
     # 计算达标维度数（使用币种特定的阈值）
     dims_ok = sum(1 for s in scores.values() if abs(s) >= prime_dim_threshold)
 
-    # v6.3.2修复：Prime判定应用币种特定阈值
+    # v7.3.4修复：Prime判定应用币种特定阈值
     # 问题：之前所有币种都用固定25分，新币专用阈值(prime_prob_min等)未生效
     # 修复：新币使用更严格的prime_strength阈值，体现高风险需要高确定性
     #
@@ -1182,7 +1210,7 @@ def _analyze_symbol_core(
     elif is_phaseB:
         prime_strength_threshold = new_coin_cfg.get("phaseB_prime_strength_min", 28)
     else:
-        # v7.2.3修复：从配置文件读取，移除硬编码54
+        # v7.3.4修复：从配置文件读取，移除硬编码54
         # 基于实际分布：Prime强度中位=36, P75=45, Max=59
         # 阈值35（配置文件默认值）接近中位数，合理
         if config:
@@ -1232,7 +1260,7 @@ def _analyze_symbol_core(
         is_accumulating = False
         accumulating_reason = ""
 
-        # v7.2.10修复：从配置读取蓄势检测阈值（避免硬编码）
+        # v7.3.40修复：从配置读取蓄势检测阈值（避免硬编码）
         strong_acc_cfg = config.config.get('蓄势检测阈值', {}).get('strong_accumulation', {})
         moderate_acc_cfg = config.config.get('蓄势检测阈值', {}).get('moderate_accumulation', {})
 
@@ -1266,25 +1294,25 @@ def _analyze_symbol_core(
     quality_check_1 = (prime_strength >= prime_strength_threshold) and (P_chosen >= p_min_adjusted)
 
     # 质量门槛2：综合置信度（A层6因子加权）
-    # v7.2.3修复：从配置文件读取，移除硬编码
-    # v7.2.30修复：使用币种阶段特定阈值（新币使用更严格的阈值）
-    # v7.2.31增强：支持阶段过渡平滑（bars_1h传入）
+    # v7.3.4修复：从配置文件读取，移除硬编码
+    # v7.3.40修复：使用币种阶段特定阈值（新币使用更严格的阈值）
+    # v7.3.41增强：支持阶段过渡平滑（bars_1h传入）
     confidence_threshold = _get_threshold_by_phase(config, coin_phase, 'confidence_min', 20, bars_1h=bars_1h)
 
     quality_check_2 = confidence >= confidence_threshold
 
     # 质量门槛3：四门槛综合质量（gate_multiplier）
-    # v7.2.4修复：从配置文件读取，移除硬编码0.84
-    # v7.2.30修复：使用币种阶段特定阈值
-    # v7.2.31增强：支持阶段过渡平滑
+    # v7.3.4修复：从配置文件读取，移除硬编码0.84
+    # v7.3.40修复：使用币种阶段特定阈值
+    # v7.3.41增强：支持阶段过渡平滑
     gate_multiplier_threshold = _get_threshold_by_phase(config, coin_phase, 'gate_multiplier_min', 0.84, bars_1h=bars_1h)
 
     quality_check_3 = gate_multiplier >= gate_multiplier_threshold
 
     # 质量门槛4：edge优势边际
-    # v7.2.4修复：从配置文件读取，移除硬编码0.48
-    # v7.2.30修复：使用币种阶段特定阈值（新币要求更高edge）
-    # v7.2.31增强：支持阶段过渡平滑
+    # v7.3.4修复：从配置文件读取，移除硬编码0.48
+    # v7.3.40修复：使用币种阶段特定阈值（新币要求更高edge）
+    # v7.3.41增强：支持阶段过渡平滑
     # 实际数据分布：Edge P75=0.14, 中位=0.07, Max=0.31
     edge_threshold = _get_threshold_by_phase(config, coin_phase, 'edge_min', 0.15, bars_1h=bars_1h)
 
@@ -1295,13 +1323,13 @@ def _analyze_symbol_core(
     is_watch = False  # 不再发布Watch信号
 
     # v6.3新增：拒绝原因跟踪（专家建议 #5）
-    # v6.3.2修复：使用币种特定的prime_strength_threshold
+    # v7.3.4修复：使用币种特定的prime_strength_threshold
     # P2.5++修复（2025-11-05）：增加新质量门槛的拒绝原因
-    # v7.2.4修复：移除硬编码，使用配置文件阈值
-    # v7.2.30修复：使用币种阶段特定阈值
+    # v7.3.4修复：移除硬编码，使用配置文件阈值
+    # v7.3.40修复：使用币种阶段特定阈值
 
     # 获取base_strength_min阈值（用于拒绝原因显示）
-    # v7.2.31增强：支持阶段过渡平滑
+    # v7.3.41增强：支持阶段过渡平滑
     base_strength_threshold = _get_threshold_by_phase(config, coin_phase, 'base_strength_min', 30, bars_1h=bars_1h)
 
     rejection_reason = []
@@ -1327,7 +1355,7 @@ def _analyze_symbol_core(
         if not quality_check_3:
             rejection_reason.append(f"❌ 四门槛质量不足(gate_mult={gate_multiplier:.3f} < {gate_multiplier_threshold:.2f})")
             # 详细说明哪些门槛拖后腿
-            # v7.2.10修复：从配置读取新币闸门阈值（避免硬编码）
+            # v7.3.40修复：从配置读取新币闸门阈值（避免硬编码）
             data_qual_newcoin_min = config.config.get('数据质量阈值', {}).get('data_qual_newcoin_min', 0.95)
             execution_gate_min = config.config.get('执行闸门阈值', {}).get('execution_gate_min', 0.70)
 
@@ -1565,7 +1593,7 @@ def _analyze_symbol_core(
             "watch": is_watch,
             "dims_ok": dims_ok,
             "prime_strength": int(prime_strength),  # Prime评分（0-100）
-            "prime_strength_threshold": prime_strength_threshold,  # v6.3.2新增：币种特定阈值
+            "prime_strength_threshold": prime_strength_threshold,  # v7.3.4新增：币种特定阈值
             "prime_breakdown": prime_breakdown,  # Prime评分详细分解（v4.0新增）
             "rejection_reason": rejection_reason,  # v6.3新增：拒绝原因跟踪
             "ttl_h": 8,
@@ -1936,7 +1964,7 @@ def _calc_momentum(h, l, c, cfg):
 
 def _calc_cvd_flow(cvd_series, c, cfg, klines=None):
     """
-    CVD资金流打分（±100系统）
+    CVD资金流打分（±100系统，v7.3.46: 移除未使用的side_long参数）
 
     Args:
         cvd_series: CVD序列
@@ -1946,10 +1974,13 @@ def _calc_cvd_flow(cvd_series, c, cfg, klines=None):
     """
     try:
         from ats_core.features.cvd_flow import score_cvd_flow
-        C, meta = score_cvd_flow(cvd_series, c, False, cfg, klines=klines)  # v2.5+传入klines
+        C, meta = score_cvd_flow(cvd_series, c, cfg, klines=klines)  # v7.3.46 P1-2: 移除side_long参数
         return int(C), meta
-    except Exception:
-        return 0, {"cvd6": 0.0, "cvd_score": 0}
+    except (ValueError, TypeError, ZeroDivisionError) as e:
+        # v7.3.46 P2-1: 精确异常捕获
+        from ats_core.logging import warn
+        warn(f"C因子计算失败: {e}，返回中性值")
+        return 0, {"cvd6": 0.0, "cvd_score": 0, "error": str(e)}
 
 def _calc_structure(h, l, c, ema30_last, atr_now, cfg, ctx):
     """结构打分"""
@@ -2002,8 +2033,8 @@ def _calc_quality(scores: Dict, n_klines: int, n_oi: int) -> float:
     """
     Q = 1.0
 
-    # v7.2.10修复：从配置读取因子质量检查阈值（避免硬编码）
-    # v7.2.20修复：使用模块级导入的get_thresholds（第32行），避免重复导入
+    # v7.3.40修复：从配置读取因子质量检查阈值（避免硬编码）
+    # v7.3.40修复：使用模块级导入的get_thresholds（第32行），避免重复导入
     config = get_thresholds()
     factor_quality_cfg = config.config.get('因子质量检查', {})
     n_klines_min = factor_quality_cfg.get('n_klines_min', 100)

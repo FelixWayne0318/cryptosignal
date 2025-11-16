@@ -23,9 +23,27 @@ from .scoring_utils import directional_score  # 保留用于内部计算
 from ats_core.scoring.scoring_utils import StandardizationChain
 from ats_core.config.factor_config import get_factor_config
 from ats_core.utils.outlier_detection import detect_outliers_iqr, apply_outlier_weights
+from ats_core.logging import log, warn, error  # v7.3.46: P2-4日志系统改进
 
 # v3.0: 模块级StandardizationChain实例（延迟初始化）
 _cvd_chain: Optional[StandardizationChain] = None
+
+
+def _get_eps_slope_min() -> float:
+    """
+    获取epsilon斜率最小值（v7.3.46 P2-3）
+
+    从numeric_stability.json读取，防止除零
+
+    Returns:
+        float: epsilon斜率最小值
+    """
+    try:
+        from ats_core.config.runtime_config import RuntimeConfig
+        numeric_config = RuntimeConfig.get_numeric_stability()
+        return numeric_config.get("C_factor", {}).get("eps_slope_min", 1e-8)
+    except Exception:
+        return 1e-8  # 降级默认值
 
 
 def _get_cvd_chain() -> StandardizationChain:
@@ -51,13 +69,20 @@ def _get_cvd_chain() -> StandardizationChain:
                     lam=std_params['lam']
                 )
             else:
-                # 如果配置禁用，使用默认参数创建（向后兼容）
+                # 如果配置禁用，从fallback_params读取（向后兼容）
+                fallback = config.get_fallback_params("C+")
+                std_fallback = fallback.get('standardization', {})
                 _cvd_chain = StandardizationChain(
-                    alpha=0.25, tau=5.0, z0=3.0, zmax=6.0, lam=1.5
+                    alpha=std_fallback.get('alpha', 0.25),
+                    tau=std_fallback.get('tau', 5.0),
+                    z0=std_fallback.get('z0', 3.0),
+                    zmax=std_fallback.get('zmax', 6.0),
+                    lam=std_fallback.get('lam', 1.5)
                 )
-        except Exception as e:
-            # 配置加载失败时使用默认参数（向后兼容）
-            print(f"⚠️ C+因子StandardizationChain配置加载失败，使用默认参数: {e}")
+        except (FileNotFoundError, KeyError, ValueError) as e:
+            # v7.3.46 P2-1: 精确异常捕获
+            # 配置加载失败时使用硬编码最小默认值（最后降级方案）
+            warn(f"C+因子StandardizationChain配置加载失败，使用硬编码默认参数: {e}")
             _cvd_chain = StandardizationChain(
                 alpha=0.25, tau=5.0, z0=3.0, zmax=6.0, lam=1.5
             )
@@ -67,17 +92,15 @@ def _get_cvd_chain() -> StandardizationChain:
 def score_cvd_flow(
     cvd_series: List[float],
     c: List[float],
-    side_long: bool,
     params: Dict[str, Any] = None,
     klines: List[list] = None
 ) -> Tuple[int, Dict[str, Any]]:
     """
-    C（CVD资金流）维度评分
+    C（CVD资金流）维度评分（v7.3.46 P1-2: 移除未使用的side_long参数）
 
     Args:
         cvd_series: CVD序列
         c: 收盘价列表
-        side_long: 是否做多
         params: 参数配置（v3.0：可选，优先级高于配置文件）
         klines: K线数据（用于ADTV_notional归一化，推荐）
 
@@ -105,13 +128,32 @@ def score_cvd_flow(
         config = get_factor_config()
         config_params = config.get_factor_params("C+")
         min_data_points = config.get_data_quality_threshold("C+", "min_data_points")
-    except Exception as e:
-        # 配置加载失败时使用硬编码默认值（向后兼容）
-        print(f"⚠️ C+因子配置加载失败，使用默认值: {e}")
+    except (FileNotFoundError, KeyError, ValueError) as e:
+        # v7.3.46 P2-1: 精确异常捕获
+        # 配置加载失败时使用硬编码最小默认值（最后降级方案）
+        warn(f"C+因子配置加载失败，使用硬编码默认值: {e}")
         config_params = {
             "lookback_hours": 6,
             "cvd_scale": 0.15,
             "crowding_p95_penalty": 10,
+            "r2_threshold": 0.7,
+            "outlier_weight": 0.3,
+            "relative_intensity_scale": 2.0,
+            "absolute_scale_fallback": 1000.0,
+            "crowding_percentile": 95,
+            "regression_window_size": 7,  # v7.3.46 P1-1
+            "min_historical_samples": 30,  # v7.3.46 P1-1
+            "outlier_detection": {  # v7.3.46 P2-2
+                "enabled": True,
+                "min_points": 5,
+                "iqr_multiplier": 1.5,
+                "weight": 0.3
+            },
+            "stability_factor_params": {
+                "base": 0.7,
+                "multiplier": 0.3,
+                "r2_baseline": 0.7
+            }
         }
         min_data_points = 7
 
@@ -133,32 +175,46 @@ def score_cvd_flow(
             "min_data_required": min_data_points
         }
 
-    # ========== 1. 计算 CVD 6小时变化 ==========
-    cvd_window = cvd_series[-7:]  # 最近7个数据点（6小时）
+    # ========== 1. 计算 CVD 回归窗口变化 ==========
+    # v7.3.46 P1-1: 从配置读取regression_window_size
+    regression_window = p.get("regression_window_size", 7)
+    cvd_window = cvd_series[-regression_window:]
     n = len(cvd_window)
 
-    # ========== 1.5 异常值检测和处理（v3.1新增） ==========
+    # ========== 1.5 异常值检测和处理（v3.1新增，v7.3.46 P2-2配置化） ==========
     # 防止巨鲸订单、闪崩等极端事件污染CVD趋势分析
     # 使用IQR方法（与O+因子一致）
     outliers_filtered = 0
     cvd_window_original = cvd_window.copy()  # 保存原始值用于对比
 
-    if len(cvd_window) >= 5:  # 至少5个点才做异常值检测
+    # v7.3.46 P2-2: 从配置读取outlier_detection参数
+    outlier_config = p.get("outlier_detection", {
+        "enabled": True,
+        "min_points": 5,
+        "iqr_multiplier": 1.5,
+        "weight": 0.3
+    })
+
+    if outlier_config.get("enabled", True) and len(cvd_window) >= outlier_config["min_points"]:
         try:
-            # 检测异常值（multiplier=1.5，标准IQR阈值）
-            outlier_mask = detect_outliers_iqr(cvd_window, multiplier=1.5)
+            # 检测异常值（使用配置化的iqr_multiplier）
+            outlier_mask = detect_outliers_iqr(cvd_window, multiplier=outlier_config["iqr_multiplier"])
             outliers_filtered = sum(outlier_mask)
 
             if outliers_filtered > 0:
                 # 对异常值降权而非完全删除（保持序列长度不变）
-                # CVD对异常值更敏感，使用更低的权重（0.3 vs O+的0.5）
+                # CVD对异常值更敏感，使用配置化的权重
                 cvd_window = apply_outlier_weights(
                     cvd_window,
                     outlier_mask,
-                    outlier_weight=0.3  # 异常值仅保留30%权重
+                    outlier_weight=outlier_config["weight"]
                 )
-        except Exception as e:
+                # v7.3.46 P2-4: 添加日志
+                log(f"C因子异常值过滤: {outliers_filtered}/{len(cvd_window)}个点被降权至{outlier_config['weight']}")
+        except (ValueError, ZeroDivisionError) as e:
+            # v7.3.46 P2-1: 精确异常捕获
             # 异常值检测失败时使用原始数据（向后兼容）
+            warn(f"C因子异常值检测失败: {e}，使用原始数据")
             outliers_filtered = 0
 
     # ========== 2. 线性回归分析（判断持续性） ==========
@@ -177,78 +233,104 @@ def score_cvd_flow(
     r_squared = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0
 
     # 2.3 综合判断持续性
-    # R² >= 0.7 = 持续性强（变化平稳，不被单根K线主导）
-    is_consistent = (r_squared >= 0.7)
+    # v7.3.4: 从配置读取R²阈值（默认0.7）
+    r2_threshold = p.get("r2_threshold", 0.7)
+    # R² >= r2_threshold = 持续性强（变化平稳，不被单根K线主导）
+    is_consistent = (r_squared >= r2_threshold)
 
     # ========== 3. 软映射评分（带符号，-100到+100） ==========
     # v2.5++最终方案：相对历史斜率归一化（方向+斜率，无绝对量）
     # 核心理念：CVD判断方向和变化速度，与资金流入流出绝对量无关
 
     # 3.1 计算历史斜率分布（用于自适应归一化）
-    use_historical_norm = (len(cvd_series) >= 30)  # 至少30个数据点
+    # v7.3.46 P1-1: 从配置读取min_historical_samples和regression_window
+    min_historical = p.get("min_historical_samples", 30)
+    use_historical_norm = (len(cvd_series) >= min_historical)
+
     if use_historical_norm:
-        # 计算过去所有6小时窗口的斜率
+        # 计算过去所有窗口的斜率（窗口大小使用配置）
         hist_slopes = []
-        for i in range(6, len(cvd_series)):
-            window = cvd_series[i-6:i+1]
-            if len(window) == 7:
+        window_start = regression_window - 1
+        for i in range(window_start, len(cvd_series)):
+            window = cvd_series[i-window_start:i+1]
+            if len(window) == regression_window:
                 # 线性回归计算斜率
-                x_m = 3.0  # (7-1)/2
-                y_m = sum(window) / 7
-                num = sum((j - x_m) * (window[j] - y_m) for j in range(7))
-                den = sum((j - x_m) ** 2 for j in range(7))
+                x_m = (regression_window - 1) / 2.0
+                y_m = sum(window) / regression_window
+                num = sum((j - x_m) * (window[j] - y_m) for j in range(regression_window))
+                den = sum((j - x_m) ** 2 for j in range(regression_window))
                 if den > 0:
                     hist_slopes.append(num / den)
 
         # 计算历史斜率的平均绝对值（代表"正常"变化速度）
         if len(hist_slopes) >= 10:
             avg_abs_slope = sum(abs(s) for s in hist_slopes) / len(hist_slopes)
-            avg_abs_slope = max(1e-8, avg_abs_slope)  # 防止除零
+            # v7.3.46 P2-3: 从numeric_stability.json读取epsilon
+            eps_slope_min = _get_eps_slope_min()
+            avg_abs_slope = max(eps_slope_min, avg_abs_slope)
         else:
             avg_abs_slope = None
     else:
         avg_abs_slope = None
 
     # 3.2 归一化：相对强度（当前斜率 / 历史平均斜率）
+    # v7.3.4: 从配置读取scale参数
     if avg_abs_slope is not None:
         # 相对强度 = 当前速度 / 历史平均速度（保留正负）
         relative_intensity = slope / avg_abs_slope
-        # 使用相对强度映射（scale调大，因为relative_intensity通常在±0.5到±3范围）
-        normalized = math.tanh(relative_intensity / 2.0)  # scale=2.0
+        # 使用相对强度映射（scale可配置，默认2.0）
+        scale = p.get("relative_intensity_scale", 2.0)
+        normalized = math.tanh(relative_intensity / scale)
         cvd_score = 100.0 * normalized
         normalization_method = "relative_historical"
     else:
         # 降级方案：使用固定scale（历史数据不足时）
-        # 这时只能用绝对斜率 + 固定scale
-        normalized = math.tanh(slope / 1000.0)  # 经验值，需要调整
+        # v7.3.4: 从配置读取fallback scale
+        fallback_scale = p.get("absolute_scale_fallback", 1000.0)
+        normalized = math.tanh(slope / fallback_scale)
         cvd_score = 100.0 * normalized
         normalization_method = "absolute_fallback"
+        # v7.3.46 P2-4: 降级日志
+        log(f"C因子降级：历史数据不足(<{min_historical})，使用固定scale归一化")
 
     # 如果R²低（震荡），降低分数（震荡意味着不稳定）
+    # v7.3.4: 从配置读取stability打折参数
     if not is_consistent:
-        # 根据R²打折：R²=0.4→70%, R²=0.6→85%, R²=0.7→100%
-        stability_factor = 0.7 + 0.3 * (r_squared / 0.7)
+        # 根据R²打折：使用配置化公式参数
+        stability_params = p.get("stability_factor_params", {
+            "base": 0.7,
+            "multiplier": 0.3,
+            "r2_baseline": 0.7
+        })
+        stability_factor = (
+            stability_params["base"] +
+            stability_params["multiplier"] * (r_squared / stability_params["r2_baseline"])
+        )
         cvd_score = cvd_score * min(1.0, stability_factor)
 
     # ========== 4. 拥挤度检测（新增v2.1，学习OI的95分位数逻辑） ==========
-    # v2.5++：使用历史斜率的95分位数判断拥挤度
+    # v2.5++：使用历史斜率的分位数判断拥挤度
+    # v7.3.4: 分位数阈值可配置（默认95）
     crowding_warn = False
     p95_slope = None
 
     if use_historical_norm and avg_abs_slope is not None and len(hist_slopes) >= 20:
-        # 使用历史斜率绝对值的95分位数
+        # 使用历史斜率绝对值的配置化分位数
         abs_slopes = [abs(s) for s in hist_slopes]
         sorted_abs_slopes = sorted(abs_slopes)
-        p95_idx = int(0.95 * (len(sorted_abs_slopes) - 1))
+        percentile = p.get("crowding_percentile", 95) / 100.0
+        p95_idx = int(percentile * (len(sorted_abs_slopes) - 1))
         p95_slope = sorted_abs_slopes[p95_idx]
 
-        # 检测当前斜率是否超过95分位数（拥挤）
+        # 检测当前斜率是否超过分位数阈值（拥挤）
         crowding_warn = (abs(slope) >= p95_slope)
 
     # 如果资金流拥挤，降权（避免追高/杀跌）
     if crowding_warn:
         penalty_factor = (100 - p["crowding_p95_penalty"]) / 100.0
         cvd_score = cvd_score * penalty_factor
+        # v7.3.46 P2-4: 拥挤度警告日志
+        log(f"C因子拥挤度警告: 斜率{abs(slope):.4f} >= P{int(percentile*100)}({p95_slope:.4f})")
 
     # ========== 5. 最终分数（保留符号） ==========
     # v2.0合规：应用StandardizationChain
@@ -268,7 +350,8 @@ def score_cvd_flow(
         "cvd_slope": round(slope, 4),         # 斜率（原始值）
         "cvd_score": round(cvd_score, 2),     # CVD得分
         "r_squared": round(r_squared, 3),     # R²拟合优度（0-1）
-        "is_consistent": is_consistent,       # 是否持续（R²>=0.7）
+        "r2_threshold": r2_threshold,         # v7.3.4: R²阈值（配置化）
+        "is_consistent": is_consistent,       # 是否持续（R²>=r2_threshold）
         # v2.1: 拥挤度检测
         "crowding_warn": crowding_warn,       # 是否拥挤
         # v2.5++: 相对历史归一化信息

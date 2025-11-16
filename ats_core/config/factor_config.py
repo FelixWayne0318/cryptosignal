@@ -80,6 +80,31 @@ class FactorConfig:
 
         return self.factors[factor_name]['params']
 
+    def get_fallback_params(self, factor_name: str) -> Dict[str, Any]:
+        """
+        获取因子降级参数（v7.3.4新增）
+
+        当配置加载失败时使用的默认参数
+
+        Args:
+            factor_name: 因子名称 (T, M, C+, S, V+, O+, L, B, Q, I, F)
+
+        Returns:
+            降级参数字典
+
+        Raises:
+            ValueError: 未知因子名称或无降级参数
+        """
+        if factor_name not in self.factors:
+            raise ValueError(f"Unknown factor: {factor_name}")
+
+        fallback = self.factors[factor_name].get('fallback_params', {})
+        if not fallback:
+            # 如果没有fallback_params，返回params作为降级（向后兼容）
+            return self.factors[factor_name]['params']
+
+        return fallback
+
     def get_factor_weight(self, factor_name: str) -> int:
         """
         获取因子权重
@@ -132,6 +157,44 @@ class FactorConfig:
                 continue
 
             weights[name] = config.get('weight', 0)
+
+        return weights
+
+    def get_weights_dict(self) -> Dict[str, float]:
+        """
+        获取权重字典（兼容analyze_symbol.py格式）
+
+        v7.3.4新增：配置统一方案，从factors_unified.json读取权重
+
+        Returns:
+            {factor_name: weight, ...}
+            - 使用简化命名（C而非C+, V而非V+, O而非O+）
+            - 返回float类型（兼容analyze_symbol.py）
+            - 包含A层评分因子（T/M/C/V/O/B）和B层调制器（L/S/F/I）
+            - B层调制器权重为0.0
+
+        Note:
+            本方法是配置统一方案的核心，替代CFG.params["weights"]
+        """
+        weights = {}
+
+        # 命名映射：factors_unified.json命名 → analyze_symbol.py命名
+        name_mapping = {
+            'C+': 'C',  # CVD因子
+            'V+': 'V',  # 量能因子
+            'O+': 'O'   # 持仓量因子
+        }
+
+        for name, config in self.factors.items():
+            # 跳过未启用的因子
+            if not config.get('enabled', False):
+                continue
+
+            # 转换命名以兼容现有代码
+            key = name_mapping.get(name, name)
+
+            # 转换为float（analyze_symbol.py期望float类型）
+            weights[key] = float(config.get('weight', 0))
 
         return weights
 

@@ -42,7 +42,7 @@ class EmpiricalCalibrator:
 
     使用历史信号的实际结果，校准confidence到真实胜率的映射
 
-    v7.2.44 P0修复：添加幸存者偏差修复
+    v7.3.44 P0修复：添加幸存者偏差修复
     - 时间衰减：旧数据权重降低
     - MTM估值：包含未平仓信号（使用当前市价估值）
     """
@@ -62,24 +62,24 @@ class EmpiricalCalibrator:
         self._silent = silent
         self.recorder = recorder
 
-        # v7.2.44 P0修复：加载配置
+        # v7.3.44 P0修复：加载配置
         self._load_config()
 
         self._update_table()
 
-        # v7.2.21：只在初始化时打印一次状态信息
+        # v7.3.41：只在初始化时打印一次状态信息
         if not self._silent:
             if len(self.history) < 30:
                 print(f"[Calibration] 初始化完成：数据不足({len(self.history)}/30)，使用启发式规则")
             else:
                 print(f"[Calibration] 初始化完成：已加载 {len(self.history)} 条历史记录，使用统计校准")
-                # v7.2.44：打印P0修复配置状态
+                # v7.3.44：打印P0修复配置状态
                 if self.include_mtm_unrealized:
                     print(f"[Calibration] P0修复已启用：时间衰减={self.decay_period_days}天，MTM权重={self.mtm_weight_factor}")
 
     def _load_config(self):
         """
-        v7.2.44 P0修复：加载统计校准配置
+        v7.3.44 P0修复：加载统计校准配置
 
         从config/signal_thresholds.json读取：
         - decay_period_days: 时间衰减周期
@@ -157,12 +157,12 @@ class EmpiricalCalibrator:
 
         分桶统计：把confidence分成10个桶，计算每个桶的实际胜率
 
-        v7.2.44 P0修复：
+        v7.3.44 P0修复：
         - 时间衰减：旧数据权重降低（exp(-age/decay_period)）
         - MTM估值：包含未平仓信号（权重=mtm_weight_factor）
         """
         # P0.3修复：降低启用阈值从50→30，加快冷启动
-        # v7.2.21修复：移除重复日志，只在初始化时打印一次
+        # v7.3.41修复：移除重复日志，只在初始化时打印一次
         if len(self.history) < 30:  # 至少30个样本
             return
 
@@ -177,7 +177,7 @@ class EmpiricalCalibrator:
             conf = record['confidence']
             bucket = int(conf // 10) * 10  # 10分一档：0-10, 10-20, ..., 90-100
 
-            # v7.2.44：计算时间衰减权重
+            # v7.3.44：计算时间衰减权重
             age_seconds = current_time - record.get('timestamp', current_time)
             age_days = age_seconds / 86400.0
             decay_weight = math.exp(-age_days / self.decay_period_days) if self.decay_period_days > 0 else 1.0
@@ -190,7 +190,7 @@ class EmpiricalCalibrator:
             if record['result'] == "win":
                 buckets[bucket]["weighted_wins"] += signal_weight
 
-        # 2. v7.2.44 P0修复：包含未平仓信号MTM估值（如果启用）
+        # 2. v7.3.44 P0修复：包含未平仓信号MTM估值（如果启用）
         if self.include_mtm_unrealized and self.recorder is not None:
             open_signals_mtm = self._get_open_signals_mtm()
             for signal_data in open_signals_mtm:
@@ -212,7 +212,7 @@ class EmpiricalCalibrator:
             if stats["count"] >= 10:  # 至少10个样本才可靠
                 winrate = stats["weighted_wins"] / stats["weighted_total"] if stats["weighted_total"] > 0 else 0.5
                 new_table[bucket] = winrate
-                # v7.2.44：显示加权统计信息
+                # v7.3.44：显示加权统计信息
                 if not self._silent:
                     print(f"  Bucket {bucket}-{bucket+10}: {winrate:.2%} (加权胜利={stats['weighted_wins']:.1f}/加权总数={stats['weighted_total']:.1f}, 样本数={stats['count']})")
 
@@ -270,7 +270,7 @@ class EmpiricalCalibrator:
 
     def _bootstrap_probability(self, confidence: float, F_score: float = None, I_score: float = None, side_long: bool = True) -> float:
         """
-        启发式概率（v7.2.28改进：修复空单F逻辑）
+        启发式概率（v7.3.48改进：修复空单F逻辑）
 
         线性映射 + F/I因子线性调整：
         - confidence=0 → P=0.45（基准）
@@ -279,14 +279,14 @@ class EmpiricalCalibrator:
         - F因子线性调整：F在[-30, 0, 70]之间线性调整P（-3% ~ +5%）
         - I因子线性调整：I在[20, 50, 80]之间线性调整P（-2% ~ +3%）
 
-        v7.2.28改进：
+        v7.3.48改进：
         - ✅ 修复空单F逻辑：添加side_long参数，使用get_effective_F
 
-        v7.2.27改进：
+        v7.3.47改进：
         - ✅ 移除硬编码的F>30/15/-30（违反规范）
         - ✅ 改为线性平滑调整（避免断崖效应）
         - ✅ 参数从配置文件读取（可调整）
-        - ✅ 与v7.2.26蓄势分级一致（都使用线性）
+        - ✅ 与v7.3.46蓄势分级一致（都使用线性）
 
         Args:
             confidence: 信号置信度 (0-100)
@@ -304,12 +304,12 @@ class EmpiricalCalibrator:
         # 基础线性映射（改进后的范围）
         P = 0.45 + (confidence / 100.0) * 0.23  # 45%-68%范围
 
-        # 读取概率校准配置（v7.2.27新增）
+        # 读取概率校准配置（v7.3.47新增）
         try:
             config = get_thresholds()
             prob_calib_config = config.config.get('概率校准线性参数', {})
 
-            # F因子线性调整（v7.2.28改进：修复空单F逻辑）
+            # F因子线性调整（v7.3.48改进：修复空单F逻辑）
             if F_score is not None:
                 F_calib_config = prob_calib_config.get('F因子线性校准', {})
                 F_enabled = F_calib_config.get('_enabled', True)
@@ -320,7 +320,7 @@ class EmpiricalCalibrator:
                     P_bonus_max = F_calib_config.get('P_bonus_at_F_max', 0.05)
                     P_penalty_min = F_calib_config.get('P_penalty_at_F_min', -0.03)
 
-                    # v7.2.28修复：使用F_effective考虑多空方向
+                    # v7.3.48修复：使用F_effective考虑多空方向
                     F_effective = get_effective_F(F_score, side_long)
 
                     # 线性调整：F在[-30, 0, 70]之间线性插值
@@ -337,7 +337,7 @@ class EmpiricalCalibrator:
                     else:
                         P += P_penalty_min  # F≤-30: -3%
 
-            # I因子线性调整（v7.2.27改进：同样改为线性）
+            # I因子线性调整（v7.3.47改进：同样改为线性）
             if I_score is not None:
                 I_calib_config = prob_calib_config.get('I因子线性校准', {})
                 I_enabled = I_calib_config.get('_enabled', True)
@@ -406,7 +406,7 @@ class EmpiricalCalibrator:
 
     def _get_open_signals_mtm(self) -> List[Dict[str, Any]]:
         """
-        v7.2.44 P0修复：获取未平仓信号的MTM（Mark-to-Market）估值
+        v7.3.44 P0修复：获取未平仓信号的MTM（Mark-to-Market）估值
 
         从TradeRecorder获取未平仓信号，并计算当前盈亏状态
 

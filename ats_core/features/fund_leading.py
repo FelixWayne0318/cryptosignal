@@ -149,7 +149,7 @@ def score_fund_leading(
 
     leading_raw = fund_momentum - price_momentum
 
-    # v7.2.27新增：边界检查（防止NaN/Inf）
+    # v7.3.47新增：边界检查（防止NaN/Inf）
     from ats_core.utils.math_utils import is_valid_number
     if not is_valid_number(leading_raw):
         return 0, {
@@ -309,7 +309,7 @@ def score_fund_leading_v2(
     price_change_pct = price_change_6h / price_6h_ago
 
     # === 3. CVD变化（6h）===
-    # v7.2.3修复：使用相对变化率而非绝对值，避免天文数字
+    # v7.3.4修复：使用相对变化率而非绝对值，避免天文数字
     if len(cvd_series) >= 7:
         cvd_6h_ago = cvd_series[-7]
         cvd_now = cvd_series[-1]
@@ -356,7 +356,7 @@ def score_fund_leading_v2(
         oi_change_6h = 0.0
 
     # === 5. 资金动量（CVD + OI，加权）===
-    # v7.2.3修复：使用相对变化率后，无需再除以ATR
+    # v7.3.4修复：使用相对变化率后，无需再除以ATR
     use_relative = p.get("use_relative_change", True)
 
     if use_relative:
@@ -374,7 +374,7 @@ def score_fund_leading_v2(
     # === 7. F原始值（资金 - 价格）===
     F_raw = fund_momentum - price_momentum
 
-    # v7.2.27新增：边界检查（防止NaN/Inf）
+    # v7.3.47新增：边界检查（防止NaN/Inf）
     from ats_core.utils.math_utils import is_valid_number
     if not is_valid_number(F_raw):
         return 0, {

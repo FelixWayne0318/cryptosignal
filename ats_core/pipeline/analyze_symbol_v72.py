@@ -21,14 +21,14 @@
 from typing import Dict, Any
 import math
 
-# v7.2.27新增：导入线性函数工具和F多空适配函数
+# v7.3.47新增：导入线性函数工具和F多空适配函数
 from ats_core.utils.math_utils import linear_reduce, get_effective_F
 
-# v7.2.30新增：新币阈值统一获取函数
+# v7.3.40新增：新币阈值统一获取函数
 def _apply_phase_transition_smooth(config, bars_1h: int, phase_old: str, phase_new: str,
                                     key: str, default: Any = None) -> Any:
     """
-    v7.2.31修复P0-2断层：在阶段切换时应用平滑过渡
+    v7.3.41修复P0-2断层：在阶段切换时应用平滑过渡
 
     在过渡期内，阈值从旧阶段线性插值到新阶段，避免突变
 
@@ -101,7 +101,7 @@ def _get_threshold_by_phase(config, coin_phase: str, key: str, default: Any = No
     """
     根据币种阶段获取对应阈值（统一函数）
 
-    v7.2.31增强：支持阶段过渡平滑（当提供bars_1h时）
+    v7.3.41增强：支持阶段过渡平滑（当提供bars_1h时）
 
     与analyze_symbol.py中的同名函数保持一致
     """
@@ -129,7 +129,7 @@ def _get_threshold_by_phase(config, coin_phase: str, key: str, default: Any = No
     # 非过渡期或未提供bars_1h，使用直接获取
     return _get_threshold_by_phase_direct(config, coin_phase, key, default)
 
-# v7.2.21修复：使用模块级单例，避免重复初始化和日志污染
+# v7.3.41修复：使用模块级单例，避免重复初始化和日志污染
 from ats_core.calibration.empirical_calibration import EmpiricalCalibrator
 _calibrator_singleton = None
 
@@ -137,7 +137,7 @@ def _get_calibrator() -> EmpiricalCalibrator:
     """
     获取校准器单例
 
-    修复原因（v7.2.21）：
+    修复原因（v7.3.41）：
     - 之前每次调用analyze_with_v72_enhancements都创建新实例
     - 导致每个币种扫描都打印"数据不足(0/30)，使用启发式规则"
     - 406个币种 = 406条重复警告，严重污染日志
@@ -192,14 +192,14 @@ def analyze_with_v72_enhancements(
     from ats_core.config.threshold_config import get_thresholds
     config = get_thresholds()
 
-    # v7.2.30新增：获取币种阶段信息（用于阈值选择）
+    # v7.3.40新增：获取币种阶段信息（用于阈值选择）
     metadata = original_result.get('metadata', {})
     coin_phase = metadata.get('coin_phase', 'mature')  # 默认为成熟币
 
-    # v7.2.31新增：获取bars_1h（用于阶段过渡平滑）
+    # v7.3.41新增：获取bars_1h（用于阶段过渡平滑）
     bars_1h = len(klines) if klines else 0
 
-    # v7.2.9修复：加载F因子动量阈值（避免硬编码）
+    # v7.3.4修复：加载F因子动量阈值（避免硬编码）
     try:
         F_strong_momentum = config.config.get('F因子动量阈值', {}).get('F_strong_momentum', 30)
         F_moderate_momentum = config.config.get('F因子动量阈值', {}).get('F_moderate_momentum', 15)
@@ -231,7 +231,7 @@ def analyze_with_v72_enhancements(
     confidence_v72 = abs(weighted_score_v72)
     side_long_v72 = (weighted_score_v72 > 0)
 
-    # ===== 2.3 v7.2.27修复：计算有效F（考虑做多/做空方向）=====
+    # ===== 2.3 v7.3.47修复：计算有效F（考虑做多/做空方向）=====
     # 做多时F>0好（资金领先价格，蓄势），做空时F<0好（资金流出快于价格下跌，恐慌逃离）
     # 因此做空时将F取反，使F>0统一表示好信号
     F_effective = get_effective_F(F_v2, side_long_v72)
@@ -244,13 +244,13 @@ def analyze_with_v72_enhancements(
     I_meta = original_result.get('scores_meta', {}).get('I', {})
 
     # ===== 3. 统计校准概率（P0.3增强：支持F/I因子）=====
-    # v7.2.21修复：使用模块级单例，避免重复初始化
+    # v7.3.41修复：使用模块级单例，避免重复初始化
     calibrator = _get_calibrator()
 
     # P0.3修复：如果使用启发式（冷启动），传递F和I因子进行多维度评估
     if not calibrator.calibration_table:
         # 冷启动模式：使用改进的启发式公式
-        # v7.2.28修复：传入side_long参数，正确处理空单F逻辑
+        # v7.3.48修复：传入side_long参数，正确处理空单F逻辑
         P_calibrated = calibrator._bootstrap_probability(
             confidence=confidence_v72,
             F_score=F_v2,
@@ -288,10 +288,10 @@ def analyze_with_v72_enhancements(
     # EV = P×TP - (1-P)×SL - cost
     EV_net = P_calibrated * TP_distance_pct - (1 - P_calibrated) * SL_distance_pct - total_cost_pct
 
-    # ===== 4.5. v7.2.26改进：F因子驱动的蓄势检测（线性平滑降低） =====
+    # ===== 4.5. v7.3.46改进：F因子驱动的蓄势检测（线性平滑降低） =====
     # 核心理念：F因子是最领先的指标（-4~8h），当F高时应降低其他阈值提前入场
     #
-    # v7.2.26改进：从断崖式分级改为线性平滑降低
+    # v7.3.46改进：从断崖式分级改为线性平滑降低
     # - 避免F=69.9和F=70之间的阈值突变（断崖效应）
     # - 线性公式：reduction_ratio = (F - 50) / 20，当F在50-70区间时线性插值
     # - 支持两种模式：linear（推荐）和 stepped（向后兼容）
@@ -316,7 +316,7 @@ def analyze_with_v72_enhancements(
         if momentum_enabled:
             # ==== 模式1：线性平滑降低（推荐，避免断崖效应） ====
             if momentum_mode == "linear":
-                # v7.2.27修复：使用F_effective考虑多空方向
+                # v7.3.47修复：使用F_effective考虑多空方向
                 # 读取线性模式参数
                 linear_params = momentum_config.get('线性模式参数', {})
                 F_threshold_min = linear_params.get('F_threshold_min', 50)
@@ -329,7 +329,7 @@ def analyze_with_v72_enhancements(
                 F_min_increase = max_reduction.get('F_min_increase', 60)
                 position_reduction = max_reduction.get('position_reduction', 0.5)
 
-                # v7.2.27新增：F≥90极值警戒处理
+                # v7.3.47新增：F≥90极值警戒处理
                 extreme_config = momentum_config.get('F极值警戒配置', {})
                 F_extreme_threshold = extreme_config.get('F_extreme_threshold', 90)
 
@@ -349,8 +349,8 @@ def analyze_with_v72_enhancements(
                     momentum_level = 3
                     momentum_desc = "极早期蓄势"
 
-                    # 获取基准阈值（v7.2.30修复：使用币种阶段特定阈值）
-                    # v7.2.31增强：支持阶段过渡平滑
+                    # 获取基准阈值（v7.3.40修复：使用币种阶段特定阈值）
+                    # v7.3.41增强：支持阶段过渡平滑
                     base_confidence = _get_threshold_by_phase(config, coin_phase, 'confidence_min', 15, bars_1h=bars_1h)
                     base_P = config.get_gate_threshold('gate4_probability', 'P_min', 0.50)
                     base_EV = config.get_gate_threshold('gate3_ev', 'EV_min', 0.015)
@@ -364,10 +364,10 @@ def analyze_with_v72_enhancements(
                     momentum_position_mult = 1.0 - position_reduction
                 elif F_effective >= F_threshold_min:
                     # 50≤F<70：线性插值（平滑过渡）
-                    # v7.2.27改进：使用linear_reduce简化计算
+                    # v7.3.47改进：使用linear_reduce简化计算
 
-                    # 获取基准阈值（v7.2.30修复：使用币种阶段特定阈值）
-                    # v7.2.31增强：支持阶段过渡平滑
+                    # 获取基准阈值（v7.3.40修复：使用币种阶段特定阈值）
+                    # v7.3.41增强：支持阶段过渡平滑
                     base_confidence = _get_threshold_by_phase(config, coin_phase, 'confidence_min', 15, bars_1h=bars_1h)
                     base_P = config.get_gate_threshold('gate4_probability', 'P_min', 0.50)
                     base_EV = config.get_gate_threshold('gate3_ev', 'EV_min', 0.015)
@@ -412,7 +412,7 @@ def analyze_with_v72_enhancements(
 
             # ==== 模式2：分级降低（向后兼容，保留断崖式） ====
             elif momentum_mode == "stepped":
-                # v7.2.27修复：使用F_effective考虑多空方向
+                # v7.3.47修复：使用F_effective考虑多空方向
                 # 读取分级阈值
                 level_3_config = momentum_config.get('level_3_极早期', {})
                 level_2_config = momentum_config.get('level_2_早期', {})
@@ -474,10 +474,10 @@ def analyze_with_v72_enhancements(
 
     # 方案：使用简化的五道检查（只检查关键指标）
     # 阶段2.2：从配置文件读取闸门阈值
-    # v7.2.25：如果触发蓄势级别，使用降低后的阈值
+    # v7.3.45：如果触发蓄势级别，使用降低后的阈值
     min_klines = config.get_gate_threshold('gate1_data_quality', 'min_klines', 100)
 
-    # v7.2.25: 动态阈值（蓄势时降低）
+    # v7.3.45: 动态阈值（蓄势时降低）
     if momentum_P_min is not None:
         # 使用蓄势级别的降低阈值
         P_min = momentum_P_min
@@ -492,10 +492,10 @@ def analyze_with_v72_enhancements(
 
     I_min = config.get_gate_threshold('gate5_independence_market', 'I_min', 30)  # v3.1新增
     market_regime_threshold = config.get_gate_threshold('gate5_independence_market', 'market_regime_threshold', 30)  # v3.1新增
-    # v7.2.9修复：从配置读取I因子相关阈值（避免硬编码）
+    # v7.3.4修复：从配置读取I因子相关阈值（避免硬编码）
     I_high_independence = config.get_gate_threshold('gate5_independence_market', 'I_high_independence', 60)
     confidence_boost_aligned = config.get_gate_threshold('gate5_independence_market', 'confidence_boost_aligned', 1.2)
-    # v7.2.10修复：从配置读取闸门通过阈值（避免硬编码0.5）
+    # v7.3.40修复：从配置读取闸门通过阈值（避免硬编码0.5）
     gate_pass_threshold = config.get_gate_threshold('v72闸门阈值', 'gate_pass_threshold', 0.5)
 
     gates_data_quality = 1.0 if len(klines) >= min_klines else 0.0
@@ -503,7 +503,7 @@ def analyze_with_v72_enhancements(
     gates_probability = 1.0 if P_calibrated >= P_min else 0.0
 
     # F因子闸门（v7.2特有：使用F_v2）
-    # v7.2.27修复：使用F_effective考虑多空方向
+    # v7.3.47修复：使用F_effective考虑多空方向
     # 做多：F_effective >= F_min (资金领先价格，蓄势待发)
     # 做空：F_effective >= F_min (资金逃离快于价格下跌，恐慌抛售)
     gates_fund_support = 1.0 if F_effective >= F_min else 0.0
@@ -533,12 +533,12 @@ def analyze_with_v72_enhancements(
             # 优质信号：做多且牛市（低独立性+顺势）- 放大信心
             gates_independence_market = 1.0
             conflict_reason = "low_independence_bull_align"
-            conflict_mult = confidence_boost_aligned  # v7.2.9修复：从配置读取
+            conflict_mult = confidence_boost_aligned  # v7.3.4修复：从配置读取
         elif not side_long_v72 and market_regime < -market_regime_threshold:
             # 优质信号：做空且熊市（低独立性+顺势）- 放大信心
             gates_independence_market = 1.0
             conflict_reason = "low_independence_bear_align"
-            conflict_mult = confidence_boost_aligned  # v7.2.9修复：从配置读取
+            conflict_mult = confidence_boost_aligned  # v7.3.4修复：从配置读取
         else:
             # 正常情况：市场中性或轻度趋势
             gates_independence_market = 1.0
@@ -550,9 +550,9 @@ def analyze_with_v72_enhancements(
         conflict_reason = "normal"
         conflict_mult = 1.0
 
-    # Gate 6: 综合质量闸门（v7.2.37新增）
+    # Gate 6: 综合质量闸门（v7.3.47新增）
     # 直接检查confidence和prime_strength，防止低质量信号通过
-    # v7.2.37修复：从original_result获取prime_strength（基础层计算）
+    # v7.3.47修复：从original_result获取prime_strength（基础层计算）
     prime_strength = original_result.get('publish', {}).get('prime_strength', 0)
 
     confidence_min_gate6 = config.get_gate_threshold('gate6_综合质量', 'confidence_min', 20)
@@ -562,16 +562,16 @@ def analyze_with_v72_enhancements(
     gates_prime_strength = 1.0 if prime_strength >= prime_strength_min_gate6 else 0.0
 
     # 综合判定（所有六道闸门都通过才发布）
-    # v7.2.10修复：使用配置的gate_pass_threshold替代硬编码0.5
-    # v7.2.37增强：新增Gate6综合质量检查
+    # v7.3.40修复：使用配置的gate_pass_threshold替代硬编码0.5
+    # v7.3.47增强：新增Gate6综合质量检查
     pass_gates = all([
         gates_data_quality > gate_pass_threshold,
         gates_ev > gate_pass_threshold,
         gates_probability > gate_pass_threshold,
         gates_fund_support > gate_pass_threshold,
         gates_independence_market > gate_pass_threshold,  # v3.1新增
-        gates_confidence > gate_pass_threshold,  # v7.2.37新增
-        gates_prime_strength > gate_pass_threshold  # v7.2.37新增
+        gates_confidence > gate_pass_threshold,  # v7.3.47新增
+        gates_prime_strength > gate_pass_threshold  # v7.3.47新增
     ])
 
     # 闸门原因
@@ -590,7 +590,7 @@ def analyze_with_v72_enhancements(
             direction = "做多" if side_long_v72 else "做空"
             market_trend = "牛市" if market_regime > 0 else "熊市"
             failed_gates.append(f"I×Market冲突({direction}+{market_trend}, I={I_v2:.0f}<{I_min}, Market={market_regime:.0f})")
-        # v7.2.37新增：Gate6综合质量检查
+        # v7.3.47新增：Gate6综合质量检查
         if gates_confidence <= gate_pass_threshold:
             failed_gates.append(f"置信度过低({confidence_v72:.1f}, 需要>={confidence_min_gate6})")
         if gates_prime_strength <= gate_pass_threshold:
@@ -610,8 +610,8 @@ def analyze_with_v72_enhancements(
             {"gate": 5, "name": "independence_market", "pass": gates_independence_market > gate_pass_threshold,
              "value": I_v2, "market_regime": market_regime, "conflict_reason": conflict_reason,
              "threshold": I_min},  # v3.1新增
-            {"gate": 6, "name": "confidence", "pass": gates_confidence > gate_pass_threshold, "value": confidence_v72, "threshold": confidence_min_gate6},  # v7.2.37新增
-            {"gate": 7, "name": "prime_strength", "pass": gates_prime_strength > gate_pass_threshold, "value": prime_strength, "threshold": prime_strength_min_gate6}  # v7.2.37新增
+            {"gate": 6, "name": "confidence", "pass": gates_confidence > gate_pass_threshold, "value": confidence_v72, "threshold": confidence_min_gate6},  # v7.3.47新增
+            {"gate": 7, "name": "prime_strength", "pass": gates_prime_strength > gate_pass_threshold, "value": prime_strength, "threshold": prime_strength_min_gate6}  # v7.3.47新增
         ]
     }
 
@@ -632,14 +632,14 @@ def analyze_with_v72_enhancements(
 
         # v7.2增强字段
         "v72_enhancements": {
-            "version": "v7.2.26_linear_momentum",
+            "version": "v7.3.46_linear_momentum",
 
             # F因子v2（资金领先性）
-            # v7.2.15修复：移除F_comparison冗余结构（A1修复后基础层已统一使用v2）
+            # v7.3.45修复：移除F_comparison冗余结构（A1修复后基础层已统一使用v2）
             "F_v2": F_v2,
             "F_v2_meta": F_v2_meta,
 
-            # v7.2.26改进：蓄势检测信息（支持线性/分级两种模式）
+            # v7.3.46改进：蓄势检测信息（支持线性/分级两种模式）
             "momentum_grading": {
                 "level": momentum_level,
                 "description": momentum_desc,
@@ -724,7 +724,7 @@ def analyze_with_v72_enhancements(
             "gate_results": gate_details,
 
             # ===== 蓄势待发标记（核心功能）=====
-            # v7.2.9修复：从配置读取F因子动量阈值（避免硬编码）
+            # v7.3.4修复：从配置读取F因子动量阈值（避免硬编码）
             # F因子 > F_strong_momentum = 资金强势领先 = 蓄势待发
             # F因子 > F_moderate_momentum = 资金明显领先 = 即将爆发
             "is_momentum_ready": F_v2 > F_strong_momentum,
@@ -749,14 +749,14 @@ def analyze_with_v72_enhancements(
         "signal_v72": signal_v72
     })
 
-    # v7.2.38 P0-Critical修复：更新publish字段，确保ScanStatistics使用v7.2的最终判定
+    # v7.3.48 P0-Critical修复：更新publish字段，确保ScanStatistics使用v7.2的最终判定
     # Bug: publish.prime使用基础层判定，未经Gate6/7过滤，导致202个低质量信号通过
     # Fix: 强制更新publish.prime为is_prime_v72（经过所有七道闸门过滤）
     original_publish = result_v72.get('publish', {})
     original_publish.update({
         "prime": is_prime_v72,  # 使用v7.2七道闸门的最终判定
         "rejection_reason": [] if is_prime_v72 else [gate_reason],  # 更新拒绝原因
-        "_v7.2.38_fix": "publish.prime已更新为v7.2七道闸门判定结果（包含Gate6/7）"
+        "_v7.3.48_fix": "publish.prime已更新为v7.2七道闸门判定结果（包含Gate6/7）"
     })
     result_v72["publish"] = original_publish
 
@@ -779,7 +779,7 @@ def batch_analyze_with_v72(symbols: list, data_getter_func) -> Dict[str, Any]:
         "total": len(symbols),
         "v72_improved": 0,  # v7.2判定与原始不同
         "gates_rejected": 0,  # 四道闸门拒绝
-        # v7.2.15移除：F_changed_sign（A1修复后F已统一为v2，不再有符号变化）
+        # v7.3.45移除：F_changed_sign（A1修复后F已统一为v2，不再有符号变化）
     }
 
     for symbol in symbols:
@@ -804,7 +804,7 @@ def batch_analyze_with_v72(symbols: list, data_getter_func) -> Dict[str, Any]:
             if not v72_enhancements["gates"]["pass_all"]:
                 stats["gates_rejected"] += 1
 
-            # v7.2.15修复：移除F_changed_sign统计（A1修复后F已统一为v2）
+            # v7.3.45修复：移除F_changed_sign统计（A1修复后F已统一为v2）
 
             results[symbol] = result_v72
 

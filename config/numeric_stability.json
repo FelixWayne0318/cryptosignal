@@ -1,7 +1,7 @@
 {
   "_description": "数值稳定性常量配置 - 基于IEEE 754双精度浮点数特性",
   "_warning": "修改这些值需要深刻理解浮点运算，建议保持默认值",
-  "_version": "7.3.2",
+  "_version": "v7.3.4",
 
   "numeric_stability": {
     "independence": {
@@ -16,6 +16,11 @@
 
       "eps_r2_denominator": 1e-10,
       "eps_r2_denominator_description": "R²分母偏移量，防止全常数序列导致除0"
+    },
+
+    "C_factor": {
+      "eps_slope_min": 1e-8,
+      "eps_slope_min_description": "C因子CVD斜率最小值（防止除0），用于历史平均斜率归一化"
     },
 
     "default": {

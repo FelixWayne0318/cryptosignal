@@ -63,7 +63,7 @@ class OptimizedBatchScanner:
         # v7.2+: 加载扫描输出配置
         self.output_config = self._load_output_config()
 
-        # v7.2.8修复：加载信号阈值配置（避免硬编码）
+        # v7.3.4修复：加载信号阈值配置（避免硬编码）
         self.threshold_config = get_thresholds()
 
         log("✅ 优化批量扫描器创建成功")
@@ -673,7 +673,7 @@ class OptimizedBatchScanner:
 
                 coin_age_days = coin_age_hours / 24
 
-                # v6.3.1规范符合性修改：按照 NEWCOIN_SPEC.md § 1 标准
+                # v7.3.4规范符合性修改：按照 NEWCOIN_SPEC.md § 1 标准
                 # 规范定义：
                 # - 进入新币通道: since_listing < 14d 或 bars_1h < 400
                 # - 回切标准通道: bars_1h ≥ 400 且 OI/funding连续≥3d，或 since_listing ≥ 14d
@@ -686,7 +686,7 @@ class OptimizedBatchScanner:
                 # 检测数据受限情况
                 data_limited = (bars_1h >= 200)  # ≥200根1h K线，视为数据充足
 
-                # v7.2.10修复：从配置读取新币阶段识别阈值（避免硬编码）
+                # v7.3.40修复：从配置读取新币阶段识别阈值（避免硬编码）
                 config = get_thresholds()
                 ultra_new_hours = config.config.get('新币阶段识别', {}).get('ultra_new_hours', 24)
                 phase_A_hours = config.config.get('新币阶段识别', {}).get('phase_A_hours', 168)
@@ -771,18 +771,18 @@ class OptimizedBatchScanner:
                     market_meta=market_meta    # v7.3.2-Full: 统一市场上下文（含T_BTC）
                 )
 
-                # v7.2.41修复：batch_scan直接应用v7.2增强（P1-High）
+                # v7.3.41修复：batch_scan直接应用v7.2增强（P1-High）
                 # 根因：之前batch_scan只做基础分析，realtime_scanner再应用v7.2增强
                 # 结果：scan_summary.md显示"v7.2增强失败100%"（错误统计）
                 # 修复：batch_scan扫描时直接应用v7.2增强，确保统计正确
                 from ats_core.pipeline.analyze_symbol_v72 import analyze_with_v72_enhancements
 
                 # 从配置读取v7.2数据要求（避免硬编码）
-                # v7.2.41修复：config是ThresholdConfig对象，需要使用config.config.get()
+                # v7.3.41修复：config是ThresholdConfig对象，需要使用config.config.get()
                 min_klines_for_v72 = config.config.get('v72增强参数', {}).get('min_klines_for_v72', 150)
                 min_cvd_points = config.config.get('v72增强参数', {}).get('min_cvd_points', 20)
 
-                # 从intermediate_data获取数据（v7.2.40已修复，确保数据存在）
+                # 从intermediate_data获取数据（v7.3.40已修复，确保数据存在）
                 intermediate = result.get('intermediate_data', {})
                 result_klines = intermediate.get('klines', [])
                 result_cvd = intermediate.get('cvd_series', [])
@@ -839,7 +839,7 @@ class OptimizedBatchScanner:
                 confidence = result.get('confidence', 0)
                 prime_strength = result.get('publish', {}).get('prime_strength', 0)
 
-                # v7.2.8修复：从配置读取候选信号阈值（避免硬编码45）
+                # v7.3.4修复：从配置读取候选信号阈值（避免硬编码45）
                 # 使用与基础分析相同的confidence_min阈值，确保候选信号能传递到v7.2层
                 confidence_threshold = self.threshold_config.get_mature_threshold('confidence_min', 8)
                 is_candidate = confidence >= confidence_threshold

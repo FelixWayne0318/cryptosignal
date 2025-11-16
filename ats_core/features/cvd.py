@@ -62,14 +62,14 @@ def cvd_from_klines(
         use_taker_buy: 是否使用真实的taker buy volume
                       True: 使用真实数据（推荐）
                       False: 使用tick rule估算（兼容旧版）
-        use_quote: 是否使用Quote CVD（v7.2.34新增）
+        use_quote: 是否使用Quote CVD（v7.3.44新增）
                   True: 使用USDT单位（推荐，不受币价波动影响）
                   False: 使用币数量单位（兼容旧版）
         filter_outliers: 是否过滤异常值（巨量K线）
                         True: 对异常值降权（推荐）
                         False: 不处理异常值
         outlier_weight: 异常值权重（0-1），默认0.5表示降低50%
-        expose_meta: v7.2.36新增 - 是否暴露meta信息（包括imbalance_ratio）
+        expose_meta: v7.3.46新增 - 是否暴露meta信息（包括imbalance_ratio）
                     True: 返回 (cvd, meta)
                     False: 仅返回 cvd（兼容旧版）
 
@@ -78,13 +78,13 @@ def cvd_from_klines(
         如果expose_meta=True，返回 (cvd, meta)
 
     改进（v2.2）:
-        - v7.2.36: 新增imbalance_ratio支持（尺度异方差对冲）
-        - v7.2.34: 新增Quote CVD支持（USDT单位，更准确反映资金流）
+        - v7.3.46: 新增imbalance_ratio支持（尺度异方差对冲）
+        - v7.3.44: 新增Quote CVD支持（USDT单位，更准确反映资金流）
         - v2.1: 添加IQR异常值检测
         - v2.1: 对巨量K线降权，避免被单笔大额交易误导
     """
     if use_taker_buy and klines and len(klines[0]) >= 11:
-        # v7.2.34: 优化方法，支持Quote CVD和Base CVD
+        # v7.3.44: 优化方法，支持Quote CVD和Base CVD
         if use_quote:
             # Quote CVD（USDT单位）- 更准确，不受币价波动影响
             taker_buy = _col(klines, 10)  # takerBuyQuoteVolume（主动买入成交额）
@@ -120,7 +120,7 @@ def cvd_from_klines(
             s += delta
             cvd.append(s)
 
-        # v7.2.36: 计算imbalance_ratio（条件1 - 尺度异方差对冲）
+        # v7.3.46: 计算imbalance_ratio（条件1 - 尺度异方差对冲）
         if expose_meta:
             epsilon = 1.0  # 防止除零，1 USDT
             imbalance_ratios: List[float] = []
@@ -142,7 +142,7 @@ def cvd_from_klines(
             return cvd
     else:
         # ⚠️ DEPRECATED: 旧方法Tick Rule估算（不准确，仅保留兼容性）
-        # v7.2.32警告：此方法使用"阳线=买盘、阴线=卖盘"判断，会系统性误判！
+        # v7.3.42警告：此方法使用"阳线=买盘、阴线=卖盘"判断，会系统性误判！
         #
         # 问题：阳线（close>=open）≠买盘，阴线≠卖盘
         # 例如：主动买盘推高后回落形成阴线，但前期都是买盘
@@ -201,7 +201,7 @@ def cvd_from_spot_klines(klines: Sequence[Sequence], use_quote: bool = True) -> 
             Base CVD（use_quote=False）:
                 [9]: takerBuyBaseVolume（主动买入量，币数量）
                 [5]: volume（总成交量，币数量）
-        use_quote: 是否使用Quote CVD（v7.2.34新增）
+        use_quote: 是否使用Quote CVD（v7.3.44新增）
                   True: 使用USDT单位（推荐）
                   False: 使用币数量单位（兼容旧版）
 
@@ -224,7 +224,7 @@ def cvd_combined(
     return_meta: bool = False
 ) -> Union[List[float], Tuple[List[float], dict]]:
     """
-    组合现货+合约CVD（v7.2.36增强版）
+    组合现货+合约CVD（v7.3.46增强版）
 
     Args:
         futures_klines: 合约K线数据
@@ -239,7 +239,7 @@ def cvd_combined(
         min_quote_window: 动态阈值计算窗口（96根1h K线 = 4天）
         min_quote_fallback: 最小回退阈值（10k USDT）
         max_discard_ratio: K线对齐最大丢弃比例（默认5%），超过自动降级
-        return_meta: v7.2.36新增 - 是否返回meta信息（包括degraded标志）
+        return_meta: v7.3.46新增 - 是否返回meta信息（包括degraded标志）
                     True: 返回 (cvd, meta)
                     False: 仅返回 cvd（兼容旧版）
 
@@ -255,17 +255,17 @@ def cvd_combined(
                 - skipped_count: int（跳过K线数）
                 - skipped_ratio: float（跳过比率）
 
-    改进（v7.2.34）：
+    改进（v7.3.44）：
         - P1-1: openTime对齐检查（防止现货/合约K线错位）
         - P2-4: 缺失/极值容错（成交额过小时处理）
         - P2-3: Quote CVD支持（USDT单位）
 
-    改进（v7.2.35）：
+    改进（v7.3.45）：
         - 动态最小成交额阈值（小币友好）
         - 自动降级逻辑（丢弃率>5%时自动切换单侧CVD）
         - 增强日志可观测性
 
-    改进（v7.2.36）：
+    改进（v7.3.46）：
         - 条件4: 降级回写标记（degraded标志可观测）
 
     说明：
@@ -299,7 +299,7 @@ def cvd_combined(
         else:
             return cvd_f
 
-    # v7.2.35: 计算动态最小成交额阈值
+    # v7.3.45: 计算动态最小成交额阈值
     dynamic_min_quote = compute_dynamic_min_quote(
         futures_klines,
         window=min_quote_window,
@@ -307,12 +307,12 @@ def cvd_combined(
         min_fallback=min_quote_fallback
     )
 
-    # v7.2.35: P1-1 - openTime对齐检查（带自动降级）
+    # v7.3.45: P1-1 - openTime对齐检查（带自动降级）
     aligned_f, aligned_s, discarded, is_degraded = align_klines_by_open_time(
         futures_klines, spot_klines, max_discard_ratio=max_discard_ratio
     )
 
-    # v7.2.35: 自动降级逻辑
+    # v7.3.45: 自动降级逻辑
     if is_degraded or not aligned_f:
         warn("⚠️  自动降级为单侧CVD（仅使用合约数据）")
         if return_meta:
@@ -357,12 +357,12 @@ def cvd_combined(
         futures_weight = 0.7
         spot_weight = 0.3
 
-    # v7.2.35: 日志可观测性
+    # v7.3.45: 日志可观测性
     log(f"📊 CVD组合统计: 丢弃{discarded}根, "
         f"期货权重={futures_weight:.2%}, 现货权重={spot_weight:.2%}, "
         f"动态阈值={dynamic_min_quote:.0f} USDT")
 
-    # v7.2.35: P2-4 - 加权组合CVD增量（动态成交额过滤）
+    # v7.3.45: P2-4 - 加权组合CVD增量（动态成交额过滤）
     result: List[float] = []
     skipped_count = 0
 
@@ -380,7 +380,7 @@ def cvd_combined(
             delta_f = cvd_f[i] - cvd_f[i-1]
             delta_s = cvd_s[i] - cvd_s[i-1]
 
-        # v7.2.35: 动态成交额过滤
+        # v7.3.45: 动态成交额过滤
         if total_quote_i < dynamic_min_quote:
             # 成交额过小，使用上一根CVD值（跳过组合）
             skipped_count += 1
@@ -399,12 +399,12 @@ def cvd_combined(
         else:
             result.append(result[-1] + combined_delta)
 
-    # v7.2.35: 成交额过滤统计
+    # v7.3.45: 成交额过滤统计
     skip_ratio = skipped_count / n if n > 0 else 0.0
     if skipped_count > 0:
         log(f"📊 CVD成交额过滤: 跳过{skipped_count}/{n}根 ({skip_ratio:.2%})")
 
-    # v7.2.36: 构建meta字典
+    # v7.3.46: 构建meta字典
     if return_meta:
         total = len(futures_klines) + len(spot_klines)
         discard_ratio = discarded / total if total > 0 else 0.0
@@ -434,7 +434,7 @@ def cvd_mix_with_oi_price(
     return_meta: bool = False
 ) -> Union[Tuple[List[float], List[float]], Tuple[List[float], List[float], dict]]:
     """
-    组合信号：CVD（现货+合约）+ 价格收益 + OI 变化（v7.2.36增强版）
+    组合信号：CVD（现货+合约）+ 价格收益 + OI 变化（v7.3.46增强版）
 
     Args:
         klines: 合约K线数据
@@ -448,11 +448,11 @@ def cvd_mix_with_oi_price(
         use_robust: 是否使用稳健Z-score（MAD）
                    True: 使用MAD（对异常值稳健）
                    False: 使用std（传统方法）
-        use_strict_oi_align: v7.2.36新增 - 是否使用严格OI对齐（取前不取后）
+        use_strict_oi_align: v7.3.46新增 - 是否使用严格OI对齐（取前不取后）
                             True: 使用align_oi_to_klines_strict（条件2）
                             False: 使用简单对齐（兼容旧版）
         oi_align_tolerance_ms: OI对齐时间容忍度（毫秒），默认5000ms
-        return_meta: v7.2.36新增 - 是否返回mix_meta信息
+        return_meta: v7.3.46新增 - 是否返回mix_meta信息
                     True: 返回 (cvd, mix, meta)
                     False: 返回 (cvd, mix)（兼容旧版）
 
@@ -463,18 +463,18 @@ def cvd_mix_with_oi_price(
             - mix_series: 综合强度（标准化），越大代表量价+OI同向越强
             - mix_meta: 统计信息（均值、标准差、偏度、OI缺失率等）
 
-    改进（v7.2.34）：
+    改进（v7.3.44）：
         - P1-2: 滚动Z标准化（避免前视偏差）
         - 对增量（ΔC, ΔP, ΔOI）做标准化，而不是累计值
         - 使用rolling_z替代全局_z_all
 
-    改进（v7.2.35）：
+    改进（v7.3.45）：
         - 修复CVD增量计算bug（使用diff而不是pct_change）
         - OI数据对齐到K线（按closeTime匹配）
         - 删除冗余window参数
         - 增加mix统计日志
 
-    改进（v7.2.36）：
+    改进（v7.3.46）：
         - 条件2: 取前不取后OI对齐（align_oi_to_klines_strict）
         - 条件6: 统一索引切齐（在变换前对齐所有序列）
         - 增加mix_meta输出（可观测性）
@@ -495,17 +495,17 @@ def cvd_mix_with_oi_price(
     # 提取价格序列
     closes = _close_prices(klines)
 
-    # v7.2.36: 严格OI对齐（条件2 - 取前不取后）
+    # v7.3.46: 严格OI对齐（条件2 - 取前不取后）
     oi_missing_ratio = 0.0
     if use_strict_oi_align:
         oi_vals, oi_missing_ratio = align_oi_to_klines_strict(
             oi_hist, klines, tolerance_ms=oi_align_tolerance_ms
         )
     else:
-        # v7.2.35: 简单OI对齐（兼容旧版）
+        # v7.3.45: 简单OI对齐（兼容旧版）
         oi_vals = align_oi_to_klines(oi_hist, klines)
 
-    # v7.2.36: 条件6 - 统一索引切齐（在变换前对齐所有序列）
+    # v7.3.46: 条件6 - 统一索引切齐（在变换前对齐所有序列）
     # 确保cvd, closes, oi_vals长度完全一致
     n = min(len(cvd), len(closes), len(oi_vals))
     if n == 0:
@@ -520,7 +520,7 @@ def cvd_mix_with_oi_price(
     closes = closes[-n:]
     oi_vals = oi_vals[-n:]
 
-    # v7.2.35: 修复CVD增量计算bug
+    # v7.3.45: 修复CVD增量计算bug
     # 对于累计量CVD，应该使用diff而不是pct_change
     # pct_change在CVD接近0时会爆炸，且对负数没有意义
     delta_cvd = _diff(cvd)  # ✅ 使用一阶差分
@@ -529,7 +529,7 @@ def cvd_mix_with_oi_price(
     ret_p = _pct_change(closes)
     d_oi = _pct_change(oi_vals) if any(oi > 0 for oi in oi_vals) else [0.0] * n
 
-    # v7.2.34: P1-2 - 滚动Z标准化（无前视偏差）
+    # v7.3.44: P1-2 - 滚动Z标准化（无前视偏差）
     z_cvd = rolling_z(delta_cvd, window=rolling_window, robust=use_robust)
     z_p = rolling_z(ret_p, window=rolling_window, robust=use_robust)
     z_oi = rolling_z(d_oi, window=rolling_window, robust=use_robust)
@@ -537,7 +537,7 @@ def cvd_mix_with_oi_price(
     # 组合权重：CVD权重提升（更重要）
     mix = [1.2 * z_cvd[i] + 0.4 * z_p[i] + 0.4 * z_oi[i] for i in range(n)]
 
-    # v7.2.35: mix统计日志（可观测性）
+    # v7.3.45: mix统计日志（可观测性）
     mean_mix = sum(mix) / len(mix) if len(mix) > 0 else 0.0
     variance_mix = sum((m - mean_mix)**2 for m in mix) / len(mix) if len(mix) > 0 else 0
     std_mix = math.sqrt(variance_mix)
@@ -545,7 +545,7 @@ def cvd_mix_with_oi_price(
 
     log(f"📊 CVD Mix统计: 均值={mean_mix:.2f}, 标准差={std_mix:.2f}, 偏度={skewness_mix:.2f}")
 
-    # v7.2.36: 构建mix_meta
+    # v7.3.46: 构建mix_meta
     if return_meta:
         meta = {
             "mean": mean_mix,

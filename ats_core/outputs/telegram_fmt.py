@@ -30,9 +30,11 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, Tuple, List
 import math
 
-# v7.2.25: 导入配置管理器（用于F因子蓄势阈值）
+# v7.3.45: 导入配置管理器（用于F因子蓄势阈值）
+# v7.3.4: 导入RuntimeConfig（用于版本号，消除P0-V1硬编码）
 try:
     from ats_core.config.threshold_config import get_thresholds
+    from ats_core.config.runtime_config import RuntimeConfig
     CONFIG_AVAILABLE = True
 except ImportError:
     CONFIG_AVAILABLE = False
@@ -111,7 +113,7 @@ def _get(d: Any, key: str, default: Any = None) -> Any:
 
 def _get_dict(d: Any, key: str, default: dict = None) -> dict:
     """
-    安全获取字典类型值（v7.2.17修复）
+    安全获取字典类型值（v7.3.47修复）
 
     解决'str' object has no attribute 'get'错误：
     - 如果返回值是字典：正常返回
@@ -126,11 +128,11 @@ def _get_dict(d: Any, key: str, default: dict = None) -> dict:
         dict: 安全的字典对象
 
     Example:
-        # Before (v7.2.16 - 可能失败)
+        # Before (v7.3.46 - 可能失败)
         scores = _get_dict(r, "scores")  # 如果scores="string"，or返回"string"
         T = scores.get("T")  # AttributeError: 'str' object has no attribute 'get'
 
-        # After (v7.2.17 - 安全)
+        # After (v7.3.47 - 安全)
         scores = _get_dict(r, "scores")  # 如果scores="string"，返回{}
         T = scores.get("T")  # 正常工作
     """
@@ -1001,10 +1003,21 @@ def render_four_gates(r: Dict[str, Any]) -> str:
     # 获取gate数据
     gates_data = _get_dict(r, "gates")
 
+    # v7.3.4: 从配置读取Telegram输出阈值（消除P0-5硬编码）
+    telegram_thresholds = {}
+    if CONFIG_AVAILABLE:
+        try:
+            config = get_thresholds()
+            telegram_thresholds = config.get('Telegram输出阈值', {})
+        except:
+            pass
+
+    gate1_data_qual_min = telegram_thresholds.get('gate1_data_qual_min', 0.90)
+
     # 🚪 Gate 1: DataQual（数据质量）
     data_qual = _get(r, "data_quality") or _get(r, "DataQual") or gates_data.get("data_qual", 1.0)
     gate1_value = data_qual
-    gate1_pass = data_qual >= 0.90
+    gate1_pass = data_qual >= gate1_data_qual_min
 
     lines.append(f"\n🚪 Gate 1：数据质量")
     lines.append(f"   {'✅' if gate1_pass else '❌'} DataQual = {data_qual:.2%} {'≥' if gate1_pass else '<'} 90%")
@@ -1057,12 +1070,17 @@ def render_four_gates(r: Dict[str, Any]) -> str:
     else:
         lines.append(f"   Prime强度调节: ×{gate_multiplier:.3f}")
 
+    # v7.3.4: 从配置读取gate multiplier等级阈值（消除P0-5硬编码）
+    gate_mult_excellent = telegram_thresholds.get('gate_multiplier_excellent', 0.95)
+    gate_mult_good = telegram_thresholds.get('gate_multiplier_good', 0.85)
+    gate_mult_acceptable = telegram_thresholds.get('gate_multiplier_acceptable', 0.70)
+
     # 总体状态
-    if gate_multiplier >= 0.95:
+    if gate_multiplier >= gate_mult_excellent:
         status = "🟢 优秀（几乎无惩罚）"
-    elif gate_multiplier >= 0.85:
+    elif gate_multiplier >= gate_mult_good:
         status = "🟡 良好（轻微惩罚）"
-    elif gate_multiplier >= 0.70:
+    elif gate_multiplier >= gate_mult_acceptable:
         status = "🟠 一般（中度惩罚）"
     else:
         status = "🔴 较差（显著惩罚）"
@@ -1491,6 +1509,16 @@ def _risk_alerts_block(r: Dict[str, Any]) -> str:
 
     根据各项指标自动生成风险警告
     """
+    # v7.3.4: 从配置读取数据质量告警阈值（消除P0-6硬编码）
+    data_qual_warning = 0.95  # 默认值
+    if CONFIG_AVAILABLE:
+        try:
+            config = get_thresholds()
+            telegram_thresholds = config.get('Telegram输出阈值', {})
+            data_qual_warning = telegram_thresholds.get('data_qual_warning_threshold', 0.95)
+        except:
+            pass
+
     alerts = []
     modulation = _get_dict(r, "modulation")
     modulator_output = _get_dict(r, "modulator_output")
@@ -1523,7 +1551,7 @@ def _risk_alerts_block(r: Dict[str, Any]) -> str:
 
     # 风险5：数据质量
     data_qual = _get(r, "data_qual") or 1.0
-    if data_qual < 0.95:
+    if data_qual < data_qual_warning:  # v7.3.4: 从配置读取阈值
         alerts.append(f"⚠️ [数据] 数据质量略低({data_qual:.0%})，建议复核")
 
     # 风险6：软约束
@@ -2013,7 +2041,7 @@ def render_v67_rich(r: Dict[str, Any]) -> str:
 
     # 风险4：数据质量
     data_qual = _get(r, "data_qual") or 1.0
-    if data_qual and data_qual < 0.95:
+    if data_qual and data_qual < data_qual_warning:  # v7.3.4: 从配置读取阈值
         alerts.append(f"⚠️ [数据] 数据质量略低({data_qual:.0%})，建议复核")
 
     # 风险5：软约束 (v6.7新增)
@@ -2061,7 +2089,15 @@ def render_v67_rich(r: Dict[str, Any]) -> str:
     from datetime import datetime, timezone
     # UTC时区（统一使用UTC，与Binance API保持一致）
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    version = "v6.7"
+
+    # v7.3.4: 从RuntimeConfig读取版本号（消除P0-V1硬编码）
+    version = "v7.3.4"  # 默认值
+    if CONFIG_AVAILABLE:
+        try:
+            version = RuntimeConfig.VERSION
+        except:
+            pass
+
     binance_url = f"https://www.binance.com/en/futures/{symbol}"
 
     footer = f"""
@@ -2088,6 +2124,16 @@ def render_v67_rich(r: Dict[str, Any]) -> str:
 
 def render_v67_compact(r: Dict[str, Any]) -> str:
     """v6.7简洁模式（6个核心块）"""
+
+    # v7.3.4: 从配置读取数据质量告警阈值（消除P0-6硬编码）
+    data_qual_warning = 0.95  # 默认值
+    if CONFIG_AVAILABLE:
+        try:
+            config = get_thresholds()
+            telegram_thresholds = config.get('Telegram输出阈值', {})
+            data_qual_warning = telegram_thresholds.get('data_qual_warning_threshold', 0.95)
+        except:
+            pass
 
     # Block 1: 头部
     direction = (_get(r, "side") or "unknown").upper()
@@ -2250,9 +2296,9 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     """
     v7.2信号消息模板（清晰简洁版）
 
-    v7.2.23优化：恢复简洁格式，优化描述文字
+    v7.3.43优化：恢复简洁格式，优化描述文字
     """
-    # v7.2.11修复：类型检查，防止v72_enhancements不是字典导致的错误
+    # v7.3.41修复：类型检查，防止v72_enhancements不是字典导致的错误
     if not isinstance(r, dict):
         return f"❌ 错误：信号数据类型异常（期望dict，实际{type(r).__name__}）"
 
@@ -2273,7 +2319,7 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
         side_icon = "⚪"
         side_lbl = "中性"
 
-    # v7.2数据（v7.2.11修复：确保v72是字典）
+    # v7.2数据（v7.3.41修复：确保v72是字典）
     v72_raw = _get(r, "v72_enhancements")
     if not isinstance(v72_raw, dict):
         v72 = {}
@@ -2287,7 +2333,7 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     RR = TP_pct / SL_pct if SL_pct > 0 else 2.0
     ttl_h = int(_ttl_hours(r))
 
-    # v7.2.26改进：从analyze结果直接读取momentum_grading信息（避免重复计算和硬编码）
+    # v7.3.46改进：从analyze结果直接读取momentum_grading信息（避免重复计算和硬编码）
     momentum_grading = _get(v72, "momentum_grading") or {}
     momentum_level = momentum_grading.get("level", 0)
     momentum_desc = momentum_grading.get("description", "正常模式")
@@ -2308,7 +2354,7 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     header += f"期望收益 {EV_net:+.1%} · 盈亏比 {RR:.1f}:1 ✅"
 
     # ========== 2. 执行参数 ==========
-    # v7.2.11修复：确保price不为None
+    # v7.3.41修复：确保price不为None
     entry = price if price is not None else 0
     entry_s = _fmt_price(entry)
 
@@ -2341,12 +2387,12 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     # ========== 3. v7.3.2-Full核心因子 ==========
     factors = f"\n\n━━━ 🔬 v7.3.2-Full核心因子 ━━━\n"
 
-    # F因子（v7.2.26改进：直接使用momentum_level，避免硬编码阈值）
+    # F因子（v7.3.46改进：直接使用momentum_level，避免硬编码阈值）
     F_v2 = _get(v72, "F_v2")
     if F_v2 is not None:
         F_v2_int = int(round(F_v2))
 
-        # v7.2.26: 直接使用momentum_level判断（由analyze_symbol_v72.py计算）
+        # v7.3.46: 直接使用momentum_level判断（由analyze_symbol_v72.py计算）
         if momentum_level == 3:  # 极早期蓄势
             F_icon = "🚀🚀"
             F_desc = "强劲资金流入 [极早期蓄势]"
@@ -2377,27 +2423,27 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
 
         factors += f"\n{F_icon} F资金领先  {F_v2_int:3d}  {F_desc}"
 
-    # I因子（v7.2.24优化：通俗描述+丰富emoji）
+    # I因子（v7.3.44优化：通俗描述+丰富emoji）
     I_v2 = _get(v72, "I_v2")
     if I_v2 is not None:
         I_v2_int = int(round(I_v2))
 
         # 获取Beta值和市场对齐分析
-        # v7.2.16修复：确保类型安全，防止字符串导致的.get()错误
+        # v7.3.46修复：确保类型安全，防止字符串导致的.get()错误
         I_meta_raw = _get(v72, "I_meta")
         I_meta = I_meta_raw if isinstance(I_meta_raw, dict) else {}
         beta_btc = I_meta.get("beta_btc", 0)
         beta_eth = I_meta.get("beta_eth", 0)
 
         # v3.1新增：市场对齐分析
-        # v7.2.16修复：确保类型安全
+        # v7.3.46修复：确保类型安全
         market_analysis_raw = _get(v72, "independence_market_analysis")
         market_analysis = market_analysis_raw if isinstance(market_analysis_raw, dict) else {}
         market_regime = market_analysis.get("market_regime", 0)
         alignment = market_analysis.get("alignment", "正常")
         confidence_mult = market_analysis.get("confidence_multiplier", 1.0)
 
-        # I因子状态（v7.2.24优化：9级分类，通俗描述）
+        # I因子状态（v7.3.44优化：9级分类，通俗描述）
         if I_v2_int >= 80:
             I_icon = "💎"
             I_desc = "完全独立走势"
@@ -2458,7 +2504,7 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     details = f"\n\n━━━ 📊 因子分组详情 ━━━\n"
 
     # 获取原始因子
-    # v7.2.16修复：确保类型安全，防止字符串导致的.get()错误
+    # v7.3.46修复：确保类型安全，防止字符串导致的.get()错误
     scores_raw = _get(r, "scores")
     scores = scores_raw if isinstance(scores_raw, dict) else {}
     T = _as_int_score(scores.get("T"), 0)
@@ -2468,7 +2514,7 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     O = _as_int_score(scores.get("O"), 0)
     B_raw = _as_int_score(scores.get("B"), 0)
 
-    # v7.2.24优化：统一颜色方案（5色）+ 不同区域用不同图形
+    # v7.3.44优化：统一颜色方案（5色）+ 不同区域用不同图形
     # TC组使用方块 ■□，VOM组使用菱形 ◆◇，B组使用三角 ▲△
     def _factor_status_tc(val: int) -> tuple:
         """TC组因子状态（方块图形）"""
@@ -2510,7 +2556,7 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
             return "⬇️", "强烈负溢价" if val < -75 else "明显负溢价"
 
     # TC组(50%)
-    # v7.2.16修复：确保类型安全
+    # v7.3.46修复：确保类型安全
     group_scores_raw = _get(v72, "group_scores")
     group_scores = group_scores_raw if isinstance(group_scores_raw, dict) else {}
     TC_score = group_scores.get("TC")
@@ -2518,15 +2564,15 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
         TC_int = int(round(TC_score))
         details += f"\nTC组(50%)  {TC_int:3d}  [趋势+资金流]"
 
-        # T趋势（v7.2.24优化：通俗描述）
+        # T趋势（v7.3.44优化：通俗描述）
         T_icon, T_desc = _factor_status_tc(T)
         details += f"\n  {T_icon} 趋势 T  {T:3d}  {T_desc}"
 
-        # M动量（v7.2.24优化：通俗描述）
+        # M动量（v7.3.44优化：通俗描述）
         M_icon, M_desc = _factor_status_tc(M)
         details += f"\n  {M_icon} 动量 M  {M:3d}  {M_desc}"
 
-        # C资金（v7.2.24优化：通俗描述）
+        # C资金（v7.3.44优化：通俗描述）
         C_icon, C_desc = _factor_status_tc(C)
         details += f"\n  {C_icon} 资金 C  {C:3d}  {C_desc}"
 
@@ -2536,11 +2582,11 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
         VOM_int = int(round(VOM_score))
         details += f"\n\nVOM组(35%) {VOM_int:3d}  [量能+持仓+动量]"
 
-        # V量能（v7.2.24优化：通俗描述）
+        # V量能（v7.3.44优化：通俗描述）
         V_icon, V_desc = _factor_status_vom(V)
         details += f"\n  {V_icon} 量能 V  {V:3d}  {V_desc}"
 
-        # O持仓（v7.2.24优化：通俗描述）
+        # O持仓（v7.3.44优化：通俗描述）
         O_icon, O_desc = _factor_status_vom(O)
         details += f"\n  {O_icon} 持仓 O  {O:3d}  {O_desc}"
 
@@ -2553,7 +2599,7 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
         B_int = int(round(B_score))
         details += f"\n\nB组(15%)   {B_int:3d}  [基差]"
 
-        # B基差（v7.2.24优化：通俗描述）
+        # B基差（v7.3.44优化：通俗描述）
         B_icon, B_desc = _factor_status_b(B_raw)
         details += f"\n  {B_icon} 基差 B  {B_raw:3d}  {B_desc}"
 
@@ -2561,13 +2607,13 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     quality = f"\n\n━━━ ✅ 质量检查（五道闸门）━━━\n"
 
     # 获取gate_details（v7.2新格式）
-    # v7.2.16修复：确保类型安全
+    # v7.3.46修复：确保类型安全
     gate_details_v72_raw = _get(v72, "gates")
     gate_details_v72 = gate_details_v72_raw if isinstance(gate_details_v72_raw, dict) else {}
     gate_details_list = gate_details_v72.get("details", [])
 
     # 构建gate字典（兼容旧格式）
-    # v7.2.17+: 添加类型检查，防止gate_info是字符串
+    # v7.3.47+: 添加类型检查，防止gate_info是字符串
     gates = {}
     for gate_info in gate_details_list:
         # 确保gate_info是字典

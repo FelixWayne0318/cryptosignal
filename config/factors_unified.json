@@ -1,5 +1,5 @@
 {
-  "version": "3.0.0",
+  "version": "v7.3.4",
   "updated_at": "2025-11-09",
   "description": "统一因子参数配置 - v3.0（配置管理优化版）",
   "global": {
@@ -27,6 +27,14 @@
           "enabled": true,
           "comment": "S因子优化参数（轻平滑+低压缩，保留zigzag快速信号）",
           "lam": 3.0
+        },
+        "B": {
+          "alpha": 0.15,
+          "tau": 3.0,
+          "z0": 2.5,
+          "zmax": 6.0,
+          "lam": 1.5,
+          "comment": "B因子（基差+资金费）使用与T相同的保守参数"
         }
       }
     },
@@ -73,10 +81,19 @@
     "T": {
       "name": "Trend",
       "layer": "price_action",
-      "weight": 25,
+      "weight": 23,
       "enabled": true,
-      "description": "趋势强度（EMA交叉+斜率+R²）",
+      "description": "趋势强度（EMA交叉+斜率+R²，v7.3.3权重调整）",
       "params": {
+        "ema_order_min_bars": 6,
+        "slope_lookback": 12,
+        "atr_period": 14,
+        "slope_scale": 0.08,
+        "ema_bonus": 12.5,
+        "r2_weight": 0.15
+      },
+      "fallback_params": {
+        "_comment": "配置加载失败时的降级默认值",
         "ema_order_min_bars": 6,
         "slope_lookback": 12,
         "atr_period": 14,
@@ -88,10 +105,23 @@
     "M": {
       "name": "Momentum",
       "layer": "price_action",
-      "weight": 15,
+      "weight": 10,
       "enabled": true,
-      "description": "价格动量（加速度，短窗口EMA3/5）",
+      "description": "价格动量（加速度，短窗口EMA3/5，v6.7降权重减少与T重叠）",
       "params": {
+        "ema_fast": 3,
+        "ema_slow": 5,
+        "slope_lookback": 6,
+        "slope_scale": 2.0,
+        "accel_scale": 2.0,
+        "slope_weight": 0.6,
+        "accel_weight": 0.4,
+        "atr_period": 14,
+        "normalization_method": "relative_historical",
+        "min_historical_samples": 30
+      },
+      "fallback_params": {
+        "_comment": "配置加载失败时的降级默认值",
         "ema_fast": 3,
         "ema_slow": 5,
         "slope_lookback": 6,
@@ -107,24 +137,62 @@
     "C+": {
       "name": "Enhanced CVD",
       "layer": "money_flow",
-      "weight": 20,
+      "weight": 26,
       "enabled": true,
-      "description": "增强CVD（资金流+拥挤度检测）",
+      "description": "增强CVD（资金流+拥挤度检测，v7.3.3权重调整）",
       "params": {
         "lookback_hours": 6,
         "cvd_scale": 0.15,
         "crowding_p95_penalty": 10,
         "normalization_method": "relative_historical",
         "min_historical_samples": 30,
-        "r2_threshold": 0.7
+        "r2_threshold": 0.7,
+        "stability_factor_params": {
+          "base": 0.7,
+          "multiplier": 0.3,
+          "r2_baseline": 0.7,
+          "_comment": "低R²时的打折公式: base + multiplier * (r2 / r2_baseline)"
+        },
+        "crowding_percentile": 95,
+        "outlier_weight": 0.3,
+        "relative_intensity_scale": 2.0,
+        "absolute_scale_fallback": 1000.0,
+        "regression_window_size": 7,
+        "outlier_detection": {
+          "enabled": true,
+          "min_points": 5,
+          "iqr_multiplier": 1.5,
+          "weight": 0.3,
+          "_comment": "v7.3.46: IQR异常值检测参数（min_points=最小检测点数, iqr_multiplier=IQR乘数, weight=异常值权重）"
+        },
+        "_comment": "v7.3.46: 完整配置化，消除P1+P2硬编码"
+      },
+      "fallback_params": {
+        "_comment": "配置加载失败时的降级默认值",
+        "lookback_hours": 6,
+        "cvd_scale": 0.15,
+        "crowding_p95_penalty": 10,
+        "r2_threshold": 0.7,
+        "outlier_weight": 0.3,
+        "relative_intensity_scale": 2.0,
+        "absolute_scale_fallback": 1000.0,
+        "min_historical_samples": 30,
+        "crowding_percentile": 95,
+        "regression_window_size": 7,
+        "outlier_detection": {
+          "enabled": true,
+          "min_points": 5,
+          "iqr_multiplier": 1.5,
+          "weight": 0.3
+        }
       }
     },
     "S": {
       "name": "Structure",
-      "layer": "price_action",
-      "weight": 10,
+      "layer": "modulator",
+      "weight": 0,
       "enabled": true,
-      "description": "支撑阻力结构质量（ZigZag模式识别）",
+      "description": "支撑阻力结构质量（ZigZag模式识别，v6.6移至B层调制器）",
       "params": {
         "theta": {
           "big": 0.4,
@@ -143,15 +211,29 @@
         },
         "overextension_threshold": 0.8,
         "overextension_penalty": 0.1
+      },
+      "fallback_params": {
+        "_comment": "配置加载失败时的降级默认值",
+        "overextension_threshold": 0.8,
+        "overextension_penalty": 0.1
       }
     },
     "V+": {
       "name": "Volume + Trigger",
       "layer": "price_action",
-      "weight": 15,
+      "weight": 11,
       "enabled": true,
-      "description": "成交量放大（配合价格方向，自适应阈值）",
+      "description": "成交量放大（配合价格方向，自适应阈值，v7.3.3权重调整）",
       "params": {
+        "vlevel_scale": 0.9,
+        "vroc_scale": 0.9,
+        "vlevel_weight": 0.6,
+        "vroc_weight": 0.4,
+        "price_lookback": 5,
+        "adaptive_threshold_mode": "hybrid"
+      },
+      "fallback_params": {
+        "_comment": "配置加载失败时的降级默认值",
         "vlevel_scale": 0.9,
         "vroc_scale": 0.9,
         "vlevel_weight": 0.6,
@@ -165,8 +247,19 @@
       "layer": "money_flow",
       "weight": 20,
       "enabled": true,
-      "description": "OI持仓量变化（名义OI，自适应阈值）",
+      "description": "OI持仓量变化（名义OI，自适应阈值，v7.3.3权重调整）",
       "params": {
+        "oi24_scale": 2.0,
+        "align_scale": 4.0,
+        "oi_weight": 0.7,
+        "align_weight": 0.3,
+        "crowding_p95_penalty": 10,
+        "adaptive_threshold_mode": "hybrid",
+        "use_notional_oi": true,
+        "contract_multiplier": 1.0
+      },
+      "fallback_params": {
+        "_comment": "配置加载失败时的降级默认值",
         "oi24_scale": 2.0,
         "align_scale": 4.0,
         "oi_weight": 0.7,
@@ -179,11 +272,26 @@
     },
     "L": {
       "name": "Liquidity",
-      "layer": "microstructure",
-      "weight": 20,
+      "layer": "modulator",
+      "weight": 0,
       "enabled": true,
-      "description": "流动性质量（订单簿深度）",
+      "description": "流动性质量（订单簿深度，v6.6移至B层调制器）",
       "params": {
+        "spread_good_bps": 2.0,
+        "spread_bad_bps": 10.0,
+        "depth_target_usdt": 1000000,
+        "impact_notional_usdt": 100000,
+        "impact_max_pct": 0.01,
+        "orderbook_depth_levels": 10,
+        "spread_weight": 0.3,
+        "depth_weight": 0.3,
+        "impact_weight": 0.3,
+        "obi_weight": 0.1,
+        "ldi_enabled": false,
+        "ldi_penalty_max": 20
+      },
+      "fallback_params": {
+        "_comment": "配置加载失败时的降级默认值",
         "spread_good_bps": 2.0,
         "spread_bad_bps": 10.0,
         "depth_target_usdt": 1000000,
@@ -201,9 +309,9 @@
     "B": {
       "name": "Basis + Funding",
       "layer": "microstructure",
-      "weight": 15,
+      "weight": 10,
       "enabled": true,
-      "description": "基差+资金费（市场情绪）",
+      "description": "基差+资金费（市场情绪，v7.3.3权重提升，v7.3.4零硬编码）",
       "params": {
         "basis_neutral_bps": 50,
         "basis_extreme_bps": 100,
@@ -213,31 +321,51 @@
         "funding_weight": 0.4,
         "fwi_enabled": false,
         "fwi_window_minutes": 30,
-        "fwi_boost_max": 20
-      }
-    },
-    "Q": {
-      "name": "Liquidation",
-      "layer": "microstructure",
-      "weight": 10,
-      "enabled": true,
-      "description": "清算密度倾斜（级联风险）",
-      "params": {
-        "interval_minutes": 5,
-        "zscore_window_hours": 1,
-        "lti_multiplier": 50,
-        "wall_detection_enabled": true,
-        "wall_min_volume_usdt": 1000000,
-        "wall_cluster_pct": 0.02
+        "fwi_boost_max": 20,
+        "adaptive_threshold_mode": "hybrid",
+        "adaptive_min_data_points": 50,
+        "basis_boundary_protection": {
+          "neutral_min": 20.0,
+          "neutral_max": 200.0,
+          "extreme_min": 50.0,
+          "extreme_max": 300.0,
+          "_comment": "自适应阈值的边界保护范围"
+        },
+        "funding_boundary_protection": {
+          "neutral_min": 0.0001,
+          "neutral_max": 0.005,
+          "extreme_min": 0.0005,
+          "extreme_max": 0.01,
+          "_comment": "资金费率自适应阈值的边界保护范围"
+        },
+        "normalization_zones": {
+          "neutral_zone": 33.0,
+          "extreme_zone": 67.0,
+          "_comment": "归一化时的区域划分：neutral区域±33，extreme区域±67"
+        },
+        "extreme_multiplier": 1.5,
+        "_comment": "v7.3.4: 完整配置化，消除硬编码"
+      },
+      "fallback_params": {
+        "_comment": "配置加载失败时的降级默认值",
+        "basis_neutral_bps": 50,
+        "basis_extreme_bps": 100,
+        "funding_neutral_rate": 0.001,
+        "funding_extreme_rate": 0.002,
+        "basis_weight": 0.6,
+        "funding_weight": 0.4,
+        "adaptive_threshold_mode": "hybrid",
+        "adaptive_min_data_points": 50,
+        "extreme_multiplier": 1.5
       }
     },
     "I": {
       "name": "Independence",
-      "layer": "market_context",
-      "weight": 10,
+      "layer": "modulator",
+      "weight": 0,
       "enabled": true,
-      "description": "独立性评分（vs BTC，v7.3.2-Full零硬编码版）",
-      "version": "7.3.2",
+      "description": "独立性评分（vs BTC，v7.3.2-Full零硬编码版，v6.6移至B层调制器）",
+      "version": "v7.3.4",
       "regression": {
         "window_hours": 24,
         "window_hours_description": "β回归窗口（小时），用于截取价格序列",
@@ -288,6 +416,20 @@
             "description": "|β|≥1.5，I分数0-15"
           }
         }
+      },
+      "fallback_params": {
+        "_comment": "配置加载失败时的降级默认值（简化版）",
+        "regression": {
+          "window_hours": 24,
+          "min_points": 16,
+          "outlier_sigma": 3.0,
+          "use_log_return": true
+        },
+        "scoring": {
+          "r2_min": 0.1,
+          "beta_low": 0.6,
+          "beta_high": 1.2
+        }
       }
     },
     "F": {
@@ -321,7 +463,43 @@
           "use_relative_change": true,
           "_comment": "v7.2.8修复：scale从0.10增大到0.50，避免F因子饱和（F_raw=0.47时F=74而非100）"
         }
+      },
+      "fallback_params": {
+        "_comment": "配置加载失败时的降级默认值",
+        "oi_weight": 0.4,
+        "vol_weight": 0.3,
+        "cvd_weight": 0.3,
+        "trend_weight": 0.6,
+        "slope_weight": 0.4,
+        "oi_scale": 3.0,
+        "vol_scale": 0.3,
+        "cvd_scale": 0.02,
+        "price_scale": 3.0,
+        "slope_scale": 0.01,
+        "leading_scale": 200.0,
+        "crowding_veto_enabled": true,
+        "crowding_percentile": 90,
+        "crowding_penalty": 0.5,
+        "crowding_min_data": 100
       }
+    }
+  },
+  "I因子参数": {
+    "_description": "v7.3.4新增：I因子(Independence)的运行时参数",
+    "effective_threshold": 50.0,
+    "confidence_boost_default": 0.0,
+    "_comment": "消除analyze_symbol.py:819硬编码",
+    "_rationale": {
+      "effective_threshold": "I因子有效阈值（用于判断是否影响confidence）",
+      "confidence_boost_default": "默认confidence加成（I>effective_threshold时的调整）"
+    }
+  },
+  "调制器参数": {
+    "_description": "v7.3.4新增：调制器模块(modulators)运行时参数",
+    "position_penalty_factor": 0.9,
+    "_comment": "消除modulator_chain.py:245,248硬编码",
+    "_rationale": {
+      "position_penalty_factor": "仓位惩罚因子（position_mult *= 0.9）"
     }
   },
   "weights_config": {

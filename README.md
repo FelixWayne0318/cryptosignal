@@ -1,7 +1,7 @@
-# CryptoSignal v7.3.2-Full
+# CryptoSignal v7.3.4
 
-> **加密货币信号分析系统 - v7.3.2-Full I因子重构版**
-> v7.3.2-Full: I因子BTC-only回归 + MarketContext全局优化 + veto风控
+> **加密货币信号分析系统 - v7.3.4 I因子重构版**
+> v7.3.4: I因子BTC-only回归 + MarketContext全局优化 + veto风控
 >
 > **核心改进**: I因子零硬编码 + BTC-only回归 + MarketContext 400x性能提升 + I因子veto风控
 
@@ -47,10 +47,10 @@ cd ~/cryptosignal
 
 ## 🎯 系统版本
 
-**当前版本**: v7.3.2-Full (I因子BTC-only重构 + MarketContext优化)
+**当前版本**: v7.3.4 (I因子BTC-only重构 + MarketContext优化)
 **更新日期**: 2025-11-15
 
-### v7.3.2-Full: I因子系统重构
+### v7.3.4: I因子系统重构
 
 ✅ **I因子BTC-only回归**
 - 移除ETH依赖，使用纯BTC Beta回归
@@ -155,7 +155,7 @@ python3 scripts/realtime_signal_scanner.py --interval 300
 - **`config/telegram.json`** - Telegram通知配置
 - **`config/binance_credentials.json`** - Binance API凭证
 
-### 当前权重配置（v6.7 P2.2）
+### 当前权重配置（v7.3.4）
 
 ```json
 {
@@ -255,7 +255,7 @@ python3 diagnose/diagnostic_scan.py
 ## ⚠️ 注意事项
 
 1. **规范文档**：所有规范已统一到 `standards/` 目录
-2. **版本**: 当前为v6.7 P2.2（权重优化版本）
+2. **版本**: 当前为v7.3.4（I因子重构版本）
 3. **主入口**: `scripts/realtime_signal_scanner.py`
 4. **部署脚本**: `setup.sh` → `deploy_and_run.sh`
 5. **配置**: 修改 `config/params.json` 后需清除缓存
@@ -270,6 +270,6 @@ python3 diagnose/diagnostic_scan.py
 
 ---
 
-**版本**: v6.7 P2.2
-**最后更新**: 2025-11-05
-**分支**: claude/reorganize-repo-structure-011CUrZaXUMTBXApc3jvsqTh
+**版本**: v7.3.4
+**最后更新**: 2025-11-15
+**分支**: claude/system-cleanup-reorganize-011sQWHq8Ffjad741JUrTAT1
