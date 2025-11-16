@@ -1,5 +1,5 @@
 {
-  "version": "v7.3.4",
+  "version": "v7.3.47",
   "description": "基于实际数据的平衡配置 - 方案B",
   "_说明": {
     "目的": "基于实际市场数据分布，平衡信号质量与数量",
@@ -122,13 +122,13 @@
     "min_bars_1h": 200,
     "data_qual_min": 0.85,
     "data_qual_newcoin_min": 0.95,
-    "allow_prime_threshold": 0.90,
+    "allow_prime_threshold": 0.9,
     "degrade_threshold": 0.88,
     "age_decay_coefficients": {
       "slightly_old_factor": 0.95,
-      "moderately_old_factor": 0.90,
+      "moderately_old_factor": 0.9,
       "old_factor": 0.85,
-      "stale_factor": 0.70,
+      "stale_factor": 0.7,
       "_comment": "时间衰减系数：slightly_old(0.95), moderately_old(0.90), old(0.85), stale(0.70)"
     },
     "_rejection_rule": "data_qual = min(1.0, bars_1h / min_bars_1h)",
@@ -551,10 +551,10 @@
   },
   "Telegram输出阈值": {
     "_description": "v7.3.4新增：Telegram格式化输出相关阈值",
-    "gate1_data_qual_min": 0.90,
+    "gate1_data_qual_min": 0.9,
     "gate_multiplier_excellent": 0.95,
     "gate_multiplier_good": 0.85,
-    "gate_multiplier_acceptable": 0.70,
+    "gate_multiplier_acceptable": 0.7,
     "data_qual_warning_threshold": 0.95,
     "_comment": "消除telegram_fmt.py:1007,1061-1065,1526,2016硬编码",
     "_rationale": {
@@ -768,6 +768,51 @@
         "correlated": 1.1,
         "highly_correlated": 1.2,
         "description": "根据I因子category调整交易成本倍数"
+      }
+    }
+  },
+  "监控系统配置_v7.3.47": {
+    "_description": "v7.3.47新增: VIF和IC监控系统配置",
+    "vif_监控": {
+      "启用": true,
+      "vif_阈值": 3.0,
+      "vif_阈值_说明": "VIF>3.0表示多重共线性,业界标准3-5",
+      "检查间隔_小时": 24,
+      "因子列表": [
+        "T",
+        "M",
+        "C",
+        "V",
+        "O",
+        "B"
+      ],
+      "警告等级": {
+        "VIF_3_5": "黄色警告",
+        "VIF_5_10": "橙色警告",
+        "VIF_10_plus": "红色严重"
+      }
+    },
+    "ic_监控": {
+      "启用": true,
+      "ic_最小值": 0.03,
+      "ic_最小值_说明": "IC<0.03表示因子失效,业界标准0.02-0.05",
+      "回看窗口": 100,
+      "回看窗口_说明": "IC计算的历史样本数",
+      "检查间隔_小时": 168,
+      "检查间隔_说明": "每周检查一次",
+      "因子列表": [
+        "T",
+        "M",
+        "C",
+        "V",
+        "O",
+        "B"
+      ],
+      "健康等级": {
+        "IC_0.05_plus": "优秀",
+        "IC_0.03_0.05": "良好",
+        "IC_0.015_0.03": "警告",
+        "IC_below_0.015": "禁用"
       }
     }
   }
