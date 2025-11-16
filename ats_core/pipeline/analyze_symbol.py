@@ -1899,6 +1899,48 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         eth_klines=eth_klines        # 独立性分析
     )
 
+    # ---- 2.5. v7.4: BTC因子计算（用于四步系统）----
+    # 四步系统需要BTC方向得分用于Step1方向确认和硬veto规则
+    from ats_core.cfg import CFG
+    params = CFG.params
+
+    if params.get("four_step_system", {}).get("enabled", False):
+        btc_factor_scores = {}
+
+        try:
+            if len(btc_klines) >= 24:  # 至少需要24根1h K线计算T因子
+                # 准备BTC K线数据（与_calc_trend格式一致）
+                h_btc = [k.get('high', 0) for k in btc_klines]
+                l_btc = [k.get('low', 0) for k in btc_klines]
+                c_btc = [k.get('close', 0) for k in btc_klines]
+                c4_btc = []  # BTC暂不需要4h K线
+
+                # 计算BTC T因子（趋势）
+                from ats_core.features.trend import score_trend
+                trend_cfg = params.get("trend", {})
+                btc_T, btc_T_meta = score_trend(h_btc, l_btc, c_btc, c4_btc, trend_cfg)
+
+                btc_factor_scores["T"] = int(btc_T)
+                btc_factor_scores["T_meta"] = btc_T_meta
+
+                log(f"✅ v7.4: BTC T因子 = {btc_T:.1f} (用于四步系统)")
+            else:
+                # BTC K线不足，使用默认中性值
+                btc_factor_scores["T"] = 0
+                btc_factor_scores["T_meta"] = {"degradation_reason": "insufficient_btc_klines"}
+                warn(f"⚠️  BTC K线不足({len(btc_klines)}根)，四步系统使用默认值T=0")
+
+        except Exception as e:
+            # BTC因子计算失败，降级处理
+            btc_factor_scores["T"] = 0
+            btc_factor_scores["T_meta"] = {"degradation_reason": "calculation_error", "error": str(e)}
+            warn(f"⚠️  BTC因子计算失败: {e}，四步系统使用默认值T=0")
+
+        # 将BTC因子添加到result元数据中
+        if "metadata" not in result:
+            result["metadata"] = {}
+        result["metadata"]["btc_factor_scores"] = btc_factor_scores
+
     # ---- 3. 添加新币数据元信息（Phase 2）----
     # 为Phase 3准备：将新币专用数据存储在metadata中
     if newcoin_data:
