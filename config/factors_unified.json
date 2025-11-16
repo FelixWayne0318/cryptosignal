@@ -158,7 +158,14 @@
         "relative_intensity_scale": 2.0,
         "absolute_scale_fallback": 1000.0,
         "regression_window_size": 7,
-        "_comment": "v7.3.4: 完整配置化，消除硬编码"
+        "outlier_detection": {
+          "enabled": true,
+          "min_points": 5,
+          "iqr_multiplier": 1.5,
+          "weight": 0.3,
+          "_comment": "v7.3.46: IQR异常值检测参数（min_points=最小检测点数, iqr_multiplier=IQR乘数, weight=异常值权重）"
+        },
+        "_comment": "v7.3.46: 完整配置化，消除P1+P2硬编码"
       },
       "fallback_params": {
         "_comment": "配置加载失败时的降级默认值",
@@ -170,7 +177,14 @@
         "relative_intensity_scale": 2.0,
         "absolute_scale_fallback": 1000.0,
         "min_historical_samples": 30,
-        "crowding_percentile": 95
+        "crowding_percentile": 95,
+        "regression_window_size": 7,
+        "outlier_detection": {
+          "enabled": true,
+          "min_points": 5,
+          "iqr_multiplier": 1.5,
+          "weight": 0.3
+        }
       }
     },
     "S": {

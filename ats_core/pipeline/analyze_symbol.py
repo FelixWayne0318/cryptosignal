@@ -1964,7 +1964,7 @@ def _calc_momentum(h, l, c, cfg):
 
 def _calc_cvd_flow(cvd_series, c, cfg, klines=None):
     """
-    CVD资金流打分（±100系统）
+    CVD资金流打分（±100系统，v7.3.46: 移除未使用的side_long参数）
 
     Args:
         cvd_series: CVD序列
@@ -1974,10 +1974,13 @@ def _calc_cvd_flow(cvd_series, c, cfg, klines=None):
     """
     try:
         from ats_core.features.cvd_flow import score_cvd_flow
-        C, meta = score_cvd_flow(cvd_series, c, False, cfg, klines=klines)  # v2.5+传入klines
+        C, meta = score_cvd_flow(cvd_series, c, cfg, klines=klines)  # v7.3.46 P1-2: 移除side_long参数
         return int(C), meta
-    except Exception:
-        return 0, {"cvd6": 0.0, "cvd_score": 0}
+    except (ValueError, TypeError, ZeroDivisionError) as e:
+        # v7.3.46 P2-1: 精确异常捕获
+        from ats_core.logging import warn
+        warn(f"C因子计算失败: {e}，返回中性值")
+        return 0, {"cvd6": 0.0, "cvd_score": 0, "error": str(e)}
 
 def _calc_structure(h, l, c, ema30_last, atr_now, cfg, ctx):
     """结构打分"""

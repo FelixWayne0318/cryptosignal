@@ -18,6 +18,11 @@
       "eps_r2_denominator_description": "R²分母偏移量，防止全常数序列导致除0"
     },
 
+    "C_factor": {
+      "eps_slope_min": 1e-8,
+      "eps_slope_min_description": "C因子CVD斜率最小值（防止除0），用于历史平均斜率归一化"
+    },
+
     "default": {
       "eps_float_compare": 1e-9,
       "eps_float_compare_description": "通用浮点数比较epsilon（用于区间边界判断）"
