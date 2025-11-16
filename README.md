@@ -1,9 +1,9 @@
-# CryptoSignal v7.3.47
+# CryptoSignal v7.4.0
 
-> **加密货币信号分析系统 - v7.3.47 I因子重构版**
-> v7.3.47: I因子BTC-only回归 + MarketContext全局优化 + veto风控
+> **加密货币信号分析系统 - v7.4.0 四步分层决策系统**
+> v7.4.0: 革命性架构升级 - 从打分到具体价格（Entry/SL/TP）
 >
-> **核心改进**: I因子零硬编码 + BTC-only回归 + MarketContext 400x性能提升 + I因子veto风控
+> **核心突破**: 四步分层决策（方向→时机→风险→质量）+ Dual Run模式 + 精确价格管理
 
 ---
 
@@ -47,30 +47,36 @@ cd ~/cryptosignal
 
 ## 🎯 系统版本
 
-**当前版本**: v7.3.47 (I因子BTC-only重构 + MarketContext优化)
-**更新日期**: 2025-11-15
+**当前版本**: v7.4.0 (四步分层决策系统 - 革命性架构升级)
+**更新日期**: 2025-11-16
 
-### v7.3.47: I因子系统重构
+### v7.4.0: 四步分层决策系统 🌟
 
-✅ **I因子BTC-only回归**
-- 移除ETH依赖，使用纯BTC Beta回归
-- alt_ret = α + β_BTC * btc_ret + ε
-- 更清晰的统计模型，log-return计算
+✅ **Step1: 方向确认层**
+- A层因子加权 + I因子置信度映射
+- BTC方向对齐系数（v2修正版）
+- 硬veto规则：高Beta币逆强BTC趋势 → 拦截
 
-✅ **I因子veto风控逻辑**
-- 规则1: 高Beta币逆BTC强趋势 → 自动拦截
-- 规则2: 高Beta币弱信号 → 不交易
-- 规则3: 高独立币 → 放宽阈值（50→45）
+✅ **Step2: 时机判断层**
+- Enhanced F v2（修正版）：Flow(C/O/V/B) vs Price
+- 避免价格自相关，纯资金流vs价格动量
+- 六级时机评分：Excellent/Good/Fair/Mediocre/Poor/Chase
 
-✅ **MarketContext全局优化**
-- BTC趋势全局计算1次/扫描（vs 400次重复）
-- 性能提升：~400x（BTC趋势计算部分）
-- 统一market_meta传递到所有analyze_symbol调用
+✅ **Step3: 风险管理层**
+- Entry价格计算（基于Enhanced F + 支撑/阻力）
+- 止损价计算（两种模式：tight / structure_above_or_below）
+- 止盈价计算（赔率约束RR≥1.5 + 结构对齐）
 
-✅ **零硬编码架构**
-- 所有因子参数从配置文件读取
-- RuntimeConfig统一管理，支持验证和缓存
-- 易于调优和维护
+✅ **Step4: 质量控制层**
+- Gate1: 24h成交量筛选
+- Gate2: ATR/Price噪声过滤
+- Gate3: 信号强度门槛
+- Gate4: 因子矛盾检测（C vs O, T vs F）
+
+✅ **Dual Run集成**
+- 旧系统(v6.6)：权重加分，保持不变
+- 新系统(v7.4)：四步决策，额外输出
+- 配置开关控制，零侵入性
 
 ---
 
@@ -155,7 +161,7 @@ python3 scripts/realtime_signal_scanner.py --interval 300
 - **`config/telegram.json`** - Telegram通知配置
 - **`config/binance_credentials.json`** - Binance API凭证
 
-### 当前权重配置（v7.3.47）
+### 当前权重配置（v7.4.0）
 
 ```json
 {
@@ -255,7 +261,7 @@ python3 diagnose/diagnostic_scan.py
 ## ⚠️ 注意事项
 
 1. **规范文档**：所有规范已统一到 `standards/` 目录
-2. **版本**: 当前为v7.3.47（I因子重构版本）
+2. **版本**: 当前为v7.4.0（四步分层决策系统）
 3. **主入口**: `scripts/realtime_signal_scanner.py`
 4. **部署脚本**: `setup.sh` → `deploy_and_run.sh`
 5. **配置**: 修改 `config/params.json` 后需清除缓存
@@ -270,6 +276,6 @@ python3 diagnose/diagnostic_scan.py
 
 ---
 
-**版本**: v7.3.47
-**最后更新**: 2025-11-15
-**分支**: claude/system-cleanup-reorganize-011sQWHq8Ffjad741JUrTAT1
+**版本**: v7.4.0
+**最后更新**: 2025-11-16
+**分支**: claude/reorganize-audit-factors-01QB7e2CKvfS3DdHR5pnfWkh

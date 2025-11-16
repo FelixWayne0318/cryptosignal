@@ -1,11 +1,12 @@
 # coding: utf-8
 """
-Telegram message formatting (v6.6 architecture)
+Telegram message formatting (v7.4 Dual Run architecture)
 
-v6.6架构（2025-11-05）：
+v7.4架构（2025-11-16）- 革命性双轨决策：
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎯 旧系统 v6.6（权重评分，向后兼容）：
 📡 A层：方向判断（6因子，权重100%）
-  - T趋势(24%) + M动量(17%) + C资金(24%) + V量能(12%) + O持仓(17%) + B基差(6%)
+  - T趋势(24%) + M动量(10%) + C资金(27%) + V量能(12%) + O持仓(21%) + B基差(6%)
 
 ⚙️ B层：调制器（4因子，权重0%，仅调节执行参数）
   - L流动性 → position_mult, cost
@@ -13,17 +14,18 @@ v6.6架构（2025-11-05）：
   - F资金领先→ Teff, p_min
   - I独立性 → Teff, cost
 
-🚪 四门槛：质量控制（gate_multiplier影响Prime强度）
-  - Gate 1: DataQual（数据质量）
-  - Gate 2: EV（期望值）
-  - Gate 3: Execution（执行质量）
-  - Gate 4: Probability（概率门槛）
+🚀 新系统 v7.4（四步决策，精确价格）：
+  - Step1 方向确认: A层加权 + I置信度映射 + BTC对齐 + 硬veto
+  - Step2 时机判断: Enhanced F v2 (Flow vs Price) → 六级时机评分
+  - Step3 风险管理: Entry价格 + 止损价 + 止盈价（RR≥1.5）
+  - Step4 质量控制: 4门检查（成交量/噪声/强度/矛盾）
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 设计原则：
-- 使用不同图标区分三个层次（圆形🔴/齿轮⚙️/门🚪）
-- A层决定方向，B层调节参数，四门槛控制质量
-- 所有约束都是软约束，不硬拒绝信号
+- Dual Run模式：两套系统并行运行，零侵入
+- 旧系统消息格式保持不变（向后兼容）
+- 新系统消息包含具体Entry/SL/TP价格
+- 配置开关控制：four_step_system.enabled
 """
 
 from __future__ import annotations
