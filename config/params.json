@@ -172,7 +172,7 @@
     "cvd_scale": 0.02,
     "price_scale": 3.0,
     "slope_scale": 0.01,
-    "leading_scale": 20.0,
+    "leading_scale": 200.0,
     "crowding_veto": {
       "_comment": "P0.4: 过热veto机制，防止追高",
       "enabled": true,
