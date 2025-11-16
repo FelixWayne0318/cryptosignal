@@ -790,8 +790,9 @@ def _analyze_symbol_core(
             config=None  # 使用默认配置
         )
 
-        # v7.3.4: 从配置读取I因子参数（消除P0-1硬编码）
-        i_factor_params = factor_config.get('I因子参数', {})
+        # v7.3.47: 从配置读取I因子参数（消除P0-1硬编码）
+        # 修复：FactorConfig对象使用.config.get()而不是.get()
+        i_factor_params = factor_config.config.get('I因子参数', {})
         i_effective_threshold_default = i_factor_params.get('effective_threshold', 50.0)
         i_confidence_boost_default = i_factor_params.get('confidence_boost_default', 0.0)
 
@@ -821,8 +822,9 @@ def _analyze_symbol_core(
         warn(f"I因子veto检查失败: {e}")
         i_veto = False
         i_veto_reasons = []
-        # v7.3.4: 从配置读取默认值（消除P0-1硬编码）
-        i_factor_params = factor_config.get('I因子参数', {})
+        # v7.3.47: 从配置读取默认值（消除P0-1硬编码）
+        # 修复：FactorConfig对象使用.config.get()而不是.get()
+        i_factor_params = factor_config.config.get('I因子参数', {})
         i_effective_threshold = i_factor_params.get('effective_threshold', 50.0)
         i_confidence_boost = i_factor_params.get('confidence_boost_default', 0.0)
         i_cost_multiplier = 1.0
