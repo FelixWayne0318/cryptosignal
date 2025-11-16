@@ -254,14 +254,22 @@ def step1_direction_confirmation(
     min_final_strength = step1_cfg.get("min_final_strength", 20.0)
 
     # 1. 计算A层方向得分（加权平均）
+    # 过滤掉配置中的注释字段（以"_"开头的键）
+    numeric_weights = {k: v for k, v in weights.items() if not k.startswith("_") and isinstance(v, (int, float))}
+
     direction_score = (
-        factor_scores.get("T", 0.0) * weights.get("T", 0.23) +
-        factor_scores.get("M", 0.0) * weights.get("M", 0.10) +
-        factor_scores.get("C", 0.0) * weights.get("C", 0.26) +
-        factor_scores.get("V", 0.0) * weights.get("V", 0.11) +
-        factor_scores.get("O", 0.0) * weights.get("O", 0.20) +
-        factor_scores.get("B", 0.0) * weights.get("B", 0.10)
-    ) / sum(weights.values())  # 归一化到-100到+100
+        factor_scores.get("T", 0.0) * numeric_weights.get("T", 0.23) +
+        factor_scores.get("M", 0.0) * numeric_weights.get("M", 0.10) +
+        factor_scores.get("C", 0.0) * numeric_weights.get("C", 0.26) +
+        factor_scores.get("V", 0.0) * numeric_weights.get("V", 0.11) +
+        factor_scores.get("O", 0.0) * numeric_weights.get("O", 0.20) +
+        factor_scores.get("B", 0.0) * numeric_weights.get("B", 0.10)
+    )
+
+    # 归一化（如果权重总和不为1）
+    weight_sum = sum(numeric_weights.values())
+    if weight_sum > 0 and abs(weight_sum - 1.0) > 0.01:
+        direction_score = direction_score / weight_sum
 
     direction_strength = abs(direction_score)
 
