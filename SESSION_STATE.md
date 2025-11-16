@@ -147,11 +147,23 @@
   - 测试覆盖：每模块3个场景，完整测试用例 ✅
   - 下一步：阶段2 Step3+4实现（16小时）
 
+- [x] **四步系统阶段2完成 - Step3+4完整实现** (commit: eb17af6) ✅
+  - ✨ Step3风险管理层完整实现（580行，6大功能）
+  - ✨ Step4质量控制层完整实现（400行，四道闸门）
+  - step3_risk.py: 支撑/阻力提取 + 订单簿分析 + 入场/止损/止盈价格计算
+    - 入场价：基于Enhanced F三级分类（强/中/弱吸筹）
+    - 止损价：两种模式（tight/structure_above_or_below）+ L因子流动性调节
+    - 止盈价：赔率约束（RR≥1.5）+ 结构对齐
+  - step4_quality.py: Gate1成交量 + Gate2噪声 + Gate3强度 + Gate4矛盾
+  - four_step_system.py: run_four_step_decision()完整版（串联1→2→3→4）
+  - Bug修复：step1_direction.py weights配置过滤（移除"_comment"键）
+  - 完成度：100% (~1700行代码，4个文件修改/新增）
+  - 测试结果：✅ Step3测试3/3通过，✅ Step4测试6/6通过，✅ Phase2完整测试3/3通过
+  - 配置驱动：零硬编码，所有参数从config读取 ✅
+  - 防御性编程：ATR降级、除零保护、数据验证 ✅
+  - 下一步：阶段3 analyze_symbol集成 + dual run测试（8小时）
+
 ### 待办事项
-- [ ] 四步系统阶段2实施：Step3+4完善（16小时）
-  - Step3: 风险管理层（Entry/SL/TP价格计算）
-  - Step4: 质量控制层（四道闸门验证）
-  - 更新主入口支持完整四步流程
 - [ ] 四步系统阶段3集成测试（8小时）
   - 在analyze_symbol中集成四步系统
   - Dual run模式测试（新旧系统对比）
