@@ -98,11 +98,12 @@ class DataQualMonitor:
     }
 
     # v7.3.4: 从配置读取阈值（消除P0-3硬编码）
+    # v7.3.47: 修复ThresholdConfig用法 - 使用.config.get()
     @classmethod
     def _get_quality_thresholds(cls):
         """从配置读取数据质量阈值"""
         config = get_thresholds()
-        quality_config = config.get('数据质量阈值', {})
+        quality_config = config.config.get('数据质量阈值', {})
         return {
             'allow_prime': quality_config.get('allow_prime_threshold', 0.90),
             'degrade': quality_config.get('degrade_threshold', 0.88)
@@ -310,8 +311,9 @@ class DataQualMonitor:
         age = time.time() - kline_cache.last_update[symbol]
 
         # v7.3.4: 从配置读取时间衰减系数（消除P0-4硬编码）
+        # v7.3.47: 修复ThresholdConfig用法 - 使用.config.get()
         config = get_thresholds()
-        quality_config = config.get('数据质量阈值', {})
+        quality_config = config.config.get('数据质量阈值', {})
         decay_coeffs = quality_config.get('age_decay_coefficients', {})
 
         slightly_old_factor = decay_coeffs.get('slightly_old_factor', 0.95)
