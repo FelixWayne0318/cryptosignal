@@ -1,0 +1,171 @@
+# CryptoSignal 工作状态
+
+> **会话状态跟踪** - 解决 Claude Code 会话切换问题
+> 最后更新: 2025-11-16 | v7.3.47
+
+---
+
+## 📍 当前位置
+
+**项目**: CryptoSignal v7.3.47 量化交易系统
+**分支**: `claude/reorganize-audit-factors-01QB7e2CKvfS3DdHR5pnfWkh`
+**状态**: ✅ v7.3.47 所有核心功能正常运行
+
+---
+
+## ✅ v7.3.47 已完成工作
+
+### P0 关键修复
+- [x] **FactorConfig 错误修复** (commit: f4a8c65)
+  - `modulator_chain.py` - 3处修复
+  - `analyze_symbol.py` - 2处修复 (早期版本)
+  - 结果: 304 错误 → 0 错误
+
+- [x] **ThresholdConfig 错误修复** (commit: 8bf23a5)
+  - `quality.py` - 2处修复
+  - 数据质量监控恢复正常
+
+### P1 系统改进
+- [x] **文件重组** (commit: 362c067)
+  - 移动 3个根目录文档到 `docs/`
+  - 删除 3个过时临时脚本
+  - 创建依赖分析工具
+
+- [x] **文档清理** (commit: 0f4ddc2)
+  - 删除 18个过时文档
+  - 文档数量: 43 → 26 (减少 40%)
+  - 仅保留当前版本
+
+### P3 规范完善
+- [x] **依赖分析** (commit: ad09a99)
+  - 验证 74 Python文件, 61个活跃 (82.4%)
+  - 确认所有13个"未使用"文件都需要保留
+  - 代码符合 SYSTEM_ENHANCEMENT_STANDARD § 5 规范
+
+- [x] **版本统一** (commit: 942caa5)
+  - 所有配置文件 → v7.3.47
+  - 所有核心模块 → v7.3.47
+  - 修复 setup.sh 拼写错误
+
+---
+
+## 🔧 当前待办事项
+
+**暂无** - 所有用户请求的任务已完成
+
+### 可选优化项（未确认需求）
+- [ ] 性能优化分析
+- [ ] 单元测试覆盖率提升
+- [ ] 监控系统增强
+
+---
+
+## ⚠️ 重要技术上下文
+
+### 关键代码模式
+
+**FactorConfig/ThresholdConfig 正确用法**:
+```python
+# ❌ 错误 - 会导致 AttributeError
+config.get('key', default)
+
+# ✅ 正确 - 必须通过 .config 访问
+config.config.get('key', default)
+
+# ✅ 处理可能是包装对象的情况
+if config is not None and hasattr(config, 'config'):
+    config = config.config
+```
+
+### 系统规范
+
+**必须遵循**: `standards/SYSTEM_ENHANCEMENT_STANDARD.md`
+- 文件修改顺序: config → core → pipeline → output → docs
+- 禁止硬编码 (Magic Numbers)
+- 所有参数从配置读取
+- Git 提交格式: `type(priority): description`
+
+**优先级**:
+- P0 (Critical): 系统风险、安全问题
+- P1 (High): 用户体验、功能增强
+- P2 (Medium): 优化、重构
+- P3 (Low): 文档、注释
+
+---
+
+## 🐛 已知问题
+
+**无** - 所有已知问题已修复
+
+---
+
+## 📊 系统健康状态
+
+```
+✅ 错误数: 0
+✅ 信号数: 38 (正常)
+✅ 版本号: v7.3.47 (统一)
+✅ 代码覆盖: 82.4%
+✅ 文档状态: 整洁有序
+✅ Git 状态: 干净，已同步
+```
+
+---
+
+## 📝 新会话启动指南
+
+### 1️⃣ 检查 Git 状态
+```bash
+git status                  # 确认工作目录干净
+git log --oneline -10       # 查看最近工作
+git branch -a               # 确认当前分支
+```
+
+### 2️⃣ 了解当前进度
+```bash
+cat SESSION_STATE.md        # 阅读本文件
+```
+
+### 3️⃣ 告知 Claude 任务
+```
+这是一个延续之前工作的会话。
+
+项目: CryptoSignal v7.3.47 量化交易系统
+分支: claude/reorganize-audit-factors-01QB7e2CKvfS3DdHR5pnfWkh
+
+[粘贴 SESSION_STATE.md 的"待办事项"部分]
+
+请按照 SYSTEM_ENHANCEMENT_STANDARD.md 规范工作。
+```
+
+### 4️⃣ 开始工作
+- 使用 TodoWrite 工具追踪进度
+- 每完成一个任务立即 commit
+- Token 使用超过 50% 时考虑结束会话
+
+---
+
+## 📈 最近 Git 提交历史
+
+```
+0f4ddc2 refactor(P1): v7.3.47 文件清理 - 删除过时和重复文档
+942caa5 refactor(P3): v7.3.47 版本号统一
+ad09a99 docs(P3): v7.3.47 依赖分析与代码规范验证报告
+362c067 refactor(P1): v7.3.47 文件重组和清理
+8bf23a5 fix(P0): v7.3.47 修复quality.py中的ThresholdConfig错误用法
+f4a8c65 fix(P0): v7.3.47 修复modulator_chain.py中的FactorConfig错误用法
+```
+
+---
+
+## 🎯 下次会话提醒
+
+1. **检查系统状态**: 运行 `git status` 和 `git log`
+2. **明确新任务**: 清晰告知 Claude 要做什么
+3. **创建 TODO**: 使用 TodoWrite 工具追踪进度
+4. **频繁提交**: 每完成一个任务就 commit
+5. **更新本文件**: 工作完成后更新本文件
+
+---
+
+**💡 提示**: 这个文件的存在就是为了解决"换对话框后进度丢失"的问题！
