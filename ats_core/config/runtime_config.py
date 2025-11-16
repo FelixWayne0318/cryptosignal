@@ -1,5 +1,5 @@
 """
-运行时配置中心 - v7.3.2
+运行时配置中心 - v7.4.0
 
 ✅ 职责范围（推荐使用）:
 - numeric_stability.json: 数值稳定性配置
@@ -23,10 +23,11 @@
 - cfg.py: 仅负责params.json（旧系统，v8.0废弃）
 - RuntimeConfig: 负责所有其他配置（推荐）
 
-🆕 v7.3.2更新:
-- 使用统一路径解析器 (path_resolver.py)
+🆕 v7.4.0架构:
+- 四步分层决策系统配置支持
+- 统一路径解析器 (path_resolver.py)
 - 支持环境变量 CRYPTOSIGNAL_CONFIG_ROOT
-- 修复P1-4: 配置路径不一致问题
+- Dual Run模式配置管理
 
 使用示例：
     from ats_core.config.runtime_config import RuntimeConfig
@@ -44,10 +45,10 @@
     fmt = RuntimeConfig.get_logging_float_format()
     decimals = fmt["decimals"]
 
-版本：v7.3.2
+版本：v7.4.0
 作者：Claude Code
 创建日期：2025-11-15
-最后更新：2025-11-15
+最后更新：2025-11-16
 
 参考:
 - docs/health_checks/system_architecture_health_check_2025-11-15.md#P0-1

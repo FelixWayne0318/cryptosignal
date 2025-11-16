@@ -200,7 +200,7 @@ class RealtimeSignalScanner:
             return
 
         log("\n" + "=" * 60)
-        log("🚀 初始化实时信号扫描器（v7.3.47 - I因子BTC-only + MarketContext优化）")
+        log("🚀 初始化实时信号扫描器（v7.4.0 - 四步分层决策系统 | Dual Run模式）")
         log("=" * 60)
 
         # 初始化批量扫描器
@@ -223,7 +223,7 @@ class RealtimeSignalScanner:
             await self.initialize()
 
         log("\n" + "=" * 60)
-        log(f"📡 开始v7.3.47扫描 - {datetime.now(TZ_UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        log(f"📡 开始v7.4.0扫描 - {datetime.now(TZ_UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}")
         log("=" * 60)
 
         # 执行批量扫描
