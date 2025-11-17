@@ -36,6 +36,11 @@ from statistics import median
 from ats_core.cfg import CFG
 from ats_core.config.threshold_config import get_thresholds  # v7.3.4: 配置管理器
 from ats_core.config.factor_config import get_factor_config  # v7.3.4: 配置统一方案
+
+# ========== v7.4 P0修复：强制重载配置 ==========
+# 确保每次运行都从最新的config/params.json读取配置
+# 解决CFG缓存导致four_step_system.enabled不生效的问题
+CFG.reload()
 from ats_core.sources.binance import get_klines, get_open_interest_hist, get_spot_klines
 from ats_core.features.cvd import cvd_from_klines, cvd_mix_with_oi_price
 from ats_core.scoring.scorecard import scorecard, get_factor_contributions
@@ -1977,7 +1982,13 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
     # 模式说明：
     #   fusion_mode.enabled=false: Dual Run模式（旧系统+并行新系统）
     #   fusion_mode.enabled=true:  融合模式（新系统替代旧系统决策）
-    if params.get("four_step_system", {}).get("enabled", False):
+
+    # v7.4 P0修复：添加详细日志追踪配置加载
+    four_step_enabled = params.get("four_step_system", {}).get("enabled", False)
+    fusion_mode_enabled = params.get("four_step_system", {}).get("fusion_mode", {}).get("enabled", False)
+    log(f"🔍 [v7.4诊断] {symbol} - four_step_system.enabled={four_step_enabled}, fusion_mode.enabled={fusion_mode_enabled}")
+
+    if four_step_enabled:
         try:
             # 读取融合模式配置（零硬编码）
             fusion_config = params.get("four_step_system", {}).get("fusion_mode", {})
