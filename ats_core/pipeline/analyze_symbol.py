@@ -2361,8 +2361,7 @@ def analyze_symbol_with_preloaded_klines(
         spot_price=spot_price,       # 传递现货价格（B）
         btc_klines=btc_klines,       # 传递BTC K线（独立性）
         eth_klines=eth_klines,       # 传递ETH K线（独立性）
-        kline_cache=kline_cache,     # 传递K线缓存（四门DataQual）
-        market_meta=market_meta      # 传递市场上下文
+        kline_cache=kline_cache      # 传递K线缓存（四门DataQual）
     )
 
     # ---- v7.4 P0修复：批量扫描也需要应用四步系统 ----
