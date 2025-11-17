@@ -2346,7 +2346,7 @@ def analyze_symbol_with_preloaded_klines(
     """
     # 使用预加载的数据调用核心分析函数（v6.6）
     # 如果oi_data为None，使用空列表避免NoneType错误
-    return _analyze_symbol_core(
+    result = _analyze_symbol_core(
         symbol=symbol,
         k1=k1h,
         k4=k4h,
@@ -2361,5 +2361,116 @@ def analyze_symbol_with_preloaded_klines(
         spot_price=spot_price,       # 传递现货价格（B）
         btc_klines=btc_klines,       # 传递BTC K线（独立性）
         eth_klines=eth_klines,       # 传递ETH K线（独立性）
-        kline_cache=kline_cache      # 传递K线缓存（四门DataQual）
+        kline_cache=kline_cache,     # 传递K线缓存（四门DataQual）
+        market_meta=market_meta      # 传递市场上下文
     )
+
+    # ---- v7.4 P0修复：批量扫描也需要应用四步系统 ----
+    # 之前问题：四步系统代码只在analyze_symbol()中，analyze_symbol_with_preloaded_klines()直接返回
+    # 导致批量扫描（realtime_signal_scanner）完全绕过四步系统
+
+    from ats_core.cfg import CFG
+    from ats_core.logging import log, warn
+    params = CFG.params
+
+    # v7.4 P0修复：添加详细日志追踪配置加载
+    four_step_enabled = params.get("four_step_system", {}).get("enabled", False)
+    fusion_mode_enabled = params.get("four_step_system", {}).get("fusion_mode", {}).get("enabled", False)
+    log(f"🔍 [v7.4诊断] {symbol} - four_step_system.enabled={four_step_enabled}, fusion_mode.enabled={fusion_mode_enabled}")
+
+    if four_step_enabled:
+        try:
+            # 读取融合模式配置（零硬编码）
+            fusion_config = params.get("four_step_system", {}).get("fusion_mode", {})
+            fusion_enabled = fusion_config.get("enabled", False)
+            preserve_old_fields = fusion_config.get("compatibility_mode", {}).get("preserve_old_fields", True)
+
+            mode_desc = "融合模式" if fusion_enabled else "Dual Run模式"
+            log(f"🚀 v7.4: 启动四步系统 - {symbol} ({mode_desc})")
+
+            # 4.1 准备历史因子序列（用于Step2 Enhanced F v2）
+            from ats_core.utils.factor_history import get_factor_scores_series
+
+            factor_scores_series = get_factor_scores_series(
+                klines_1h=k1h,
+                window_hours=7,
+                current_factor_scores=result["scores"],
+                params=params
+            )
+
+            # 4.2 提取所需的输入数据
+            factor_scores = result["scores"]
+
+            # 从market_meta提取BTC因子（如果有）
+            btc_factor_scores = {}
+            if market_meta and "btc_factor_scores" in market_meta:
+                btc_factor_scores = market_meta["btc_factor_scores"]
+            elif result.get("metadata", {}).get("btc_factor_scores"):
+                btc_factor_scores = result["metadata"]["btc_factor_scores"]
+            else:
+                btc_factor_scores = {"T": 0}
+
+            s_factor_meta = result.get("scores_meta", {}).get("S", {})
+            l_factor_meta = result.get("scores_meta", {}).get("L", {})
+            l_score = result["scores"].get("L", 0.0)
+
+            # 4.3 调用四步系统主入口
+            from ats_core.decision.four_step_system import run_four_step_decision
+
+            four_step_result = run_four_step_decision(
+                symbol=symbol,
+                klines=k1h,
+                factor_scores=factor_scores,
+                factor_scores_series=factor_scores_series,
+                btc_factor_scores=btc_factor_scores,
+                s_factor_meta=s_factor_meta,
+                l_factor_meta=l_factor_meta,
+                l_score=l_score,
+                params=params
+            )
+
+            # 4.4 融合模式：让四步系统决策覆盖旧系统
+            if fusion_enabled and four_step_result.get("decision") in ["ACCEPT", "REJECT"]:
+                # 保存旧系统结果（用于对比日志）
+                old_is_prime = result.get("is_prime", False)
+                old_side_long = result.get("side_long", None)
+                old_prime_strength = result.get("prime_strength", 0)
+
+                # 四步系统决策覆盖主决策标志
+                new_decision = four_step_result["decision"]
+                result["is_prime"] = (new_decision == "ACCEPT")
+
+                if new_decision == "ACCEPT":
+                    # ACCEPT：使用四步系统的方向和价格
+                    result["side_long"] = (four_step_result["action"] == "LONG")
+
+                    # 添加四步系统特有的价格信息到主结果
+                    result["entry_price"] = four_step_result.get("entry_price")
+                    result["stop_loss"] = four_step_result.get("stop_loss")
+                    result["take_profit"] = four_step_result.get("take_profit")
+                    result["risk_reward_ratio"] = four_step_result.get("risk_reward_ratio")
+
+                    # 映射四步系统强度到prime_strength（兼容性）
+                    result["prime_strength"] = four_step_result.get("step1_direction", {}).get("final_strength", 0)
+
+                    log(f"✅ v7.4融合: {symbol} - 旧系统{'通过' if old_is_prime else '拒绝'} → 四步系统ACCEPT")
+                    log(f"   💰 Entry={result['entry_price']:.6f}, SL={result['stop_loss']:.6f}, TP={result['take_profit']:.6f}, RR=1:{result['risk_reward_ratio']:.2f}")
+                else:
+                    # REJECT：标记为非Prime
+                    result["side_long"] = None
+
+                    log(f"❌ v7.4融合: {symbol} - 旧系统{'通过' if old_is_prime else '拒绝'} → 四步系统REJECT")
+                    reject_stage = four_step_result.get("reject_stage", "unknown")
+                    reject_reason = four_step_result.get("reject_reason", "unknown")
+                    log(f"   拒绝原因: {reject_stage} - {reject_reason}")
+
+            # 4.5 保存四步系统完整结果（无论融合模式）
+            if preserve_old_fields or not fusion_enabled:
+                result["four_step_decision"] = four_step_result
+
+        except Exception as e:
+            warn(f"⚠️  四步系统执行失败 ({symbol}): {e}")
+            import traceback
+            traceback.print_exc()
+
+    return result
