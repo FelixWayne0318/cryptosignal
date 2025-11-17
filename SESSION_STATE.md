@@ -55,6 +55,42 @@
 
 ### 最新完成（2025-11-17）
 
+- [x] **扫描统计报告更新为v7.4.0** (commit: db8ea2c) ✅
+  - 🎯 需求：用户发现统计报告仍显示v7.3.2版本信息（七道闸门/旧版本号）
+  - 修改范围：ats_core/analysis/scan_statistics.py
+  - 核心变更：
+    1. 系统配置区块动态适配
+       - 检测four_step_system.enabled和fusion_mode.enabled
+       - v7.4融合模式：显示四步系统架构（Step1-4详细说明）
+       - 降级模式：显示v6.6旧系统（向后兼容）
+    2. 增强统计区块更新
+       - "四步系统统计"代替"v7.3.2-Full增强统计"
+       - "四道闸门全部通过"代替"七道闸门全部通过"
+       - "决策变更(四步系统覆盖旧系统)"
+    3. 版本号统一
+       - v7.3.2-Full → v7.4.0（5处）
+       - 更新所有版本描述为v7.4.0标准
+  - 设计特点：
+    - ✅ 零硬编码：从CFG.params读取配置
+    - ✅ 向后兼容：支持v6.6降级显示
+    - ✅ 动态适配：根据实际配置调整显示
+  - 预期效果：统计报告将显示v7.4.0四步决策系统信息
+  - 符合规范：SYSTEM_ENHANCEMENT_STANDARD.md §所有章节 ✅
+
+- [x] **P0-CRITICAL修复：market_meta参数错误** (commit: 241f39a) ✅
+  - 🔥 致命错误：所有币种分析失败，批量扫描完全无法运行
+  - 错误现象：TypeError: _analyze_symbol_core() got an unexpected keyword argument 'market_meta'
+  - 根本原因：
+    - 在analyze_symbol_with_preloaded_klines()中传递了market_meta参数
+    - 但_analyze_symbol_core()函数签名不接受此参数
+    - 这是修复批量扫描绕过四步系统时引入的bug (commit: abd1e20)
+  - 修复方案：
+    - 移除market_meta参数传递（ats_core/pipeline/analyze_symbol.py:2365行）
+    - 从market_meta提取BTC因子的逻辑移到调用之后
+    - 保持四步系统正常工作
+  - 影响：修复后批量扫描恢复正常，四步系统可以正常运行
+  - 验证：重启后应看到"🔍 [v7.4诊断]"和四步系统输出
+
 - [x] **v7.4配置缓存根本问题修复** (commit: 83cdc40) ✅
   - 🔥 P0关键修复：解决服务器始终运行v7.3.2的根本原因
   - 问题追踪链：
