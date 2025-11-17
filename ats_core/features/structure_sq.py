@@ -245,6 +245,15 @@ def score_structure(h,l,c, ema30_last, atr_now, params=None, ctx=None):
     else:
         interpretation = "结构混乱"
 
+    # v7.4: 导出ZigZag点（用于四步系统Step3风险管理）
+    zigzag_points = []
+    for kind, price, dt in zz:
+        zigzag_points.append({
+            "type": kind,           # "H" (高点) or "L" (低点)
+            "price": float(price),  # ZigZag点的价格
+            "dt": int(dt)           # ZigZag点的时间位置（从0开始）
+        })
+
     return S, {
         "theta":th,
         "icr":icr,
@@ -253,5 +262,6 @@ def score_structure(h,l,c, ema30_last, atr_now, params=None, ctx=None):
         "not_over":(over<=0.8),
         "m15_ok":bool(ctx.get("m15_ok",False)),
         "penalty":penalty,
-        "interpretation": interpretation
+        "interpretation": interpretation,
+        "zigzag_points": zigzag_points  # v7.4新增：支撑/阻力位识别
     }

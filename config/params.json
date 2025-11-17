@@ -129,8 +129,8 @@
   },
 
   "weights": {
-    "_source": "从 config/factors_unified.json 自动加载（v7.3.4配置统一）",
-    "_version": "v7.3.4",
+    "_source": "从 config/factors_unified.json 自动加载（v7.4.0配置统一）",
+    "_version": "v7.4.0",
     "T": 23.0,
     "M": 10.0,
     "C": 26.0,
@@ -144,7 +144,7 @@
     "E": 0.0
   },
   "weights_comment": {
-    "_version": "v7.3.3 - 战略设计优化（基于战略评估报告）",
+    "_version": "v7.4.0 - 四步分层决策系统（革命性架构升级）",
     "_total_weight": "100%（A层6因子权重百分比系统）",
     "_layer1_price_action": "Layer 1 价格行为层（44%）: T(23%) + M(10%) + V(11%)",
     "_layer2_capital_flow": "Layer 2 资金流层（46%）: C(26%) + O(20%)",
@@ -172,7 +172,7 @@
     "cvd_scale": 0.02,
     "price_scale": 3.0,
     "slope_scale": 0.01,
-    "leading_scale": 20.0,
+    "leading_scale": 200.0,
     "crowding_veto": {
       "_comment": "P0.4: 过热veto机制，防止追高",
       "enabled": true,
@@ -366,5 +366,221 @@
     "ETHUSDT",
     "BNBUSDT",
     "SOLUSDT"
-  ]
+  ],
+
+  "four_step_system": {
+    "_comment": "v7.4四步分层决策系统 - 基于专家实施方案",
+    "_version": "v7.4.0",
+    "_description": "革命性架构：不仅给方向，更给具体价格（入场/止损/止盈）",
+    "enabled": false,
+
+    "step1_direction": {
+      "_comment": "Step1: 方向确认层 - A层因子 + I因子置信度 + BTC对齐 + 硬veto",
+      "min_final_strength": 20.0,
+
+      "weights": {
+        "_comment": "A层因子权重（与现有权重保持一致）",
+        "T": 0.23,
+        "M": 0.10,
+        "C": 0.26,
+        "V": 0.11,
+        "O": 0.20,
+        "B": 0.10
+      },
+
+      "I_thresholds": {
+        "_comment": "I因子Beta映射阈值（I∈[0,100]，高值=独立，低值=跟随BTC）",
+        "high_beta": 15,
+        "moderate_beta": 30,
+        "low_beta": 50,
+        "independent": 85
+      },
+
+      "btc_alignment": {
+        "_comment": "BTC方向对齐参数",
+        "strong_trend_threshold": 70.0,
+        "same_direction_base": 0.90,
+        "same_direction_bonus": 0.10,
+        "opposite_direction_base": 0.70,
+        "opposite_direction_bonus": 0.25
+      },
+
+      "hard_veto": {
+        "_comment": "高Beta币 vs 强BTC趋势 - 硬veto防作死规则",
+        "enabled": true,
+        "high_beta_threshold": 30,
+        "strong_btc_threshold": 70.0
+      },
+
+      "confidence": {
+        "_comment": "置信度范围",
+        "floor": 0.50,
+        "ceiling": 1.00
+      }
+    },
+
+    "step2_timing": {
+      "_comment": "Step2: 时机判断层 - Enhanced F v2（修正价格自相关问题）",
+
+      "enhanced_f": {
+        "_comment": "Enhanced F v2: flow_momentum - price_momentum（只用非价格因子C/O/V/B）",
+        "scale": 20.0,
+        "min_threshold": 30.0,
+
+        "flow_weights": {
+          "_comment": "Flow因子权重（仅非价格因子，避免自相关）",
+          "C": 0.40,
+          "O": 0.30,
+          "V": 0.20,
+          "B": 0.10
+        },
+
+        "lookback_hours": 6,
+        "_note": "计算6小时前后的flow_score差异"
+      },
+
+      "timing_quality": {
+        "_comment": "时机质量评级阈值",
+        "excellent": 80,
+        "good": 60,
+        "fair": 30,
+        "mediocre": -30,
+        "poor": -60
+      },
+
+      "S_factor": {
+        "_comment": "S因子（结构）时机增强",
+        "theta_threshold": 0.65,
+        "timing_boost": 10
+      },
+
+      "L_factor": {
+        "_comment": "L因子（流动性）时机过滤",
+        "liquidity_min": 30,
+        "timing_penalty": 15
+      }
+    },
+
+    "step3_risk": {
+      "_comment": "Step3: 风险管理层 - Entry/SL/TP价格计算",
+
+      "volatility": {
+        "_comment": "波动率计算参数",
+        "atr_period": 14,
+        "max_loss_fraction": 0.02
+      },
+
+      "entry_price": {
+        "_comment": "入场价计算（基于Enhanced F和支撑/阻力）",
+        "strong_accumulation_f": 70,
+        "moderate_accumulation_f": 40,
+        "buffer_strong": 1.000,
+        "buffer_moderate": 1.002,
+        "buffer_weak": 1.005
+      },
+
+      "stop_loss": {
+        "_comment": "止损策略（支持两种模式）",
+        "mode": "structure_above_or_below",
+        "_mode_options": "tight | structure_above_or_below",
+
+        "base_atr_multiplier": 2.0,
+
+        "liquidity_adjustment": {
+          "_comment": "根据L因子调整止损距离",
+          "low_liquidity_threshold": -30,
+          "high_liquidity_threshold": 30,
+          "low_liquidity_multiplier": 1.5,
+          "high_liquidity_multiplier": 0.8
+        },
+
+        "tight_mode": {
+          "_comment": "紧止损模式（当前逻辑）",
+          "structure_buffer": 0.998,
+          "use_max_of_structure_and_volatility": true
+        },
+
+        "structure_above_or_below_mode": {
+          "_comment": "结构上下模式（止损更远，降低被扫概率）",
+          "structure_buffer_long": 0.994,
+          "structure_buffer_short": 1.006,
+          "use_min_of_structure_and_volatility": true
+        }
+      },
+
+      "take_profit": {
+        "_comment": "止盈计算",
+        "min_risk_reward_ratio": 1.5,
+        "structure_buffer": 0.998,
+        "use_max_of_min_and_structure": true
+      },
+
+      "orderbook": {
+        "_comment": "订单簿调整（从L因子元数据提取）",
+        "enabled": true,
+        "obi_buy_wall_threshold": 0.3,
+        "obi_sell_wall_threshold": -0.3,
+        "wall_adjustment_enabled": false,
+        "_note": "初版不做订单簿调整，后续版本可启用"
+      }
+    },
+
+    "step4_quality": {
+      "_comment": "Step4: 质量控制层 - 四道闸门验证",
+
+      "gate1_volume": {
+        "_comment": "Gate1: 基础成交量筛选",
+        "min_volume_24h": 1000000
+      },
+
+      "gate2_noise": {
+        "_comment": "Gate2: 噪声过滤（ATR/Price）",
+        "max_noise_ratio": 0.15
+      },
+
+      "gate3_strength": {
+        "_comment": "Gate3: 信号强度门槛",
+        "min_prime_strength": 35
+      },
+
+      "gate4_contradiction": {
+        "_comment": "Gate4: 因子矛盾检测",
+
+        "c_vs_o": {
+          "_comment": "C vs O矛盾检测（资金流vs持仓）",
+          "enabled": true,
+          "abs_threshold": 60
+        },
+
+        "t_vs_enhanced_f": {
+          "_comment": "T vs Enhanced_F矛盾检测（趋势vs时机）",
+          "enabled": true,
+          "t_strong_threshold": 70,
+          "enhanced_f_chase_threshold": -40
+        }
+      },
+
+      "final_decision": {
+        "_comment": "最终决策参数",
+        "min_ev": 0.8,
+        "min_risk_reward": 1.0,
+        "min_final_score": 50.0
+      },
+
+      "crowding_detection": {
+        "_comment": "过热检测（防止追高）",
+        "oi_crowding_percentile": 95,
+        "basis_extreme_percentile": 95,
+        "funding_extreme_percentile": 95
+      }
+    },
+
+    "integration": {
+      "_comment": "系统集成参数",
+      "dual_run_mode": false,
+      "_dual_run_note": "true=新旧系统并行运行对比，false=仅用新系统",
+      "fallback_on_error": true,
+      "detailed_logging": true
+    }
+  }
 }

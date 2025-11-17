@@ -1,0 +1,94 @@
+{
+  "_description": "扫描输出配置 v7.3.47",
+  "_version": "v7.3.47",
+  "_updated": "2025-11-16",
+  "_purpose": "控制批量扫描时的输出详细程度，避免日志过多或过少",
+
+  "output_detail_level": {
+    "_description": "输出详细程度控制",
+    "mode": "full",
+    "_mode_options": {
+      "full": "显示所有币种的完整分析结果",
+      "limited": "仅显示前N个币种的详细信息",
+      "minimal": "仅显示汇总统计，不显示单币详情"
+    },
+    "limited_count": 10,
+    "_limited_count_comment": "当mode=limited时，显示前N个币种"
+  },
+
+  "factor_output": {
+    "_description": "因子输出控制",
+    "show_all_factors": true,
+    "_show_all_factors_comment": "总开关，关闭后忽略下面的单项配置",
+
+    "show_core_factors": true,
+    "_show_core_factors_comment": "显示6个核心因子(T/M/C/V/O/B)的评分",
+
+    "show_modulators": true,
+    "_show_modulators_comment": "显示4个调制器(L/S/F/I)的值",
+
+    "show_gates": true,
+    "_show_gates_comment": "显示四门调节系数(DataQual/EV/Execution/Probability)",
+
+    "show_prime_breakdown": true,
+    "_show_prime_breakdown_comment": "显示Prime信号的详细分解(TC/VOM/B组成)"
+  },
+
+  "diagnostic_output": {
+    "_description": "诊断信息输出控制",
+
+    "show_f_factor_details": true,
+    "_show_f_factor_details_comment": "显示F因子(资金领先)的详细元数据",
+
+    "show_i_factor_details": true,
+    "_show_i_factor_details_comment": "显示I因子(独立性)的详细元数据",
+
+    "show_intermediate_values": true,
+    "_show_intermediate_values_comment": "显示中间计算值(如fund_momentum, price_momentum等)",
+
+    "alert_on_saturation": true,
+    "_alert_on_saturation_comment": "当因子接近饱和时发出警告",
+
+    "saturation_threshold": 98,
+    "_saturation_threshold_comment": "因子饱和阈值，|Factor| >= 此值时视为饱和"
+  },
+
+  "performance": {
+    "_description": "性能相关输出控制",
+
+    "show_slow_coins": true,
+    "_show_slow_coins_comment": "显示分析耗时过长的币种",
+
+    "slow_threshold_sec": 5.0,
+    "_slow_threshold_sec_comment": "慢速阈值(秒)，超过此时间的币种会被标记",
+
+    "show_progress_interval": 20,
+    "_show_progress_interval_comment": "每分析N个币种显示一次进度"
+  },
+
+  "rejection_output": {
+    "_description": "拒绝原因输出控制",
+
+    "show_rejection_reasons": true,
+    "_show_rejection_reasons_comment": "显示信号被拒绝的原因",
+
+    "max_reasons_per_coin": 2,
+    "_max_reasons_per_coin_comment": "每个币种最多显示N条拒绝理由，避免日志过长"
+  },
+
+  "statistics_output": {
+    "_description": "统计分析输出控制(新增v7.3.47)",
+
+    "show_full_statistics": true,
+    "_show_full_statistics_comment": "显示完整的统计分析报告(CVD/因子分布/相关性等)",
+
+    "show_factor_distribution": true,
+    "_show_factor_distribution_comment": "显示各因子的分布统计(均值/标准差/偏度等)",
+
+    "show_correlation_matrix": true,
+    "_show_correlation_matrix_comment": "显示因子间的相关性矩阵",
+
+    "show_performance_metrics": true,
+    "_show_performance_metrics_comment": "显示性能指标(扫描速度/成功率等)"
+  }
+}

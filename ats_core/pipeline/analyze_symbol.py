@@ -2,27 +2,32 @@
 from __future__ import annotations
 
 """
-完整的单币种分析管道（统一±100系统 v6.6 - 6+4因子架构）：
+完整的单币种分析管道（v7.4 - Dual Run双轨决策系统）：
+
+🚀 v7.4革命性升级：从打分到价格（Entry/SL/TP）
 1. 获取市场数据（K线、OI、订单簿、资金费率）
 2. 计算6+4维特征（A层6因子: T/M/C/V/O/B + B层4调制器: L/S/F/I）
 3. 统一±100评分（正数=看多/好，负数=看空/差）
-4. 计算加权分数和置信度（权重百分比系统，A层总和100%）
-5. L/S/F/I调制器：调节仓位/置信度/温度/成本，不参与评分
-6. 判定发布条件（软约束系统：EV≤0和P<p_min仅标记，不硬拒绝）
+4. 旧系统(v6.6)：权重加分 → 概率 → 软约束筛选
+5. 新系统(v7.4)：四步分层决策 → Entry/SL/TP价格
 
-核心架构（v6.6 - 软约束+调制器系统）：
+🎯 核心架构（v7.4 Dual Run模式）：
+【旧系统 v6.6 - 保持不变】
 - A层6因子: T/M/C/V/O/B（权重百分比，总和100%）
 - B层4调制器: L(流动性)/S(结构)/F(资金领先)/I(独立性)（权重=0，仅调制参数）
-- 废弃因子: Q(清算密度-数据不可靠), E(环境-低收益), S移至调制器
-- 权重配置: T24/M17/C24/V12/O17/B6 (总和100%)
 - 软约束: EV≤0和P<p_min不硬拒绝，仅标记soft_filtered=True
 - 三层止损: 结构止损(Swing) > 订单簿聚类 > ATR后备
 
-架构分层（v6.6标准配置）：
-- Layer 1（价格行为53%）：T(24%) + M(17%) + V(12%)
-- Layer 2（资金流41%）：C(24%) + O(17%)
-- Layer 3（微观结构6%）：B(6%)
-- Layer B（调制器0%）：L/S/F/I(0%)  ← 不参与评分，仅调制执行参数
+【新系统 v7.4 - 四步决策】
+- Step1 方向确认: A层加权 + I置信度映射 + BTC对齐 + 硬veto
+- Step2 时机判断: Enhanced F v2 (Flow vs Price) → 六级时机评分
+- Step3 风险管理: Entry价格 + 止损价 + 止盈价（RR≥1.5）
+- Step4 质量控制: 4门检查（成交量/噪声/强度/矛盾）
+
+📊 Dual Run集成：
+- 旧系统结果：is_prime, weighted_score, confidence（向后兼容）
+- 新系统结果：four_step_decision（额外输出，可选启用）
+- 配置开关：four_step_system.enabled（默认false）
 """
 
 from typing import Dict, Any, Tuple, List
@@ -608,7 +613,7 @@ def _analyze_symbol_core(
 
                 # 补充元数据
                 I_meta['data_points'] = use_len
-                I_meta['version'] = 'v7.3.2-Full'
+                I_meta['version'] = 'v7.3.47'
                 I_meta['note'] = 'BTC-only回归，使用log-return，零硬编码'
             else:
                 I, I_meta = 50, {"note": f"数据不足（需要18小时，实际{min_len}小时）", "status": "insufficient_data"}
@@ -790,8 +795,9 @@ def _analyze_symbol_core(
             config=None  # 使用默认配置
         )
 
-        # v7.3.4: 从配置读取I因子参数（消除P0-1硬编码）
-        i_factor_params = factor_config.get('I因子参数', {})
+        # v7.3.47: 从配置读取I因子参数（消除P0-1硬编码）
+        # 修复：FactorConfig对象使用.config.get()而不是.get()
+        i_factor_params = factor_config.config.get('I因子参数', {})
         i_effective_threshold_default = i_factor_params.get('effective_threshold', 50.0)
         i_confidence_boost_default = i_factor_params.get('confidence_boost_default', 0.0)
 
@@ -821,8 +827,9 @@ def _analyze_symbol_core(
         warn(f"I因子veto检查失败: {e}")
         i_veto = False
         i_veto_reasons = []
-        # v7.3.4: 从配置读取默认值（消除P0-1硬编码）
-        i_factor_params = factor_config.get('I因子参数', {})
+        # v7.3.47: 从配置读取默认值（消除P0-1硬编码）
+        # 修复：FactorConfig对象使用.config.get()而不是.get()
+        i_factor_params = factor_config.config.get('I因子参数', {})
         i_effective_threshold = i_factor_params.get('effective_threshold', 50.0)
         i_confidence_boost = i_factor_params.get('confidence_boost_default', 0.0)
         i_cost_multiplier = 1.0
@@ -1897,6 +1904,48 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
         eth_klines=eth_klines        # 独立性分析
     )
 
+    # ---- 2.5. v7.4: BTC因子计算（用于四步系统）----
+    # 四步系统需要BTC方向得分用于Step1方向确认和硬veto规则
+    from ats_core.cfg import CFG
+    params = CFG.params
+
+    if params.get("four_step_system", {}).get("enabled", False):
+        btc_factor_scores = {}
+
+        try:
+            if len(btc_klines) >= 24:  # 至少需要24根1h K线计算T因子
+                # 准备BTC K线数据（与_calc_trend格式一致）
+                h_btc = [k.get('high', 0) for k in btc_klines]
+                l_btc = [k.get('low', 0) for k in btc_klines]
+                c_btc = [k.get('close', 0) for k in btc_klines]
+                c4_btc = []  # BTC暂不需要4h K线
+
+                # 计算BTC T因子（趋势）
+                from ats_core.features.trend import score_trend
+                trend_cfg = params.get("trend", {})
+                btc_T, btc_T_meta = score_trend(h_btc, l_btc, c_btc, c4_btc, trend_cfg)
+
+                btc_factor_scores["T"] = int(btc_T)
+                btc_factor_scores["T_meta"] = btc_T_meta
+
+                log(f"✅ v7.4: BTC T因子 = {btc_T:.1f} (用于四步系统)")
+            else:
+                # BTC K线不足，使用默认中性值
+                btc_factor_scores["T"] = 0
+                btc_factor_scores["T_meta"] = {"degradation_reason": "insufficient_btc_klines"}
+                warn(f"⚠️  BTC K线不足({len(btc_klines)}根)，四步系统使用默认值T=0")
+
+        except Exception as e:
+            # BTC因子计算失败，降级处理
+            btc_factor_scores["T"] = 0
+            btc_factor_scores["T_meta"] = {"degradation_reason": "calculation_error", "error": str(e)}
+            warn(f"⚠️  BTC因子计算失败: {e}，四步系统使用默认值T=0")
+
+        # 将BTC因子添加到result元数据中
+        if "metadata" not in result:
+            result["metadata"] = {}
+        result["metadata"]["btc_factor_scores"] = btc_factor_scores
+
     # ---- 3. 添加新币数据元信息（Phase 2）----
     # 为Phase 3准备：将新币专用数据存储在metadata中
     if newcoin_data:
@@ -1923,6 +1972,74 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
             "is_new_coin": False,
             "phase2_note": "成熟币使用标准数据流",
         }
+
+    # ---- 4. v7.4: 四步系统集成（Dual Run模式）----
+    # 当four_step_system.enabled=true时，并行运行四步系统
+    # 旧系统（v6.6权重加分）结果保持不变，四步系统结果作为额外信息
+    if params.get("four_step_system", {}).get("enabled", False):
+        try:
+            log(f"🚀 v7.4: 启动四步系统 - {symbol}")
+
+            # 4.1 准备历史因子序列（用于Step2 Enhanced F v2）
+            from ats_core.utils.factor_history import get_factor_scores_series
+
+            factor_scores_series = get_factor_scores_series(
+                klines_1h=k1,
+                window_hours=7,
+                current_factor_scores=result["scores"],
+                params=params
+            )
+
+            # 4.2 提取所需的输入数据
+            factor_scores = result["scores"]
+            btc_factor_scores = result.get("metadata", {}).get("btc_factor_scores", {"T": 0})
+            s_factor_meta = result.get("scores_meta", {}).get("S", {})
+            l_factor_meta = result.get("scores_meta", {}).get("L", {})
+            l_score = result["scores"].get("L", 0.0)
+
+            # 4.3 调用四步系统主入口
+            from ats_core.decision.four_step_system import run_four_step_decision
+
+            four_step_result = run_four_step_decision(
+                symbol=symbol,
+                klines=k1,
+                factor_scores=factor_scores,
+                factor_scores_series=factor_scores_series,
+                btc_factor_scores=btc_factor_scores,
+                s_factor_meta=s_factor_meta,
+                l_factor_meta=l_factor_meta,
+                l_score=l_score,
+                params=params
+            )
+
+            # 4.4 添加四步系统结果到result
+            result["four_step_decision"] = four_step_result
+
+            # 4.5 Dual Run对比日志
+            old_signal = "LONG" if result.get("side_long", False) else "SHORT"
+            new_decision = four_step_result.get("decision", "UNKNOWN")
+            new_action = four_step_result.get("action", "N/A")
+
+            log(f"📊 Dual Run对比 - {symbol}:")
+            log(f"   旧系统(v6.6): {old_signal} | Prime={result.get('is_prime', False)} | 强度={result.get('prime_strength', 0):.1f}")
+            if new_decision == "ACCEPT":
+                log(f"   新系统(v7.4): {new_action} ACCEPT | Entry={four_step_result.get('entry_price'):.6f} | "
+                    f"SL={four_step_result.get('stop_loss'):.6f} | TP={four_step_result.get('take_profit'):.6f} | "
+                    f"RR={four_step_result.get('risk_reward_ratio'):.2f}")
+            else:
+                log(f"   新系统(v7.4): REJECT at {four_step_result.get('reject_stage', 'unknown')} | "
+                    f"原因: {four_step_result.get('reject_reason', 'N/A')}")
+
+        except Exception as e:
+            from ats_core.logging import warn
+            warn(f"⚠️  四步系统执行失败: {e}")
+            import traceback
+            traceback.print_exc()
+            result["four_step_decision"] = {
+                "decision": "ERROR",
+                "error": str(e),
+                "phase": "integration_error"
+            }
 
     return result
 

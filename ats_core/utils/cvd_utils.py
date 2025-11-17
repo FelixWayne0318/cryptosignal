@@ -291,13 +291,14 @@ def rolling_z(
         - 只使用历史数据（i-window+1 到 i），避免前视偏差
         - robust=True时使用MAD（Median Absolute Deviation），对异常值更稳健
         - robust=False时使用标准差（传统方法）
-        - 当窗口内数据不足或std=0时，返回0.0
+        - 当窗口内数据不足window个点时，返回0.0（避免不稳定统计量）
+        - v7.3.47修复: 前window个点全部设为0,避免前视偏差
 
     Example:
         >>> data = [1.0, 2.0, 1.5, 3.0, 2.5]
         >>> z = rolling_z(data, window=3, robust=False)
         >>> # z[0] = 0 (窗口不足)
-        >>> # z[1] = (2.0 - mean([1.0, 2.0])) / std([1.0, 2.0])
+        >>> # z[1] = 0 (窗口不足)
         >>> # z[2] = (1.5 - mean([1.0, 2.0, 1.5])) / std([1.0, 2.0, 1.5])
     """
     if not values:
@@ -309,8 +310,10 @@ def rolling_z(
         start = max(0, i - window + 1)
         window_data = values[start:i+1]
 
-        if len(window_data) < 2:
-            # 窗口数据不足，无法计算标准差
+        # v7.3.47 P0-2修复: 前window个点设为0,避免不稳定统计量导致的前视偏差
+        # 当窗口数据不足window个点时,统计量（均值/标准差/MAD）不稳定
+        # 这会导致Z-score失真,影响CVD因子(26%权重)的准确性
+        if len(window_data) < window:
             result.append(0.0)
             continue
 

@@ -986,6 +986,9 @@ class OptimizedBatchScanner:
             except Exception as e:
                 errors += 1
                 warn(f"⚠️  {symbol} 分析失败: {e}")
+                # v7.3.47 临时诊断：打印完整堆栈跟踪
+                import traceback
+                warn(f"完整错误堆栈:\n{traceback.format_exc()}")
 
         scan_elapsed = time.time() - scan_start
 

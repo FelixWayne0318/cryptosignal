@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # coding: utf-8
 """
-实时信号扫描器（v7.3.4 - I因子BTC-only + MarketContext优化）
+实时信号扫描器（v7.3.47 - I因子BTC-only + MarketContext优化）
 
 功能特性:
-1. ✅ v7.3.4 I因子（BTC-only回归 + veto风控 + MarketContext优化）
+1. ✅ v7.3.47 I因子（BTC-only回归 + veto风控 + MarketContext优化）
 2. ✅ WebSocket批量扫描优化（0次API调用）
 3. ✅ 自动数据采集（信号快照、分析数据库）
 4. ✅ Telegram通知（v7.3.2格式 + 扫描摘要）
@@ -54,12 +54,12 @@ sys.path.insert(0, str(project_root))
 from ats_core.pipeline.batch_scan_optimized import OptimizedBatchScanner
 from ats_core.logging import log, warn, error
 from ats_core.outputs.telegram_fmt import render_trade_v72
-# v7.3.4: batch_scan已集成I因子veto逻辑，无需额外处理
+# v7.3.47: batch_scan已集成I因子veto逻辑，无需额外处理
 from ats_core.publishing.anti_jitter import AntiJitter
 from ats_core.config.anti_jitter_config import get_config
 from ats_core.analysis.report_writer import get_report_writer
 
-# v7.3.4: 数据采集模块
+# v7.3.47: 数据采集模块
 try:
     from ats_core.data.trade_recorder import get_recorder
     from ats_core.data.analysis_db import get_analysis_db
@@ -129,7 +129,7 @@ def telegram_send_wrapper(message: str, bot_token: str, chat_id: str):
 
 
 class RealtimeSignalScanner:
-    """实时信号扫描器（v7.3.4版本）"""
+    """实时信号扫描器（v7.3.47版本）"""
 
     def __init__(
         self,
@@ -142,9 +142,9 @@ class RealtimeSignalScanner:
         初始化扫描器
 
         Args:
-            min_score: 最低confidence阈值（v7.3.4信号）
+            min_score: 最低confidence阈值（v7.3.47信号）
             send_telegram: 是否发送Telegram通知
-            record_data: 是否记录数据到数据库（v7.3.4特性）
+            record_data: 是否记录数据到数据库（v7.3.47特性）
             verbose: 是否显示详细输出
         """
         self.min_score = min_score
@@ -168,7 +168,7 @@ class RealtimeSignalScanner:
 
         # 防抖动系统（AntiJitter）
         if send_telegram:
-            # v7.3.4修复：使用5m激进配置（confirmation_bars=1）允许单次扫描发布
+            # v7.3.47修复：使用5m激进配置（confirmation_bars=1）允许单次扫描发布
             # 原因：1h配置需要2个历史记录，但单次扫描每个symbol只有1个数据点
             # 结果：所有信号在首次扫描时被"历史记录不足"拒绝
             anti_jitter_config = get_config("5m")  # confirmation_bars=1, cooldown=5min
@@ -200,7 +200,7 @@ class RealtimeSignalScanner:
             return
 
         log("\n" + "=" * 60)
-        log("🚀 初始化实时信号扫描器（v7.3.4 - I因子BTC-only + MarketContext优化）")
+        log("🚀 初始化实时信号扫描器（v7.4.0 - 四步分层决策系统 | Dual Run模式）")
         log("=" * 60)
 
         # 初始化批量扫描器
@@ -223,7 +223,7 @@ class RealtimeSignalScanner:
             await self.initialize()
 
         log("\n" + "=" * 60)
-        log(f"📡 开始v7.3.4扫描 - {datetime.now(TZ_UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        log(f"📡 开始v7.4.0扫描 - {datetime.now(TZ_UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}")
         log("=" * 60)
 
         # 执行批量扫描
@@ -236,7 +236,7 @@ class RealtimeSignalScanner:
             warn("扫描无结果")
             return
 
-        # v7.3.41修复：batch_scan已应用v7.2增强，无需重复调用
+        # v7.3.471修复：batch_scan已应用v7.2增强，无需重复调用
         # 之前逻辑：realtime_scanner读取batch_scan结果 → 应用v7.2增强 → 重写scan_detail.json
         # 新逻辑：batch_scan直接应用v7.2增强 → realtime_scanner直接使用结果
         # 优点：架构清晰，避免重复计算，scan_summary.md统计正确
@@ -267,7 +267,7 @@ class RealtimeSignalScanner:
 
         log("=" * 60 + "\n")
 
-    # v7.3.41修复：_apply_v72_enhancements已废弃（batch_scan直接应用v7.2增强）
+    # v7.3.471修复：_apply_v72_enhancements已废弃（batch_scan直接应用v7.2增强）
 
     def _filter_prime_signals_v72(self, results: list) -> list:
         """
@@ -369,11 +369,11 @@ class RealtimeSignalScanner:
             log(f"      F={F_v2:.0f}, I={I_v2:.0f}")
 
         except Exception as e:
-            # v7.3.41修复：安全获取symbol，防止top_signal不是字典
+            # v7.3.471修复：安全获取symbol，防止top_signal不是字典
             symbol = top_signal.get('symbol') if isinstance(top_signal, dict) else str(top_signal)[:20]
             error(f"   ❌ 发送失败 {symbol}: {e}")
 
-            # v7.3.47+: 打印完整traceback用于诊断
+            # v7.3.477+: 打印完整traceback用于诊断
             import traceback
             error("   完整错误堆栈:")
             for line in traceback.format_exc().split('\n'):
@@ -476,7 +476,7 @@ class RealtimeSignalScanner:
 async def main():
     """主函数"""
     parser = argparse.ArgumentParser(
-        description='实时信号扫描器（v7.3.4 - I因子BTC-only + MarketContext优化）',
+        description='实时信号扫描器（v7.3.47 - I因子BTC-only + MarketContext优化）',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:

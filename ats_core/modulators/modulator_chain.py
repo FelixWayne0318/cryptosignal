@@ -244,8 +244,9 @@ class ModulatorChain:
             impact_bps = L_components.get("impact_bps", 0)
 
             # v7.3.4: 从配置读取仓位惩罚因子（消除P0-7硬编码）
+            # v7.3.47: 修复FactorConfig用法 - 使用.config.get()
             config = get_factor_config()
-            modulator_params = config.get('调制器参数', {})
+            modulator_params = config.config.get('调制器参数', {})
             position_penalty = modulator_params.get('position_penalty_factor', 0.9)
 
             # 如果spread或impact极高，进一步降低仓位（但不低于min_position）
@@ -466,6 +467,10 @@ class ModulatorChain:
         - 配置从config/signal_thresholds.json的independence_gate节点读取
         - 所有阈值可配置，零硬编码
         """
+        # v7.3.47: 处理FactorConfig对象 - 提取内部字典
+        if config is not None and hasattr(config, 'config'):
+            config = config.config
+
         # 加载配置
         if config is None:
             try:
@@ -577,6 +582,10 @@ class ModulatorChain:
             "Teff_mult": float  # 兼容旧接口
           }
         """
+        # v7.3.47: 处理FactorConfig对象 - 提取内部字典
+        if config is not None and hasattr(config, 'config'):
+            config = config.config
+
         # 1. 风控闸门
         gate_result = self.apply_I_gate(I, T_BTC, T_alt, composite_score, config)
 

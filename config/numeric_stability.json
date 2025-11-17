@@ -1,7 +1,7 @@
 {
   "_description": "数值稳定性常量配置 - 基于IEEE 754双精度浮点数特性",
   "_warning": "修改这些值需要深刻理解浮点运算，建议保持默认值",
-  "_version": "v7.3.4",
+  "_version": "v7.3.47",
 
   "numeric_stability": {
     "independence": {
