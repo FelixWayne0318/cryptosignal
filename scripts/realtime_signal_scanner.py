@@ -168,12 +168,16 @@ class RealtimeSignalScanner:
 
         # 防抖动系统（AntiJitter）
         if send_telegram:
-            # v7.3.47修复：使用5m激进配置（confirmation_bars=1）允许单次扫描发布
-            # 原因：1h配置需要2个历史记录，但单次扫描每个symbol只有1个数据点
-            # 结果：所有信号在首次扫描时被"历史记录不足"拒绝
-            anti_jitter_config = get_config("5m")  # confirmation_bars=1, cooldown=5min
+            # v7.4.0优化：使用2h多样化配置，强制币种轮换
+            # 设计理念：
+            #   - 每个币种信号后2小时内不再发送
+            #   - 配合Top 1发送机制，强制多币种轮换
+            #   - 降低单币种集中风险，提高投资组合多样化
+            #   - 避免同一币种频繁出现导致的信息疲劳
+            # 配置参数：confirmation_bars=2/3, cooldown=2小时
+            anti_jitter_config = get_config("2h")  # confirmation_bars=2, cooldown=2h
             self.anti_jitter = AntiJitter(config=anti_jitter_config)
-            log(f"✅ 防抖动系统已启用: {anti_jitter_config.cooldown_seconds}秒冷却期, K/N={anti_jitter_config.confirmation_bars}/{anti_jitter_config.total_bars}")
+            log(f"✅ 防抖动系统已启用: {anti_jitter_config.cooldown_seconds}秒冷却期 (2小时多样化), K/N={anti_jitter_config.confirmation_bars}/{anti_jitter_config.total_bars}")
 
         # v7.2: 数据记录器
         if self.record_data:

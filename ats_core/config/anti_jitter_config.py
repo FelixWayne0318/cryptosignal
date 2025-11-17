@@ -248,6 +248,44 @@ def get_config_5m_aggressive() -> AntiJitterConfig:
     )
 
 
+def get_config_2h_diversified() -> AntiJitterConfig:
+    """
+    2小时多样化配置 - 强制币种轮换，降低集中风险（v7.4.0推荐）
+
+    设计理念：
+    - 每个币种发出信号后2小时内不再发送
+    - 配合Top 1竞争机制，强制多币种轮换
+    - 降低单一币种集中风险，提高投资组合多样化
+    - 减少同一币种频繁出现导致的信息疲劳
+
+    配置参数：
+    - K-line: 15m（标准周期）
+    - Scan: every 60s（频繁扫描，快速响应）
+    - K/N: 2/3（需要2/3个bar确认，确保信号稳定）
+    - Cooldown: 8 bars = 120分钟 = 2小时（关键差异）
+
+    适用场景：
+    - 多币种轮换策略
+    - Top 1信号发送机制
+    - 强调投资组合分散
+    - 控制单币种暴露风险
+
+    Returns:
+        AntiJitterConfig实例，冷却期=2小时
+    """
+    return AntiJitterConfig(
+        kline_period="15m",
+        scan_interval_seconds=60,
+        confirmation_bars=2,
+        total_bars=3,
+        cooldown_bars=8,  # 8 bars × 15min = 120min = 2小时
+        prime_entry_threshold=0.45,
+        prime_maintain_threshold=0.42,
+        watch_entry_threshold=0.40,
+        watch_maintain_threshold=0.37
+    )
+
+
 def get_config_default() -> AntiJitterConfig:
     """
     Default configuration (15m standard).
@@ -259,12 +297,17 @@ def get_config_default() -> AntiJitterConfig:
 
 # === Configuration Selection ===
 
-def get_config(preset: Literal["15m", "1h", "5m", "default"] = "default") -> AntiJitterConfig:
+def get_config(preset: Literal["15m", "1h", "5m", "2h", "default"] = "default") -> AntiJitterConfig:
     """
     Get anti-jitter configuration by preset name.
 
     Args:
-        preset: Configuration preset ("15m", "1h", "5m", "default")
+        preset: Configuration preset ("15m", "1h", "5m", "2h", "default")
+            - "15m": 标准15分钟配置（cooldown=15min）
+            - "1h": 保守1小时配置（cooldown=1h）
+            - "5m": 激进5分钟配置（cooldown=5min）
+            - "2h": 多样化2小时配置（cooldown=2h，v7.4.0推荐）
+            - "default": 默认配置（15m）
 
     Returns:
         AntiJitterConfig instance
@@ -276,7 +319,8 @@ def get_config(preset: Literal["15m", "1h", "5m", "default"] = "default") -> Ant
         "default": get_config_default,
         "15m": get_config_15m_standard,
         "1h": get_config_1h_standard,
-        "5m": get_config_5m_aggressive
+        "5m": get_config_5m_aggressive,
+        "2h": get_config_2h_diversified
     }
 
     if preset not in presets:
