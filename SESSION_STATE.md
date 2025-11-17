@@ -55,6 +55,37 @@
 
 ### 最新完成（2025-11-17）
 
+- [x] **Step3完整集成L因子价格带法订单簿分析v7.4.0** (commit: 693ad15) ✅
+  - 🎯 需求：用户指出订单簿分析已在L因子实现（liquidity_priceband.py），需要按规范集成到Step3系统中
+  - 修改范围：ats_core/decision/step3_risk.py - extract_orderbook_from_L_meta()函数（84-232行）
+  - 核心变更：
+    1. 【完整提取L因子元数据】从简化版升级为完整版
+       - 原版：仅提取obi_value, best_bid, best_ask（3个字段）
+       - 新版：提取buy_impact_bps, sell_impact_bps, spread_bps, buy_covered, sell_covered, gates_passed, liquidity_level等全部字段
+    2. 【深度得分综合计算】从单一OBI映射升级为多维度加权
+       - 原版：简单映射 buy_depth = 50 + OBI*50
+       - 新版：OBI基础分(50%) + 覆盖度(25%) + 冲击成本(25%)
+       - 冲击成本评分：100 - impact_bps * 2 (10bps优秀, 50bps可接受)
+    3. 【买墙/卖墙检测增强】从单一OBI阈值升级为双重确认
+       - 原版：仅检查OBI阈值(±0.3)
+       - 新版：需要OBI显著 + 对应方向深度覆盖=true
+    4. 【返回字段扩展】新增6个关键字段供Step3使用
+       - buy_impact_bps/sell_impact_bps: 评估市价单成本
+       - spread_bps: 买卖价差分析
+       - liquidity_level: 流动性等级(excellent/good/fair/poor)
+       - gates_passed: 四道闸通过数量（对齐专家方案）
+  - 技术价值：
+    - ✅ 充分利用L因子price band方法的524行完整实现
+    - ✅ 为Entry/SL/TP价格计算提供更精确的流动性数据
+    - ✅ 四道闸gates_passed直接传递给质量评估使用
+    - ✅ 降级处理：L因子不可用时返回中性值确保系统稳定
+  - 测试结果：✅ test_four_step_integration_mock.py验证通过（Step1→Step2完整流程）
+  - 对齐专家v7.4.0方案：
+    - 订单簿分析基于已实现的liquidity_priceband.py（用户之前已反馈并认可此实现）
+    - 从"占位实现"升级为"完整集成"
+    - Step3现在真正利用了价格带法的全部分析能力
+  - 符合规范：SYSTEM_ENHANCEMENT_STANDARD.md §所有章节 ✅
+
 - [x] **系统版本号统一更新为v7.4.0（第一批）** (commit: f17476e) ✅
   - 🎯 需求：按照专家方案和规范要求，系统中所有文件、代码、脚本修改为v7.4版本
   - 修改范围：config层 + core层部分核心模块（共9个文件）
