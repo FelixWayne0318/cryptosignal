@@ -55,6 +55,40 @@
 
 ### 最新完成（2025-11-17）
 
+- [x] **Telegram消息版本号更新为v7.4.0** (commit: ebe4ace) ✅
+  - 🎯 需求：用户发现Telegram消息仍显示"v7.3.2-Full核心因子"
+  - 修改范围：ats_core/outputs/telegram_fmt.py
+  - 核心变更：
+    - 因子标题：" v7.3.2-Full核心因子" → "v7.4.0 核心因子"
+    - 注释更新：标注"四步决策系统"
+  - 版本号统一验证：
+    - ✅ 系统版本号（2143行）：已经是v7.4.0
+    - ✅ 因子标题（2437行）：更新为v7.4.0
+    - ✅ 扫描统计报告：已更新为v7.4.0
+  - 预期效果：Telegram消息显示"━━━ 🔬 v7.4.0 核心因子 ━━━"
+  - 符合规范：SYSTEM_ENHANCEMENT_STANDARD.md §所有章节 ✅
+
+- [x] **P0-CRITICAL修复：四步系统K线格式兼容性** (commit: 33467b2) ✅
+  - 🔥 致命问题：6个币种（1.7%）四步系统分析失败
+  - 错误现象：AttributeError: 'list' object has no attribute 'get'
+  - 根本原因：
+    - factor_history.py期望K线是字典格式：{high: x, low: y, close: z}
+    - 但某些K线是列表格式：[timestamp, open, high, low, close, volume]
+    - 导致.get()方法调用失败
+  - 修复方案：
+    - 添加extract_kline_values()智能检测函数
+    - 支持字典格式：使用.get()方法
+    - 支持列表格式：按索引提取（high=k[2], low=k[3], close=k[4]）
+    - 未知格式：使用默认值0
+  - 代码变更：ats_core/utils/factor_history.py (122-146行)
+  - 预期效果：
+    - 四步系统成功率从98.3%提升到100%
+    - "分析失败: 0个"
+  - 符合规范：
+    - ✅ 零硬编码：使用类型检测
+    - ✅ 防御性编程：类型检查、空值处理
+    - ✅ 文件修改顺序：core → output
+
 - [x] **扫描统计报告更新为v7.4.0** (commit: db8ea2c) ✅
   - 🎯 需求：用户发现统计报告仍显示v7.3.2版本信息（七道闸门/旧版本号）
   - 修改范围：ats_core/analysis/scan_statistics.py
