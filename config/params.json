@@ -527,12 +527,41 @@
       },
 
       "orderbook": {
-        "_comment": "订单簿调整（从L因子元数据提取）",
+        "_comment": "订单簿分析参数（从L因子元数据提取）- v7.4.0完整版",
         "enabled": true,
+
+        "_comment_wall_detection": "买墙/卖墙检测阈值",
         "obi_buy_wall_threshold": 0.3,
         "obi_sell_wall_threshold": -0.3,
         "wall_adjustment_enabled": false,
-        "_note": "初版不做订单簿调整，后续版本可启用"
+
+        "_comment_depth_score": "深度得分计算权重（OBI + 覆盖 + 冲击）",
+        "depth_score_weights": {
+          "obi_base_weight": 0.50,
+          "coverage_weight": 0.25,
+          "impact_cost_weight": 0.25
+        },
+
+        "_comment_obi_score": "OBI基础分计算参数",
+        "obi_score": {
+          "base_score": 50.0,
+          "multiplier": 50.0
+        },
+
+        "_comment_coverage": "深度覆盖度分值",
+        "coverage_scores": {
+          "covered": 100.0,
+          "not_covered": 0.0
+        },
+
+        "_comment_impact_cost": "价格冲击成本评分参数",
+        "impact_cost": {
+          "excellent_threshold_bps": 10,
+          "acceptable_threshold_bps": 50,
+          "score_multiplier": 2.0
+        },
+
+        "_note": "v7.4.0: 从硬编码升级为配置化，便于后续调优"
       }
     },
 

@@ -114,7 +114,8 @@ def extract_orderbook_from_L_meta(
 
     Note:
         v7.4.0完整版：充分利用L因子价格带法的全部分析结果
-        深度得分 = OBI基础分(50%) + 覆盖度(25%) + 冲击成本(25%)
+        深度得分 = OBI基础分 + 覆盖度 + 冲击成本（权重从配置读取，默认50%+25%+25%）
+        所有计算参数从config/params.json读取，零硬编码 ✅
     """
     orderbook_cfg = params.get("four_step_system", {}).get("step3_risk", {}).get("orderbook", {})
     enabled = orderbook_cfg.get("enabled", True)
@@ -173,33 +174,49 @@ def extract_orderbook_from_L_meta(
     sell_wall_price = best_ask if (obi_value < sell_wall_threshold and sell_covered) else None
 
     # ====================
-    # 3. 深度得分（综合版：OBI基础分50% + 覆盖度25% + 冲击成本25%）
+    # 3. 深度得分（综合版：OBI基础分 + 覆盖度 + 冲击成本，权重从配置读取）
     # ====================
+    # 从配置读取参数（v7.4.0配置化改造，消除硬编码）
+    weights = orderbook_cfg.get("depth_score_weights", {})
+    obi_weight = weights.get("obi_base_weight", 0.50)
+    coverage_weight = weights.get("coverage_weight", 0.25)
+    impact_weight = weights.get("impact_cost_weight", 0.25)
+
+    obi_score_cfg = orderbook_cfg.get("obi_score", {})
+    obi_base = obi_score_cfg.get("base_score", 50.0)
+    obi_mult = obi_score_cfg.get("multiplier", 50.0)
+
+    coverage_scores_cfg = orderbook_cfg.get("coverage_scores", {})
+    score_covered = coverage_scores_cfg.get("covered", 100.0)
+    score_not_covered = coverage_scores_cfg.get("not_covered", 0.0)
+
+    impact_cfg = orderbook_cfg.get("impact_cost", {})
+    impact_multiplier = impact_cfg.get("score_multiplier", 2.0)
+
     # 3.1 OBI基础分 ∈ [0, 100]
-    obi_buy_base = max(0.0, min(100.0, 50.0 + obi_value * 50.0))
-    obi_sell_base = max(0.0, min(100.0, 50.0 - obi_value * 50.0))
+    obi_buy_base = max(0.0, min(100.0, obi_base + obi_value * obi_mult))
+    obi_sell_base = max(0.0, min(100.0, obi_base - obi_value * obi_mult))
 
     # 3.2 覆盖度分 ∈ [0, 100]
-    coverage_buy_score = 100.0 if buy_covered else 0.0
-    coverage_sell_score = 100.0 if sell_covered else 0.0
+    coverage_buy_score = score_covered if buy_covered else score_not_covered
+    coverage_sell_score = score_covered if sell_covered else score_not_covered
 
     # 3.3 冲击成本分 ∈ [0, 100] (冲击越小越好)
-    # 冲击阈值: 10 bps为优秀, 50 bps为可接受, >50 bps为差
-    # 分数 = max(0, 100 - impact_bps * 2)
-    impact_buy_score = max(0.0, min(100.0, 100.0 - buy_impact_bps * 2.0))
-    impact_sell_score = max(0.0, min(100.0, 100.0 - sell_impact_bps * 2.0))
+    # 分数 = max(0, 100 - impact_bps * multiplier)
+    impact_buy_score = max(0.0, min(100.0, 100.0 - buy_impact_bps * impact_multiplier))
+    impact_sell_score = max(0.0, min(100.0, 100.0 - sell_impact_bps * impact_multiplier))
 
-    # 3.4 综合深度得分（加权平均）
+    # 3.4 综合深度得分（加权平均，权重从配置读取）
     buy_depth_score = (
-        obi_buy_base * 0.50 +        # OBI基础分占50%
-        coverage_buy_score * 0.25 +  # 覆盖度占25%
-        impact_buy_score * 0.25      # 冲击成本占25%
+        obi_buy_base * obi_weight +
+        coverage_buy_score * coverage_weight +
+        impact_buy_score * impact_weight
     )
 
     sell_depth_score = (
-        obi_sell_base * 0.50 +       # OBI基础分占50%
-        coverage_sell_score * 0.25 + # 覆盖度占25%
-        impact_sell_score * 0.25     # 冲击成本占25%
+        obi_sell_base * obi_weight +
+        coverage_sell_score * coverage_weight +
+        impact_sell_score * impact_weight
     )
 
     # ====================
