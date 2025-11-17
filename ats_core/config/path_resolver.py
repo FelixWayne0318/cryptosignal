@@ -1,5 +1,5 @@
 """
-统一配置路径解析器 - v7.3.2
+统一配置路径解析器 - v7.4.0
 
 **目的**: 解决P1-4问题 - cfg.py和RuntimeConfig路径解析不一致
 
@@ -23,9 +23,9 @@
     # 设置自定义配置目录
     set_config_root("/custom/path/to/config")
 
-版本: v7.3.2
+版本: v7.4.0
 作者: Claude Code
-创建日期: 2025-11-15
+更新日期: 2025-11-17
 参考: /tmp/revised_fix_plan.md#Phase2-3
 """
 

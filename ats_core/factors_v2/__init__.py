@@ -1,15 +1,16 @@
 # coding: utf-8
 """
-统一因子系统 v7.2
+统一因子系统 v7.4.0 - 四步分层决策系统
 
-v7.2精简版：
-- 核心因子 (评分): T, M, C, V, O, B（在features/中实现）
-- 调制器 (调节): L, S, F, I（在features/和modulators/中实现）
-- factors_v2保留：B因子（基差+资金费）和I因子（独立性）
+v7.4.0核心架构：
+- Step1方向确认因子: I独立性（市场对齐veto）
+- Step2时机判断因子: F资金流向（Enhanced F v2）
+- Step3风险管理: Entry/SL/TP价格计算
+- Step4质量控制: 四道闸门过滤
 
-v7.3.43清理：
-- 删除未使用模块：oi_regime, volume_trigger, liquidity, cvd_enhanced
-- 这些功能已被features/模块替代或废弃
+factors_v2模块保留：
+- B因子（基差+资金费，市场情绪）
+- I因子（独立性，Step1核心veto机制）
 """
 
 from .basis_funding import score_basis_funding
