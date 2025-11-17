@@ -78,14 +78,16 @@ echo ""
 # 6. 运行时Python诊断（关键）
 echo "🐍 6. 运行时Python配置检查 (关键诊断)"
 echo "-----------------------------------"
-python3 << 'PYTHON_EOF'
+CURRENT_DIR=$(pwd)
+python3 << PYTHON_EOF
 import sys
 import os
 import json
 
-# 添加项目路径
-sys.path.insert(0, '/home/user/cryptosignal')
-os.chdir('/home/user/cryptosignal')
+# 添加项目路径（使用当前目录）
+CURRENT_DIR = "$CURRENT_DIR"
+sys.path.insert(0, CURRENT_DIR)
+os.chdir(CURRENT_DIR)
 
 print("Python路径:", sys.executable)
 print("工作目录:", os.getcwd())
