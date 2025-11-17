@@ -55,6 +55,32 @@
 
 ### 最新完成（2025-11-17）
 
+- [x] **系统版本号统一更新为v7.4.0（第一批）** (commit: f17476e) ✅
+  - 🎯 需求：按照专家方案和规范要求，系统中所有文件、代码、脚本修改为v7.4版本
+  - 修改范围：config层 + core层部分核心模块（共9个文件）
+  - 核心变更：
+    1. 【Config配置层】全部6个JSON文件更新为v7.4.0
+       - factors_unified.json: v7.3.47 → v7.4.0（四步分层决策系统）
+       - signal_thresholds.json: v7.3.47 → v7.4.0
+       - logging.json, factor_ranges.json, numeric_stability.json, scan_output.json
+    2. 【Core核心模块】关键模块版本号更新
+       - ats_core/factors_v2/__init__.py: v7.2 → v7.4.0
+         * 架构说明重构为四步系统（Step1-4清晰描述）
+       - ats_core/factors_v2/independence.py: v7.3.2-Full → v7.4.0
+         * 强调"Step1核心因子"定位
+       - ats_core/config/path_resolver.py: v7.3.2 → v7.4.0
+  - 设计原则：
+    - ✅ 严格遵守SYSTEM_ENHANCEMENT_STANDARD.md文件修改顺序（config → core → pipeline → output → docs）
+    - ✅ 保留历史changelog中的版本号（用于追溯历史修改）
+    - ✅ 仅更新主版本号标识和模块描述
+    - ✅ 所有v7.4.0描述都强调"四步分层决策系统"特征
+  - 待续工作：
+    - Pipeline层：analyze_symbol_v72.py等管道文件
+    - Docs层：文档文件版本号更新
+    - Standards层：标准文档版本号更新
+    - Scripts层：工具脚本版本号更新
+  - 符合规范：SYSTEM_ENHANCEMENT_STANDARD.md §所有章节 ✅
+
 - [x] **Telegram消息格式重新设计为v7.4.0风格** (commit: b168943) ✅
   - 🎯 需求：用户要求完全按照v7.4设计，保持原风格但让非专业人士也能看懂
   - 修改范围：ats_core/outputs/telegram_fmt.py - render_signal_v72()函数
