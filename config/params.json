@@ -621,6 +621,77 @@
       "_dual_run_note": "true=新旧系统并行运行对比，false=仅用新系统",
       "fallback_on_error": true,
       "detailed_logging": true
+    },
+
+    "symbol_refresh": {
+      "_comment": "币种列表动态刷新配置 - v7.4.0方案B（无需重启发现新币）",
+      "_version": "v7.4.0",
+      "_feature": "动态币种发现机制",
+
+      "enabled": true,
+      "_enabled_note": "启用币种列表动态刷新（推荐），关闭则需要重启才能发现新币",
+
+      "refresh_interval_hours": 6,
+      "_interval_rationale": "每6小时刷新一次（每天4次），平衡及时性和资源消耗",
+      "_interval_options": "可选值: 3h(更激进), 6h(推荐), 12h(保守)",
+
+      "refresh_times_utc": [0, 6, 12, 18],
+      "_times_note": "固定时间点刷新（UTC时间），便于监控和调试",
+
+      "new_coin_detection": {
+        "_comment": "新币发现和初始化配置",
+
+        "min_kline_requirements": {
+          "_comment": "新币K线数据最少要求（避免数据不足产生噪声信号）",
+          "15m_min_bars": 20,
+          "1h_min_bars": 24,
+          "4h_min_bars": 7,
+          "1d_min_bars": 3,
+          "_rationale": "15m需5h, 1h需1天, 4h需28h, 1d需3天数据"
+        },
+
+        "notification": {
+          "_comment": "新币发现通知配置",
+          "enabled": true,
+          "telegram_notify": true,
+          "min_volume_threshold_m": 50,
+          "_threshold_note": "只通知流动性>50M USDT的大盘新币",
+          "log_all_new_coins": true
+        }
+      },
+
+      "delisting_handling": {
+        "_comment": "退市币种处理配置",
+        "grace_period_hours": 2,
+        "_grace_period_note": "退市宽限期2小时（对齐冷却期），等待信号发送完成",
+        "cleanup_on_next_refresh": true
+      },
+
+      "failure_handling": {
+        "_comment": "刷新失败容错配置",
+        "max_retries": 3,
+        "retry_interval_minutes": 5,
+        "keep_old_list_on_failure": true,
+        "_failure_note": "刷新失败时保持旧列表，避免用错误数据",
+        "alert_on_consecutive_failures": 3,
+        "_alert_note": "连续3次失败发送Telegram告警"
+      },
+
+      "persistence": {
+        "_comment": "币种列表变化历史记录",
+        "enabled": true,
+        "log_file": "data/symbol_list_history.jsonl",
+        "archive_monthly": true,
+        "_record_fields": ["timestamp", "total_symbols", "new_symbols", "removed_symbols", "volume_changes"]
+      },
+
+      "_design_principles": [
+        "渐进式初始化：新币数据不足时暂不分析",
+        "双缓冲机制：刷新时不影响当前扫描",
+        "温和移除：退市币种等待冷却期结束",
+        "保守容错：宁可不刷新，也不用错误数据",
+        "完整追溯：记录所有币种变化历史"
+      ]
     }
   }
 }

@@ -414,6 +414,13 @@ class RealtimeSignalScanner:
 
         while True:
             try:
+                # v7.4.0方案B：尝试刷新币种列表（如果到达刷新时间）
+                try:
+                    await self.scanner.refresh_symbols_list()
+                except Exception as e:
+                    # 刷新失败不影响扫描继续
+                    warn(f"⚠️  币种列表刷新异常: {e}")
+
                 # 执行扫描
                 await self.scan_once()
 

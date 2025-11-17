@@ -50,6 +50,12 @@ class OptimizedBatchScanner:
         self.initialized = False
         self.symbols = []  # 保存初始化时的币种列表
 
+        # v7.4.0方案B：币种列表动态刷新机制
+        self.symbols_active = []       # 当前活跃的扫描列表
+        self.last_refresh_time = 0     # 上次刷新时间戳
+        self.refresh_config = {}       # 刷新配置
+        self.consecutive_failures = 0  # 连续失败计数
+
         # v6.6因子系统：预加载的市场数据缓存
         self.orderbook_cache = {}      # {symbol: orderbook_dict} - L调制器
         self.mark_price_cache = {}     # {symbol: mark_price} - B因子
@@ -410,6 +416,32 @@ class OptimizedBatchScanner:
 
         data_elapsed = time.time() - data_start
         log(f"   数据预加载完成，耗时: {data_elapsed:.1f}秒")
+
+        # v7.4.0方案B：加载币种刷新配置
+        log(f"\n6️⃣  加载币种刷新配置...")
+        try:
+            import json
+            from pathlib import Path
+            config_path = Path(__file__).parent.parent.parent / 'config' / 'params.json'
+
+            with open(config_path, 'r', encoding='utf-8') as f:
+                params = json.load(f)
+                self.refresh_config = params.get('symbol_refresh', {})
+
+            # 初始化symbols_active
+            self.symbols_active = symbols.copy()
+            self.last_refresh_time = time.time()
+
+            if self.refresh_config.get('enabled', False):
+                refresh_interval = self.refresh_config.get('refresh_interval_hours', 6)
+                log(f"   ✅ 币种动态刷新已启用（间隔: {refresh_interval}小时）")
+            else:
+                log(f"   ℹ️  币种动态刷新已禁用（需要重启发现新币）")
+
+        except Exception as e:
+            warn(f"   ⚠️  加载刷新配置失败，将禁用动态刷新: {e}")
+            self.refresh_config = {'enabled': False}
+            self.symbols_active = symbols.copy()
 
         self.initialized = True
 
@@ -1176,6 +1208,52 @@ class OptimizedBatchScanner:
             'api_calls': 0,  # ✅ 0次API调用
             'cache_stats': cache_stats
         }
+
+    async def refresh_symbols_list(self) -> bool:
+        """
+        动态刷新币种列表（v7.4.0方案B）
+
+        Returns:
+            bool: True=刷新成功, False=刷新失败或未启用
+        """
+        # 检查是否启用刷新
+        if not self.refresh_config.get('enabled', False):
+            return False
+
+        # 检查是否到达刷新时间
+        now = time.time()
+        refresh_interval_hours = self.refresh_config.get('refresh_interval_hours', 6)
+        refresh_interval_seconds = refresh_interval_hours * 3600
+
+        if now - self.last_refresh_time < refresh_interval_seconds:
+            return False
+
+        # 调用独立模块执行刷新
+        from ats_core.pipeline.symbol_refresh import refresh_symbols_list
+
+        try:
+            success, new_symbols = await refresh_symbols_list(
+                scanner=self,
+                client=self.client,
+                kline_cache=self.kline_cache,
+                symbols_active=self.symbols_active,
+                refresh_config=self.refresh_config
+            )
+
+            if success:
+                self.symbols_active = new_symbols
+                self.symbols = new_symbols  # 向后兼容
+                self.last_refresh_time = now
+                self.consecutive_failures = 0
+            else:
+                self.consecutive_failures += 1
+
+            return success
+
+        except Exception as e:
+            error(f"❌ 刷新失败: {e}")
+            self.consecutive_failures += 1
+            return False
 
     async def close(self):
         """关闭扫描器"""
