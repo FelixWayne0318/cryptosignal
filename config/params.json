@@ -372,7 +372,7 @@
     "_comment": "v7.4四步分层决策系统 - 基于专家实施方案",
     "_version": "v7.4.0",
     "_description": "革命性架构：不仅给方向，更给具体价格（入场/止损/止盈）",
-    "enabled": false,
+    "enabled": true,
 
     "fusion_mode": {
       "_comment": "融合模式：控制四步系统与旧系统的关系",
