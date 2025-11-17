@@ -55,6 +55,46 @@
 
 ### 最新完成（2025-11-17）
 
+- [x] **v7.4配置缓存根本问题修复** (commit: 83cdc40) ✅
+  - 🔥 P0关键修复：解决服务器始终运行v7.3.2的根本原因
+  - 问题追踪链：
+    1. 用户报告：服务器日志显示v7.3.2版本（七道闸门/旧F因子/无Step1-4输出）
+    2. 初步修复：启用four_step_system.enabled=true (commit: ff96266)
+    3. 创建诊断工具：diagnose_server_version.sh + fix_server_version.sh
+    4. 用户反馈：执行修复脚本、清理缓存、重启进程后问题仍存在
+    5. 深度诊断：发现Python缓存清理后仍有14个__pycache__目录和43个.pyc文件
+    6. 根本原因定位：CFG单例模式缓存配置，进程重启后仍不重新加载params.json
+  - 根本原因分析：
+    - CFG类在首次加载时将config/params.json缓存到_params属性
+    - 即使重启进程，新进程启动时CFG也只加载一次配置并缓存
+    - analyze_symbol.py从未显式调用CFG.reload()
+    - 导致four_step_system.enabled配置变更不生效
+  - 解决方案（三管齐下）：
+    1. **核心修复**：在analyze_symbol.py模块导入时添加CFG.reload()
+       - 位置：导入CFG后立即调用，确保每次模块加载都重新读取配置
+       - 注释：完整说明修复目的和解决的问题
+    2. **诊断日志**：添加详细配置追踪日志
+       - 显示four_step_system.enabled和fusion_mode.enabled状态
+       - 格式："🔍 [v7.4诊断] {symbol} - four_step_system.enabled={value}"
+    3. **诊断工具**：创建运行时诊断脚本
+       - diagnose_runtime.py: 检查实际加载的代码路径和配置
+       - force_reload_config.py: 测试CFG.reload()机制
+  - 代码变更：
+    - ats_core/pipeline/analyze_symbol.py:
+      * 第40-43行：添加CFG.reload()强制重载
+      * 第1986-1989行：添加配置状态诊断日志
+    - diagnose_runtime.py: 新增193行运行时诊断脚本
+    - force_reload_config.py: 新增154行配置重载测试脚本
+  - 预期效果：
+    - 服务器启动后日志显示："🔍 [v7.4诊断] BTCUSDT - four_step_system.enabled=True, fusion_mode.enabled=True"
+    - 随后显示："🚀 v7.4: 启动四步系统 - BTCUSDT (融合模式)"
+    - 完整的Step1-4输出和Entry/SL/TP价格应正常显示
+  - 技术价值：
+    - ✅ 解决配置热重载问题（无需重启进程即可应用配置变更）
+    - ✅ 提供完整的诊断工具链（问题定位→验证→修复）
+    - ✅ 增强系统可观测性（配置加载状态可见）
+  - 符合规范：SYSTEM_ENHANCEMENT_STANDARD.md §所有章节 ✅
+
 - [x] **v7.4服务器诊断和修复工具** (commit: 2529ca8) ✅
   - 🔧 问题：用户报告服务器日志仍显示v7.3版本（七道闸门/旧F因子/无Step1-4）
   - 根本原因：服务器未重启 + Python缓存 + 代码可能未更新
