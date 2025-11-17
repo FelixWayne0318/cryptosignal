@@ -55,6 +55,56 @@
 
 ### 最新完成（2025-11-17）
 
+- [x] **P2: 订单簿分析配置化改造v7.4.0** (commit: 0902b6b) ✅
+  - 🎯 需求：审计发现订单簿深度得分计算存在硬编码，违反SYSTEM_ENHANCEMENT_STANDARD §5规范
+  - 修改范围：config/params.json + ats_core/decision/step3_risk.py
+  - 核心变更：
+    1. 【Config层】params.json扩展orderbook配置块
+       - 新增depth_score_weights: OBI权重50% + 覆盖度25% + 冲击成本25%
+       - 新增obi_score: base_score=50.0, multiplier=50.0
+       - 新增coverage_scores: covered=100.0, not_covered=0.0
+       - 新增impact_cost: excellent_threshold_bps=10, acceptable=50, multiplier=2.0
+    2. 【Core层】step3_risk.py消除硬编码
+       - 行179-180: OBI基础分计算 → 从配置读取
+       - 行183-184: 覆盖度分值 → 从配置读取
+       - 行189: 冲击成本乘数 → 从配置读取
+       - 行194-196: 深度得分权重 → 从配置读取
+       - 所有参数通过orderbook_cfg.get()读取，提供默认值
+  - 技术价值：
+    - ✅ 零硬编码：移除所有Magic Number
+    - ✅ 向后兼容：默认值保持原有逻辑
+    - ✅ 便于调优：可通过配置快速实验参数
+    - ✅ 符合规范：满足SYSTEM_ENHANCEMENT_STANDARD §5统一配置管理
+  - 测试结果：✅ JSON格式验证通过，✅ 四步系统集成测试通过
+  - 影响范围：config→core层
+  - 符合规范：SYSTEM_ENHANCEMENT_STANDARD.md §所有章节 ✅
+
+- [x] **P1: 2小时多样化冷却期v7.4.0** (commit: a702f3f) ✅
+  - 🎯 需求：用户洞察 - Top 1发送机制+5分钟冷却期导致同一币种频繁出现，需要强制币种轮换
+  - 修改范围：ats_core/config/anti_jitter_config.py + scripts/realtime_signal_scanner.py
+  - 核心变更：
+    1. 【Core/Config】anti_jitter_config.py
+       - 新增get_config_2h_diversified()预设配置
+       - 配置参数：K-line=15m, K/N=2/3, cooldown=8 bars=120min=2小时
+       - 更新get_config()函数支持"2h"预设
+       - 详细设计理念注释（币种轮换/风险分散）
+    2. 【Pipeline】realtime_signal_scanner.py
+       - 从get_config("5m")切换到get_config("2h")
+       - 5分钟冷却 → 2小时冷却（cooldown_seconds: 300 → 7200）
+       - 更新日志输出标识"2小时多样化"
+  - 设计理念：
+    - 用户分析：5min冷却 + Top 1机制 → 同一币种可能在1小时内发12次
+    - 解决方案：2h冷却 → 强制其他币种竞争Top 1位置
+    - 预期效果：单币种最多12小时4次信号，强制6-12个不同币种轮换
+  - 风险管理优势：
+    - ✅ 降低单币种集中风险
+    - ✅ 提高投资组合多样化
+    - ✅ 避免同一币种频繁出现导致的信息疲劳
+    - ✅ 更好的风险分散（配合Top 1机制）
+  - 测试结果：✅ 配置加载测试通过（cooldown=7200秒=120分钟）
+  - 影响范围：config→pipeline层
+  - 符合规范：SYSTEM_ENHANCEMENT_STANDARD.md §所有章节 ✅
+
 - [x] **Step3完整集成L因子价格带法订单簿分析v7.4.0** (commit: 693ad15) ✅
   - 🎯 需求：用户指出订单簿分析已在L因子实现（liquidity_priceband.py），需要按规范集成到Step3系统中
   - 修改范围：ats_core/decision/step3_risk.py - extract_orderbook_from_L_meta()函数（84-232行）
