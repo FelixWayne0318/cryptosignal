@@ -165,13 +165,29 @@ fi
 echo -e "${GREEN}✅ Telegram配置存在${NC}"
 
 # 配置crontab（如果未配置）
+# v7.4.0方案B更新：取消2h自动重启，改为每日3am保险重启
+# 原因：方案B实现币种列表动态刷新（6h一次），无需频繁重启
+# 每日3am重启作为保险机制，避免长期运行的内存泄漏等问题
 echo ""
 echo "⏰ 配置定时任务..."
 if crontab -l 2>/dev/null | grep -q "auto_restart.sh"; then
-    echo -e "${GREEN}✅ 定时任务已配置${NC}"
+    echo -e "${YELLOW}⚠️  检测到旧的定时任务（2h重启），正在更新...${NC}"
+    # 移除旧的2h重启任务
+    crontab -l 2>/dev/null | grep -v "0 \*/2 \* \* \*" > /tmp/crontab_new 2>/dev/null || true
+    # 添加每日3am重启（如果不存在）
+    if ! grep -q "0 3 \* \* \*" /tmp/crontab_new 2>/dev/null; then
+        echo "0 3 * * * ~/cryptosignal/auto_restart.sh  # v7.4.0方案B：每日3am保险重启" >> /tmp/crontab_new
+    fi
+    # 添加日志清理任务（如果不存在）
+    if ! grep -q "cryptosignal_.*\.log" /tmp/crontab_new 2>/dev/null; then
+        echo "0 1 * * * find ~ -name 'cryptosignal_*.log' -mtime +7 -delete" >> /tmp/crontab_new
+    fi
+    crontab /tmp/crontab_new 2>/dev/null || true
+    rm -f /tmp/crontab_new
+    echo -e "${GREEN}✅ 定时任务已更新（每日3am保险重启）${NC}"
 else
-    (crontab -l 2>/dev/null; echo "0 */2 * * * ~/cryptosignal/auto_restart.sh"; echo "0 1 * * * find ~ -name 'cryptosignal_*.log' -mtime +7 -delete") | crontab -
-    echo -e "${GREEN}✅ 定时任务已添加（每2小时重启）${NC}"
+    (crontab -l 2>/dev/null; echo "0 3 * * * ~/cryptosignal/auto_restart.sh  # v7.4.0方案B：每日3am保险重启"; echo "0 1 * * * find ~ -name 'cryptosignal_*.log' -mtime +7 -delete") | crontab -
+    echo -e "${GREEN}✅ 定时任务已添加（每日3am保险重启）${NC}"
 fi
 
 # 添加执行权限
