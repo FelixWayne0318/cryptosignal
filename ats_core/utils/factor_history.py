@@ -115,10 +115,35 @@ def _calculate_factors_at_time(
     """
     scores = {}
 
-    # 准备K线数据
-    h = [k.get('high', 0) for k in klines]
-    l = [k.get('low', 0) for k in klines]
-    c = [k.get('close', 0) for k in klines]
+    # v7.4 P0修复：兼容不同K线数据格式
+    # Binance K线可能是字典格式或列表格式：
+    # - 字典格式: [{open: x, high: y, low: z, close: w, volume: v}, ...]
+    # - 列表格式: [[timestamp, open, high, low, close, volume, ...], ...]
+    def extract_kline_values(klines):
+        """提取K线的high/low/close值，兼容不同格式"""
+        h_list, l_list, c_list = [], [], []
+
+        for k in klines:
+            if isinstance(k, dict):
+                # 字典格式
+                h_list.append(k.get('high', 0))
+                l_list.append(k.get('low', 0))
+                c_list.append(k.get('close', 0))
+            elif isinstance(k, (list, tuple)) and len(k) >= 5:
+                # 列表格式: [timestamp, open, high, low, close, ...]
+                h_list.append(float(k[2]) if k[2] else 0)  # high
+                l_list.append(float(k[3]) if k[3] else 0)  # low
+                c_list.append(float(k[4]) if k[4] else 0)  # close
+            else:
+                # 未知格式，使用0
+                h_list.append(0)
+                l_list.append(0)
+                c_list.append(0)
+
+        return h_list, l_list, c_list
+
+    # 准备K线数据（兼容不同格式）
+    h, l, c = extract_kline_values(klines)
 
     # ---- T因子（趋势）：完整计算 ----
     try:
