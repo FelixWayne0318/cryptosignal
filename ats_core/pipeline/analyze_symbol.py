@@ -1973,12 +1973,19 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
             "phase2_note": "成熟币使用标准数据流",
         }
 
-    # ---- 4. v7.4: 四步系统集成（Dual Run模式）----
-    # 当four_step_system.enabled=true时，并行运行四步系统
-    # 旧系统（v6.6权重加分）结果保持不变，四步系统结果作为额外信息
+    # ---- 4. v7.4: 四步系统集成（支持融合模式）----
+    # 模式说明：
+    #   fusion_mode.enabled=false: Dual Run模式（旧系统+并行新系统）
+    #   fusion_mode.enabled=true:  融合模式（新系统替代旧系统决策）
     if params.get("four_step_system", {}).get("enabled", False):
         try:
-            log(f"🚀 v7.4: 启动四步系统 - {symbol}")
+            # 读取融合模式配置（零硬编码）
+            fusion_config = params.get("four_step_system", {}).get("fusion_mode", {})
+            fusion_enabled = fusion_config.get("enabled", False)
+            preserve_old_fields = fusion_config.get("compatibility_mode", {}).get("preserve_old_fields", True)
+
+            mode_desc = "融合模式" if fusion_enabled else "Dual Run模式"
+            log(f"🚀 v7.4: 启动四步系统 - {symbol} ({mode_desc})")
 
             # 4.1 准备历史因子序列（用于Step2 Enhanced F v2）
             from ats_core.utils.factor_history import get_factor_scores_series
@@ -2012,23 +2019,77 @@ def analyze_symbol(symbol: str) -> Dict[str, Any]:
                 params=params
             )
 
-            # 4.4 添加四步系统结果到result
-            result["four_step_decision"] = four_step_result
+            # 4.4 融合模式：让四步系统决策覆盖旧系统
+            if fusion_enabled and four_step_result.get("decision") in ["ACCEPT", "REJECT"]:
+                # 保存旧系统结果（用于对比日志）
+                old_is_prime = result.get("is_prime", False)
+                old_side_long = result.get("side_long", False)
+                old_prime_strength = result.get("prime_strength", 0)
 
-            # 4.5 Dual Run对比日志
-            old_signal = "LONG" if result.get("side_long", False) else "SHORT"
-            new_decision = four_step_result.get("decision", "UNKNOWN")
-            new_action = four_step_result.get("action", "N/A")
+                # 四步系统决策覆盖主决策标志
+                new_decision = four_step_result["decision"]
+                result["is_prime"] = (new_decision == "ACCEPT")
 
-            log(f"📊 Dual Run对比 - {symbol}:")
-            log(f"   旧系统(v6.6): {old_signal} | Prime={result.get('is_prime', False)} | 强度={result.get('prime_strength', 0):.1f}")
-            if new_decision == "ACCEPT":
-                log(f"   新系统(v7.4): {new_action} ACCEPT | Entry={four_step_result.get('entry_price'):.6f} | "
-                    f"SL={four_step_result.get('stop_loss'):.6f} | TP={four_step_result.get('take_profit'):.6f} | "
-                    f"RR={four_step_result.get('risk_reward_ratio'):.2f}")
+                if new_decision == "ACCEPT":
+                    # ACCEPT：使用四步系统的方向和价格
+                    result["side_long"] = (four_step_result["action"] == "LONG")
+
+                    # 添加四步系统特有的价格信息到主结果
+                    result["entry_price"] = four_step_result.get("entry_price")
+                    result["stop_loss"] = four_step_result.get("stop_loss")
+                    result["take_profit"] = four_step_result.get("take_profit")
+                    result["risk_reward_ratio"] = four_step_result.get("risk_reward_ratio")
+
+                    # 映射四步系统强度到prime_strength（兼容性）
+                    result["prime_strength"] = four_step_result.get("step1_direction", {}).get("final_strength", 0)
+
+                else:
+                    # REJECT：设置为不发送信号
+                    result["is_prime"] = False
+                    # side_long保持不变（用于统计分析）
+
+                # 如果启用了兼容模式，保留旧系统字段
+                if preserve_old_fields:
+                    result["v6_decision"] = {
+                        "is_prime": old_is_prime,
+                        "side_long": old_side_long,
+                        "prime_strength": old_prime_strength,
+                        "note": "旧系统决策（已被四步系统覆盖）"
+                    }
+
+                # 融合模式日志（显示决策变化）
+                log(f"🔀 融合模式决策 - {symbol}:")
+                log(f"   旧系统(v6.6): Prime={old_is_prime} | 强度={old_prime_strength:.1f}")
+                log(f"   新系统(v7.4): {'✅ ACCEPT' if new_decision == 'ACCEPT' else '❌ REJECT'}")
+
+                if new_decision == "ACCEPT":
+                    log(f"   → 方向: {four_step_result['action']}")
+                    log(f"   → Entry: {result['entry_price']:.6f}")
+                    log(f"   → SL: {result['stop_loss']:.6f}")
+                    log(f"   → TP: {result['take_profit']:.6f}")
+                    log(f"   → RR: {result['risk_reward_ratio']:.2f}")
+                else:
+                    log(f"   → 拒绝阶段: {four_step_result.get('reject_stage', 'unknown')}")
+                    log(f"   → 原因: {four_step_result.get('reject_reason', 'N/A')}")
+
             else:
-                log(f"   新系统(v7.4): REJECT at {four_step_result.get('reject_stage', 'unknown')} | "
-                    f"原因: {four_step_result.get('reject_reason', 'N/A')}")
+                # Dual Run模式：四步系统仅作为额外信息
+                old_signal = "LONG" if result.get("side_long", False) else "SHORT"
+                new_decision = four_step_result.get("decision", "UNKNOWN")
+                new_action = four_step_result.get("action", "N/A")
+
+                log(f"📊 Dual Run对比 - {symbol}:")
+                log(f"   旧系统(v6.6): {old_signal} | Prime={result.get('is_prime', False)} | 强度={result.get('prime_strength', 0):.1f}")
+                if new_decision == "ACCEPT":
+                    log(f"   新系统(v7.4): {new_action} ACCEPT | Entry={four_step_result.get('entry_price'):.6f} | "
+                        f"SL={four_step_result.get('stop_loss'):.6f} | TP={four_step_result.get('take_profit'):.6f} | "
+                        f"RR={four_step_result.get('risk_reward_ratio'):.2f}")
+                else:
+                    log(f"   新系统(v7.4): REJECT at {four_step_result.get('reject_stage', 'unknown')} | "
+                        f"原因: {four_step_result.get('reject_reason', 'N/A')}")
+
+            # 4.5 添加四步系统完整结果到metadata
+            result["four_step_decision"] = four_step_result
 
         except Exception as e:
             from ats_core.logging import warn

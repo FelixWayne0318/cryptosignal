@@ -1388,62 +1388,109 @@ def _six_block(r: Dict[str, Any]) -> str:
 
 def _pricing_block(r: Dict[str, Any]) -> str:
     """
-    生成价格信息块（v6.7简洁增强版）
+    生成价格信息块（v7.4四步系统增强版）
+
+    支持两种模式：
+    1. v7.4四步系统：显示Entry/SL/TP + RR（来自四步决策）
+    2. v6.x旧系统：显示入场区间 + 止损止盈（来自旧定价逻辑）
 
     显示：
-    - 入场区间
-    - 止损（距离% · 方法 · 置信度）
-    - 止盈1/2（距离%）
+    - 入场价格（四步系统单价 或 旧系统区间）
+    - 止损（价格 + 距离/方法/置信度）
+    - 止盈（价格 + 距离）
     - 盈亏比
     """
-    # 获取价格数据
-    price = _get(r, "price") or _get(r, "last") or 0
-    stop_loss = _get_dict(r, "stop_loss")
-    take_profit = _get_dict(r, "take_profit")
-    pricing = _get_dict(r, "pricing")
-
     lines = []
 
-    # 入场区间
-    entry_lo = pricing.get("entry_lo") or price
-    entry_hi = pricing.get("entry_hi") or price
-    if abs(entry_lo - entry_hi) < 0.0001:
-        lines.append(f"📍 入场价: {_fmt_price(entry_lo)}")
-    else:
-        lines.append(f"📍 入场区间: {_fmt_price(entry_lo)} - {_fmt_price(entry_hi)}")
+    # 【v7.4新增】检测四步系统价格字段（零硬编码：使用.get()）
+    has_four_step_prices = (
+        r.get("entry_price") is not None and
+        r.get("stop_loss") is not None and
+        r.get("take_profit") is not None
+    )
 
-    # 止损（增强显示）
-    sl_price = stop_loss.get("stop_price")
-    if sl_price:
-        sl_distance_pct = stop_loss.get("distance_pct", 0)
-        sl_method_cn = stop_loss.get("method_cn", "")
-        sl_confidence = stop_loss.get("confidence", 0)
+    if has_four_step_prices:
+        # ========== v7.4四步系统模式：显示具体价格 ==========
+        entry_price = r.get("entry_price", 0)
+        stop_loss_price = r.get("stop_loss", 0)
+        take_profit_price = r.get("take_profit", 0)
+        rr_ratio = r.get("risk_reward_ratio", 0)
 
-        # 构建止损描述
-        sl_details = []
-        if sl_distance_pct:
-            sl_details.append(f"距离{abs(sl_distance_pct):.1%}")
-        if sl_method_cn:
-            sl_details.append(sl_method_cn)
-        if sl_confidence:
-            sl_details.append(f"置信{sl_confidence}")
+        # 入场价
+        lines.append(f"💰 入场价: {_fmt_price(entry_price)}")
 
-        if sl_details:
-            lines.append(f"🛑 止损: {_fmt_price(sl_price)} ({' · '.join(sl_details)})")
+        # 止损（计算距离百分比）
+        if entry_price > 0 and stop_loss_price > 0:
+            sl_distance_pct = abs(stop_loss_price - entry_price) / entry_price
+            lines.append(f"🛡️  止损: {_fmt_price(stop_loss_price)} (距离{sl_distance_pct:.1%})")
         else:
-            lines.append(f"🛑 止损: {_fmt_price(sl_price)}")
+            lines.append(f"🛡️  止损: {_fmt_price(stop_loss_price)}")
 
-    # 止盈1
-    tp1_price = take_profit.get("price") or pricing.get("tp1")
-    if tp1_price and price:
-        tp1_dist_pct = abs(tp1_price - price) / price
-        lines.append(f"🎯 止盈1: {_fmt_price(tp1_price)} (距离{tp1_dist_pct:.1%})")
+        # 止盈（计算距离百分比）
+        if entry_price > 0 and take_profit_price > 0:
+            tp_distance_pct = abs(take_profit_price - entry_price) / entry_price
+            lines.append(f"🎯 止盈: {_fmt_price(take_profit_price)} (距离{tp_distance_pct:.1%})")
+        else:
+            lines.append(f"🎯 止盈: {_fmt_price(take_profit_price)}")
 
-    # 止盈2（如果有）
-    tp2_price = pricing.get("tp2")
-    if tp2_price and price:
-        tp2_dist_pct = abs(tp2_price - price) / price
-        lines.append(f"🎯 止盈2: {_fmt_price(tp2_price)} (距离{tp2_dist_pct:.1%})")
+        # 盈亏比（带emoji反馈）
+        if rr_ratio >= 2.0:
+            rr_emoji = "✅"
+        elif rr_ratio >= 1.5:
+            rr_emoji = "⚠️"
+        else:
+            rr_emoji = "❌"
+
+        lines.append(f"📈 盈亏比: 1:{rr_ratio:.2f} {rr_emoji}")
+
+    else:
+        # ========== v6.x旧系统模式：保持原有逻辑 ==========
+        # 获取价格数据
+        price = _get(r, "price") or _get(r, "last") or 0
+        stop_loss = _get_dict(r, "stop_loss")
+        take_profit = _get_dict(r, "take_profit")
+        pricing = _get_dict(r, "pricing")
+
+        # 入场区间
+        entry_lo = pricing.get("entry_lo") or price
+        entry_hi = pricing.get("entry_hi") or price
+        if abs(entry_lo - entry_hi) < 0.0001:
+            lines.append(f"📍 入场价: {_fmt_price(entry_lo)}")
+        else:
+            lines.append(f"📍 入场区间: {_fmt_price(entry_lo)} - {_fmt_price(entry_hi)}")
+
+        # 止损（增强显示）
+        sl_price = stop_loss.get("stop_price")
+        if sl_price:
+            sl_distance_pct = stop_loss.get("distance_pct", 0)
+            sl_method_cn = stop_loss.get("method_cn", "")
+            sl_confidence = stop_loss.get("confidence", 0)
+
+            # 构建止损描述
+            sl_details = []
+            if sl_distance_pct:
+                sl_details.append(f"距离{abs(sl_distance_pct):.1%}")
+            if sl_method_cn:
+                sl_details.append(sl_method_cn)
+            if sl_confidence:
+                sl_details.append(f"置信{sl_confidence}")
+
+            if sl_details:
+                lines.append(f"🛑 止损: {_fmt_price(sl_price)} ({' · '.join(sl_details)})")
+            else:
+                lines.append(f"🛑 止损: {_fmt_price(sl_price)}")
+
+        # 止盈1
+        tp1_price = take_profit.get("price") or pricing.get("tp1")
+        if tp1_price and price:
+            tp1_dist_pct = abs(tp1_price - price) / price
+            lines.append(f"🎯 止盈1: {_fmt_price(tp1_price)} (距离{tp1_dist_pct:.1%})")
+
+        # 止盈2（如果有）
+        tp2_price = pricing.get("tp2")
+        if tp2_price and price:
+            tp2_dist_pct = abs(tp2_price - price) / price
+            lines.append(f"🎯 止盈2: {_fmt_price(tp2_price)} (距离{tp2_dist_pct:.1%})")
 
     if lines:
         return "\n" + "\n".join(lines)

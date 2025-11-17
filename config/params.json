@@ -374,6 +374,17 @@
     "_description": "革命性架构：不仅给方向，更给具体价格（入场/止损/止盈）",
     "enabled": false,
 
+    "fusion_mode": {
+      "_comment": "融合模式：控制四步系统与旧系统的关系",
+      "_description": "true=四步系统替代旧系统（真正融合），false=并行模式（仅对比）",
+      "enabled": true,
+      "compatibility_mode": {
+        "_comment": "兼容性设置：确保向后兼容",
+        "preserve_old_fields": true,
+        "_description": "true=保留旧系统字段（is_prime等），false=仅用新系统字段"
+      }
+    },
+
     "step1_direction": {
       "_comment": "Step1: 方向确认层 - A层因子 + I因子置信度 + BTC对齐 + 硬veto",
       "min_final_strength": 20.0,
