@@ -1,14 +1,19 @@
 # coding: utf-8
 """
-Backtest Framework v1.0 - Backtest Engine
-回测框架 - 回测引擎
+Backtest Framework v1.5 - Backtest Engine (P0 Fixes)
+回测框架 - 回测引擎（生产级修复）
 
 功能：
 1. 时间循环模拟（按小时步进）
 2. 调用四步系统生成信号
-3. 模拟订单执行（滑点、手续费）
-4. 头寸生命周期跟踪（SL/TP监控）
+3. 模拟订单执行（限价单模型、滑点、手续费）
+4. 头寸生命周期跟踪（悲观SL/TP监控）
 5. 结果收集与返回
+
+v1.5 P0修复（专家方案）:
+- 限价单模型：信号t生成，t+1开始尝试成交，max_entry_bars有效期
+- 手续费建模：双边Taker手续费（0.05%），从PnL扣除
+- 悲观SL/TP假设：同bar触发时优先止损
 
 Standard: SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0
 Design: docs/BACKTEST_FRAMEWORK_v1.0_DESIGN.md
@@ -206,34 +211,36 @@ class BacktestEngine:
         Returns:
             BacktestResult: 回测结果（包含所有信号和元数据）
 
-        算法流程:
+        算法流程 (v1.5 限价单模型):
         1. For each timestamp in [start_time, end_time] (hourly step):
-            2. For each symbol:
-                3. Fetch historical klines up to current timestamp
-                4. Calculate factor scores via analyze_symbol_with_preloaded_klines()
-                5. Check if signal generated (four_step_system.decision == ACCEPT)
-                6. If signal:
-                    7. Check cooldown (Anti-Jitter)
-                    8. Simulate order execution (entry price ± slippage)
-                    9. Add to active positions
+            2. Try to fill pending entry orders (limit order model)
+            3. For each symbol:
+                4. Fetch historical klines up to current timestamp
+                5. Calculate factor scores via analyze_symbol_with_preloaded_klines()
+                6. Check if signal generated (four_step_system.decision == ACCEPT)
+                7. If signal:
+                    8. Check cooldown (Anti-Jitter)
+                    9. Add to pending_entries queue (entry attempt starts at t+1)
             10. For each active position:
-                11. Monitor current candle for SL/TP hit
+                11. Monitor current candle for SL/TP hit (pessimistic assumption)
                 12. If hit: close position, record signal
-        13. Return BacktestResult with all signals and metadata
+            13. Expire pending entries that exceed max_entry_bars
+        14. Return BacktestResult with all signals and metadata
         """
         interval = interval or self.data_loader.default_interval
         interval_ms = self._interval_to_ms(interval)
 
         logger.info(
-            f"开始回测: symbols={symbols}, "
+            f"开始回测 (v1.5限价单模型): symbols={symbols}, "
             f"time_range={self._format_timestamp(start_time)}-{self._format_timestamp(end_time)}, "
-            f"interval={interval}"
+            f"interval={interval}, max_entry_bars={self.max_entry_bars}"
         )
 
         # 统计信息
         total_iterations = 0
         all_signals: List[SimulatedSignal] = []
         active_positions: List[SimulatedSignal] = []
+        pending_entries: List[SimulatedSignal] = []  # v1.5新增：待入场队列
         last_signal_time_by_symbol: Dict[str, int] = {}
 
         # 开始计时
@@ -251,8 +258,43 @@ class BacktestEngine:
                     f"回测进度: {total_iterations} iterations, "
                     f"timestamp={self._format_timestamp(current_timestamp)}, "
                     f"signals={len(all_signals)}, "
-                    f"active_positions={len(active_positions)}"
+                    f"active_positions={len(active_positions)}, "
+                    f"pending_entries={len(pending_entries)}"
                 )
+
+            # v1.5 P0修复：尝试成交待入场订单（限价单模型）
+            filled_entries = []
+            expired_entries = []
+
+            for pending in pending_entries:
+                # 检查是否到达入场尝试时间
+                if current_timestamp < pending.entry_attempt_time:
+                    continue  # 尚未到达入场时间
+
+                # 尝试成交限价单
+                filled, expired = self._try_fill_pending_entry(
+                    pending, current_timestamp, interval_ms
+                )
+
+                if filled:
+                    # 成交成功：添加到活跃头寸
+                    active_positions.append(pending)
+                    filled_entries.append(pending)
+                    logger.info(
+                        f"✅ 限价单成交: {pending.symbol} {pending.side.upper()} @ {pending.entry_price_actual:.4f} "
+                        f"(delay={(current_timestamp - pending.timestamp) / 3600000:.1f}h)"
+                    )
+                elif expired:
+                    # 超时未成交：标记为ENTRY_NOT_FILLED
+                    expired_entries.append(pending)
+                    logger.info(
+                        f"⏱️ 限价单超时: {pending.symbol} {pending.side.upper()} "
+                        f"(waited={(current_timestamp - pending.entry_attempt_time) / 3600000:.1f}h)"
+                    )
+
+            # 移除已成交和已超时的订单
+            for entry in filled_entries + expired_entries:
+                pending_entries.remove(entry)
 
             # 遍历所有符号
             for symbol in symbols:
@@ -336,19 +378,18 @@ class BacktestEngine:
                         step4_result=analysis_result.get("four_step_decision", {}).get("step4", {})
                     )
 
-                    # 模拟订单执行（滑点）
-                    self._simulate_order_execution(signal)
-
-                    # 添加到活跃头寸
-                    active_positions.append(signal)
-                    all_signals.append(signal)
+                    # v1.5 P0修复：不立即执行，加入待入场队列（限价单模型）
+                    signal.entry_attempt_time = current_timestamp + interval_ms  # 下一个bar开始尝试
+                    pending_entries.append(signal)
+                    all_signals.append(signal)  # 记录信号（无论是否最终成交）
 
                     # 更新最后信号时间（Anti-Jitter）
                     last_signal_time_by_symbol[symbol] = current_timestamp
 
                     logger.info(
                         f"📊 信号生成: {symbol} {side.upper()} @ {entry_price_rec:.4f} "
-                        f"(SL={stop_loss_rec:.4f}, TP1={take_profit_1_rec:.4f})"
+                        f"(SL={stop_loss_rec:.4f}, TP1={take_profit_1_rec:.4f}) "
+                        f"[pending entry attempt at {self._format_timestamp(signal.entry_attempt_time)}]"
                     )
 
                 except Exception as e:
@@ -400,6 +441,79 @@ class BacktestEngine:
 
         return BacktestResult(signals=all_signals, metadata=metadata)
 
+    def _try_fill_pending_entry(
+        self,
+        signal: SimulatedSignal,
+        current_timestamp: int,
+        interval_ms: int
+    ) -> tuple[bool, bool]:
+        """
+        尝试成交待入场限价单（v1.5 P0修复）
+
+        Args:
+            signal: 待入场信号
+            current_timestamp: 当前时间戳（毫秒）
+            interval_ms: K线周期（毫秒）
+
+        Returns:
+            (filled, expired): filled=是否成交, expired=是否超时
+
+        限价单成交逻辑:
+        - 检查当前bar的high/low是否覆盖推荐入场价
+        - 做多：low <= entry_price_recommended <= high → 成交
+        - 做空：同样逻辑
+        - 如果成交：应用滑点、计算手续费、标记entry_filled=True
+        - 如果超时（waited > max_entry_bars）：标记为ENTRY_NOT_FILLED
+        """
+        # 检查是否超时
+        bars_waited = (current_timestamp - signal.entry_attempt_time) // interval_ms
+        if bars_waited >= self.max_entry_bars:
+            # 超时未成交
+            signal.exit_reason = self.exit_classification["entry_not_filled"]["label"]
+            signal.exit_time = current_timestamp
+            return (False, True)
+
+        # 加载当前K线
+        try:
+            current_klines = self.data_loader.load_klines(
+                signal.symbol,
+                start_time=current_timestamp - interval_ms,
+                end_time=current_timestamp,
+                interval=self.data_loader.default_interval
+            )
+
+            if not current_klines:
+                return (False, False)  # 无K线数据，继续等待
+
+            current_kline = current_klines[-1]
+            high = current_kline["high"]
+            low = current_kline["low"]
+
+            # 检查是否可以成交（推荐价格在当前bar的范围内）
+            entry_rec = signal.entry_price_recommended
+            can_fill = low <= entry_rec <= high
+
+            if can_fill:
+                # 成交！应用滑点模拟
+                self._simulate_order_execution(signal)
+
+                # 标记成交
+                signal.entry_filled = True
+                signal.entry_filled_time = current_timestamp
+
+                # 计算入场手续费
+                entry_fee = self._calculate_fees(signal.entry_price_actual, self.position_size_usdt)
+                signal.fees_paid += entry_fee
+
+                return (True, False)
+            else:
+                # 未成交，继续等待
+                return (False, False)
+
+        except Exception as e:
+            logger.error(f"限价单成交检查失败: {signal.symbol} - {e}")
+            return (False, False)
+
     def _simulate_order_execution(self, signal: SimulatedSignal) -> None:
         """
         模拟订单执行（滑点模拟）
@@ -409,7 +523,7 @@ class BacktestEngine:
 
         滑点模型（§6.1 Base + Range模式）:
         - slippage = slippage_percent ± random(slippage_range)
-        - 例如: 0.1% ± 0.05% → [0.05%, 0.15%]
+        - 例如: 0.02% ± 0.01% → [0.01%, 0.03%]
         - 做多：entry_actual = entry_rec * (1 + slippage)（稍高买入）
         - 做空：entry_actual = entry_rec * (1 - slippage)（稍低卖出）
         """
@@ -434,6 +548,27 @@ class BacktestEngine:
             signal.take_profit_1_actual = signal.take_profit_1_recommended
             signal.take_profit_2_actual = signal.take_profit_2_recommended
 
+    def _calculate_fees(self, price: float, position_size_usdt: float) -> float:
+        """
+        计算交易手续费（v1.5 P0修复）
+
+        Args:
+            price: 成交价格
+            position_size_usdt: 仓位大小（USDT）
+
+        Returns:
+            手续费（USDT）
+
+        手续费模型:
+        - Taker手续费率：0.05% (默认值，从配置读取)
+        - 费用 = 名义价值 * 手续费率
+        - 名义价值 = position_size_usdt (简化版，v1.0使用固定仓位)
+        - 双边收费：入场 + 出场各收一次
+        """
+        notional_value = position_size_usdt
+        fee = notional_value * self.taker_fee_rate
+        return round(fee, 4)
+
     def _monitor_active_positions(
         self,
         active_positions: List[SimulatedSignal],
@@ -451,12 +586,13 @@ class BacktestEngine:
         Returns:
             仍然活跃的头寸列表（已平仓的会被移除）
 
-        监控逻辑:
+        监控逻辑 (v1.5 P0修复 - 悲观假设):
         1. 加载当前K线（包含high/low价格）
         2. 检查SL触发：low ≤ SL (做多) 或 high ≥ SL (做空)
         3. 检查TP触发：high ≥ TP (做多) 或 low ≤ TP (做空)
-        4. 检查超时：holding_hours > max_holding_hours
-        5. 如果触发任一条件，平仓并移除
+        4. **悲观假设**：如果SL和TP同时触发，优先认为SL触发（先检查SL）
+        5. 检查超时：holding_hours > max_holding_hours
+        6. 如果触发任一条件，平仓并移除
         """
         still_active = []
 
@@ -483,9 +619,20 @@ class BacktestEngine:
                 high = current_kline["high"]
                 low = current_kline["low"]
 
-                # 检查止损触发
+                # v1.5 P0修复：悲观假设 - 先检查SL，如果同时触发则优先SL
                 sl_hit = self._check_stop_loss_hit(position, high, low)
+                tp_hit, tp_level = self._check_take_profit_hit(position, high, low)
+
+                if sl_hit and tp_hit:
+                    # 同时触发：悲观假设，认为SL先触发
+                    logger.debug(
+                        f"⚠️ SL/TP同时触发（悲观假设）: {position.symbol} "
+                        f"SL={position.stop_loss_actual:.4f}, TP={position.take_profit_1_actual:.4f}, "
+                        f"bar_range=[{low:.4f}, {high:.4f}] → 优先SL"
+                    )
+
                 if sl_hit:
+                    # 止损触发（或SL/TP同时触发时优先止损）
                     self._close_position(
                         position,
                         exit_time=current_timestamp,
@@ -494,9 +641,8 @@ class BacktestEngine:
                     )
                     continue
 
-                # 检查止盈触发
-                tp_hit, tp_level = self._check_take_profit_hit(position, high, low)
                 if tp_hit:
+                    # 止盈触发（仅当SL未触发时）
                     tp_price = (
                         position.take_profit_1_actual if tp_level == 1
                         else position.take_profit_2_actual
@@ -606,19 +752,31 @@ class BacktestEngine:
             exit_time: 退出时间（毫秒）
             exit_price: 退出价格
             exit_reason: 退出原因
+
+        v1.5 P0修复:
+        - 计算出场手续费
+        - PnL减去总手续费（入场+出场）
         """
         position.exit_time = exit_time
         position.exit_price = exit_price
         position.exit_reason = exit_reason
 
-        # 计算盈亏
+        # v1.5 P0修复：计算出场手续费
+        exit_fee = self._calculate_fees(exit_price, self.position_size_usdt)
+        position.fees_paid += exit_fee
+
+        # 计算盈亏（百分比）
         if position.side == "long":
             pnl_pct = (exit_price - position.entry_price_actual) / position.entry_price_actual * 100
         else:
             pnl_pct = (position.entry_price_actual - exit_price) / position.entry_price_actual * 100
 
         position.pnl_percent = round(pnl_pct, 2)
-        position.pnl_usdt = round(self.position_size_usdt * pnl_pct / 100, 2)
+
+        # v1.5 P0修复：PnL减去手续费
+        pnl_usdt_gross = self.position_size_usdt * pnl_pct / 100
+        pnl_usdt_net = pnl_usdt_gross - position.fees_paid
+        position.pnl_usdt = round(pnl_usdt_net, 2)
 
         # 计算持仓时长
         position.holding_hours = round(
@@ -628,7 +786,8 @@ class BacktestEngine:
 
         logger.info(
             f"📉 平仓: {position.symbol} {position.side.upper()} "
-            f"PnL={position.pnl_percent:+.2f}% ({position.pnl_usdt:+.2f} USDT), "
+            f"PnL={position.pnl_percent:+.2f}% ({position.pnl_usdt:+.2f} USDT net), "
+            f"fees={position.fees_paid:.2f} USDT, "
             f"holding={position.holding_hours:.1f}h, "
             f"reason={exit_reason}"
         )
