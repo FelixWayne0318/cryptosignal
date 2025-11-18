@@ -1,26 +1,21 @@
 #!/bin/bash
 # ==========================================
-# CryptoSignal v7.4.0方案B 生产环境部署脚本（模板）
+# CryptoSignal v7.4.0方案B 生产环境部署脚本（交互式版本）
 # ==========================================
-# 用途：全新服务器一键部署（包含敏感信息）
-# 保存位置：本地电脑，使用Termius上传执行
-# ⚠️  安全警告：此文件包含敏感信息，绝对不要推送到Git！
-# ==========================================
-#
-# 🔧 v2修复内容：
-#   - 修复自动启动导致SSH断开的问题
-#   - 提供screen/nohup/前台三种启动方式
-#   - 添加详细错误日志
-#   - 优化交互式提示
-# ==========================================
-#
+# 用途：全新服务器一键部署（运行时交互式输入敏感信息）
 # 使用方法：
-#   1. 【重要】在本地电脑上填写下方【敏感信息配置区】
-#   2. 保存文件：deploy_cryptosignal_v740.sh
-#   3. 使用Termius上传到服务器: scp deploy_cryptosignal_v740.sh root@YOUR_SERVER_IP:~
-#   4. SSH连接到服务器
-#   5. 执行: chmod +x ~/deploy_cryptosignal_v740.sh && ~/deploy_cryptosignal_v740.sh
-#   6. 部署完成后删除: rm ~/deploy_cryptosignal_v740.sh
+#   1. 上传到服务器: scp docs/deploy_server_v740_TEMPLATE.sh root@YOUR_SERVER_IP:~/deploy.sh
+#   2. SSH连接到服务器
+#   3. 执行: chmod +x ~/deploy.sh && ~/deploy.sh
+#   4. 根据提示输入GitHub Token、Binance API等敏感信息
+#   5. 部署完成后自动删除
+# ==========================================
+#
+# 🔧 v3交互式版本：
+#   - ✅ 运行时交互式输入敏感信息（无需预填写）
+#   - ✅ 敏感信息输入隐藏显示（read -s）
+#   - ✅ 自动清理临时文件（无残留）
+#   - ✅ 修复SSH断开问题（提供screen启动选项）
 # ==========================================
 
 set -e  # 遇到错误立即退出
@@ -37,42 +32,6 @@ error_handler() {
     echo ""
     exit 1
 }
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 【敏感信息配置区】- 在本地电脑上填写以下真实信息
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-# ============================================
-# 1. GitHub配置（必填）
-# ============================================
-GITHUB_TOKEN="YOUR_GITHUB_TOKEN_HERE"                   # GitHub Personal Access Token
-GITHUB_USER="YOUR_GITHUB_USERNAME"                      # GitHub用户名
-GITHUB_REPO="cryptosignal"                              # 仓库名
-GITHUB_BRANCH="main"                                    # 分支名（可修改）
-
-# ============================================
-# 2. Binance API配置（必填）
-# ============================================
-BINANCE_API_KEY="YOUR_BINANCE_API_KEY_HERE"             # Binance API Key
-BINANCE_API_SECRET="YOUR_BINANCE_API_SECRET_HERE"       # Binance API Secret
-BINANCE_TESTNET="false"                                 # 是否使用测试网（true/false）
-
-# ============================================
-# 3. Telegram配置（可选，不用可留空）
-# ============================================
-TELEGRAM_ENABLED="false"                                # 是否启用Telegram通知（true/false）
-TELEGRAM_BOT_TOKEN=""                                   # Telegram Bot Token（如不使用留空）
-TELEGRAM_CHAT_ID=""                                     # Telegram Chat ID（如不使用留空）
-
-# ============================================
-# 4. 服务器配置
-# ============================================
-SERVER_TIMEZONE="Asia/Singapore"                        # 服务器时区
-PYTHON_VERSION="3.10"                                   # Python版本要求（建议3.9+）
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 【部署流程】- 以下代码无需修改
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # 颜色定义
 RED='\033[0;31m'
@@ -94,57 +53,136 @@ print_warning() { echo -e "${YELLOW}⚠️  $1${NC}"; }
 print_error() { echo -e "${RED}❌ $1${NC}"; }
 print_info() { echo -e "${CYAN}ℹ️  $1${NC}"; }
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 【交互式配置向导】- 运行时输入敏感信息
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+clear
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}    CryptoSignal v7.4.0 部署配置向导${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo -e "${CYAN}请根据提示输入配置信息（敏感信息输入时不显示）${NC}"
+echo ""
+
+# ============================================
+# 1. GitHub配置
+# ============================================
+echo -e "${BLUE}━━━ 1. GitHub配置 (必填) ━━━${NC}"
+echo ""
+
+read -p "GitHub用户名: " GITHUB_USER
+while [ -z "$GITHUB_USER" ]; do
+    print_error "GitHub用户名不能为空"
+    read -p "GitHub用户名: " GITHUB_USER
+done
+
+echo -n "GitHub Token (输入隐藏): "
+read -s GITHUB_TOKEN
+echo ""
+while [ -z "$GITHUB_TOKEN" ]; do
+    print_error "GitHub Token不能为空"
+    echo -n "GitHub Token (输入隐藏): "
+    read -s GITHUB_TOKEN
+    echo ""
+done
+
+read -p "仓库名 [cryptosignal]: " GITHUB_REPO
+GITHUB_REPO=${GITHUB_REPO:-cryptosignal}
+
+read -p "分支名 [main]: " GITHUB_BRANCH
+GITHUB_BRANCH=${GITHUB_BRANCH:-main}
+
+print_success "GitHub配置完成"
+echo ""
+
+# ============================================
+# 2. Binance API配置
+# ============================================
+echo -e "${BLUE}━━━ 2. Binance API配置 (必填) ━━━${NC}"
+echo ""
+
+read -p "Binance API Key: " BINANCE_API_KEY
+while [ -z "$BINANCE_API_KEY" ]; do
+    print_error "Binance API Key不能为空"
+    read -p "Binance API Key: " BINANCE_API_KEY
+done
+
+echo -n "Binance API Secret (输入隐藏): "
+read -s BINANCE_API_SECRET
+echo ""
+while [ -z "$BINANCE_API_SECRET" ]; do
+    print_error "Binance API Secret不能为空"
+    echo -n "Binance API Secret (输入隐藏): "
+    read -s BINANCE_API_SECRET
+    echo ""
+done
+
+read -p "使用测试网? (true/false) [false]: " BINANCE_TESTNET
+BINANCE_TESTNET=${BINANCE_TESTNET:-false}
+
+print_success "Binance配置完成"
+echo ""
+
+# ============================================
+# 3. Telegram配置
+# ============================================
+echo -e "${BLUE}━━━ 3. Telegram通知配置 (可选) ━━━${NC}"
+echo ""
+
+read -p "启用Telegram通知? (true/false) [false]: " TELEGRAM_ENABLED
+TELEGRAM_ENABLED=${TELEGRAM_ENABLED:-false}
+
+if [ "$TELEGRAM_ENABLED" = "true" ]; then
+    read -p "Telegram Bot Token: " TELEGRAM_BOT_TOKEN
+    read -p "Telegram Chat ID: " TELEGRAM_CHAT_ID
+    print_success "Telegram配置完成"
+else
+    TELEGRAM_BOT_TOKEN=""
+    TELEGRAM_CHAT_ID=""
+    print_info "Telegram通知已禁用"
+fi
+echo ""
+
+# ============================================
+# 4. 服务器配置
+# ============================================
+echo -e "${BLUE}━━━ 4. 服务器配置 ━━━${NC}"
+echo ""
+
+read -p "服务器时区 [Asia/Singapore]: " SERVER_TIMEZONE
+SERVER_TIMEZONE=${SERVER_TIMEZONE:-Asia/Singapore}
+
+print_success "服务器配置完成"
+echo ""
+
+# ============================================
+# 配置摘要确认
+# ============================================
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${CYAN}📋 配置摘要${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo "  GitHub用户: $GITHUB_USER"
+echo "  仓库: $GITHUB_REPO"
+echo "  分支: $GITHUB_BRANCH"
+echo "  时区: $SERVER_TIMEZONE"
+echo "  Binance测试网: $BINANCE_TESTNET"
+echo "  Telegram通知: $TELEGRAM_ENABLED"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+read -p "确认以上配置正确，开始部署? (y/n): " -n 1 -r
+echo ""
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    print_error "部署已取消"
+    exit 0
+fi
+
 # 创建部署日志
 DEPLOY_LOG=~/deploy_$(date +%Y%m%d_%H%M%S).log
 echo "部署日志: $DEPLOY_LOG" > "$DEPLOY_LOG"
-
-# ==========================================
-# 步骤0：环境检查
-# ==========================================
-print_step "步骤0/10：环境检查"
-
-# 检查必填配置
-if [ "$GITHUB_TOKEN" = "YOUR_GITHUB_TOKEN_HERE" ] || [ -z "$GITHUB_TOKEN" ]; then
-    print_error "请先填写GITHUB_TOKEN！"
-    print_info "在脚本开头的【敏感信息配置区】中填写"
-    exit 1
-fi
-
-if [ "$BINANCE_API_KEY" = "YOUR_BINANCE_API_KEY_HERE" ] || [ -z "$BINANCE_API_KEY" ]; then
-    print_error "请先填写BINANCE_API_KEY！"
-    print_info "在脚本开头的【敏感信息配置区】中填写"
-    exit 1
-fi
-
-if [ "$BINANCE_API_SECRET" = "YOUR_BINANCE_API_SECRET_HERE" ] || [ -z "$BINANCE_API_SECRET" ]; then
-    print_error "请先填写BINANCE_API_SECRET！"
-    print_info "在脚本开头的【敏感信息配置区】中填写"
-    exit 1
-fi
-
-print_success "配置检查通过"
-
-# 显示部署信息
+print_info "部署日志: $DEPLOY_LOG"
 echo ""
-print_info "部署信息："
-print_info "  GitHub用户: $GITHUB_USER"
-print_info "  目标分支: $GITHUB_BRANCH"
-print_info "  时区设置: $SERVER_TIMEZONE"
-print_info "  Telegram通知: $TELEGRAM_ENABLED"
-print_info "  部署日志: $DEPLOY_LOG"
-echo ""
-
-# 非交互式确认（避免卡住）
-if [ -t 0 ]; then
-    read -p "确认开始部署？(y/n) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        print_warning "部署已取消"
-        exit 0
-    fi
-else
-    print_info "非交互式模式，自动继续部署"
-fi
 
 # ==========================================
 # 步骤1：更新系统并安装依赖
@@ -534,5 +572,18 @@ echo -e "${GREEN}部署完成！请选择上方启动选项启动系统 🎉${NC
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo -e "${YELLOW}💡 提示: 建议使用screen方式启动，SSH断开后程序继续运行${NC}"
-echo -e "${YELLOW}💡 记得删除部署脚本: rm ~/deploy_cryptosignal_v740.sh${NC}"
+echo ""
+
+# ==========================================
+# 自动清理部署脚本
+# ==========================================
+echo -e "${CYAN}🧹 清理部署脚本...${NC}"
+SCRIPT_PATH="$0"
+if [ -f "$SCRIPT_PATH" ]; then
+    # 延迟删除（避免脚本还在运行时删除自身）
+    (sleep 2 && rm -f "$SCRIPT_PATH" && echo "✅ 部署脚本已自动删除" || true) &
+    print_success "部署脚本将在2秒后自动删除（无敏感信息残留）"
+else
+    print_info "无需清理"
+fi
 echo ""
