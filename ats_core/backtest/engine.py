@@ -321,13 +321,14 @@ class BacktestEngine:
                         # K线不足，跳过（避免噪声信号）
                         continue
 
-                    # 转换为Binance原始格式（analyze_symbol_with_preloaded_klines需要）
-                    klines_1h_raw = self._convert_to_binance_format(klines_1h)
+                    # v1.5 P0 Bugfix: 直接传递字典格式（四步系统期望字典格式）
+                    # data_loader.load_klines()已返回字典格式，不需要转换
+                    # 移除_convert_to_binance_format()调用，避免Step2崩溃
 
                     # 调用四步系统分析
                     analysis_result = analyze_symbol_with_preloaded_klines(
                         symbol=symbol,
-                        k1h=klines_1h_raw,
+                        k1h=klines_1h,  # 直接传递字典格式
                         k4h=[],  # 暂时不用4h K线（v1.0简化）
                         oi_data=None,
                         spot_k1h=None,
@@ -794,7 +795,14 @@ class BacktestEngine:
 
     def _convert_to_binance_format(self, klines_dict: List[Dict]) -> List[list]:
         """
-        转换为Binance原始格式（analyze_symbol_with_preloaded_klines需要）
+        转换为Binance原始格式（已废弃 - v1.5 P0 Bugfix）
+
+        DEPRECATED: 此方法已废弃，不再使用。
+
+        原因：四步系统期望字典格式K线，而非Binance原始格式。
+        data_loader.load_klines()已返回字典格式，直接传递即可。
+
+        保留此方法仅用于代码历史参考，将来可能移除。
 
         Args:
             klines_dict: 字典格式K线
