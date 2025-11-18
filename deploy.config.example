@@ -1,0 +1,37 @@
+# CryptoSignal部署配置文件
+# ⚠️ 此文件包含敏感信息，已添加到.gitignore，不会被提交到Git
+
+# ============================================
+# 1. GitHub配置
+# ============================================
+GITHUB_TOKEN=YOUR_GITHUB_TOKEN_HERE
+GITHUB_USER=YOUR_GITHUB_USERNAME
+GITHUB_REPO=cryptosignal
+GITHUB_BRANCH=main
+
+# ============================================
+# 2. Binance API配置
+# ============================================
+BINANCE_API_KEY=YOUR_BINANCE_API_KEY_HERE
+BINANCE_API_SECRET=YOUR_BINANCE_API_SECRET_HERE
+BINANCE_TESTNET=false
+
+# ============================================
+# 3. Telegram配置（可选）
+# ============================================
+TELEGRAM_ENABLED=false
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+
+# ============================================
+# 4. 服务器配置
+# ============================================
+SERVER_TIMEZONE=Asia/Singapore
+PYTHON_VERSION=3.10
+
+# ============================================
+# 5. 服务器连接信息
+# ============================================
+SERVER_IP=YOUR_SERVER_IP_HERE
+SERVER_USER=root
+SERVER_PORT=22
