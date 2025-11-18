@@ -55,6 +55,35 @@
 
 ### 最新完成（2025-11-18）
 
+- [x] **P0 Bugfix: _analyze_symbol_core不支持字典格式K线** (commit: eeab20b) ✅
+  - 🎯 需求：修复回测验证时_analyze_symbol_core崩溃的P0级别Bug（KeyError: 0）
+  - 修改范围：ats_core/pipeline/analyze_symbol.py - _analyze_symbol_core()函数
+  - 问题根因：
+    - _analyze_symbol_core()假设K线是Binance列表格式：`[[timestamp, open, ...], ...]`
+    - 回测引擎传递字典格式：`[{"timestamp": ..., "open": ..., ...}, ...]`
+    - 代码尝试访问`k1[0][0]`获取timestamp时触发`KeyError: 0`
+    - 错误日志显示为：`分析失败: ETHUSDT at 1724450400000 - 0`
+  - 受影响代码位置：
+    - 行349-350：`first_kline_ts = k1[0][0]`, `latest_kline_ts = k1[-1][0]`
+    - 行618：`btc_prices_np = [_to_f(k[4]) for k in btc_klines]`  # k[4] = close
+    - 行621-622：`alt_timestamps_np = [_to_f(k[0]) for k in k1]`  # k[0] = timestamp
+  - 核心修复：
+    - 添加`_get_kline_field(kline, field)`辅助函数（行330-340）
+    - 自动检测K线格式（`isinstance(kline, dict)`）
+    - 字典格式：`kline.get(field, 0)`
+    - 列表格式：`kline[field_map[field]]`（field_map: timestamp=0, close=4等）
+    - 修复所有K线字段访问使用`_get_kline_field()`
+  - 技术价值：
+    - ✅ 格式兼容：同时支持列表格式和字典格式
+    - ✅ 向后兼容：不影响现有使用列表格式的代码路径
+    - ✅ 代码健壮：自动检测格式，无需手动指定
+    - ✅ 全局修复：_analyze_symbol_core()现在可处理任意格式K线
+  - 验证结果：
+    - ✅ Python语法验证通过
+    - ✅ 修复后回测验证可正常运行
+  - 影响范围：pipeline层（核心分析函数）
+  - 符合规范：SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0 §P0优先级处理 ✅
+
 - [x] **P0 Bugfix: 回测K线格式不匹配导致Step2崩溃** (commit: 6ad2cc2) ✅
   - 🎯 需求：修复回测验证时Step2崩溃的P0级别Bug（AttributeError: 'list' object has no attribute 'get'）
   - 修改范围：ats_core/backtest/engine.py - run()方法（line 331）
