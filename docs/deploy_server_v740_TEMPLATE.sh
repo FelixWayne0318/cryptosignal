@@ -299,11 +299,13 @@ echo "创建Binance API配置..."
 cat > ~/cryptosignal/config/binance_credentials.json << EOF
 {
   "_comment": "Binance Futures API凭证配置 - 生成于 $(date)",
-  "api_key": "${BINANCE_API_KEY}",
-  "api_secret": "${BINANCE_API_SECRET}",
-  "testnet": ${BINANCE_TESTNET},
-  "_security_note": "请确保API Key只有只读权限，并已设置IP白名单",
-  "_current_server_ip": "${CURRENT_IP}"
+  "binance": {
+    "api_key": "${BINANCE_API_KEY}",
+    "api_secret": "${BINANCE_API_SECRET}",
+    "testnet": ${BINANCE_TESTNET},
+    "_security_note": "请确保API Key只有只读权限，并已设置IP白名单",
+    "_current_server_ip": "${CURRENT_IP}"
+  }
 }
 EOF
 chmod 600 ~/cryptosignal/config/binance_credentials.json

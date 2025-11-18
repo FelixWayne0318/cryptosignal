@@ -72,9 +72,11 @@ print_step "5/8 创建配置文件"
 mkdir -p ~/cryptosignal/config
 cat > ~/cryptosignal/config/binance_credentials.json << EOF
 {
-  "api_key": "${BINANCE_API_KEY}",
-  "api_secret": "${BINANCE_API_SECRET}",
-  "testnet": false
+  "binance": {
+    "api_key": "${BINANCE_API_KEY}",
+    "api_secret": "${BINANCE_API_SECRET}",
+    "testnet": false
+  }
 }
 EOF
 chmod 600 ~/cryptosignal/config/binance_credentials.json
