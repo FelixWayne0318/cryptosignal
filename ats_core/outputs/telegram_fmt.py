@@ -1388,62 +1388,109 @@ def _six_block(r: Dict[str, Any]) -> str:
 
 def _pricing_block(r: Dict[str, Any]) -> str:
     """
-    生成价格信息块（v6.7简洁增强版）
+    生成价格信息块（v7.4四步系统增强版）
+
+    支持两种模式：
+    1. v7.4四步系统：显示Entry/SL/TP + RR（来自四步决策）
+    2. v6.x旧系统：显示入场区间 + 止损止盈（来自旧定价逻辑）
 
     显示：
-    - 入场区间
-    - 止损（距离% · 方法 · 置信度）
-    - 止盈1/2（距离%）
+    - 入场价格（四步系统单价 或 旧系统区间）
+    - 止损（价格 + 距离/方法/置信度）
+    - 止盈（价格 + 距离）
     - 盈亏比
     """
-    # 获取价格数据
-    price = _get(r, "price") or _get(r, "last") or 0
-    stop_loss = _get_dict(r, "stop_loss")
-    take_profit = _get_dict(r, "take_profit")
-    pricing = _get_dict(r, "pricing")
-
     lines = []
 
-    # 入场区间
-    entry_lo = pricing.get("entry_lo") or price
-    entry_hi = pricing.get("entry_hi") or price
-    if abs(entry_lo - entry_hi) < 0.0001:
-        lines.append(f"📍 入场价: {_fmt_price(entry_lo)}")
-    else:
-        lines.append(f"📍 入场区间: {_fmt_price(entry_lo)} - {_fmt_price(entry_hi)}")
+    # 【v7.4新增】检测四步系统价格字段（零硬编码：使用.get()）
+    has_four_step_prices = (
+        r.get("entry_price") is not None and
+        r.get("stop_loss") is not None and
+        r.get("take_profit") is not None
+    )
 
-    # 止损（增强显示）
-    sl_price = stop_loss.get("stop_price")
-    if sl_price:
-        sl_distance_pct = stop_loss.get("distance_pct", 0)
-        sl_method_cn = stop_loss.get("method_cn", "")
-        sl_confidence = stop_loss.get("confidence", 0)
+    if has_four_step_prices:
+        # ========== v7.4四步系统模式：显示具体价格 ==========
+        entry_price = r.get("entry_price", 0)
+        stop_loss_price = r.get("stop_loss", 0)
+        take_profit_price = r.get("take_profit", 0)
+        rr_ratio = r.get("risk_reward_ratio", 0)
 
-        # 构建止损描述
-        sl_details = []
-        if sl_distance_pct:
-            sl_details.append(f"距离{abs(sl_distance_pct):.1%}")
-        if sl_method_cn:
-            sl_details.append(sl_method_cn)
-        if sl_confidence:
-            sl_details.append(f"置信{sl_confidence}")
+        # 入场价
+        lines.append(f"💰 入场价: {_fmt_price(entry_price)}")
 
-        if sl_details:
-            lines.append(f"🛑 止损: {_fmt_price(sl_price)} ({' · '.join(sl_details)})")
+        # 止损（计算距离百分比）
+        if entry_price > 0 and stop_loss_price > 0:
+            sl_distance_pct = abs(stop_loss_price - entry_price) / entry_price
+            lines.append(f"🛡️  止损: {_fmt_price(stop_loss_price)} (距离{sl_distance_pct:.1%})")
         else:
-            lines.append(f"🛑 止损: {_fmt_price(sl_price)}")
+            lines.append(f"🛡️  止损: {_fmt_price(stop_loss_price)}")
 
-    # 止盈1
-    tp1_price = take_profit.get("price") or pricing.get("tp1")
-    if tp1_price and price:
-        tp1_dist_pct = abs(tp1_price - price) / price
-        lines.append(f"🎯 止盈1: {_fmt_price(tp1_price)} (距离{tp1_dist_pct:.1%})")
+        # 止盈（计算距离百分比）
+        if entry_price > 0 and take_profit_price > 0:
+            tp_distance_pct = abs(take_profit_price - entry_price) / entry_price
+            lines.append(f"🎯 止盈: {_fmt_price(take_profit_price)} (距离{tp_distance_pct:.1%})")
+        else:
+            lines.append(f"🎯 止盈: {_fmt_price(take_profit_price)}")
 
-    # 止盈2（如果有）
-    tp2_price = pricing.get("tp2")
-    if tp2_price and price:
-        tp2_dist_pct = abs(tp2_price - price) / price
-        lines.append(f"🎯 止盈2: {_fmt_price(tp2_price)} (距离{tp2_dist_pct:.1%})")
+        # 盈亏比（带emoji反馈）
+        if rr_ratio >= 2.0:
+            rr_emoji = "✅"
+        elif rr_ratio >= 1.5:
+            rr_emoji = "⚠️"
+        else:
+            rr_emoji = "❌"
+
+        lines.append(f"📈 盈亏比: 1:{rr_ratio:.2f} {rr_emoji}")
+
+    else:
+        # ========== v6.x旧系统模式：保持原有逻辑 ==========
+        # 获取价格数据
+        price = _get(r, "price") or _get(r, "last") or 0
+        stop_loss = _get_dict(r, "stop_loss")
+        take_profit = _get_dict(r, "take_profit")
+        pricing = _get_dict(r, "pricing")
+
+        # 入场区间
+        entry_lo = pricing.get("entry_lo") or price
+        entry_hi = pricing.get("entry_hi") or price
+        if abs(entry_lo - entry_hi) < 0.0001:
+            lines.append(f"📍 入场价: {_fmt_price(entry_lo)}")
+        else:
+            lines.append(f"📍 入场区间: {_fmt_price(entry_lo)} - {_fmt_price(entry_hi)}")
+
+        # 止损（增强显示）
+        sl_price = stop_loss.get("stop_price")
+        if sl_price:
+            sl_distance_pct = stop_loss.get("distance_pct", 0)
+            sl_method_cn = stop_loss.get("method_cn", "")
+            sl_confidence = stop_loss.get("confidence", 0)
+
+            # 构建止损描述
+            sl_details = []
+            if sl_distance_pct:
+                sl_details.append(f"距离{abs(sl_distance_pct):.1%}")
+            if sl_method_cn:
+                sl_details.append(sl_method_cn)
+            if sl_confidence:
+                sl_details.append(f"置信{sl_confidence}")
+
+            if sl_details:
+                lines.append(f"🛑 止损: {_fmt_price(sl_price)} ({' · '.join(sl_details)})")
+            else:
+                lines.append(f"🛑 止损: {_fmt_price(sl_price)}")
+
+        # 止盈1
+        tp1_price = take_profit.get("price") or pricing.get("tp1")
+        if tp1_price and price:
+            tp1_dist_pct = abs(tp1_price - price) / price
+            lines.append(f"🎯 止盈1: {_fmt_price(tp1_price)} (距离{tp1_dist_pct:.1%})")
+
+        # 止盈2（如果有）
+        tp2_price = pricing.get("tp2")
+        if tp2_price and price:
+            tp2_dist_pct = abs(tp2_price - price) / price
+            lines.append(f"🎯 止盈2: {_fmt_price(tp2_price)} (距离{tp2_dist_pct:.1%})")
 
     if lines:
         return "\n" + "\n".join(lines)
@@ -2341,19 +2388,19 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     momentum_desc = momentum_grading.get("description", "正常模式")
     F_v2 = _get(v72, "F_v2") or 0
 
-    # 构建头部（根据momentum_level显示不同标题，避免硬编码阈值）
+    # 构建头部（v7.4.0：反映四步系统通过状态）
     if momentum_level == 3:
-        header = f"🚀🚀 极早期蓄势 · 强势机会\n"
+        header = f"🚀🚀 v7.4智能信号 · 极早期蓄势\n"
     elif momentum_level == 2:
-        header = f"🚀 早期蓄势 · 提前布局\n"
+        header = f"🚀 v7.4智能信号 · 早期蓄势\n"
     elif momentum_level == 1:
-        header = f"🚀 蓄势待发\n"
+        header = f"🔥 v7.4智能信号 · 蓄势待发\n"
     else:
-        header = f"{'📍 观察信号' if is_watch else '🚀 交易信号'}\n"
+        header = f"{'📍 v7.4观察信号' if is_watch else '✅ v7.4交易信号'}\n"
 
     header += f"🔹 {sym} · 现价 {price_s}\n"
     header += f"{side_icon} {side_lbl} 胜率{P_pct}% · 有效期{ttl_h}h\n"
-    header += f"期望收益 {EV_net:+.1%} · 盈亏比 {RR:.1f}:1 ✅"
+    header += f"收益预期 {EV_net:+.1%} · 风险比 1:{RR:.1f} ✅"
 
     # ========== 2. 执行参数 ==========
     # v7.3.41修复：确保price不为None
@@ -2380,50 +2427,44 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     position_base = _get(r, "position_size") or 0.05
     position_pct = position_base * 100
 
-    params = f"\n\n📍 入场价: {entry_s}\n"
-    params += f"🛑 止损: {sl_s} (-{sl_dist:.1f}%)\n"
-    params += f"🎯 止盈: {tp_s} (+{tp_dist:.1f}%)\n"
-    params += f"\n💼 仓位建议\n"
-    params += f"• 基准仓位: {position_pct:.1f}%"
+    params = f"\n\n━━━ 💰 Step3: 风险管理 ━━━\n"
+    params += f"📍 入场价: {entry_s}\n"
+    params += f"🛑 止损价: {sl_s} ({sl_dist:.1f}% 风险)\n"
+    params += f"🎯 止盈价: {tp_s} ({tp_dist:.1f}% 收益)\n"
+    params += f"💼 仓位: {position_pct:.1f}% (基准)"
 
-    # ========== 3. v7.3.2-Full核心因子 ==========
-    factors = f"\n\n━━━ 🔬 v7.3.2-Full核心因子 ━━━\n"
+    # ========== 3. Step2: 时机判断（关键因子）==========
+    factors = f"\n\n━━━ ⏰ Step2: 时机判断 ━━━\n"
 
-    # F因子（v7.3.46改进：直接使用momentum_level，避免硬编码阈值）
+    # F因子（Enhanced F v2 - v7.4核心时机指标）
     F_v2 = _get(v72, "F_v2")
     if F_v2 is not None:
         F_v2_int = int(round(F_v2))
 
-        # v7.3.46: 直接使用momentum_level判断（由analyze_symbol_v72.py计算）
+        # 简化描述，让非专业人士也能看懂
         if momentum_level == 3:  # 极早期蓄势
             F_icon = "🚀🚀"
-            F_desc = "强劲资金流入 [极早期蓄势]"
+            F_desc = "资金抢跑，极佳时机"
         elif momentum_level == 2:  # 早期蓄势
             F_icon = "🚀"
-            F_desc = "偏强资金流入 [早期蓄势]"
+            F_desc = "资金提前布局，很好时机"
         elif momentum_level == 1:  # 蓄势待发
             F_icon = "🔥"
-            F_desc = "中等资金流入 [蓄势待发]"
+            F_desc = "资金积蓄，较好时机"
         elif F_v2_int >= 20:
             F_icon = "🟢"
-            F_desc = "轻微资金流入"
+            F_desc = "资金流入中"
         elif F_v2_int >= -20:
             F_icon = "🟡"
-            F_desc = "资金流平衡"
-        elif F_v2_int >= -40:
-            F_icon = "🟠"
-            F_desc = "轻微资金流出"
+            F_desc = "资金平衡"
         elif F_v2_int >= -60:
             F_icon = "🟠"
-            F_desc = "中等资金流出 [追高风险]"
-        elif F_v2_int >= -80:
-            F_icon = "🔴"
-            F_desc = "偏强资金流出 [高风险]"
+            F_desc = "资金流出，谨慎"
         else:
             F_icon = "🔴"
-            F_desc = "强劲资金流出 [极高风险]"
+            F_desc = "资金大幅流出，高风险"
 
-        factors += f"\n{F_icon} F资金领先  {F_v2_int:3d}  {F_desc}"
+        factors += f"📊 资金流向 ({F_v2_int}分)\n{F_icon} {F_desc}"
 
     # I因子（v7.3.44优化：通俗描述+丰富emoji）
     I_v2 = _get(v72, "I_v2")
@@ -2496,14 +2537,14 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
             align_icon = ""
             align_desc = ""
 
-        factors += f"\n{I_icon} I市场独立  {I_v2_int:3d}  {I_desc}"
-        factors += f"\n   Beta: BTC={beta_btc:.2f} ETH={beta_eth:.2f}"
-        factors += f"\n   {market_icon} 大盘{market_trend}({market_regime:+.0f})"
+        # v7.4.0：简化I因子显示，让非专业人士也能看懂
+        factors += f"\n\n🎯 市场独立性 ({I_v2_int}分)\n{I_icon} {I_desc}"
+        factors += f"\n   {market_icon} 当前大盘{market_trend}"
         if align_desc:
-            factors += f" {align_icon}{align_desc}"
+            factors += f" · {align_icon}{align_desc}"
 
-    # ========== 4. 因子分组详情 ==========
-    details = f"\n\n━━━ 📊 因子分组详情 ━━━\n"
+    # ========== 4. Step1: 方向确认（因子分组详情）==========
+    details = f"\n\n━━━ 🧭 Step1: 方向确认 ━━━\n"
 
     # 获取原始因子
     # v7.3.46修复：确保类型安全，防止字符串导致的.get()错误
@@ -2605,8 +2646,8 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
         B_icon, B_desc = _factor_status_b(B_raw)
         details += f"\n  {B_icon} 基差 B  {B_raw:3d}  {B_desc}"
 
-    # ========== 5. 质量检查（v3.1增强：五道闸门）==========
-    quality = f"\n\n━━━ ✅ 质量检查（五道闸门）━━━\n"
+    # ========== 5. Step4: 质量控制（v7.4.0：四道闸门）==========
+    quality = f"\n\n━━━ ✅ Step4: 质量控制 ━━━\n"
 
     # 获取gate_details（v7.2新格式）
     # v7.3.46修复：确保类型安全
@@ -2624,18 +2665,16 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
         gate_num = gate_info.get("gate")
         gates[f"gate{gate_num}"] = gate_info
 
-    # 提取各个闸门
+    # v7.4.0：提取四道闸门
     gate1 = gates.get("gate1", {})
     gate2 = gates.get("gate2", {})
     gate3 = gates.get("gate3", {})
     gate4 = gates.get("gate4", {})
-    gate5 = gates.get("gate5", {})  # v3.1新增
 
     g1_pass = gate1.get("pass", True)
     g2_pass = gate2.get("pass", True)
     g3_pass = gate3.get("pass", True)
     g4_pass = gate4.get("pass", True)
-    g5_pass = gate5.get("pass", True)  # v3.1新增
 
     # 获取数值
     bars = _get(r, "klines") or []
@@ -2643,26 +2682,24 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     F_dir = gate2.get("value", F_v2 or 0)
     EV_gate = gate3.get("value", EV_net)
     P_gate = gate4.get("value", P_calibrated)
-    I_gate = gate5.get("value", I_v2 or 50)  # v3.1新增
 
     g1_icon = "✅" if g1_pass else "❌"
     g2_icon = "✅" if g2_pass else "❌"
     g3_icon = "✅" if g3_pass else "❌"
     g4_icon = "✅" if g4_pass else "❌"
-    g5_icon = "✅" if g5_pass else "❌"  # v3.1新增
 
-    quality += f"\n{g1_icon} Gate1 数据充足 ({bars_count}根K线)"
-    quality += f"\n{g2_icon} Gate2 资金支撑 (F={F_dir:.0f})"
-    quality += f"\n{g3_icon} Gate3 期望收益 (EV={EV_gate:+.2%})"
-    quality += f"\n{g4_icon} Gate4 胜率校准 (P={P_gate:.1%})"
-    quality += f"\n{g5_icon} Gate5 市场对齐 (I={I_gate:.0f})"  # v3.1新增
+    # v7.4.0：四道闸门显示（简化描述）
+    quality += f"\n{g1_icon} 成交量充足 ({bars_count}根K线)"
+    quality += f"\n{g2_icon} 资金流向 (F={F_dir:.0f}分)"
+    quality += f"\n{g3_icon} 收益质量 (EV={EV_gate:+.1%})"
+    quality += f"\n{g4_icon} 信号强度 (胜率{P_gate:.0%})"
 
     # ========== 6. 时间戳 + 标签 ==========
     timestamp = _get(r, "timestamp") or 0
     time_str = _format_timestamp(timestamp)
 
     footer = f"\n\n⏱ {time_str}\n"
-    footer += f"🏷 v7.2\n"
+    footer += f"🏷 v7.4.0 四步决策系统\n"
     footer += f"\n#trade #{sym}"
 
     # ========== 组装完整消息 ==========

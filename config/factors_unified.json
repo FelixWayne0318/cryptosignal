@@ -1,7 +1,7 @@
 {
-  "version": "v7.3.47",
-  "updated_at": "2025-11-16",
-  "description": "统一因子参数配置 - v3.0（配置管理优化版）",
+  "version": "v7.4.0",
+  "updated_at": "2025-11-17",
+  "description": "统一因子参数配置 - v7.4.0（四步分层决策系统）",
   "global": {
     "standardization": {
       "enabled": true,
@@ -364,8 +364,8 @@
       "layer": "modulator",
       "weight": 0,
       "enabled": true,
-      "description": "独立性评分（vs BTC，v7.3.2-Full零硬编码版，v6.6移至B层调制器）",
-      "version": "v7.3.47",
+      "description": "独立性评分（vs BTC，零硬编码版本，v7.4.0四步系统Step1核心）",
+      "version": "v7.4.0",
       "regression": {
         "window_hours": 24,
         "window_hours_description": "β回归窗口（小时），用于截取价格序列",

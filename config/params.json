@@ -372,7 +372,18 @@
     "_comment": "v7.4四步分层决策系统 - 基于专家实施方案",
     "_version": "v7.4.0",
     "_description": "革命性架构：不仅给方向，更给具体价格（入场/止损/止盈）",
-    "enabled": false,
+    "enabled": true,
+
+    "fusion_mode": {
+      "_comment": "融合模式：控制四步系统与旧系统的关系",
+      "_description": "true=四步系统替代旧系统（真正融合），false=并行模式（仅对比）",
+      "enabled": true,
+      "compatibility_mode": {
+        "_comment": "兼容性设置：确保向后兼容",
+        "preserve_old_fields": true,
+        "_description": "true=保留旧系统字段（is_prime等），false=仅用新系统字段"
+      }
+    },
 
     "step1_direction": {
       "_comment": "Step1: 方向确认层 - A层因子 + I因子置信度 + BTC对齐 + 硬veto",
@@ -516,12 +527,41 @@
       },
 
       "orderbook": {
-        "_comment": "订单簿调整（从L因子元数据提取）",
+        "_comment": "订单簿分析参数（从L因子元数据提取）- v7.4.0完整版",
         "enabled": true,
+
+        "_comment_wall_detection": "买墙/卖墙检测阈值",
         "obi_buy_wall_threshold": 0.3,
         "obi_sell_wall_threshold": -0.3,
         "wall_adjustment_enabled": false,
-        "_note": "初版不做订单簿调整，后续版本可启用"
+
+        "_comment_depth_score": "深度得分计算权重（OBI + 覆盖 + 冲击）",
+        "depth_score_weights": {
+          "obi_base_weight": 0.50,
+          "coverage_weight": 0.25,
+          "impact_cost_weight": 0.25
+        },
+
+        "_comment_obi_score": "OBI基础分计算参数",
+        "obi_score": {
+          "base_score": 50.0,
+          "multiplier": 50.0
+        },
+
+        "_comment_coverage": "深度覆盖度分值",
+        "coverage_scores": {
+          "covered": 100.0,
+          "not_covered": 0.0
+        },
+
+        "_comment_impact_cost": "价格冲击成本评分参数",
+        "impact_cost": {
+          "excellent_threshold_bps": 10,
+          "acceptable_threshold_bps": 50,
+          "score_multiplier": 2.0
+        },
+
+        "_note": "v7.4.0: 从硬编码升级为配置化，便于后续调优"
       }
     },
 
@@ -581,6 +621,77 @@
       "_dual_run_note": "true=新旧系统并行运行对比，false=仅用新系统",
       "fallback_on_error": true,
       "detailed_logging": true
+    },
+
+    "symbol_refresh": {
+      "_comment": "币种列表动态刷新配置 - v7.4.0方案B（无需重启发现新币）",
+      "_version": "v7.4.0",
+      "_feature": "动态币种发现机制",
+
+      "enabled": true,
+      "_enabled_note": "启用币种列表动态刷新（推荐），关闭则需要重启才能发现新币",
+
+      "refresh_interval_hours": 6,
+      "_interval_rationale": "每6小时刷新一次（每天4次），平衡及时性和资源消耗",
+      "_interval_options": "可选值: 3h(更激进), 6h(推荐), 12h(保守)",
+
+      "refresh_times_utc": [0, 6, 12, 18],
+      "_times_note": "固定时间点刷新（UTC时间），便于监控和调试",
+
+      "new_coin_detection": {
+        "_comment": "新币发现和初始化配置",
+
+        "min_kline_requirements": {
+          "_comment": "新币K线数据最少要求（避免数据不足产生噪声信号）",
+          "15m_min_bars": 20,
+          "1h_min_bars": 24,
+          "4h_min_bars": 7,
+          "1d_min_bars": 3,
+          "_rationale": "15m需5h, 1h需1天, 4h需28h, 1d需3天数据"
+        },
+
+        "notification": {
+          "_comment": "新币发现通知配置",
+          "enabled": true,
+          "telegram_notify": true,
+          "min_volume_threshold_m": 50,
+          "_threshold_note": "只通知流动性>50M USDT的大盘新币",
+          "log_all_new_coins": true
+        }
+      },
+
+      "delisting_handling": {
+        "_comment": "退市币种处理配置",
+        "grace_period_hours": 2,
+        "_grace_period_note": "退市宽限期2小时（对齐冷却期），等待信号发送完成",
+        "cleanup_on_next_refresh": true
+      },
+
+      "failure_handling": {
+        "_comment": "刷新失败容错配置",
+        "max_retries": 3,
+        "retry_interval_minutes": 5,
+        "keep_old_list_on_failure": true,
+        "_failure_note": "刷新失败时保持旧列表，避免用错误数据",
+        "alert_on_consecutive_failures": 3,
+        "_alert_note": "连续3次失败发送Telegram告警"
+      },
+
+      "persistence": {
+        "_comment": "币种列表变化历史记录",
+        "enabled": true,
+        "log_file": "data/symbol_list_history.jsonl",
+        "archive_monthly": true,
+        "_record_fields": ["timestamp", "total_symbols", "new_symbols", "removed_symbols", "volume_changes"]
+      },
+
+      "_design_principles": [
+        "渐进式初始化：新币数据不足时暂不分析",
+        "双缓冲机制：刷新时不影响当前扫描",
+        "温和移除：退市币种等待冷却期结束",
+        "保守容错：宁可不刷新，也不用错误数据",
+        "完整追溯：记录所有币种变化历史"
+      ]
     }
   }
 }

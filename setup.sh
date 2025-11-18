@@ -164,15 +164,19 @@ EOF
 fi
 echo -e "${GREEN}✅ Telegram配置存在${NC}"
 
-# 配置crontab（如果未配置）
-echo ""
-echo "⏰ 配置定时任务..."
-if crontab -l 2>/dev/null | grep -q "auto_restart.sh"; then
-    echo -e "${GREEN}✅ 定时任务已配置${NC}"
-else
-    (crontab -l 2>/dev/null; echo "0 */2 * * * ~/cryptosignal/auto_restart.sh"; echo "0 1 * * * find ~ -name 'cryptosignal_*.log' -mtime +7 -delete") | crontab -
-    echo -e "${GREEN}✅ 定时任务已添加（每2小时重启）${NC}"
-fi
+# ==========================================
+# 注意：定时任务配置已移至部署脚本
+# ==========================================
+# v7.4.0方案B架构调整：
+#   - crontab配置应由部署脚本负责（服务器基础设施层）
+#   - setup.sh只负责应用启动（应用执行层）
+#   - 这样职责清晰，避免每次git pull都修改系统配置
+#
+# 如果需要配置定时任务，请使用：
+#   deploy_server_v7.4.0_planB_PRODUCTION.sh（全新部署）
+#   或手动配置：crontab -e
+#     添加：0 3 * * * ~/cryptosignal/auto_restart.sh
+# ==========================================
 
 # 添加执行权限
 chmod +x auto_restart.sh deploy_and_run.sh setup.sh scripts/init_databases.py start_live.sh 2>/dev/null || true

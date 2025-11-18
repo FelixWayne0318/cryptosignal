@@ -86,24 +86,36 @@ def extract_orderbook_from_L_meta(
     params: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
-    从L因子元数据中提取订单簿信息
+    从L因子元数据中提取订单簿信息（v7.4.0完整版 - 利用价格带法全部分析结果）
 
     Args:
-        l_factor_meta: L因子元数据，包含obi_value, best_bid, best_ask等
+        l_factor_meta: L因子元数据，包含价格带法的完整分析结果
+            - buy_impact_bps/sell_impact_bps: 价格冲击
+            - spread_bps: 买卖价差
+            - obi_value: 订单簿失衡度
+            - buy_covered/sell_covered: 深度覆盖度
+            - gates_passed/gates_status: 四道闸通过情况
+            - liquidity_level: 流动性等级
         params: 配置参数
 
     Returns:
         dict: {
             "buy_wall_price": float | None,   # 买墙价格
             "sell_wall_price": float | None,  # 卖墙价格
-            "buy_depth_score": float,         # 买盘深度得分
-            "sell_depth_score": float,        # 卖盘深度得分
-            "imbalance": float                # OBI失衡度
+            "buy_depth_score": float,         # 买盘深度得分（综合OBI+覆盖+冲击）
+            "sell_depth_score": float,        # 卖盘深度得分（综合OBI+覆盖+冲击）
+            "imbalance": float,               # OBI失衡度
+            "buy_impact_bps": float,          # 买入价格冲击
+            "sell_impact_bps": float,         # 卖出价格冲击
+            "spread_bps": float,              # 买卖价差
+            "liquidity_level": str,           # 流动性等级
+            "gates_passed": int               # 通过的闸门数量
         }
 
     Note:
-        v7.4.0初版：使用L因子元数据，但不做订单簿调整（wall_adjustment_enabled=false）
-        后续版本可启用墙调整功能
+        v7.4.0完整版：充分利用L因子价格带法的全部分析结果
+        深度得分 = OBI基础分 + 覆盖度 + 冲击成本（权重从配置读取，默认50%+25%+25%）
+        所有计算参数从config/params.json读取，零硬编码 ✅
     """
     orderbook_cfg = params.get("four_step_system", {}).get("step3_risk", {}).get("orderbook", {})
     enabled = orderbook_cfg.get("enabled", True)
@@ -115,32 +127,125 @@ def extract_orderbook_from_L_meta(
             "sell_wall_price": None,
             "buy_depth_score": 50.0,
             "sell_depth_score": 50.0,
-            "imbalance": 0.0
+            "imbalance": 0.0,
+            "buy_impact_bps": 0.0,
+            "sell_impact_bps": 0.0,
+            "spread_bps": 0.0,
+            "liquidity_level": "unknown",
+            "gates_passed": 0
         }
 
-    # 从L因子元数据提取
-    obi_value = l_factor_meta.get("obi_value", 0.0)
+    # ====================
+    # 1. 从L因子元数据提取完整信息
+    # ====================
+    # 基础价格
     best_bid = l_factor_meta.get("best_bid")
     best_ask = l_factor_meta.get("best_ask")
 
-    # OBI阈值判断（买墙/卖墙检测）
+    # OBI失衡度
+    obi_value = l_factor_meta.get("obi_value", 0.0)
+
+    # 价格冲击（关键！）
+    buy_impact_bps = l_factor_meta.get("buy_impact_bps", 0.0)
+    sell_impact_bps = l_factor_meta.get("sell_impact_bps", 0.0)
+
+    # 价差
+    spread_bps = l_factor_meta.get("spread_bps", 0.0)
+
+    # 深度覆盖度
+    buy_covered = l_factor_meta.get("buy_covered", False)
+    sell_covered = l_factor_meta.get("sell_covered", False)
+
+    # 四道闸通过情况
+    gates_passed = l_factor_meta.get("gates_passed", 0)
+
+    # 流动性等级
+    liquidity_level = l_factor_meta.get("liquidity_level", "unknown")
+
+    # ====================
+    # 2. 买墙/卖墙检测（增强版：需要OBI显著 + 深度覆盖）
+    # ====================
     buy_wall_threshold = orderbook_cfg.get("obi_buy_wall_threshold", 0.3)
     sell_wall_threshold = orderbook_cfg.get("obi_sell_wall_threshold", -0.3)
 
-    buy_wall_price = best_bid if obi_value > buy_wall_threshold else None
-    sell_wall_price = best_ask if obi_value < sell_wall_threshold else None
+    # 买墙：OBI显著为正 且 买盘深度覆盖良好
+    buy_wall_price = best_bid if (obi_value > buy_wall_threshold and buy_covered) else None
+    # 卖墙：OBI显著为负 且 卖盘深度覆盖良好
+    sell_wall_price = best_ask if (obi_value < sell_wall_threshold and sell_covered) else None
 
-    # 深度得分（简化版：基于OBI映射到0-100）
-    # OBI ∈ [-1, 1], 买盘深度 = 50 + OBI*50, 卖盘深度 = 50 - OBI*50
-    buy_depth_score = max(0.0, min(100.0, 50.0 + obi_value * 50.0))
-    sell_depth_score = max(0.0, min(100.0, 50.0 - obi_value * 50.0))
+    # ====================
+    # 3. 深度得分（综合版：OBI基础分 + 覆盖度 + 冲击成本，权重从配置读取）
+    # ====================
+    # 从配置读取参数（v7.4.0配置化改造，消除硬编码）
+    weights = orderbook_cfg.get("depth_score_weights", {})
+    obi_weight = weights.get("obi_base_weight", 0.50)
+    coverage_weight = weights.get("coverage_weight", 0.25)
+    impact_weight = weights.get("impact_cost_weight", 0.25)
 
+    obi_score_cfg = orderbook_cfg.get("obi_score", {})
+    obi_base = obi_score_cfg.get("base_score", 50.0)
+    obi_mult = obi_score_cfg.get("multiplier", 50.0)
+
+    coverage_scores_cfg = orderbook_cfg.get("coverage_scores", {})
+    score_covered = coverage_scores_cfg.get("covered", 100.0)
+    score_not_covered = coverage_scores_cfg.get("not_covered", 0.0)
+
+    impact_cfg = orderbook_cfg.get("impact_cost", {})
+    impact_multiplier = impact_cfg.get("score_multiplier", 2.0)
+
+    # 3.1 OBI基础分 ∈ [0, 100]
+    obi_buy_base = max(0.0, min(100.0, obi_base + obi_value * obi_mult))
+    obi_sell_base = max(0.0, min(100.0, obi_base - obi_value * obi_mult))
+
+    # 3.2 覆盖度分 ∈ [0, 100]
+    coverage_buy_score = score_covered if buy_covered else score_not_covered
+    coverage_sell_score = score_covered if sell_covered else score_not_covered
+
+    # 3.3 冲击成本分 ∈ [0, 100] (冲击越小越好)
+    # 分数 = max(0, 100 - impact_bps * multiplier)
+    impact_buy_score = max(0.0, min(100.0, 100.0 - buy_impact_bps * impact_multiplier))
+    impact_sell_score = max(0.0, min(100.0, 100.0 - sell_impact_bps * impact_multiplier))
+
+    # 3.4 综合深度得分（加权平均，权重从配置读取）
+    buy_depth_score = (
+        obi_buy_base * obi_weight +
+        coverage_buy_score * coverage_weight +
+        impact_buy_score * impact_weight
+    )
+
+    sell_depth_score = (
+        obi_sell_base * obi_weight +
+        coverage_sell_score * coverage_weight +
+        impact_sell_score * impact_weight
+    )
+
+    # ====================
+    # 4. 返回完整分析结果
+    # ====================
     return {
+        # 墙价格
         "buy_wall_price": buy_wall_price,
         "sell_wall_price": sell_wall_price,
+
+        # 深度得分（综合）
         "buy_depth_score": buy_depth_score,
         "sell_depth_score": sell_depth_score,
-        "imbalance": obi_value
+
+        # OBI失衡度
+        "imbalance": obi_value,
+
+        # 价格冲击（新增！）
+        "buy_impact_bps": buy_impact_bps,
+        "sell_impact_bps": sell_impact_bps,
+
+        # 价差（新增！）
+        "spread_bps": spread_bps,
+
+        # 流动性等级（新增！）
+        "liquidity_level": liquidity_level,
+
+        # 四道闸通过数（新增！）
+        "gates_passed": gates_passed
     }
 
 

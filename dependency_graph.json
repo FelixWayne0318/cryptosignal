@@ -1,0 +1,288 @@
+{
+  "entrypoint": "scripts/realtime_signal_scanner.py",
+  "total_files": 66,
+  "dependencies": {
+    "scripts/realtime_signal_scanner.py": [
+      "ats_core/pipeline/batch_scan_optimized.py",
+      "ats_core/logging.py",
+      "ats_core/outputs/telegram_fmt.py",
+      "ats_core/publishing/anti_jitter.py",
+      "ats_core/config/anti_jitter_config.py",
+      "ats_core/analysis/report_writer.py",
+      "ats_core/data/trade_recorder.py",
+      "ats_core/data/analysis_db.py"
+    ],
+    "ats_core/pipeline/batch_scan_optimized.py": [
+      "ats_core/execution/binance_futures_client.py",
+      "ats_core/data/realtime_kline_cache.py",
+      "ats_core/pipeline/analyze_symbol.py",
+      "ats_core/logging.py",
+      "ats_core/analysis/scan_statistics.py",
+      "ats_core/config/threshold_config.py",
+      "ats_core/pipeline/analyze_symbol.py",
+      "ats_core/pools/pool_manager.py",
+      "ats_core/sources/binance.py",
+      "ats_core/sources/binance_safe.py",
+      "ats_core/sources/binance.py",
+      "ats_core/factors_v2/trend.py",
+      "ats_core/pipeline/analyze_symbol_v72.py",
+      "ats_core/analysis/report_writer.py",
+      "ats_core/sources/binance.py",
+      "ats_core/data/analysis_db.py"
+    ],
+    "ats_core/outputs/telegram_fmt.py": [
+      "ats_core/config/threshold_config.py",
+      "ats_core/config/runtime_config.py",
+      "ats_core/scoring/scorecard.py"
+    ],
+    "ats_core/publishing/anti_jitter.py": [
+      "ats_core/config/anti_jitter_config.py",
+      "ats_core/config/anti_jitter_config.py"
+    ],
+    "ats_core/execution/binance_futures_client.py": [
+      "ats_core/logging.py"
+    ],
+    "ats_core/data/realtime_kline_cache.py": [
+      "ats_core/logging.py"
+    ],
+    "ats_core/pipeline/analyze_symbol.py": [
+      "ats_core/cfg.py",
+      "ats_core/config/threshold_config.py",
+      "ats_core/config/factor_config.py",
+      "ats_core/sources/binance.py",
+      "ats_core/features/cvd.py",
+      "ats_core/scoring/scorecard.py",
+      "ats_core/scoring/probability.py",
+      "ats_core/scoring/probability_v2.py",
+      "ats_core/scoring/adaptive_weights.py",
+      "ats_core/modulators/modulator_chain.py",
+      "ats_core/modulators/fi_modulators.py",
+      "ats_core/features/multi_timeframe.py",
+      "ats_core/execution/stop_loss_calculator.py",
+      "ats_core/features/liquidity_priceband.py",
+      "ats_core/factors_v2/basis_funding.py",
+      "ats_core/factors_v2/independence.py",
+      "ats_core/features/accumulation_detection.py",
+      "ats_core/features/fund_leading.py",
+      "ats_core/logging.py",
+      "ats_core/logging.py",
+      "ats_core/data_feeds.py",
+      "ats_core/sources/binance.py",
+      "ats_core/cfg.py",
+      "ats_core/features/market_regime.py",
+      "ats_core/features/market_regime.py",
+      "ats_core/features/multi_timeframe.py",
+      "ats_core/features/market_regime.py",
+      "ats_core/features/trend.py",
+      "ats_core/features/accel.py",
+      "ats_core/features/momentum.py",
+      "ats_core/features/cvd_flow.py",
+      "ats_core/features/structure_sq.py",
+      "ats_core/features/volume.py",
+      "ats_core/features/open_interest.py",
+      "ats_core/features/environment.py",
+      "ats_core/features/microconfirm_15m.py",
+      "ats_core/features/pricing.py",
+      "ats_core/logging.py",
+      "ats_core/logging.py",
+      "ats_core/data/quality.py",
+      "ats_core/logging.py",
+      "ats_core/logging.py",
+      "ats_core/logging.py",
+      "ats_core/logging.py",
+      "ats_core/logging.py",
+      "ats_core/logging.py",
+      "ats_core/logging.py",
+      "ats_core/logging.py",
+      "ats_core/logging.py",
+      "ats_core/utils/factor_history.py",
+      "ats_core/decision/four_step_system.py",
+      "ats_core/logging.py",
+      "ats_core/logging.py",
+      "ats_core/logging.py",
+      "ats_core/logging.py",
+      "ats_core/logging.py",
+      "ats_core/logging.py",
+      "ats_core/logging.py",
+      "ats_core/logging.py",
+      "ats_core/features/trend.py",
+      "ats_core/logging.py"
+    ],
+    "ats_core/analysis/scan_statistics.py": [
+      "ats_core/config/threshold_config.py",
+      "ats_core/config/unified_config.py",
+      "ats_core/config/threshold_config.py"
+    ],
+    "ats_core/sources/binance.py": [
+      "ats_core/backoff.py",
+      "ats_core/utils/rate_limiter.py"
+    ],
+    "ats_core/pipeline/analyze_symbol_v72.py": [
+      "ats_core/utils/math_utils.py",
+      "ats_core/calibration/empirical_calibration.py",
+      "ats_core/config/threshold_config.py",
+      "ats_core/scoring/factor_groups.py",
+      "ats_core/pipeline/analyze_symbol.py"
+    ],
+    "ats_core/features/cvd.py": [
+      "ats_core/utils/outlier_detection.py",
+      "ats_core/utils/cvd_utils.py",
+      "ats_core/logging.py",
+      "ats_core/utils/cvd_utils.py",
+      "ats_core/logging.py"
+    ],
+    "ats_core/scoring/probability_v2.py": [
+      "ats_core/scoring/probability.py"
+    ],
+    "ats_core/modulators/modulator_chain.py": [
+      "ats_core/config/factor_config.py",
+      "ats_core/config/runtime_config.py"
+    ],
+    "ats_core/modulators/fi_modulators.py": [
+      "ats_core/config/threshold_config.py"
+    ],
+    "ats_core/features/multi_timeframe.py": [
+      "ats_core/sources/binance.py",
+      "ats_core/logging.py"
+    ],
+    "ats_core/factors_v2/basis_funding.py": [
+      "ats_core/scoring/scoring_utils.py",
+      "ats_core/config/factor_config.py"
+    ],
+    "ats_core/factors_v2/independence.py": [
+      "ats_core/config/runtime_config.py",
+      "ats_core/utils/format_utils.py",
+      "ats_core/config/threshold_config.py",
+      "ats_core/config/threshold_config.py"
+    ],
+    "ats_core/features/fund_leading.py": [
+      "ats_core/features/scoring_utils.py",
+      "ats_core/config/factor_config.py",
+      "ats_core/utils/math_utils.py",
+      "ats_core/utils/math_utils.py"
+    ],
+    "ats_core/data_feeds.py": [
+      "ats_core/sources/binance.py"
+    ],
+    "ats_core/features/market_regime.py": [
+      "ats_core/sources/binance.py"
+    ],
+    "ats_core/features/trend.py": [
+      "ats_core/scoring/scoring_utils.py",
+      "ats_core/config/factor_config.py"
+    ],
+    "ats_core/features/accel.py": [
+      "ats_core/features/ta_core.py",
+      "ats_core/features/scoring_utils.py",
+      "ats_core/scoring/scoring_utils.py"
+    ],
+    "ats_core/features/momentum.py": [
+      "ats_core/scoring/scoring_utils.py",
+      "ats_core/config/factor_config.py"
+    ],
+    "ats_core/features/cvd_flow.py": [
+      "ats_core/scoring/scoring_utils.py",
+      "ats_core/config/factor_config.py",
+      "ats_core/utils/outlier_detection.py",
+      "ats_core/logging.py",
+      "ats_core/config/runtime_config.py"
+    ],
+    "ats_core/features/structure_sq.py": [
+      "ats_core/features/ta_core.py",
+      "ats_core/scoring/scoring_utils.py",
+      "ats_core/config/factor_config.py"
+    ],
+    "ats_core/features/volume.py": [
+      "ats_core/features/scoring_utils.py",
+      "ats_core/scoring/scoring_utils.py",
+      "ats_core/config/factor_config.py"
+    ],
+    "ats_core/features/open_interest.py": [
+      "ats_core/sources/oi.py",
+      "ats_core/features/scoring_utils.py",
+      "ats_core/utils/outlier_detection.py",
+      "ats_core/scoring/scoring_utils.py",
+      "ats_core/config/factor_config.py",
+      "ats_core/logging.py"
+    ],
+    "ats_core/features/microconfirm_15m.py": [
+      "ats_core/sources/klines.py",
+      "ats_core/features/ta_core.py"
+    ],
+    "ats_core/features/pricing.py": [
+      "ats_core/features/ta_core.py"
+    ],
+    "ats_core/data/quality.py": [
+      "ats_core/config/threshold_config.py"
+    ],
+    "ats_core/utils/factor_history.py": [
+      "ats_core/logging.py",
+      "ats_core/cfg.py",
+      "ats_core/cfg.py",
+      "ats_core/features/trend.py",
+      "ats_core/features/momentum.py"
+    ],
+    "ats_core/decision/four_step_system.py": [
+      "ats_core/logging.py",
+      "ats_core/decision/step1_direction.py",
+      "ats_core/decision/step2_timing.py",
+      "ats_core/decision/step3_risk.py",
+      "ats_core/decision/step4_quality.py",
+      "ats_core/cfg.py"
+    ],
+    "ats_core/calibration/empirical_calibration.py": [
+      "ats_core/utils/math_utils.py",
+      "ats_core/config/threshold_config.py",
+      "ats_core/config/threshold_config.py"
+    ],
+    "ats_core/utils/cvd_utils.py": [
+      "ats_core/logging.py",
+      "ats_core/logging.py"
+    ],
+    "ats_core/utils/format_utils.py": [
+      "ats_core/config/runtime_config.py"
+    ],
+    "ats_core/sources/oi.py": [
+      "ats_core/sources/binance.py"
+    ],
+    "ats_core/sources/klines.py": [
+      "ats_core/sources/binance.py"
+    ],
+    "ats_core/decision/step1_direction.py": [
+      "ats_core/logging.py"
+    ],
+    "ats_core/decision/step2_timing.py": [
+      "ats_core/logging.py"
+    ],
+    "ats_core/decision/step3_risk.py": [
+      "ats_core/logging.py",
+      "ats_core/cfg.py"
+    ],
+    "ats_core/decision/step4_quality.py": [
+      "ats_core/logging.py",
+      "ats_core/cfg.py"
+    ]
+  },
+  "module_stats": {
+    "pipeline": 5,
+    "logging.py": 39,
+    "outputs": 1,
+    "publishing": 1,
+    "config": 31,
+    "analysis": 3,
+    "data": 5,
+    "execution": 2,
+    "pools": 1,
+    "sources": 13,
+    "factors_v2": 3,
+    "scoring": 15,
+    "cfg.py": 7,
+    "features": 30,
+    "modulators": 2,
+    "data_feeds.py": 1,
+    "utils": 12,
+    "decision": 5,
+    "backoff.py": 1,
+    "calibration": 1
+  }
+}
