@@ -34,13 +34,19 @@ class SimulatedSignal:
     """
     回测模拟信号（包含完整执行结果）
 
+    v1.5 P0修复：添加限价单模型字段
+    - entry_attempt_time: 开始尝试入场的时间
+    - entry_filled_time: 实际成交时间
+    - entry_filled: 是否成功入场
+    - fees_paid: 已支付的手续费
+
     设计原则（§6.2 函数签名演进）:
     - 所有字段初始化有默认值
     - 新增字段向后兼容
     """
     # 基本信息
     symbol: str
-    timestamp: int  # 信号生成时间（毫秒）
+    timestamp: int  # 信号生成时间（决策时刻，bar close，毫秒）
     side: str  # "long" | "short"
 
     # 推荐价格（从Step3获取）
@@ -48,6 +54,11 @@ class SimulatedSignal:
     stop_loss_recommended: float
     take_profit_1_recommended: float
     take_profit_2_recommended: float
+
+    # v1.5 P0修复：入场执行信息（限价单模型）
+    entry_attempt_time: int = 0  # 开始尝试入场的时间（timestamp + 1h，毫秒）
+    entry_filled_time: int = 0   # 实际成交时间（0表示未成交）
+    entry_filled: bool = False   # 是否成功入场
 
     # 实际执行价格（模拟滑点后）
     entry_price_actual: float = 0.0
@@ -58,11 +69,14 @@ class SimulatedSignal:
     # 退出信息
     exit_time: int = 0  # 退出时间（毫秒）
     exit_price: float = 0.0
-    exit_reason: str = ""  # "SL_HIT" | "TP1_HIT" | "TP2_HIT" | "TIMEOUT" | "MANUAL"
+    exit_reason: str = ""  # "SL_HIT" | "TP1_HIT" | "TP2_HIT" | "TIMEOUT" | "MANUAL" | "ENTRY_NOT_FILLED"
 
     # 盈亏信息
     pnl_percent: float = 0.0  # (exit - entry) / entry * 100
-    pnl_usdt: float = 0.0  # 假设100 USDT仓位
+    pnl_usdt: float = 0.0  # 假设100 USDT仓位（v1.0简化版）
+
+    # v1.5 P0修复：手续费信息
+    fees_paid: float = 0.0  # 已支付的手续费（USDT）
 
     # 持仓时长
     holding_hours: float = 0.0
@@ -116,6 +130,8 @@ class BacktestEngine:
     - batch_size: 批次大小（暂时不用，v1.0单线程）
     - progress_log_interval: 进度日志间隔（每N次迭代）
     - signal_cooldown_hours: 信号冷却期（小时）
+    - max_entry_bars: 限价单有效期（1h bar数）[v1.5新增]
+    - taker_fee_rate: Taker手续费率 [v1.5新增]
     - slippage_percent: 滑点百分比
     - slippage_range: 滑点随机范围
     - position_size_usdt: 仓位大小（USDT）
@@ -139,8 +155,13 @@ class BacktestEngine:
         self.batch_size = config.get("batch_size", 1)
         self.progress_log_interval = config.get("progress_log_interval", 100)
         self.signal_cooldown_hours = config.get("signal_cooldown_hours", 2)
-        self.slippage_percent = config.get("slippage_percent", 0.1)
-        self.slippage_range = config.get("slippage_range", 0.05)
+
+        # v1.5 P0修复：限价单模型配置
+        self.max_entry_bars = config.get("max_entry_bars", 4)  # 默认4h有效期
+        self.taker_fee_rate = config.get("taker_fee_rate", 0.0005)  # 默认0.05%手续费
+
+        self.slippage_percent = config.get("slippage_percent", 0.02)  # v1.5调整：从0.1%降至0.02%
+        self.slippage_range = config.get("slippage_range", 0.01)  # v1.5调整：从0.05%降至0.01%
         self.position_size_usdt = config.get("position_size_usdt", 100)
         self.max_holding_hours = config.get("max_holding_hours", 168)  # 7天
         self.enable_anti_jitter = config.get("enable_anti_jitter", True)
@@ -151,17 +172,19 @@ class BacktestEngine:
             "tp1_hit": {"priority": 2, "label": "TP1_HIT"},
             "tp2_hit": {"priority": 3, "label": "TP2_HIT"},
             "max_holding_exceeded": {"priority": 4, "label": "TIMEOUT"},
-            "manual_close": {"priority": 5, "label": "MANUAL"}
+            "manual_close": {"priority": 5, "label": "MANUAL"},
+            "entry_not_filled": {"priority": 6, "label": "ENTRY_NOT_FILLED"}  # v1.5新增
         })
 
         # 重载配置（确保使用最新配置）
         CFG.reload()
 
         logger.info(
-            f"BacktestEngine initialized: "
+            f"BacktestEngine initialized (v1.5): "
+            f"max_entry_bars={self.max_entry_bars}, "
+            f"fee={self.taker_fee_rate*100:.3f}%, "
             f"slippage={self.slippage_percent}±{self.slippage_range}%, "
-            f"cooldown={self.signal_cooldown_hours}h, "
-            f"max_holding={self.max_holding_hours}h"
+            f"cooldown={self.signal_cooldown_hours}h"
         )
 
     def run(
