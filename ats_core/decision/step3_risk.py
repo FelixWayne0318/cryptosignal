@@ -315,12 +315,16 @@ def calculate_entry_price(
     """
     entry_cfg = params.get("four_step_system", {}).get("step3_risk", {}).get("entry_price", {})
 
-    # 从配置读取阈值和buffer
+    # 从配置读取阈值和buffer（v7.4.1配置化，消除硬编码）
     strong_f = entry_cfg.get("strong_accumulation_f", 70)
     moderate_f = entry_cfg.get("moderate_accumulation_f", 40)
     buffer_strong = entry_cfg.get("buffer_strong", 1.000)
     buffer_moderate = entry_cfg.get("buffer_moderate", 1.002)
     buffer_weak = entry_cfg.get("buffer_weak", 1.005)
+
+    # v7.4.1新增：无支撑/阻力时的fallback buffer（消除硬编码）
+    fallback_moderate = entry_cfg.get("fallback_moderate_buffer", 0.998)
+    fallback_weak = entry_cfg.get("fallback_weak_buffer", 0.995)
 
     is_long = direction_score > 0.0
     buy_wall = orderbook.get("buy_wall_price")
@@ -337,13 +341,13 @@ def calculate_entry_price(
             if support is not None:
                 entry = support * buffer_moderate
             else:
-                entry = current_price * 0.998
+                entry = current_price * fallback_moderate  # v7.4.1: 从配置读取，不再硬编码0.998
         else:
             # 弱吸筹
             if support is not None:
                 entry = support * buffer_weak
             else:
-                entry = current_price * 0.995
+                entry = current_price * fallback_weak  # v7.4.1: 从配置读取，不再硬编码0.995
 
         # 买墙调整（初版不启用，但预留逻辑）
         wall_adjustment_enabled = params.get("four_step_system", {}).get("step3_risk", {}).get("orderbook", {}).get("wall_adjustment_enabled", False)

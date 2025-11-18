@@ -67,7 +67,9 @@ def calculate_flow_score(
 def calculate_flow_momentum(
     factor_scores_series: List[Dict[str, float]],
     weights: Dict[str, float],
-    lookback_hours: int = 6
+    lookback_hours: int = 6,
+    flow_weak_threshold: float = 1.0,
+    base_min_value: float = 10.0
 ) -> float:
     """
     计算Flow动量（6小时变化百分比）
@@ -76,13 +78,15 @@ def calculate_flow_momentum(
         flow_now = flow_series[-1]
         flow_6h_ago = flow_series[0]
         flow_change = flow_now - flow_6h_ago
-        base = max(abs(flow_now), abs(flow_6h_ago), 10)
+        base = max(abs(flow_now), abs(flow_6h_ago), base_min_value)
         flow_momentum = (flow_change / base) * 100
 
     Args:
         factor_scores_series: 历史因子得分序列（7个时间点）
         weights: Flow权重
         lookback_hours: 回溯小时数（默认6）
+        flow_weak_threshold: Flow弱阈值（v7.4.1配置化，默认1.0）
+        base_min_value: base最小值（v7.4.1配置化，默认10.0）
 
     Returns:
         flow_momentum: Flow动量百分比
@@ -100,13 +104,13 @@ def calculate_flow_momentum(
     flow_now = flow_series[-1]
     flow_6h_ago = flow_series[0]
 
-    # 如果flow值都很弱（接近0），认为无动量
-    if abs(flow_now) < 1.0 and abs(flow_6h_ago) < 1.0:
+    # v7.4.1配置化：flow值都很弱（接近0）时认为无动量
+    if abs(flow_now) < flow_weak_threshold and abs(flow_6h_ago) < flow_weak_threshold:
         return 0.0
 
-    # 计算变化百分比
+    # v7.4.1配置化：计算变化百分比，使用配置的base_min_value避免除0
     flow_change = flow_now - flow_6h_ago
-    base = max(abs(flow_now), abs(flow_6h_ago), 10.0)
+    base = max(abs(flow_now), abs(flow_6h_ago), base_min_value)
     flow_momentum = (flow_change / base) * 100.0
 
     return flow_momentum
@@ -192,6 +196,10 @@ def calculate_enhanced_f_v2(
     })
     lookback_hours = enhanced_f_cfg.get("lookback_hours", 6)
 
+    # v7.4.1新增：Flow动量计算参数（消除硬编码）
+    flow_weak_threshold = enhanced_f_cfg.get("flow_weak_threshold", 1.0)
+    base_min_value = enhanced_f_cfg.get("base_min_value", 10.0)
+
     # 数据验证
     if len(factor_scores_series) < lookback_hours + 1:
         return {
@@ -215,11 +223,13 @@ def calculate_enhanced_f_v2(
             "reject_reason": f"K线不足: 需要{lookback_hours+1}根，实际{len(klines)}根"
         }
 
-    # 计算Flow动量
+    # 计算Flow动量（v7.4.1: 传入配置参数，消除硬编码）
     flow_momentum = calculate_flow_momentum(
         factor_scores_series,
         flow_weights,
-        lookback_hours
+        lookback_hours,
+        flow_weak_threshold,
+        base_min_value
     )
 
     # 计算价格动量

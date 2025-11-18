@@ -62,29 +62,40 @@ def calculate_direction_confidence_v2(
     floor = confidence_cfg.get("floor", 0.50)
     ceiling = confidence_cfg.get("ceiling", 1.00)
 
-    # 分段计算置信度（v2.0修正版）
+    # v7.4.1新增：从配置读取置信度映射曲线参数（消除硬编码）
+    mapping = confidence_cfg.get("mapping", {})
+    high_beta_base = mapping.get("high_beta_base", 0.60)
+    high_beta_range = mapping.get("high_beta_range", 0.10)
+    moderate_beta_base = mapping.get("moderate_beta_base", 0.70)
+    moderate_beta_range = mapping.get("moderate_beta_range", 0.15)
+    low_beta_base = mapping.get("low_beta_base", 0.85)
+    low_beta_range = mapping.get("low_beta_range", 0.10)
+    independent_base = mapping.get("independent_base", 0.95)
+    independent_range = mapping.get("independent_range", 0.05)
+
+    # 分段计算置信度（v2.0修正版 + v7.4.1配置化）
     if I_score < high_beta:
         # 高Beta（严重跟随BTC）→ 置信度低
-        # I=0 → 0.60, I=15 → 0.70
-        confidence = 0.60 + (I_score / high_beta) * 0.10
+        # I=0 → high_beta_base, I=high_beta → high_beta_base + high_beta_range
+        confidence = high_beta_base + (I_score / high_beta) * high_beta_range
 
     elif I_score < moderate_beta:
         # 中度跟随BTC
-        # I=15 → 0.70, I=30 → 0.85
+        # I=high_beta → moderate_beta_base, I=moderate_beta → moderate_beta_base + moderate_beta_range
         progress = (I_score - high_beta) / (moderate_beta - high_beta)
-        confidence = 0.70 + progress * 0.15
+        confidence = moderate_beta_base + progress * moderate_beta_range
 
     elif I_score < low_beta:
         # 轻度跟随BTC
-        # I=30 → 0.85, I=50 → 0.95
+        # I=moderate_beta → low_beta_base, I=low_beta → low_beta_base + low_beta_range
         progress = (I_score - moderate_beta) / (low_beta - moderate_beta)
-        confidence = 0.85 + progress * 0.10
+        confidence = low_beta_base + progress * low_beta_range
 
     else:
-        # 独立行情（I >= 50）
-        # I=50 → 0.95, I=100 → 1.00
+        # 独立行情（I >= low_beta）
+        # I=low_beta → independent_base, I=100 → independent_base + independent_range
         progress = (I_score - low_beta) / (100.0 - low_beta)
-        confidence = 0.95 + progress * 0.05
+        confidence = independent_base + progress * independent_range
 
     # 截断到[floor, ceiling]范围
     confidence = max(floor, min(ceiling, confidence))
