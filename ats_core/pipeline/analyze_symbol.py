@@ -334,8 +334,12 @@ def _analyze_symbol_core(
             return kline.get(field, 0)
         else:
             # 列表格式（Binance原始格式）
-            field_map = {"timestamp": 0, "open": 1, "high": 2, "low": 3,
-                        "close": 4, "volume": 5}
+            # [timestamp, open, high, low, close, volume, close_time, quote_volume, trades, taker_buy_base, taker_buy_quote, ignore]
+            field_map = {
+                "timestamp": 0, "open": 1, "high": 2, "low": 3,
+                "close": 4, "volume": 5, "close_time": 6, "quote_volume": 7,
+                "trades": 8, "taker_buy_base": 9, "taker_buy_quote": 10
+            }
             idx = field_map.get(field, 0)
             return kline[idx] if idx < len(kline) else 0
 
@@ -493,12 +497,13 @@ def _analyze_symbol_core(
     if not k1 or len(k1) < min_data:
         return _make_empty_result(symbol, "insufficient_data")
 
-    h = [_to_f(r[2]) for r in k1]
-    l = [_to_f(r[3]) for r in k1]
-    c = [_to_f(r[4]) for r in k1]
-    v = [_to_f(r[5]) for r in k1]  # base volume
-    q = [_to_f(r[7]) for r in k1]  # quote volume
-    c4 = [_to_f(r[4]) for r in k4] if k4 and len(k4) >= 30 else c
+    # v1.5 Bugfix: 使用_get_kline_field()兼容字典格式
+    h = [_to_f(_get_kline_field(r, "high")) for r in k1]
+    l = [_to_f(_get_kline_field(r, "low")) for r in k1]
+    c = [_to_f(_get_kline_field(r, "close")) for r in k1]
+    v = [_to_f(_get_kline_field(r, "volume")) for r in k1]  # base volume
+    q = [_to_f(_get_kline_field(r, "quote_volume")) for r in k1]  # quote volume
+    c4 = [_to_f(_get_kline_field(r, "close")) for r in k4] if k4 and len(k4) >= 30 else c
 
     # 性能监控
     import time
