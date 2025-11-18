@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # coding: utf-8
 """
-实时信号扫描器（v7.3.47 - I因子BTC-only + MarketContext优化）
+实时信号扫描器（v7.4.0 - 四步分层决策系统 | Dual Run模式）
 
 功能特性:
-1. ✅ v7.3.47 I因子（BTC-only回归 + veto风控 + MarketContext优化）
+1. ✅ v7.4.0 四步决策系统（Step1-4: 方向/时机/风险/质量）
 2. ✅ WebSocket批量扫描优化（0次API调用）
 3. ✅ 自动数据采集（信号快照、分析数据库）
-4. ✅ Telegram通知（v7.3.2格式 + 扫描摘要）
+4. ✅ Telegram通知（含Entry/SL/TP价格）
 5. ✅ 防抖动系统（避免重复通知）
 6. ✅ 自动提交报告到Git仓库
 
@@ -54,12 +54,12 @@ sys.path.insert(0, str(project_root))
 from ats_core.pipeline.batch_scan_optimized import OptimizedBatchScanner
 from ats_core.logging import log, warn, error
 from ats_core.outputs.telegram_fmt import render_trade_v72
-# v7.3.47: batch_scan已集成I因子veto逻辑，无需额外处理
+# v7.4.0: batch_scan已集成四步决策系统，Dual Run模式
 from ats_core.publishing.anti_jitter import AntiJitter
 from ats_core.config.anti_jitter_config import get_config
 from ats_core.analysis.report_writer import get_report_writer
 
-# v7.3.47: 数据采集模块
+# v7.4.0: 数据采集模块
 try:
     from ats_core.data.trade_recorder import get_recorder
     from ats_core.data.analysis_db import get_analysis_db
@@ -129,7 +129,7 @@ def telegram_send_wrapper(message: str, bot_token: str, chat_id: str):
 
 
 class RealtimeSignalScanner:
-    """实时信号扫描器（v7.3.47版本）"""
+    """实时信号扫描器（v7.4.0版本 - 四步决策系统）"""
 
     def __init__(
         self,
@@ -142,9 +142,9 @@ class RealtimeSignalScanner:
         初始化扫描器
 
         Args:
-            min_score: 最低confidence阈值（v7.3.47信号）
+            min_score: 最低confidence阈值（v7.4.0信号）
             send_telegram: 是否发送Telegram通知
-            record_data: 是否记录数据到数据库（v7.3.47特性）
+            record_data: 是否记录数据到数据库（v7.4.0特性）
             verbose: 是否显示详细输出
         """
         self.min_score = min_score
@@ -240,9 +240,8 @@ class RealtimeSignalScanner:
             warn("扫描无结果")
             return
 
-        # v7.3.471修复：batch_scan已应用v7.2增强，无需重复调用
-        # 之前逻辑：realtime_scanner读取batch_scan结果 → 应用v7.2增强 → 重写scan_detail.json
-        # 新逻辑：batch_scan直接应用v7.2增强 → realtime_scanner直接使用结果
+        # v7.4.0优化：batch_scan已集成四步决策系统，直接使用结果
+        # 逻辑：batch_scan应用四步系统 → realtime_scanner直接使用结果
         # 优点：架构清晰，避免重复计算，scan_summary.md统计正确
 
         # 记录到数据库（v7.2增强已在batch_scan中完成）
@@ -265,17 +264,17 @@ class RealtimeSignalScanner:
         if prime_signals:
             log(f"   Prime列表: {', '.join([s['symbol'] for s in prime_signals])}")
 
-        # 发送Telegram（v7.2格式，包含蓄势待发标记）
+        # 发送Telegram（v7.4.0格式，包含Entry/SL/TP价格）
         if self.send_telegram and prime_signals:
             await self._send_signals_to_telegram_v72(prime_signals)
 
         log("=" * 60 + "\n")
 
-    # v7.3.471修复：_apply_v72_enhancements已废弃（batch_scan直接应用v7.2增强）
+    # v7.4.0优化：四步决策已在batch_scan中完成
 
     def _filter_prime_signals_v72(self, results: list) -> list:
         """
-        v7.2版本的Prime信号过滤
+        v7.4.0版本的Prime信号过滤（四步决策系统）
 
         过滤条件：
         1. v72_enhancements存在
@@ -487,7 +486,7 @@ class RealtimeSignalScanner:
 async def main():
     """主函数"""
     parser = argparse.ArgumentParser(
-        description='实时信号扫描器（v7.3.47 - I因子BTC-only + MarketContext优化）',
+        description='实时信号扫描器（v7.4.0 - 四步分层决策系统 | Dual Run模式）',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
