@@ -55,7 +55,34 @@
 
 ### 最新完成（2025-11-18）
 
-- [x] **P0 Bugfix: _analyze_symbol_core不支持字典格式K线** (commit: eeab20b) ✅
+- [x] **P0 Bugfix #3: OHLCV字段提取不支持字典格式** (commit: 8d4a171) ✅
+  - 🎯 需求：修复回测验证时OHLCV字段提取崩溃的P0级别Bug（KeyError: 2）
+  - 修改范围：ats_core/pipeline/analyze_symbol.py - _analyze_symbol_core()函数（行496-502）
+  - 问题根因：
+    - _analyze_symbol_core()行496-502直接访问K线索引提取OHLCV字段
+    - 使用`r[2], r[3], r[4], r[5], r[7]`访问high/low/close/volume/quote_volume
+    - 字典格式K线导致`KeyError: 2`（尝试访问`r[2]`时）
+    - 错误日志显示为：`分析失败: ETHUSDT at 1724594400000 - 2`
+  - 核心修复：
+    - 扩展`_get_kline_field()`支持完整Binance字段映射（11个字段）
+    - 更新行496-502使用`_get_kline_field()`替代直接索引访问
+    - 修复5个字段提取：high, low, close, volume, quote_volume
+    - 修复k4字段提取：close (用于4h K线)
+  - 完整字段映射：
+    - timestamp=0, open=1, high=2, low=3, close=4, volume=5
+    - close_time=6, quote_volume=7, trades=8, taker_buy_base=9, taker_buy_quote=10
+  - 技术价值：
+    - ✅ 完整格式支持：覆盖所有Binance K线字段
+    - ✅ 统一接口：所有K线字段访问都通过_get_kline_field()
+    - ✅ 向后兼容：同时支持列表格式和字典格式
+    - ✅ 消除硬编码：字段映射集中管理
+  - 验证结果：
+    - ✅ Python语法验证通过
+    - ✅ 修复后回测验证应可正常提取OHLCV数据
+  - 影响范围：pipeline层（核心OHLCV字段提取）
+  - 符合规范：SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0 §P0优先级处理 ✅
+
+- [x] **P0 Bugfix #2: _analyze_symbol_core不支持字典格式K线** (commit: eeab20b) ✅
   - 🎯 需求：修复回测验证时_analyze_symbol_core崩溃的P0级别Bug（KeyError: 0）
   - 修改范围：ats_core/pipeline/analyze_symbol.py - _analyze_symbol_core()函数
   - 问题根因：
