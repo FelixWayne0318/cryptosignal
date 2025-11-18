@@ -716,5 +716,64 @@
         "完整追溯：记录所有币种变化历史"
       ]
     }
+  },
+
+  "backtest": {
+    "_comment": "Backtest Framework v1.0 - 零硬编码历史数据回测系统",
+    "_version": "v1.0",
+    "_description": "配置驱动的回测框架，所有参数可调，支持多符号、多时间段回测",
+    "_standard": "SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0",
+    "_design_doc": "docs/BACKTEST_FRAMEWORK_v1.0_DESIGN.md",
+
+    "data_loader": {
+      "_comment": "历史数据加载器配置",
+      "default_interval": "1h",
+      "api_retry_count": 3,
+      "api_retry_delay_base": 2.0,
+      "api_retry_delay_range": 2.0,
+      "api_timeout_seconds": 30,
+      "cache_enabled": true,
+      "cache_dir": "data/backtest_cache",
+      "cache_max_size_mb": 500,
+      "cache_ttl_hours": 168
+    },
+
+    "engine": {
+      "_comment": "回测引擎配置",
+      "batch_size": 1,
+      "progress_log_interval": 100,
+      "signal_cooldown_hours": 2,
+      "slippage_percent": 0.1,
+      "slippage_range": 0.05,
+      "position_size_usdt": 100,
+      "max_holding_hours": 168,
+      "enable_anti_jitter": true,
+
+      "exit_classification": {
+        "_comment": "退出原因分类（§6.4分段逻辑配置）",
+        "sl_hit": {"priority": 1, "label": "SL_HIT"},
+        "tp1_hit": {"priority": 2, "label": "TP1_HIT"},
+        "tp2_hit": {"priority": 3, "label": "TP2_HIT"},
+        "max_holding_exceeded": {"priority": 4, "label": "TIMEOUT"},
+        "manual_close": {"priority": 5, "label": "MANUAL"}
+      }
+    },
+
+    "metrics": {
+      "_comment": "性能评估配置",
+      "min_signals_for_stats": 10,
+      "confidence_level": 0.95,
+      "risk_free_rate": 0.03,
+      "pnl_histogram_bins": [-10, -5, -2, 0, 2, 5, 10, 20],
+      "holding_time_bins_hours": [1, 6, 12, 24, 48, 72, 168]
+    },
+
+    "output": {
+      "_comment": "输出格式配置",
+      "default_format": "json",
+      "json_indent": 2,
+      "markdown_include_charts": false,
+      "csv_delimiter": ","
+    }
   }
 }
