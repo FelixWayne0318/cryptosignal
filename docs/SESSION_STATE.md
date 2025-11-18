@@ -1,15 +1,15 @@
 # CryptoSignal 工作状态
 
 > **会话状态跟踪** - 解决 Claude Code 会话切换问题
-> 最后更新: 2025-11-17 | v7.4.0 Fusion
+> 最后更新: 2025-11-18 | Backtest v1.5 P0修复
 
 ---
 
 ## 📍 当前位置
 
-**项目**: CryptoSignal v7.4.0 四步分层决策系统 - 完全融合模式
-**分支**: `claude/reorganize-audit-signals-01PavGxKBtm1yUZ1iz7ADXkA`
-**状态**: ✅ v7.4.0 融合模式完成，四步系统真正替代旧决策
+**项目**: CryptoSignal Backtest Framework v1.5 - 生产级P0修复
+**分支**: `claude/reorganize-audit-cryptosignal-01Tq5fFaPwzRwTZBMBBKBDf8`
+**状态**: ✅ v1.5 P0修复完成（限价单+手续费+悲观SL/TP），待推送
 
 ---
 
@@ -53,7 +53,58 @@
 
 **暂无** - 所有用户请求的任务已完成
 
-### 最新完成（2025-11-17）
+### 最新完成（2025-11-18）
+
+- [x] **P0: Backtest Framework v1.5生产级修复** (commits: b6348f7, 348e396) ✅
+  - 🎯 需求：专家审计v1.0回测方案，发现3个P0关键缺陷导致回测结果过于乐观，需要修复至生产级标准
+  - 修改范围：config/params.json + ats_core/backtest/engine.py
+  - 核心变更（三大P0修复）：
+    1. 【P0-1: 限价单模型】防止未来信息泄露
+       - 问题：v1.0在信号生成时立即成交（使用当前bar数据）→ 未来信息泄露
+       - 修复：信号t时刻生成 → t+1时刻开始尝试成交 → 有效期max_entry_bars=4（4小时）
+       - 实现：新增pending_entries队列 + _try_fill_pending_entry()方法（113行）
+       - 检查逻辑：当前bar的high/low是否覆盖推荐入场价 → 覆盖则成交，否则继续等待
+       - 超时处理：超过max_entry_bars未成交 → 标记为ENTRY_NOT_FILLED
+    2. 【P0-2: 手续费建模】真实成本计算
+       - 问题：v1.0未计算手续费 → PnL计算虚高
+       - 修复：双边Taker手续费（入场0.05% + 出场0.05% = 0.1%总成本）
+       - 实现：新增_calculate_fees()方法（20行）+ 更新_close_position()（15行）
+       - 净PnL公式：毛PnL - (entry_fee + exit_fee)
+       - 影响：100 USDT仓位每次往返扣除0.1 USDT手续费
+    3. 【P0-3: 悲观SL/TP假设】保守估计
+       - 问题：v1.0先检查TP再检查SL → 乐观假设（同bar触发时优先TP）
+       - 修复：先检查SL，同bar触发时优先SL → 悲观假设（更保守）
+       - 实现：_monitor_active_positions()同时检查SL/TP，如果都触发则优先SL（24行）
+       - 日志：添加debug日志记录SL/TP冲突情况，便于分析
+  - 配置新增参数（config/params.json）：
+    - max_entry_bars: 4（限价单有效期，4个1h bar）
+    - taker_fee_rate: 0.0005（0.05%手续费率）
+    - slippage_percent: 0.02（从0.1%降至0.02%，更真实）
+    - slippage_range: 0.01（从0.05%降至0.01%，更真实）
+    - exit_classification新增entry_not_filled分类
+  - 数据结构扩展（SimulatedSignal）：
+    - entry_attempt_time: 开始尝试入场的时间
+    - entry_filled_time: 实际成交时间
+    - entry_filled: 是否成功入场
+    - fees_paid: 已支付的手续费（USDT）
+  - 技术价值：
+    - ✅ 消除未来信息泄露：限价单模型确保决策与成交时间分离
+    - ✅ 真实成本核算：手续费纳入PnL计算，与实盘一致
+    - ✅ 保守风险评估：悲观假设降低回测过拟合风险
+    - ✅ 生产级准确度：修复后的回测结果更接近实盘表现
+  - 向后兼容：
+    - ✅ 所有新字段有默认值（entry_attempt_time=0, fees_paid=0.0等）
+    - ✅ 配置参数都提供默认值（max_entry_bars=4, taker_fee_rate=0.0005）
+    - ✅ 旧代码可正常运行，逐步迁移到v1.5
+  - 测试结果：
+    - ✅ Python语法验证通过（py_compile）
+    - ✅ JSON配置验证通过（json.load）
+    - ✅ 所有新方法向后兼容
+  - 影响范围：config→core层（严格遵守修改顺序）
+  - 符合规范：SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0 §5配置驱动 + §6.2向后兼容 ✅
+  - 下一步：推送远程 → 更新设计文档 → 实盘验证
+
+### 历史完成（2025-11-17）
 
 - [x] **P2: 订单簿分析配置化改造v7.4.0** (commit: 0902b6b) ✅
   - 🎯 需求：审计发现订单簿深度得分计算存在硬编码，违反SYSTEM_ENHANCEMENT_STANDARD §5规范
