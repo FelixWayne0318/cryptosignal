@@ -82,17 +82,28 @@ def cvd_from_klines(
         - v7.3.44: 新增Quote CVD支持（USDT单位，更准确反映资金流）
         - v2.1: 添加IQR异常值检测
         - v2.1: 对巨量K线降权，避免被单笔大额交易误导
+        - v7.4.2: P0-1修复 - 增强K线格式验证，添加异常处理
     """
-    if use_taker_buy and klines and len(klines[0]) >= 11:
-        # v7.3.44: 优化方法，支持Quote CVD和Base CVD
-        if use_quote:
-            # Quote CVD（USDT单位）- 更准确，不受币价波动影响
-            taker_buy = _col(klines, 10)  # takerBuyQuoteVolume（主动买入成交额）
-            total_vol = _col(klines, 7)   # quoteAssetVolume（总成交额）
-        else:
-            # Base CVD（币数量单位）- 兼容旧版
-            taker_buy = _col(klines, 9)   # takerBuyBaseVolume（主动买入量）
-            total_vol = _col(klines, 5)   # volume（总成交量）
+    # v7.4.2 P0-1修复: 增强K线格式验证
+    if use_taker_buy and klines:
+        try:
+            # 检查K线格式：需要至少11列（index 0-10用于Quote CVD）
+            if not klines[0] or len(klines[0]) < 11:
+                # 降级：K线格式不足，返回零CVD
+                return ([0.0] * len(klines), {"degraded": True, "reason": "insufficient_kline_columns"}) if expose_meta else [0.0] * len(klines)
+
+            # v7.3.44: 优化方法，支持Quote CVD和Base CVD
+            if use_quote:
+                # Quote CVD（USDT单位）- 更准确，不受币价波动影响
+                taker_buy = _col(klines, 10)  # takerBuyQuoteVolume（主动买入成交额）
+                total_vol = _col(klines, 7)   # quoteAssetVolume（总成交额）
+            else:
+                # Base CVD（币数量单位）- 兼容旧版
+                taker_buy = _col(klines, 9)   # takerBuyBaseVolume（主动买入量）
+                total_vol = _col(klines, 5)   # volume（总成交量）
+        except (IndexError, TypeError, AttributeError) as e:
+            # P0-1修复: 捕获格式异常，返回零CVD
+            return ([0.0] * len(klines), {"degraded": True, "reason": f"kline_format_error: {e}"}) if expose_meta else [0.0] * len(klines)
 
         n = min(len(taker_buy), len(total_vol))
 

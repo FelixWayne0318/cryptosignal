@@ -507,10 +507,11 @@
         "buffer_moderate": 1.002,
         "buffer_weak": 1.005,
 
-        "_comment_fallback": "无支撑/阻力时的fallback buffer（v7.4.1配置化，消除硬编码）",
-        "fallback_moderate_buffer": 0.998,
-        "fallback_weak_buffer": 0.995,
-        "_fallback_note": "无支撑时做多用current_price * fallback_buffer，无阻力时做空用current_price / fallback_buffer"
+        "_comment_fallback": "无支撑/阻力时的fallback buffer（v7.4.1配置化，v7.4.2调整为更保守）",
+        "fallback_moderate_buffer": 0.999,
+        "fallback_weak_buffer": 0.997,
+        "_fallback_note": "无支撑时做多用current_price * fallback_buffer，无阻力时做空用current_price / fallback_buffer",
+        "_fallback_p0_5_fix": "v7.4.2 P0-5修复：从0.998/0.995调整为0.999/0.997（更保守，减少滑点风险）"
       },
 
       "stop_loss": {
@@ -597,8 +598,29 @@
       },
 
       "gate2_noise": {
-        "_comment": "Gate2: 噪声过滤（ATR/Price）",
-        "max_noise_ratio": 0.15
+        "_comment": "Gate2: 噪声过滤（ATR/Price） - v7.4.2: 添加资产类别动态阈值",
+        "max_noise_ratio": 0.15,
+
+        "_comment_dynamic": "基于资产类别的动态阈值（P0-6修复：稳定币/主流币/山寨币分级）",
+        "enable_dynamic": true,
+        "dynamic_thresholds": {
+          "stablecoins": {
+            "_comment": "稳定币（USDT, BUSD, USDC等）- 低波动性",
+            "max_noise_ratio": 0.05,
+            "symbols": ["USDTUSDT", "BUSDUSDT", "USDCUSDT", "TUSDUSDT", "DAIUSDT"]
+          },
+          "blue_chip": {
+            "_comment": "蓝筹币（BTC, ETH, BNB等主流币）- 中等波动性",
+            "max_noise_ratio": 0.10,
+            "symbols": ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "ADAUSDT", "XRPUSDT", "DOTUSDT", "AVAXUSDT", "MATICUSDT", "LINKUSDT"]
+          },
+          "altcoins": {
+            "_comment": "山寨币（其他所有币种）- 高波动性",
+            "max_noise_ratio": 0.20
+          }
+        },
+
+        "_p0_6_rationale": "稳定币波动小用0.05过滤异常，主流币用0.10，山寨币用0.20避免过度拒绝高质量信号"
       },
 
       "gate3_strength": {
