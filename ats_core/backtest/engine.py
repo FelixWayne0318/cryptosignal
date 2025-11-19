@@ -379,10 +379,61 @@ class BacktestEngine:
                         continue
 
                     side = "long" if side_long else "short"
-                    entry_price_rec = analysis_result.get("entry_price", 0.0)
-                    stop_loss_rec = analysis_result.get("stop_loss", 0.0)
-                    take_profit_1_rec = analysis_result.get("take_profit_1", 0.0)
-                    take_profit_2_rec = analysis_result.get("take_profit_2", 0.0)
+
+                    # ==================== P0修复：正确提取价格（融合模式 vs 旧系统） ====================
+                    # 检查是否启用了融合模式（四步系统决策结果存在）
+                    four_step = analysis_result.get("four_step_decision", {})
+                    fusion_mode_enabled = (
+                        four_step and
+                        four_step.get("decision") == "ACCEPT"
+                    )
+
+                    if fusion_mode_enabled:
+                        # 融合模式：四步系统直接提供浮点数价格
+                        entry_price_rec = analysis_result.get("entry_price", 0.0)
+                        stop_loss_rec = analysis_result.get("stop_loss", 0.0)
+                        take_profit_1_rec = analysis_result.get("take_profit", 0.0)  # 注意：字段名是take_profit
+                        take_profit_2_rec = 0.0  # 四步系统暂不支持TP2
+
+                        logger.debug(
+                            f"[融合模式] {symbol} Entry={entry_price_rec:.4f}, "
+                            f"SL={stop_loss_rec:.4f}, TP={take_profit_1_rec:.4f}"
+                        )
+                    else:
+                        # 旧系统：从字典结构提取价格
+                        stop_loss_dict = analysis_result.get("stop_loss", {})
+                        take_profit_dict = analysis_result.get("take_profit", {})
+
+                        # 提取止损价格（从字典）
+                        if isinstance(stop_loss_dict, dict):
+                            stop_loss_rec = stop_loss_dict.get("stop_price", 0.0)
+                        else:
+                            logger.warning(f"{symbol} stop_loss格式异常: {type(stop_loss_dict)}")
+                            stop_loss_rec = float(stop_loss_dict) if stop_loss_dict else 0.0
+
+                        # 提取止盈价格（从字典）
+                        if isinstance(take_profit_dict, dict):
+                            take_profit_1_rec = take_profit_dict.get("price", 0.0)
+                        else:
+                            logger.warning(f"{symbol} take_profit格式异常: {type(take_profit_dict)}")
+                            take_profit_1_rec = float(take_profit_dict) if take_profit_dict else 0.0
+
+                        take_profit_2_rec = 0.0  # 旧系统也不支持TP2
+
+                        # 入场价格：使用当前K线最后一根的收盘价
+                        if klines_1h and len(klines_1h) > 0:
+                            last_kline = klines_1h[-1]
+                            if isinstance(last_kline, dict):
+                                entry_price_rec = last_kline.get("close", 0.0)
+                            else:
+                                entry_price_rec = last_kline[4] if len(last_kline) > 4 else 0.0
+                        else:
+                            entry_price_rec = 0.0
+
+                        logger.debug(
+                            f"[旧系统] {symbol} Entry={entry_price_rec:.4f}(K线close), "
+                            f"SL={stop_loss_rec:.4f}, TP={take_profit_1_rec:.4f}"
+                        )
 
                     # 验证价格有效性
                     if entry_price_rec <= 0 or stop_loss_rec <= 0:
@@ -390,6 +441,19 @@ class BacktestEngine:
                             f"信号价格无效: {symbol} entry={entry_price_rec} sl={stop_loss_rec}"
                         )
                         continue
+
+                    # 验证止盈价格（允许为0，但记录警告并计算默认TP）
+                    if take_profit_1_rec <= 0:
+                        logger.warning(
+                            f"止盈价格无效: {symbol} tp1={take_profit_1_rec}，使用2R作为默认TP"
+                        )
+                        # 计算默认TP（2倍风险回报）
+                        risk_distance = abs(entry_price_rec - stop_loss_rec)
+                        if side == "long":
+                            take_profit_1_rec = entry_price_rec + (risk_distance * 2)
+                        else:
+                            take_profit_1_rec = entry_price_rec - (risk_distance * 2)
+                    # =============================================================================
 
                     # 创建模拟信号
                     signal = SimulatedSignal(
