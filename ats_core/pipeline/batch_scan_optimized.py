@@ -50,7 +50,7 @@ class OptimizedBatchScanner:
         self.initialized = False
         self.symbols = []  # 保存初始化时的币种列表
 
-        # v7.4.0方案B：币种列表动态刷新机制
+        # v7.4.2方案B：币种列表动态刷新机制
         self.symbols_active = []       # 当前活跃的扫描列表
         self.last_refresh_time = 0     # 上次刷新时间戳
         self.refresh_config = {}       # 刷新配置
@@ -417,7 +417,7 @@ class OptimizedBatchScanner:
         data_elapsed = time.time() - data_start
         log(f"   数据预加载完成，耗时: {data_elapsed:.1f}秒")
 
-        # v7.4.0方案B：加载币种刷新配置
+        # v7.4.2方案B：加载币种刷新配置
         log(f"\n6️⃣  加载币种刷新配置...")
         try:
             import json
@@ -1211,7 +1211,7 @@ class OptimizedBatchScanner:
 
     async def refresh_symbols_list(self) -> bool:
         """
-        动态刷新币种列表（v7.4.0方案B）
+        动态刷新币种列表（v7.4.2方案B）
 
         Returns:
             bool: True=刷新成功, False=刷新失败或未启用

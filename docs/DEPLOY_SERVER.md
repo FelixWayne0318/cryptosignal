@@ -1,4 +1,4 @@
-# 服务器部署指南 - v7.4.0方案B
+# 服务器部署指南 - v7.4.2方案B
 
 ## 快速开始
 
@@ -9,13 +9,13 @@
 1. **上传模板到服务器**
    ```bash
    # 在本地
-   scp deploy_server_v7.4.0_planB.template.sh root@YOUR_SERVER_IP:~
+   scp deploy_server_v7.4.2_planB.template.sh root@YOUR_SERVER_IP:~
    ```
 
 2. **修改配置**
    ```bash
    # 在服务器上
-   vim ~/deploy_server_v7.4.0_planB.template.sh
+   vim ~/deploy_server_v7.4.2_planB.template.sh
 
    # 修改以下配置（约30-40行处）：
    GITHUB_TOKEN="YOUR_GITHUB_TOKEN_HERE"
@@ -30,17 +30,17 @@
 
 3. **执行部署**
    ```bash
-   chmod +x ~/deploy_server_v7.4.0_planB.template.sh
-   ~/deploy_server_v7.4.0_planB.template.sh
+   chmod +x ~/deploy_server_v7.4.2_planB.template.sh
+   ~/deploy_server_v7.4.2_planB.template.sh
 
    # 然后执行生成的部署脚本
-   ~/vultr_deploy_v7.4.0_planB.sh
+   ~/vultr_deploy_v7.4.2_planB.sh
    ```
 
 4. **清理敏感文件**
    ```bash
-   rm ~/deploy_server_v7.4.0_planB.template.sh
-   rm ~/vultr_deploy_v7.4.0_planB.sh
+   rm ~/deploy_server_v7.4.2_planB.template.sh
+   rm ~/vultr_deploy_v7.4.2_planB.sh
    ```
 
 ### 方式2：直接使用setup.sh（快速）
@@ -52,7 +52,7 @@ cd ~/cryptosignal
 ./setup.sh
 ```
 
-## v7.4.0方案B特性
+## v7.4.2方案B特性
 
 ### 核心改进
 
@@ -289,5 +289,5 @@ git log --oneline -5
 ---
 
 **部署时间**：2025-11-17
-**版本**：v7.4.0 方案B
+**版本**：v7.4.2 方案B
 **状态**：✅ 生产就绪

@@ -17,9 +17,9 @@
 - ❌ 新代码不应使用此模块
 - ✅ 仅 analyze_symbol.py 历史兼容（旧系统v6.6）
 - ✅ 新代码请使用 ats_core.config.runtime_config.RuntimeConfig
-- ✅ v7.4.0四步系统使用RuntimeConfig
+- ✅ v7.4.2四步系统使用RuntimeConfig
 
-🆕 v7.4.0更新:
+🆕 v7.4.2更新:
 - 支持Dual Run模式（v6.6 + v7.4四步系统）
 - 使用统一路径解析器 (path_resolver.py)
 - 支持环境变量 CRYPTOSIGNAL_CONFIG_ROOT

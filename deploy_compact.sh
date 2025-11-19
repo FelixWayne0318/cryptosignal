@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==========================================
-# CryptoSignal v7.4.0 精简部署脚本
+# CryptoSignal v7.4.2 精简部署脚本
 # 适合手机Termius复制粘贴执行
 # ==========================================
 # 使用方法：
@@ -35,7 +35,7 @@ print_err() { echo -e "${RED}❌ $1${NC}"; exit 1; }
 [ "$BINANCE_API_KEY" = "YOUR_BINANCE_API_KEY" ] && print_err "请先填写BINANCE_API_KEY"
 
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}  CryptoSignal v7.4.0 部署开始${NC}"
+echo -e "${GREEN}  CryptoSignal v7.4.2 部署开始${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo "GitHub用户: $GITHUB_USER"
 echo "分支: $GITHUB_BRANCH"

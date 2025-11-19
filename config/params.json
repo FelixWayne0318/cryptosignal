@@ -129,8 +129,8 @@
   },
 
   "weights": {
-    "_source": "从 config/factors_unified.json 自动加载（v7.4.0配置统一）",
-    "_version": "v7.4.0",
+    "_source": "从 config/factors_unified.json 自动加载（v7.4.2配置统一）",
+    "_version": "v7.4.2",
     "T": 23.0,
     "M": 10.0,
     "C": 26.0,
@@ -144,7 +144,7 @@
     "E": 0.0
   },
   "weights_comment": {
-    "_version": "v7.4.0 - 四步分层决策系统（革命性架构升级）",
+    "_version": "v7.4.2 - 四步分层决策系统（革命性架构升级）",
     "_total_weight": "100%（A层6因子权重百分比系统）",
     "_layer1_price_action": "Layer 1 价格行为层（44%）: T(23%) + M(10%) + V(11%)",
     "_layer2_capital_flow": "Layer 2 资金流层（46%）: C(26%) + O(20%)",
@@ -370,7 +370,7 @@
 
   "four_step_system": {
     "_comment": "v7.4四步分层决策系统 - 基于专家实施方案",
-    "_version": "v7.4.0",
+    "_version": "v7.4.2",
     "_description": "革命性架构：不仅给方向，更给具体价格（入场/止损/止盈）",
     "enabled": true,
 
@@ -428,7 +428,7 @@
         "floor": 0.50,
         "ceiling": 1.00,
 
-        "_comment_mapping": "I因子置信度映射曲线（v7.4.1配置化，消除硬编码）",
+        "_comment_mapping": "I因子置信度映射曲线（v7.4.2配置化，消除硬编码）",
         "mapping": {
           "high_beta_base": 0.60,
           "high_beta_range": 0.10,
@@ -462,7 +462,7 @@
         "lookback_hours": 6,
         "_note": "计算6小时前后的flow_score差异",
 
-        "_comment_flow_params": "Flow动量计算参数（v7.4.1配置化，消除硬编码）",
+        "_comment_flow_params": "Flow动量计算参数（v7.4.2配置化，消除硬编码）",
         "flow_weak_threshold": 1.0,
         "base_min_value": 10.0,
         "_flow_params_note": "flow值弱于threshold时认为无动量，base取max(..., base_min_value)避免除0"
@@ -507,7 +507,7 @@
         "buffer_moderate": 1.002,
         "buffer_weak": 1.005,
 
-        "_comment_fallback": "无支撑/阻力时的fallback buffer（v7.4.1配置化，v7.4.2调整为更保守）",
+        "_comment_fallback": "无支撑/阻力时的fallback buffer（v7.4.2配置化，v7.4.2调整为更保守）",
         "fallback_moderate_buffer": 0.999,
         "fallback_weak_buffer": 0.997,
         "_fallback_note": "无支撑时做多用current_price * fallback_buffer，无阻力时做空用current_price / fallback_buffer",
@@ -551,7 +551,7 @@
       },
 
       "orderbook": {
-        "_comment": "订单簿分析参数（从L因子元数据提取）- v7.4.0完整版",
+        "_comment": "订单簿分析参数（从L因子元数据提取）- v7.4.2完整版",
         "enabled": true,
 
         "_comment_wall_detection": "买墙/卖墙检测阈值",
@@ -585,7 +585,7 @@
           "score_multiplier": 2.0
         },
 
-        "_note": "v7.4.0: 从硬编码升级为配置化，便于后续调优"
+        "_note": "v7.4.2: 从硬编码升级为配置化，便于后续调优"
       }
     },
 
@@ -669,8 +669,8 @@
     },
 
     "symbol_refresh": {
-      "_comment": "币种列表动态刷新配置 - v7.4.0方案B（无需重启发现新币）",
-      "_version": "v7.4.0",
+      "_comment": "币种列表动态刷新配置 - v7.4.2方案B（无需重启发现新币）",
+      "_version": "v7.4.2",
       "_feature": "动态币种发现机制",
 
       "enabled": true,

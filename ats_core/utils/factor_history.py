@@ -5,7 +5,7 @@ Purpose:
     计算过去N小时的因子得分序列，用于Step2时机判断层的flow_momentum计算
 
 Implementation Note:
-    初版实现（v7.4.0）：
+    初版实现（v7.4.2）：
     - 完整实现：T, M 因子（仅需K线数据）
     - 简化实现：C, V, O, B 因子（使用当前值或降级逻辑）
     - 原因：历史CVD、OI数据获取复杂，初版先实现核心功能
@@ -16,7 +16,7 @@ Future Enhancement (v7.5+):
     - 实现V/B因子历史（如需要）
 
 Author: Claude Code
-Version: v7.4.0
+Version: v7.4.2
 Created: 2025-11-16
 """
 
@@ -167,7 +167,7 @@ def _calculate_factors_at_time(
         scores["M"] = 0
 
     # ---- C/O/V/B因子：简化实现（初版）----
-    # v7.4.0: 使用当前值或中性值
+    # v7.4.2: 使用当前值或中性值
     # v7.5+: 实现完整历史计算（需要CVD/OI历史数据）
 
     if current_scores:

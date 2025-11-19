@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# CryptoSignal v7.4.0 方案B 部署脚本生成器（模板）
+# CryptoSignal v7.4.2 方案B 部署脚本生成器（模板）
 # 用途：在服务器上生成完整的部署脚本
 #
 # 使用说明：
@@ -8,14 +8,14 @@
 #   2. 执行此脚本生成部署脚本
 #   3. 执行生成的部署脚本
 #
-# v7.4.0方案B特性：
+# v7.4.2方案B特性：
 #   - 每日3am保险重启（取代2h频繁重启）
 #   - 动态币种刷新（6h/次，无需重启发现新币）
 #   - 保护AntiJitter 2h冷却状态
 #
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  CryptoSignal v7.4.0 方案B 部署脚本生成器"
+echo "  CryptoSignal v7.4.2 方案B 部署脚本生成器"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "⚠️  请先配置以下变量（填入真实值）："
@@ -56,10 +56,10 @@ if [[ "$GITHUB_TOKEN" == "YOUR_GITHUB_TOKEN_HERE" ]] || \
     exit 1
 fi
 
-echo "正在创建v7.4.0方案B部署脚本..."
+echo "正在创建v7.4.2方案B部署脚本..."
 
 # 创建部署脚本
-cat > ~/vultr_deploy_v7.4.0_planB.sh << 'DEPLOY_SCRIPT_EOF'
+cat > ~/vultr_deploy_v7.4.2_planB.sh << 'DEPLOY_SCRIPT_EOF'
 #!/bin/bash
 set -e
 
@@ -78,7 +78,7 @@ TELEGRAM_CHAT_ID="TELEGRAM_CHAT_ID_PLACEHOLDER"
 TELEGRAM_ENABLED="TELEGRAM_ENABLED_PLACEHOLDER"
 SERVER_IP_WHITELIST="SERVER_IP_WHITELIST_PLACEHOLDER"
 
-# v7.4.0方案B配置更新
+# v7.4.2方案B配置更新
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 取消2小时自动重启配置（已废弃）
 # 原因：
@@ -108,11 +108,11 @@ print_info() { echo -e "${CYAN}ℹ️  $1${NC}"; }
 
 clear
 echo -e "${CYAN}╔═══════════════════════════════════════════════════════════╗${NC}"
-echo -e "${CYAN}║       CryptoSignal v7.4.0 方案B 服务器自动部署系统       ║${NC}"
+echo -e "${CYAN}║       CryptoSignal v7.4.2 方案B 服务器自动部署系统       ║${NC}"
 echo -e "${CYAN}║       Powered by Claude AI                                ║${NC}"
 echo -e "${CYAN}╚═══════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "${GREEN}v7.4.0方案B特性：${NC}"
+echo -e "${GREEN}v7.4.2方案B特性：${NC}"
 echo "  • 每日3am保险重启（取代2h频繁重启）"
 echo "  • 动态币种刷新（6h/次，无需重启发现新币）"
 echo "  • 保护AntiJitter 2h冷却状态"
@@ -172,7 +172,7 @@ if git checkout "$TARGET_BRANCH"; then
     print_info "当前分支: $CURRENT_BRANCH"
     print_info "最新提交: $LATEST_COMMIT"
     echo ""
-    print_success "v7.4.0方案B功能包含:"
+    print_success "v7.4.2方案B功能包含:"
     echo "   • 动态币种刷新机制（6h/次）"
     echo "   • 每日3am保险重启（替代2h频繁重启）"
     echo "   • AntiJitter 2h冷却期保护"
@@ -232,16 +232,16 @@ chmod 600 ~/cryptosignal/config/telegram.json
 print_success "Telegram配置已创建"
 
 print_header "步骤 8/10: 验证重启脚本"
-print_info "使用仓库中的auto_restart.sh（已包含v7.4.0方案B更新）"
+print_info "使用仓库中的auto_restart.sh（已包含v7.4.2方案B更新）"
 chmod +x ~/cryptosignal/auto_restart.sh
 print_success "自动重启脚本权限已设置"
 
-print_header "步骤 9/10: 配置定时任务（v7.4.0方案B）"
+print_header "步骤 9/10: 配置定时任务（v7.4.2方案B）"
 crontab -l 2>/dev/null | grep -v "cryptosignal" | grep -v "auto_restart" > /tmp/crontab.tmp || true
 cat >> /tmp/crontab.tmp <<'CRON_EOF'
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# CryptoSignal v7.4.0 方案B 自动化任务
+# CryptoSignal v7.4.2 方案B 自动化任务
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 每日3am保险重启（避免长期运行的内存泄漏）
 0 3 * * * ~/cryptosignal/auto_restart.sh
@@ -252,7 +252,7 @@ cat >> /tmp/crontab.tmp <<'CRON_EOF'
 CRON_EOF
 crontab /tmp/crontab.tmp
 rm /tmp/crontab.tmp
-print_success "定时任务已配置（v7.4.0方案B）"
+print_success "定时任务已配置（v7.4.2方案B）"
 
 print_header "步骤 10/10: 验证配置"
 VALIDATION_ERRORS=0
@@ -267,29 +267,29 @@ print_header "部署完成"
 [ $VALIDATION_ERRORS -eq 0 ] && print_success "✅ 部署成功！" || print_warning "⚠️  部署完成，但有验证错误"
 echo ""
 echo "🚀 启动系统: cd ~/cryptosignal && ./setup.sh"
-echo "🗑️  删除脚本: rm ~/vultr_deploy_v7.4.0_planB.sh"
+echo "🗑️  删除脚本: rm ~/vultr_deploy_v7.4.2_planB.sh"
 echo ""
 DEPLOY_SCRIPT_EOF
 
 # 替换占位符
-sed -i "s|GITHUB_TOKEN_PLACEHOLDER|$GITHUB_TOKEN|g" ~/vultr_deploy_v7.4.0_planB.sh
-sed -i "s|GIT_USER_NAME_PLACEHOLDER|$GIT_USER_NAME|g" ~/vultr_deploy_v7.4.0_planB.sh
-sed -i "s|GIT_USER_EMAIL_PLACEHOLDER|$GIT_USER_EMAIL|g" ~/vultr_deploy_v7.4.0_planB.sh
-sed -i "s|TARGET_BRANCH_PLACEHOLDER|$TARGET_BRANCH|g" ~/vultr_deploy_v7.4.0_planB.sh
-sed -i "s|BINANCE_API_KEY_PLACEHOLDER|$BINANCE_API_KEY|g" ~/vultr_deploy_v7.4.0_planB.sh
-sed -i "s|BINANCE_API_SECRET_PLACEHOLDER|$BINANCE_API_SECRET|g" ~/vultr_deploy_v7.4.0_planB.sh
-sed -i "s|BINANCE_TESTNET_PLACEHOLDER|$BINANCE_TESTNET|g" ~/vultr_deploy_v7.4.0_planB.sh
-sed -i "s|TELEGRAM_BOT_TOKEN_PLACEHOLDER|$TELEGRAM_BOT_TOKEN|g" ~/vultr_deploy_v7.4.0_planB.sh
-sed -i "s|TELEGRAM_CHAT_ID_PLACEHOLDER|$TELEGRAM_CHAT_ID|g" ~/vultr_deploy_v7.4.0_planB.sh
-sed -i "s|TELEGRAM_ENABLED_PLACEHOLDER|$TELEGRAM_ENABLED|g" ~/vultr_deploy_v7.4.0_planB.sh
-sed -i "s|SERVER_IP_WHITELIST_PLACEHOLDER|$SERVER_IP_WHITELIST|g" ~/vultr_deploy_v7.4.0_planB.sh
+sed -i "s|GITHUB_TOKEN_PLACEHOLDER|$GITHUB_TOKEN|g" ~/vultr_deploy_v7.4.2_planB.sh
+sed -i "s|GIT_USER_NAME_PLACEHOLDER|$GIT_USER_NAME|g" ~/vultr_deploy_v7.4.2_planB.sh
+sed -i "s|GIT_USER_EMAIL_PLACEHOLDER|$GIT_USER_EMAIL|g" ~/vultr_deploy_v7.4.2_planB.sh
+sed -i "s|TARGET_BRANCH_PLACEHOLDER|$TARGET_BRANCH|g" ~/vultr_deploy_v7.4.2_planB.sh
+sed -i "s|BINANCE_API_KEY_PLACEHOLDER|$BINANCE_API_KEY|g" ~/vultr_deploy_v7.4.2_planB.sh
+sed -i "s|BINANCE_API_SECRET_PLACEHOLDER|$BINANCE_API_SECRET|g" ~/vultr_deploy_v7.4.2_planB.sh
+sed -i "s|BINANCE_TESTNET_PLACEHOLDER|$BINANCE_TESTNET|g" ~/vultr_deploy_v7.4.2_planB.sh
+sed -i "s|TELEGRAM_BOT_TOKEN_PLACEHOLDER|$TELEGRAM_BOT_TOKEN|g" ~/vultr_deploy_v7.4.2_planB.sh
+sed -i "s|TELEGRAM_CHAT_ID_PLACEHOLDER|$TELEGRAM_CHAT_ID|g" ~/vultr_deploy_v7.4.2_planB.sh
+sed -i "s|TELEGRAM_ENABLED_PLACEHOLDER|$TELEGRAM_ENABLED|g" ~/vultr_deploy_v7.4.2_planB.sh
+sed -i "s|SERVER_IP_WHITELIST_PLACEHOLDER|$SERVER_IP_WHITELIST|g" ~/vultr_deploy_v7.4.2_planB.sh
 
-chmod +x ~/vultr_deploy_v7.4.0_planB.sh
+chmod +x ~/vultr_deploy_v7.4.2_planB.sh
 
 echo ""
-echo "✅ v7.4.0方案B部署脚本已创建: ~/vultr_deploy_v7.4.0_planB.sh"
+echo "✅ v7.4.2方案B部署脚本已创建: ~/vultr_deploy_v7.4.2_planB.sh"
 echo ""
 echo "📱 下一步："
-echo "  1. 执行部署: ~/vultr_deploy_v7.4.0_planB.sh"
-echo "  2. 删除脚本: rm ~/vultr_deploy_v7.4.0_planB.sh ~/deploy_server_v7.4.0_planB.template.sh"
+echo "  1. 执行部署: ~/vultr_deploy_v7.4.2_planB.sh"
+echo "  2. 删除脚本: rm ~/vultr_deploy_v7.4.2_planB.sh ~/deploy_server_v7.4.2_planB.template.sh"
 echo ""

@@ -54,7 +54,7 @@
     ],
     "docs": [
       "FOUR_STEP_SYSTEM_VERIFICATION_REPORT.md",
-      "AUDIT_REPORT_v7.4.0.md",
+      "AUDIT_REPORT_v7.4.2.md",
       "README.md",
       "SYSTEM_HEALTH_CHECK_REPORT_2025-11-18.md",
       "docs/SERVER_VERSION_FIX_GUIDE.md",
@@ -89,7 +89,7 @@
       "docs/FOUR_STEP_LAYERED_DECISION_SYSTEM_DESIGN.md",
       "docs/CLAUDE_PROJECT_IMPORT_GUIDE.md",
       "docs/CODE_MODIFICATION_PROTOCOL.md",
-      "docs/v7.4.1_HARDCODE_CLEANUP.md",
+      "docs/v7.4.2_HARDCODE_CLEANUP.md",
       "docs/FACTOR_SYSTEM_COMPLETE_DESIGN.md",
       "docs/CONFIG_MANAGEMENT_GUIDE.md",
       "docs/F_FACTOR_ANTI_CHASE_CAPABILITY_ASSESSMENT.md",

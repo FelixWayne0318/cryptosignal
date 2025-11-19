@@ -22,7 +22,7 @@ Key Features:
     - 赔率约束（min RR = 1.5）
 
 Author: Claude Code (based on Expert Implementation Plan)
-Version: v7.4.0
+Version: v7.4.2
 Created: 2025-11-16
 """
 
@@ -86,7 +86,7 @@ def extract_orderbook_from_L_meta(
     params: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
-    从L因子元数据中提取订单簿信息（v7.4.0完整版 - 利用价格带法全部分析结果）
+    从L因子元数据中提取订单簿信息（v7.4.2完整版 - 利用价格带法全部分析结果）
 
     Args:
         l_factor_meta: L因子元数据，包含价格带法的完整分析结果
@@ -113,7 +113,7 @@ def extract_orderbook_from_L_meta(
         }
 
     Note:
-        v7.4.0完整版：充分利用L因子价格带法的全部分析结果
+        v7.4.2完整版：充分利用L因子价格带法的全部分析结果
         深度得分 = OBI基础分 + 覆盖度 + 冲击成本（权重从配置读取，默认50%+25%+25%）
         所有计算参数从config/params.json读取，零硬编码 ✅
     """
@@ -176,7 +176,7 @@ def extract_orderbook_from_L_meta(
     # ====================
     # 3. 深度得分（综合版：OBI基础分 + 覆盖度 + 冲击成本，权重从配置读取）
     # ====================
-    # 从配置读取参数（v7.4.0配置化改造，消除硬编码）
+    # 从配置读取参数（v7.4.2配置化改造，消除硬编码）
     weights = orderbook_cfg.get("depth_score_weights", {})
     obi_weight = weights.get("obi_base_weight", 0.50)
     coverage_weight = weights.get("coverage_weight", 0.25)
@@ -315,14 +315,14 @@ def calculate_entry_price(
     """
     entry_cfg = params.get("four_step_system", {}).get("step3_risk", {}).get("entry_price", {})
 
-    # 从配置读取阈值和buffer（v7.4.1配置化，消除硬编码）
+    # 从配置读取阈值和buffer（v7.4.2配置化，消除硬编码）
     strong_f = entry_cfg.get("strong_accumulation_f", 70)
     moderate_f = entry_cfg.get("moderate_accumulation_f", 40)
     buffer_strong = entry_cfg.get("buffer_strong", 1.000)
     buffer_moderate = entry_cfg.get("buffer_moderate", 1.002)
     buffer_weak = entry_cfg.get("buffer_weak", 1.005)
 
-    # v7.4.1新增：无支撑/阻力时的fallback buffer（消除硬编码）
+    # v7.4.2新增：无支撑/阻力时的fallback buffer（消除硬编码）
     fallback_moderate = entry_cfg.get("fallback_moderate_buffer", 0.998)
     fallback_weak = entry_cfg.get("fallback_weak_buffer", 0.995)
 
@@ -341,13 +341,13 @@ def calculate_entry_price(
             if support is not None:
                 entry = support * buffer_moderate
             else:
-                entry = current_price * fallback_moderate  # v7.4.1: 从配置读取，不再硬编码0.998
+                entry = current_price * fallback_moderate  # v7.4.2: 从配置读取，不再硬编码0.998
         else:
             # 弱吸筹
             if support is not None:
                 entry = support * buffer_weak
             else:
-                entry = current_price * fallback_weak  # v7.4.1: 从配置读取，不再硬编码0.995
+                entry = current_price * fallback_weak  # v7.4.2: 从配置读取，不再硬编码0.995
 
         # 买墙调整（初版不启用，但预留逻辑）
         wall_adjustment_enabled = params.get("four_step_system", {}).get("step3_risk", {}).get("orderbook", {}).get("wall_adjustment_enabled", False)

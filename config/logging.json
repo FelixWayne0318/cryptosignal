@@ -1,6 +1,6 @@
 {
-  "_description": "日志格式配置 - v7.4.0四步分层决策系统",
-  "_version": "v7.4.0",
+  "_description": "日志格式配置 - v7.4.2四步分层决策系统",
+  "_version": "v7.4.2",
 
   "logging": {
     "float_format": {

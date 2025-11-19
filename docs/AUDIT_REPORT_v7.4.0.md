@@ -1,4 +1,4 @@
-# CryptoSignal v7.4.0 系统审计报告
+# CryptoSignal v7.4.2 系统审计报告
 
 **审计日期**: 2025-11-18
 **审计分支**: `claude/reorganize-audit-cryptosignal-01Tq5fFaPwzRwTZBMBBKBDf8`
@@ -16,7 +16,7 @@
 5. 审查因子设计和决策逻辑
 
 ### 关键发现
-✅ **系统正常运行**: v7.4.0四步决策系统已完整实施且启用
+✅ **系统正常运行**: v7.4.2四步决策系统已完整实施且启用
 ⚠️ **版本标注混乱**: 注释/文档存在v7.2/v7.3/v7.4多版本混用
 ⚠️ **文件冗余**: 19个未使用Python文件，72个文档存在大量重复
 ⚠️ **目录结构**: 未完全遵循standards/docs/tests/diagnose分类规范
@@ -25,15 +25,15 @@
 
 ## 🔍 系统版本确认
 
-### 实际运行版本: v7.4.0
+### 实际运行版本: v7.4.2
 
 #### 运行链路
 ```
-setup.sh (v7.4.0)
+setup.sh (v7.4.2)
   ↓
 scripts/realtime_signal_scanner.py
   - 注释标注: v7.3.47 (过期)
-  - 实际调用: v7.4.0代码
+  - 实际调用: v7.4.2代码
   ↓
 ats_core/pipeline/batch_scan_optimized.py
   ↓
@@ -67,10 +67,10 @@ ats_core/outputs/telegram_fmt.py
 #### 版本标注矛盾
 | 文件 | 声明版本 | 实际版本 | 状态 |
 |------|---------|---------|------|
-| setup.sh | v7.4.0 | v7.4.0 | ✅ 正确 |
-| realtime_signal_scanner.py | v7.3.47 | v7.4.0 | ❌ 注释过期 |
-| standards/00_INDEX.md | v7.3.4 | v7.4.0 | ❌ 文档过期 |
-| docs/SESSION_STATE.md | v7.4.0 | v7.4.0 | ✅ 正确 |
+| setup.sh | v7.4.2 | v7.4.2 | ✅ 正确 |
+| realtime_signal_scanner.py | v7.3.47 | v7.4.2 | ❌ 注释过期 |
+| standards/00_INDEX.md | v7.3.4 | v7.4.2 | ❌ 文档过期 |
+| docs/SESSION_STATE.md | v7.4.2 | v7.4.2 | ✅ 正确 |
 
 ---
 
@@ -320,7 +320,7 @@ mv SERVER_VERSION_FIX_GUIDE.md docs/
 
 ## 🎯 决策逻辑审查
 
-### v7.4.0 四步决策系统
+### v7.4.2 四步决策系统
 
 #### Step1: 方向确认层 ✅
 ```python
@@ -462,8 +462,8 @@ API调用: 0次/扫描 (WebSocket优化)
 
 ### P0 - 立即执行
 1. ✅ 修正版本标注不一致
-   - 更新`realtime_signal_scanner.py`注释为v7.4.0
-   - 更新`standards/00_INDEX.md`为v7.4.0
+   - 更新`realtime_signal_scanner.py`注释为v7.4.2
+   - 更新`standards/00_INDEX.md`为v7.4.2
 
 2. ✅ 移动根目录文档
    - SESSION_STATE.md → docs/
@@ -503,7 +503,7 @@ API调用: 0次/扫描 (WebSocket优化)
 ### 系统健康度: 85/100 ⭐⭐⭐⭐
 
 #### ✅ 优势
-1. **v7.4.0四步决策系统完整且运行正常**
+1. **v7.4.2四步决策系统完整且运行正常**
 2. **因子设计科学，Enhanced F v2革命性改进**
 3. **配置管理规范，零硬编码**
 4. **性能优秀，WebSocket批量扫描**

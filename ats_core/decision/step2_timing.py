@@ -24,7 +24,7 @@ Timing Quality Levels:
     Enhanced_F < -60  → "Chase" (严重追涨)
 
 Author: Claude Code (based on Expert Plan)
-Version: v7.4.0
+Version: v7.4.2
 Created: 2025-11-16
 """
 
@@ -85,8 +85,8 @@ def calculate_flow_momentum(
         factor_scores_series: 历史因子得分序列（7个时间点）
         weights: Flow权重
         lookback_hours: 回溯小时数（默认6）
-        flow_weak_threshold: Flow弱阈值（v7.4.1配置化，默认1.0）
-        base_min_value: base最小值（v7.4.1配置化，默认10.0）
+        flow_weak_threshold: Flow弱阈值（v7.4.2配置化，默认1.0）
+        base_min_value: base最小值（v7.4.2配置化，默认10.0）
 
     Returns:
         flow_momentum: Flow动量百分比
@@ -104,11 +104,11 @@ def calculate_flow_momentum(
     flow_now = flow_series[-1]
     flow_6h_ago = flow_series[0]
 
-    # v7.4.1配置化：flow值都很弱（接近0）时认为无动量
+    # v7.4.2配置化：flow值都很弱（接近0）时认为无动量
     if abs(flow_now) < flow_weak_threshold and abs(flow_6h_ago) < flow_weak_threshold:
         return 0.0
 
-    # v7.4.1配置化：计算变化百分比，使用配置的base_min_value避免除0
+    # v7.4.2配置化：计算变化百分比，使用配置的base_min_value避免除0
     flow_change = flow_now - flow_6h_ago
     base = max(abs(flow_now), abs(flow_6h_ago), base_min_value)
     flow_momentum = (flow_change / base) * 100.0
@@ -196,7 +196,7 @@ def calculate_enhanced_f_v2(
     })
     lookback_hours = enhanced_f_cfg.get("lookback_hours", 6)
 
-    # v7.4.1新增：Flow动量计算参数（消除硬编码）
+    # v7.4.2新增：Flow动量计算参数（消除硬编码）
     flow_weak_threshold = enhanced_f_cfg.get("flow_weak_threshold", 1.0)
     base_min_value = enhanced_f_cfg.get("base_min_value", 10.0)
 
@@ -223,7 +223,7 @@ def calculate_enhanced_f_v2(
             "reject_reason": f"K线不足: 需要{lookback_hours+1}根，实际{len(klines)}根"
         }
 
-    # 计算Flow动量（v7.4.1: 传入配置参数，消除硬编码）
+    # 计算Flow动量（v7.4.2: 传入配置参数，消除硬编码）
     flow_momentum = calculate_flow_momentum(
         factor_scores_series,
         flow_weights,

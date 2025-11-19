@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==========================================
-# CryptoSignal v7.4.0方案B 生产环境部署脚本（交互式版本）
+# CryptoSignal v7.4.2方案B 生产环境部署脚本（交互式版本）
 # ==========================================
 # 用途：全新服务器一键部署（运行时交互式输入敏感信息）
 # 使用方法：
@@ -59,7 +59,7 @@ print_info() { echo -e "${CYAN}ℹ️  $1${NC}"; }
 
 clear
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}    CryptoSignal v7.4.0 部署配置向导${NC}"
+echo -e "${GREEN}    CryptoSignal v7.4.2 部署配置向导${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo -e "${CYAN}请根据提示输入配置信息（敏感信息输入时不显示）${NC}"
@@ -340,7 +340,7 @@ chmod 600 ~/cryptosignal/config/telegram.json
 if [ -f ~/cryptosignal/config/params.json ]; then
     print_success "params.json配置文件存在"
     if grep -q '"symbol_refresh"' ~/cryptosignal/config/params.json; then
-        print_success "v7.4.0方案B配置已启用（symbol_refresh）"
+        print_success "v7.4.2方案B配置已启用（symbol_refresh）"
     else
         print_warning "未检测到symbol_refresh配置"
     fi
@@ -394,9 +394,9 @@ else
 fi
 
 # ==========================================
-# 步骤9：配置定时任务（v7.4.0方案B）
+# 步骤9：配置定时任务（v7.4.2方案B）
 # ==========================================
-print_step "步骤9/10：配置定时任务（v7.4.0方案B）"
+print_step "步骤9/10：配置定时任务（v7.4.2方案B）"
 
 # 备份当前crontab
 crontab -l > /tmp/crontab_backup_$(date +%Y%m%d_%H%M%S).txt 2>/dev/null || true
@@ -408,7 +408,7 @@ crontab -l 2>/dev/null | grep -v "cryptosignal" | grep -v "auto_restart" > /tmp/
 cat >> /tmp/crontab.tmp << 'CRON_EOF'
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# CryptoSignal v7.4.0 方案B 自动化任务
+# CryptoSignal v7.4.2 方案B 自动化任务
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 特性：
 #   1. 每日3am保险重启（避免内存泄漏）
@@ -475,7 +475,7 @@ fi
 
 # 验证方案B配置
 echo ""
-echo "验证v7.4.0方案B配置..."
+echo "验证v7.4.2方案B配置..."
 if grep -q '"symbol_refresh"' ~/cryptosignal/config/params.json 2>/dev/null; then
     print_success "动态币种刷新配置存在"
 else
@@ -488,9 +488,9 @@ fi
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 if [ $VALIDATION_ERRORS -eq 0 ]; then
-    echo -e "${GREEN}✅ v7.4.0方案B 部署完成！所有验证通过！${NC}"
+    echo -e "${GREEN}✅ v7.4.2方案B 部署完成！所有验证通过！${NC}"
 else
-    echo -e "${YELLOW}⚠️  v7.4.0方案B 部署完成，但有 $VALIDATION_ERRORS 个验证错误${NC}"
+    echo -e "${YELLOW}⚠️  v7.4.2方案B 部署完成，但有 $VALIDATION_ERRORS 个验证错误${NC}"
 fi
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
@@ -508,7 +508,7 @@ echo "   部署日志: $DEPLOY_LOG"
 echo ""
 
 # 显示方案B特性
-echo -e "${CYAN}⏰ v7.4.0方案B 特性${NC}"
+echo -e "${CYAN}⏰ v7.4.2方案B 特性${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "   ✅ 每日3am自动重启（保护2h冷却状态）"
 echo "   ✅ 动态币种刷新（6h自动刷新，无需重启）"

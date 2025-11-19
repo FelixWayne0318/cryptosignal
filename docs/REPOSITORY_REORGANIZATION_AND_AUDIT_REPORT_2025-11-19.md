@@ -1,7 +1,7 @@
 # CryptoSignal v7.4 仓库重组与系统审计报告
 
 **日期**: 2025-11-19
-**版本**: v7.4.0
+**版本**: v7.4.2
 **分支**: `claude/reorganize-audit-cryptosignal-01BCwP8umVzbeyT1ESmLsnbB`
 **任务类型**: 仓库重组 + 技术审计
 
@@ -31,7 +31,7 @@
 setup.sh
   ├─ 拉取最新代码（git pull）
   ├─ 清理Python缓存
-  ├─ 验证v7.4.0目录结构（tests/diagnose/docs/standards/ats_core/decision）
+  ├─ 验证v7.4.2目录结构（tests/diagnose/docs/standards/ats_core/decision）
   ├─ 安装依赖（pip install -r requirements.txt）
   ├─ 检查配置文件（config/binance_credentials.json, config/telegram.json）
   ├─ 初始化数据库（scripts/init_databases.py）
@@ -40,7 +40,7 @@ setup.sh
 
 **核心发现**：
 - ✅ 入口点清晰，文档齐全
-- ✅ v7.4.0 四步决策系统已完整实现
+- ✅ v7.4.2 四步决策系统已完整实现
 - ✅ 配置管理规范（config/params.json统一管理）
 - ⚠️  依赖分析显示21个Python文件"未使用"（实际为误报，详见1.2节）
 
@@ -97,7 +97,7 @@ setup.sh
 
 | 文件名 | 原位置 | 新位置 | 类型 |
 |--------|--------|--------|------|
-| AUDIT_REPORT_v7.4.0.md | 根目录 | docs/ | 审计报告 |
+| AUDIT_REPORT_v7.4.2.md | 根目录 | docs/ | 审计报告 |
 | BACKTEST_READINESS_ASSESSMENT.md | 根目录 | docs/ | 回测评估 |
 | DEPLOY_QUICKSTART.md | 根目录 | docs/ | 部署文档 |
 | FOUR_STEP_SYSTEM_VERIFICATION_REPORT.md | 根目录 | docs/ | 验证报告 |
@@ -129,7 +129,7 @@ cryptosignal/
 ├── requirements.txt             # 依赖清单
 │
 ├── docs/                        # 📚 说明文档（统一管理）
-│   ├── AUDIT_REPORT_v7.4.0.md
+│   ├── AUDIT_REPORT_v7.4.2.md
 │   ├── BACKTEST_READINESS_ASSESSMENT.md
 │   ├── DEPLOY_QUICKSTART.md
 │   ├── FOUR_STEP_SYSTEM_VERIFICATION_REPORT.md
@@ -221,7 +221,7 @@ cryptosignal/
 | 模块 | 评分 | 关键优点 | 主要问题 |
 |------|------|----------|----------|
 | **Step1（方向确认）** | 8.5/10 | ✅ I因子语义修正正确<br>✅ 硬veto规则合理 | ⚠️ 方向置信度曲线硬编码（P2） |
-| **Step2（时机判断）** | 9.0/10 ⭐ | ✅ Enhanced F v2修正版<br>✅ Flow vs Price对比逻辑清晰 | ⚠️ Flow弱阈值硬编码（v7.4.1已修复） |
+| **Step2（时机判断）** | 9.0/10 ⭐ | ✅ Enhanced F v2修正版<br>✅ Flow vs Price对比逻辑清晰 | ⚠️ Flow弱阈值硬编码（v7.4.2已修复） |
 | **Step3（风险管理）** | 8.0/10 | ✅ 支撑/阻力识别<br>✅ L因子调节止损 | ⚠️ 入场价fallback过于激进（P0）<br>⚠️ ATR倍数调节阈值缺乏实证（P1） |
 | **Step4（质量控制）** | 7.5/10 | ✅ 四道闸门设计合理<br>✅ C vs O矛盾检测 | ⚠️ Gate2噪声阈值固定（P0）<br>⚠️ Gate4矛盾阈值过于宽松（P1） |
 
@@ -251,7 +251,7 @@ cryptosignal/
 3. O因子统计窗口与价格判断窗口不一致
 4. E因子`chop14_max=70`过于宽松
 5. S因子ZigZag的`theta`参数计算复杂
-6. Enhanced F v2的Flow弱阈值硬编码（v7.4.1已修复）
+6. Enhanced F v2的Flow弱阈值硬编码（v7.4.2已修复）
 7. Step3止损ATR倍数调节阈值缺乏实证
 8. Gate4矛盾检测阈值过于宽松
 9. 缺少因子间相关性监控
@@ -337,7 +337,7 @@ cryptosignal/
 
 ✅ **1. 系统架构分析**
 - 从 setup.sh 入口深入分析真实运行流程
-- 确认v7.4.0四步决策系统完整实现
+- 确认v7.4.2四步决策系统完整实现
 - 验证配置管理规范性
 
 ✅ **2. 依赖关系分析**
@@ -409,7 +409,7 @@ cryptosignal/
 
 **文档移动（根目录 → docs/）**：
 ```bash
-mv AUDIT_REPORT_v7.4.0.md docs/
+mv AUDIT_REPORT_v7.4.2.md docs/
 mv BACKTEST_READINESS_ASSESSMENT.md docs/
 mv DEPLOY_QUICKSTART.md docs/
 mv FOUR_STEP_SYSTEM_VERIFICATION_REPORT.md docs/
@@ -452,7 +452,7 @@ mv analyze_dependencies_v2.py scripts/
 
 ### 9.1 核心发现
 
-1. **系统架构优秀** - v7.4.0四步决策系统设计合理，分层清晰
+1. **系统架构优秀** - v7.4.2四步决策系统设计合理，分层清晰
 2. **数学基础扎实** - 大部分因子计算正确，符合市场微观结构原理
 3. **配置管理规范** - 统一使用 config/params.json，零硬编码达成度95%+
 4. **存在工程债务** - 8个P0问题需要立即修复，12个P1问题影响稳健性
