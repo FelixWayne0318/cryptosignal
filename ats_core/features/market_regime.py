@@ -13,11 +13,32 @@ BTC/ETH市场大盘趋势过滤器（方案B - 独立过滤器）
 目标：避免在BTC强势下跌时做多山寨币
 """
 
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Union
 import math
 
 # 缓存市场趋势结果（避免重复计算）
 _market_cache = {}
+
+
+def _get_kline_field(kline: Union[dict, list], field: str) -> float:
+    """
+    从K线中提取字段值（兼容字典和列表两种格式）
+
+    P0 Bugfix: 支持回测引擎返回的字典格式K线
+    """
+    if isinstance(kline, dict):
+        return kline.get(field, 0)
+    else:
+        field_map = {
+            "timestamp": 0, "open": 1, "high": 2, "low": 3, "close": 4,
+            "volume": 5, "close_time": 6, "quote_volume": 7
+        }
+        index = field_map.get(field, 0)
+        if isinstance(kline, (list, tuple)) and len(kline) > index:
+            return kline[index]
+        else:
+            return 0
+
 
 def _calc_single_trend(closes: list) -> int:
     """
@@ -133,8 +154,9 @@ def calculate_market_regime(cache_key: str = None) -> Tuple[int, Dict[str, Any]]
         eth_k1 = get_klines("ETHUSDT", "1h", 100)
 
         # 提取收盘价
-        btc_closes = [float(k[4]) for k in btc_k1]
-        eth_closes = [float(k[4]) for k in eth_k1]
+        # P0 Bugfix: 使用兼容函数支持字典格式K线
+        btc_closes = [float(_get_kline_field(k, "close")) for k in btc_k1]
+        eth_closes = [float(_get_kline_field(k, "close")) for k in eth_k1]
 
         # 计算趋势分数（使用1小时级别算法）
         btc_trend = _calc_single_trend(btc_closes)

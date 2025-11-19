@@ -15,9 +15,51 @@ v7.3.45增强：CVD专家复核修复
 - compute_cvd_delta: 增加列数校验
 """
 
-from typing import List, Tuple, Dict, Sequence
+from typing import List, Tuple, Dict, Sequence, Union
 import math
 from ats_core.logging import warn, error
+
+
+def _get_kline_field(kline: Union[dict, list], field: str) -> float:
+    """
+    从K线中提取字段值（兼容字典和列表两种格式）
+
+    Args:
+        kline: K线数据（字典或列表格式）
+        field: 字段名称（timestamp, open, high, low, close, volume, close_time等）
+
+    Returns:
+        字段值（浮点数）
+
+    说明:
+        - P0 Bugfix: 支持回测引擎返回的字典格式K线
+        - 字典格式: {"timestamp": ..., "close": ..., "close_time": ...}
+        - 列表格式: [timestamp, open, high, low, close, volume, close_time, ...]
+        - 字段映射: timestamp=0, open=1, high=2, low=3, close=4, volume=5, close_time=6
+    """
+    if isinstance(kline, dict):
+        # 字典格式：直接读取字段
+        return kline.get(field, 0)
+    else:
+        # 列表格式：根据索引映射读取
+        field_map = {
+            "timestamp": 0,
+            "open": 1,
+            "high": 2,
+            "low": 3,
+            "close": 4,
+            "volume": 5,
+            "close_time": 6,
+            "quote_volume": 7,
+            "trades": 8,
+            "taker_buy_base": 9,
+            "taker_buy_quote": 10
+        }
+        index = field_map.get(field, 0)
+        if isinstance(kline, (list, tuple)) and len(kline) > index:
+            return kline[index]
+        else:
+            return 0
 
 
 def _diff(values: List[float]) -> List[float]:
@@ -87,7 +129,8 @@ def align_oi_to_klines(
         return []
 
     # 构建K线closeTime映射 (closeTime -> index)
-    kline_close_times = {int(k[6]): i for i, k in enumerate(klines)}
+    # P0 Bugfix: 使用兼容函数支持字典格式K线
+    kline_close_times = {int(_get_kline_field(k, "close_time")): i for i, k in enumerate(klines)}
 
     # 初始化结果（默认0）
     result = [0.0] * len(klines)
@@ -478,7 +521,8 @@ def align_oi_to_klines_strict(
     prev_oi = 0.0  # 延迟1栈（用于回退）
 
     for i, kline in enumerate(klines):
-        close_time = int(kline[6])  # closeTime
+        # P0 Bugfix: 使用兼容函数支持字典格式K线
+        close_time = int(_get_kline_field(kline, "close_time"))  # closeTime
 
         # 向下查找：找最近的 oi_ts <= closeTime
         best_oi = None
@@ -639,7 +683,8 @@ def filter_unclosed_klines(
     filtered_count = 0
 
     for kline in klines:
-        close_time = int(kline[6])  # closeTime
+        # P0 Bugfix: 使用兼容函数支持字典格式K线
+        close_time = int(_get_kline_field(kline, "close_time"))  # closeTime
 
         # 检查是否已经安全收盘
         if now_ms >= close_time + safety_lag_ms:

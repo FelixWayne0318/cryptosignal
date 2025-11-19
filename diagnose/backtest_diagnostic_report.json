@@ -1,0 +1,28 @@
+{
+  "timestamp": "2025-11-18",
+  "summary": {
+    "p0_issues": 1,
+    "p1_issues": 0,
+    "p2_issues": 0,
+    "warnings": 0
+  },
+  "issues": [
+    {
+      "id": "API-002",
+      "severity": "P0",
+      "title": "API认证头无条件发送（导致HTTP 403）",
+      "description": "_get_signed函数中，无论API_KEY是否为空都发送X-MBX-APIKEY头",
+      "location": "ats_core/sources/binance.py:99-109",
+      "reason": "发送空的X-MBX-APIKEY头会触发Binance 403 Forbidden",
+      "fix": "在发送认证头前检查API_KEY是否存在"
+    }
+  ],
+  "warnings": [],
+  "info": [
+    {
+      "id": "INFO-001",
+      "title": "四步系统融合模式已启用",
+      "description": "回测将使用四步系统决策"
+    }
+  ]
+}

@@ -424,9 +424,22 @@
       },
 
       "confidence": {
-        "_comment": "置信度范围",
+        "_comment": "置信度范围和曲线参数",
         "floor": 0.50,
-        "ceiling": 1.00
+        "ceiling": 1.00,
+
+        "_comment_mapping": "I因子置信度映射曲线（v7.4.1配置化，消除硬编码）",
+        "mapping": {
+          "high_beta_base": 0.60,
+          "high_beta_range": 0.10,
+          "moderate_beta_base": 0.70,
+          "moderate_beta_range": 0.15,
+          "low_beta_base": 0.85,
+          "low_beta_range": 0.10,
+          "independent_base": 0.95,
+          "independent_range": 0.05
+        },
+        "_mapping_note": "I < high_beta: [0.60, 0.70], I < moderate_beta: [0.70, 0.85], I < low_beta: [0.85, 0.95], I >= low_beta: [0.95, 1.00]"
       }
     },
 
@@ -447,7 +460,12 @@
         },
 
         "lookback_hours": 6,
-        "_note": "计算6小时前后的flow_score差异"
+        "_note": "计算6小时前后的flow_score差异",
+
+        "_comment_flow_params": "Flow动量计算参数（v7.4.1配置化，消除硬编码）",
+        "flow_weak_threshold": 1.0,
+        "base_min_value": 10.0,
+        "_flow_params_note": "flow值弱于threshold时认为无动量，base取max(..., base_min_value)避免除0"
       },
 
       "timing_quality": {
@@ -487,7 +505,12 @@
         "moderate_accumulation_f": 40,
         "buffer_strong": 1.000,
         "buffer_moderate": 1.002,
-        "buffer_weak": 1.005
+        "buffer_weak": 1.005,
+
+        "_comment_fallback": "无支撑/阻力时的fallback buffer（v7.4.1配置化，消除硬编码）",
+        "fallback_moderate_buffer": 0.998,
+        "fallback_weak_buffer": 0.995,
+        "_fallback_note": "无支撑时做多用current_price * fallback_buffer，无阻力时做空用current_price / fallback_buffer"
       },
 
       "stop_loss": {
@@ -692,6 +715,83 @@
         "保守容错：宁可不刷新，也不用错误数据",
         "完整追溯：记录所有币种变化历史"
       ]
+    }
+  },
+
+  "backtest": {
+    "_comment": "Backtest Framework v1.0 - 零硬编码历史数据回测系统",
+    "_version": "v1.0",
+    "_description": "配置驱动的回测框架，所有参数可调，支持多符号、多时间段回测",
+    "_standard": "SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0",
+    "_design_doc": "docs/BACKTEST_FRAMEWORK_v1.0_DESIGN.md",
+
+    "data_loader": {
+      "_comment": "历史数据加载器配置",
+      "default_interval": "1h",
+      "api_retry_count": 3,
+      "api_retry_delay_base": 2.0,
+      "api_retry_delay_range": 2.0,
+      "api_timeout_seconds": 30,
+      "cache_enabled": true,
+      "cache_dir": "data/backtest_cache",
+      "cache_max_size_mb": 500,
+      "cache_ttl_hours": 168
+    },
+
+    "engine": {
+      "_comment": "回测引擎配置（v1.5 P0修复：限价单模型 + 手续费 + 悲观假设）",
+      "batch_size": 1,
+      "progress_log_interval": 100,
+      "signal_cooldown_hours": 2,
+
+      "_comment_execution": "=== 交易执行参数（v1.5 P0修复） ===",
+      "max_entry_bars": 4,
+      "_max_entry_bars_note": "限价单有效期（1h bar数），超时未成交则信号失效（专家方案：防止未来信息泄露）",
+
+      "taker_fee_rate": 0.0005,
+      "_taker_fee_rate_note": "Taker手续费率（0.05%），双边收费（入场+出场）",
+
+      "slippage_percent": 0.02,
+      "_slippage_percent_note": "滑点基数（0.02% = 2bps），做多买贵/做空卖便宜（v1.5调整：从0.1%降至0.02%更真实）",
+      "slippage_range": 0.01,
+      "_slippage_range_note": "滑点随机范围（±0.01%），模拟真实市场波动",
+
+      "_comment_position": "=== 仓位管理参数 ===",
+      "position_size_usdt": 100,
+      "_position_size_note": "固定仓位大小（v1.0简化版，v1.6将改为基于风险%的动态仓位）",
+
+      "max_holding_hours": 168,
+      "_max_holding_note": "最大持仓时长（168h = 7天），超时强制平仓",
+
+      "enable_anti_jitter": true,
+      "_anti_jitter_note": "启用Anti-Jitter冷却期（2小时），与实盘一致",
+
+      "exit_classification": {
+        "_comment": "退出原因分类（§6.4分段逻辑配置）",
+        "sl_hit": {"priority": 1, "label": "SL_HIT"},
+        "tp1_hit": {"priority": 2, "label": "TP1_HIT"},
+        "tp2_hit": {"priority": 3, "label": "TP2_HIT"},
+        "max_holding_exceeded": {"priority": 4, "label": "TIMEOUT"},
+        "manual_close": {"priority": 5, "label": "MANUAL"},
+        "entry_not_filled": {"priority": 6, "label": "ENTRY_NOT_FILLED"}
+      }
+    },
+
+    "metrics": {
+      "_comment": "性能评估配置",
+      "min_signals_for_stats": 10,
+      "confidence_level": 0.95,
+      "risk_free_rate": 0.03,
+      "pnl_histogram_bins": [-10, -5, -2, 0, 2, 5, 10, 20],
+      "holding_time_bins_hours": [1, 6, 12, 24, 48, 72, 168]
+    },
+
+    "output": {
+      "_comment": "输出格式配置",
+      "default_format": "json",
+      "json_indent": 2,
+      "markdown_include_charts": false,
+      "csv_delimiter": ","
     }
   }
 }

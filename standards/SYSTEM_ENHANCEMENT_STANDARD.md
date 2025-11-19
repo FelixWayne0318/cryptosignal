@@ -1106,6 +1106,570 @@ def check_default_consistency():
 
 ---
 
+## 🎓 实战案例：v7.4.1四步系统硬编码清理（高级配置化）
+
+### 案例背景
+
+**问题来源**: SYSTEM_HEALTH_CHECK_REPORT_2025-11-18.md识别的P1硬编码问题
+
+**修复范围**: v7.4.0四步分层决策系统中的3个P1硬编码问题
+1. step1_direction.py - 置信度曲线硬编码（Lines 66-87）
+2. step2_timing.py - Flow参数硬编码（Lines 104, 109）
+3. step3_risk.py - 缓冲区硬编码（Lines 340, 346）
+
+**优先级**: P1 (High)
+**总耗时**: ~2.5小时
+**版本**: v7.4.1
+
+---
+
+### 修复历程
+
+#### 问题1: step1置信度曲线硬编码（算法曲线配置化典型案例）
+
+**挑战**: 分段函数有**8个硬编码数字**
+
+```python
+# ❌ 原始硬编码（Lines 66-87）
+if I_score < high_beta:
+    confidence = 0.60 + (I_score / high_beta) * 0.10  # 0.60, 0.10硬编码
+elif I_score < moderate_beta:
+    progress = (I_score - high_beta) / (moderate_beta - high_beta)
+    confidence = 0.70 + progress * 0.15  # 0.70, 0.15硬编码
+elif I_score < low_beta:
+    progress = (I_score - moderate_beta) / (low_beta - moderate_beta)
+    confidence = 0.85 + progress * 0.10  # 0.85, 0.10硬编码
+else:
+    progress = (I_score - low_beta) / (100.0 - low_beta)
+    confidence = 0.95 + progress * 0.05  # 0.95, 0.05硬编码
+```
+
+**解决方案**: Base + Range 模式（§6.1）
+
+**配置设计**:
+```json
+{
+  "step1_direction": {
+    "confidence": {
+      "mapping": {
+        "high_beta_base": 0.60,      // 起点
+        "high_beta_range": 0.10,     // 变化量
+        "moderate_beta_base": 0.70,
+        "moderate_beta_range": 0.15,
+        "low_beta_base": 0.85,
+        "low_beta_range": 0.10,
+        "independent_base": 0.95,
+        "independent_range": 0.05
+      }
+    }
+  }
+}
+```
+
+**代码重构**:
+```python
+# ✅ 配置化版本（Lines 65-98）
+mapping = confidence_cfg.get("mapping", {})
+high_beta_base = mapping.get("high_beta_base", 0.60)
+high_beta_range = mapping.get("high_beta_range", 0.10)
+# ... 读取其他6个参数
+
+if I_score < high_beta:
+    confidence = high_beta_base + (I_score / high_beta) * high_beta_range
+elif I_score < moderate_beta:
+    progress = (I_score - high_beta) / (moderate_beta - high_beta)
+    confidence = moderate_beta_base + progress * moderate_beta_range
+# ... 其他分支使用配置参数
+```
+
+**成果**: 8个硬编码 → 0个硬编码，算法曲线完全可配置
+
+---
+
+#### 问题2: step2 Flow参数硬编码（函数签名演进案例）
+
+**挑战**: 需要修改函数签名，同时保持向后兼容
+
+```python
+# ❌ 原始硬编码（Lines 104, 109）
+def calculate_flow_momentum(
+    factor_scores_series: List[Dict[str, float]],
+    weights: Dict[str, float],
+    lookback_hours: int = 6
+) -> float:
+    if abs(flow_now) < 1.0 and abs(flow_6h_ago) < 1.0:  # 硬编码1.0
+        return 0.0
+    base = max(abs(flow_now), abs(flow_6h_ago), 10.0)  # 硬编码10.0
+```
+
+**解决方案**: 向后兼容的函数签名演进（§6.2）
+
+**配置设计**:
+```json
+{
+  "step2_timing": {
+    "enhanced_f": {
+      "flow_weak_threshold": 1.0,
+      "base_min_value": 10.0
+    }
+  }
+}
+```
+
+**代码重构**:
+```python
+# ✅ 向后兼容版本（Lines 67-112）
+def calculate_flow_momentum(
+    factor_scores_series: List[Dict[str, float]],
+    weights: Dict[str, float],
+    lookback_hours: int = 6,  # 保留默认值
+    flow_weak_threshold: float = 1.0,  # ✅ 新增参数带默认值
+    base_min_value: float = 10.0  # ✅ 新增参数带默认值
+) -> float:
+    """
+    Args:
+        flow_weak_threshold: Flow弱阈值（v7.4.1新增，默认1.0）
+        base_min_value: base最小值（v7.4.1新增，默认10.0）
+    """
+    if abs(flow_now) < flow_weak_threshold and abs(flow_6h_ago) < flow_weak_threshold:
+        return 0.0
+    base = max(abs(flow_now), abs(flow_6h_ago), base_min_value)
+
+# 调用处（Lines 218-225）
+flow_weak_threshold = enhanced_f_cfg.get("flow_weak_threshold", 1.0)
+base_min_value = enhanced_f_cfg.get("base_min_value", 10.0)
+
+flow_momentum = calculate_flow_momentum(
+    factor_scores_series,
+    flow_weights,
+    lookback_hours,
+    flow_weak_threshold,  # 传入配置参数
+    base_min_value
+)
+```
+
+**成果**: 2个硬编码 → 0个硬编码，旧代码继续工作（向后兼容）
+
+---
+
+#### 问题3: step3缓冲区硬编码（分段逻辑配置化案例）
+
+**挑战**: if-else分支中的fallback硬编码
+
+```python
+# ❌ 原始硬编码（Lines 340, 346）
+elif enhanced_f >= moderate_f:
+    if support is not None:
+        entry = support * buffer_moderate
+    else:
+        entry = current_price * 0.998  # 硬编码
+else:
+    if support is not None:
+        entry = support * buffer_weak
+    else:
+        entry = current_price * 0.995  # 硬编码
+```
+
+**解决方案**: 分段逻辑配置化（§6.4）
+
+**配置设计**:
+```json
+{
+  "step3_risk": {
+    "entry_price": {
+      "fallback_moderate_buffer": 0.998,
+      "fallback_weak_buffer": 0.995
+    }
+  }
+}
+```
+
+**代码重构**:
+```python
+# ✅ 配置化版本（Lines 325-350）
+fallback_moderate = entry_cfg.get("fallback_moderate_buffer", 0.998)
+fallback_weak = entry_cfg.get("fallback_weak_buffer", 0.995)
+
+elif enhanced_f >= moderate_f:
+    if support is not None:
+        entry = support * buffer_moderate
+    else:
+        entry = current_price * fallback_moderate  # ✅ 配置化
+else:
+    if support is not None:
+        entry = support * buffer_weak
+    else:
+        entry = current_price * fallback_weak  # ✅ 配置化
+```
+
+**成果**: 2个硬编码 → 0个硬编码，分支逻辑完全可配置
+
+---
+
+### 累计成果
+
+| 指标 | Before | After | 改善 |
+|------|--------|-------|------|
+| 零硬编码达成度 | 85% | **95%+** | +10% |
+| step1硬编码 | 8个 | 0个 | ✅ 100% |
+| step2硬编码 | 2个 | 0个 | ✅ 100% |
+| step3硬编码 | 2个 | 0个 | ✅ 100% |
+| 配置项总数 | N | N+12 | +12个 |
+| 系统行为 | - | 无变化 | ✅ 兼容 |
+
+---
+
+### 关键经验
+
+#### 1. 算法曲线配置化模式
+
+**识别特征**: 分段函数、映射曲线、每段有基准值和增量
+
+**标准模式**: Base + Range
+- Base: 分段起点值
+- Range: 分段变化量
+- 优点: 语义清晰，易于调优，可扩展
+
+**适用场景**:
+- 置信度映射曲线（如v7.4.1 step1）
+- 概率分段计算
+- 风险等级划分
+- 任何分段线性/非线性函数
+
+#### 2. 函数签名演进原则
+
+**核心原则**: 向后兼容优于一切
+
+**实践要点**:
+1. 新增参数必须带默认值
+2. 默认值与原硬编码值完全一致
+3. 文档字符串标注版本变更
+4. 允许新旧代码共存（渐进式迁移）
+
+**反例**: 移除默认值或改变必填参数 → 破坏所有现有调用
+
+#### 3. Session状态记录价值
+
+v7.4.1首次创建`SESSION_STATE.md`，记录：
+- 完整修改清单（配置/代码/文档/测试/Git）
+- Before/After指标对比
+- 5个Phase开发流程回顾
+- 剩余工作（便于后续继续）
+
+**适用场景**（§6.3）:
+- ✅ 多步骤任务
+- ✅ 复杂重构
+- ✅ 系统性修复
+- ❌ 单文件修改
+
+---
+
+### 文档参考
+
+详细修复文档：
+- `docs/v7.4.1_HARDCODE_CLEANUP.md` - 完整变更文档（问题描述、修复方案、验证结果）
+- `SESSION_STATE.md` - Session状态记录示例
+- `SYSTEM_HEALTH_CHECK_REPORT_2025-11-18.md` - 问题来源
+
+Git提交：
+```
+commit 892a170
+refactor(v7.4.1): 四步系统硬编码清理 - 配置化改造
+
+commit 52aca9a
+docs: 添加SESSION_STATE.md记录v7.4.1硬编码清理session状态
+```
+
+---
+
+## 🎓 § 6: 高级配置化模式 (v3.3新增)
+
+### 6.1 算法曲线参数配置化
+
+**适用场景**: 分段函数、映射曲线、复杂算法公式
+
+#### 问题示例
+
+```python
+# ❌ 硬编码的分段映射曲线
+if I_score < 15:
+    confidence = 0.60 + (I_score / 15) * 0.10  # 4个硬编码数字
+elif I_score < 30:
+    progress = (I_score - 15) / (30 - 15)
+    confidence = 0.70 + progress * 0.15  # 又是4个硬编码数字
+elif I_score < 50:
+    progress = (I_score - 30) / (50 - 30)
+    confidence = 0.85 + progress * 0.10  # 继续硬编码...
+else:
+    progress = (I_score - 50) / (100.0 - 50)
+    confidence = 0.95 + progress * 0.05  # 还是硬编码...
+```
+
+**总计**: 16个硬编码数字（每段4个：起点、范围、base、增量）
+
+#### 最佳实践：Base + Range 模式
+
+**核心思想**: 将曲线拆解为 **基准值(base)** + **变化范围(range)**
+
+**配置结构**:
+```json
+{
+  "confidence": {
+    "mapping": {
+      "high_beta_base": 0.60,
+      "high_beta_range": 0.10,
+      "moderate_beta_base": 0.70,
+      "moderate_beta_range": 0.15,
+      "low_beta_base": 0.85,
+      "low_beta_range": 0.10,
+      "independent_base": 0.95,
+      "independent_range": 0.05
+    }
+  }
+}
+```
+
+**代码实现**:
+```python
+# ✅ 配置化版本
+mapping = confidence_cfg.get("mapping", {})
+high_beta_base = mapping.get("high_beta_base", 0.60)
+high_beta_range = mapping.get("high_beta_range", 0.10)
+moderate_beta_base = mapping.get("moderate_beta_base", 0.70)
+moderate_beta_range = mapping.get("moderate_beta_range", 0.15)
+low_beta_base = mapping.get("low_beta_base", 0.85)
+low_beta_range = mapping.get("low_beta_range", 0.10)
+independent_base = mapping.get("independent_base", 0.95)
+independent_range = mapping.get("independent_range", 0.05)
+
+if I_score < high_beta:
+    confidence = high_beta_base + (I_score / high_beta) * high_beta_range
+elif I_score < moderate_beta:
+    progress = (I_score - high_beta) / (moderate_beta - high_beta)
+    confidence = moderate_beta_base + progress * moderate_beta_range
+elif I_score < low_beta:
+    progress = (I_score - moderate_beta) / (low_beta - moderate_beta)
+    confidence = low_beta_base + progress * low_beta_range
+else:
+    progress = (I_score - low_beta) / (100.0 - low_beta)
+    confidence = independent_base + progress * independent_range
+```
+
+**优点**:
+- ✅ **语义清晰**: base表示起点，range表示变化量
+- ✅ **易于调优**: 只需调整base/range值，公式结构不变
+- ✅ **可扩展**: 添加新分段只需扩展配置，无需改代码
+
+**实战案例**: `ats_core/decision/step1_direction.py` Lines 65-98 (v7.4.1)
+
+---
+
+### 6.2 函数签名演进最佳实践
+
+**场景**: 为现有函数添加配置化参数
+
+#### ❌ 错误做法：破坏向后兼容
+
+```python
+# v1.0
+def calculate_flow_momentum(
+    factor_scores_series: List[Dict[str, float]],
+    weights: Dict[str, float],
+    lookback_hours: int = 6
+) -> float:
+    # ...
+    if abs(flow_now) < 1.0 and abs(flow_6h_ago) < 1.0:  # 硬编码
+        return 0.0
+    base = max(abs(flow_now), abs(flow_6h_ago), 10.0)  # 硬编码
+
+# v2.0 - 破坏性修改
+def calculate_flow_momentum(
+    factor_scores_series: List[Dict[str, float]],
+    weights: Dict[str, float],
+    lookback_hours: int,  # 移除了默认值！
+    flow_weak_threshold: float,  # 必填参数！
+    base_min_value: float  # 必填参数！
+) -> float:
+    # ...
+```
+
+**问题**: 所有现有调用点都会报错！
+
+#### ✅ 正确做法：保持向后兼容
+
+```python
+# v2.0 - 向后兼容版本
+def calculate_flow_momentum(
+    factor_scores_series: List[Dict[str, float]],
+    weights: Dict[str, float],
+    lookback_hours: int = 6,  # ✅ 保留默认值
+    flow_weak_threshold: float = 1.0,  # ✅ 新增参数带默认值
+    base_min_value: float = 10.0  # ✅ 新增参数带默认值
+) -> float:
+    """
+    ...
+    Args:
+        ...
+        flow_weak_threshold: Flow弱阈值（v2.0新增，默认1.0）
+        base_min_value: base最小值（v2.0新增，默认10.0）
+    """
+    # v2.0配置化：flow值都很弱时认为无动量
+    if abs(flow_now) < flow_weak_threshold and abs(flow_6h_ago) < flow_weak_threshold:
+        return 0.0
+
+    # v2.0配置化：使用配置的base_min_value避免除0
+    base = max(abs(flow_now), abs(flow_6h_ago), base_min_value)
+```
+
+**调用方式**:
+
+```python
+# 旧代码 - 继续工作（使用默认值）
+flow_momentum = calculate_flow_momentum(
+    factor_scores_series,
+    flow_weights,
+    lookback_hours
+)
+
+# 新代码 - 使用配置化参数
+flow_weak_threshold = enhanced_f_cfg.get("flow_weak_threshold", 1.0)
+base_min_value = enhanced_f_cfg.get("base_min_value", 10.0)
+
+flow_momentum = calculate_flow_momentum(
+    factor_scores_series,
+    flow_weights,
+    lookback_hours,
+    flow_weak_threshold,  # 传入配置参数
+    base_min_value  # 传入配置参数
+)
+```
+
+**原则**:
+1. **新增参数必须带默认值**（与原硬编码值一致）
+2. **默认值写在函数签名中**（不要依赖None判断）
+3. **文档字符串标注版本**（v2.0新增）
+4. **渐进式迁移**（允许新旧代码共存）
+
+**实战案例**: `ats_core/decision/step2_timing.py` Lines 67-112 (v7.4.1)
+
+---
+
+### 6.3 Session状态记录规范
+
+**目的**: 记录完整session工作，便于后续继续或审查
+
+#### 标准格式：SESSION_STATE.md
+
+**必需章节**:
+
+```markdown
+# SESSION_STATE - <项目名> <版本号>
+
+**Session Date**: YYYY-MM-DD
+**Branch**: <git-branch-name>
+**Task**: <任务描述>
+
+---
+
+## 📋 Session Summary
+### Task Completed
+### Achievements (配置/代码/文档/测试/Git变更)
+
+## 🎯 Achievements
+### Configuration Changes
+### Code Changes
+### Documentation
+### Testing
+### Git Commits
+
+## 📊 Metrics (Before/After对比)
+
+## 🔄 Development Process (5个Phase)
+
+## 📝 Remaining Work
+
+## 🎓 Key Learnings
+
+## 📚 Related Documents
+
+## 🔗 Git Information
+
+---
+
+**Session Status**: ✅ Completed / ⏸️ Paused / 🚧 In Progress
+**Last Updated**: YYYY-MM-DD
+```
+
+#### 何时创建
+
+- ✅ **多步骤任务**: 需要跨session完成的任务
+- ✅ **复杂重构**: 涉及多个文件、多次提交
+- ✅ **系统性修复**: 修复一类问题（如v7.4.1硬编码清理）
+- ❌ **单文件修改**: 简单的bug修复或小改进
+
+#### 内容要点
+
+1. **完整性**: 包含所有修改的文件、配置、测试
+2. **可追溯**: 清晰的Git提交历史和文档链接
+3. **可继续**: Remaining Work明确指出未完成任务
+4. **可审查**: Metrics展示改进效果
+
+**实战案例**: `SESSION_STATE.md` (v7.4.1)
+
+---
+
+### 6.4 分段逻辑配置化系统模式
+
+**场景**: if-elif-else每个分支都有硬编码
+
+#### 识别模式
+
+```python
+# 典型模式：多分支条件 + 每分支有硬编码
+if condition_A:
+    value = HARDCODED_A  # ❌
+elif condition_B:
+    value = HARDCODED_B  # ❌
+elif condition_C:
+    value = HARDCODED_C  # ❌
+else:
+    value = HARDCODED_DEFAULT  # ❌
+```
+
+#### 配置化步骤
+
+1. **提取所有分支的硬编码值到配置**
+```json
+{
+  "branch_A_value": <HARDCODED_A>,
+  "branch_B_value": <HARDCODED_B>,
+  "branch_C_value": <HARDCODED_C>,
+  "default_value": <HARDCODED_DEFAULT>
+}
+```
+
+2. **在代码中统一读取配置**
+```python
+cfg = config.get("branch_config", {})
+value_A = cfg.get("branch_A_value", HARDCODED_A)  # 默认值保持一致
+value_B = cfg.get("branch_B_value", HARDCODED_B)
+value_C = cfg.get("branch_C_value", HARDCODED_C)
+default = cfg.get("default_value", HARDCODED_DEFAULT)
+
+if condition_A:
+    value = value_A  # ✅ 配置化
+elif condition_B:
+    value = value_B  # ✅ 配置化
+elif condition_C:
+    value = value_C  # ✅ 配置化
+else:
+    value = default  # ✅ 配置化
+```
+
+**实战案例**: `ats_core/decision/step3_risk.py` Lines 325-350 (v7.4.1)
+
+---
+
 ## 📌 重要原则
 
 1. **配置优先**: 先定义配置，后实现代码（禁止硬编码）
@@ -1114,13 +1678,38 @@ def check_default_consistency():
 4. **测试充分**: 配置 + 逻辑 + 导入 + 集成
 5. **文档同步**: 代码与文档同步提交
 6. **版本规范**: 遵循版本命名规范
-7. **统一配置**: 强制所有参数从配置文件读取，增加配置验证器 🆕
-8. **系统性扫描**: 发现一个问题，立即全面扫描同类问题 🆕
-9. **默认值一致**: 代码默认值必须与配置文件保持一致 🆕
+7. **统一配置**: 强制所有参数从配置文件读取，增加配置验证器
+8. **系统性扫描**: 发现一个问题，立即全面扫描同类问题
+9. **默认值一致**: 代码默认值必须与配置文件保持一致
+10. **向后兼容**: 函数签名演进时保持向后兼容 🆕
+11. **Session记录**: 复杂任务创建SESSION_STATE.md记录完整状态 🆕
 
 ---
 
 ## 📝 版本历史
+
+### v3.3.0 (2025-11-18)
+**重大更新**:
+- **新增章节 § 6**: 高级配置化模式（基于v7.4.1实战）
+  - 6.1 算法曲线参数配置化（Base + Range模式）
+  - 6.2 函数签名演进最佳实践（向后兼容原则）
+  - 6.3 Session状态记录规范（SESSION_STATE.md标准格式）
+  - 6.4 分段逻辑配置化系统模式（if-elif-else配置化）
+- **新增实战案例**: v7.4.1四步系统硬编码清理
+  - 算法曲线配置化（step1置信度映射，8个参数）
+  - 函数签名向后兼容演进（step2 Flow动量计算）
+  - 分段逻辑配置化（step3入场价fallback buffer）
+  - 零硬编码达成度：85% → 95%+
+- **更新核心原则**: 添加2条新原则（#10向后兼容，#11 Session记录）
+
+**影响**:
+- 提供算法曲线配置化的系统方法论
+- 建立函数签名演进的标准实践
+- 规范复杂任务的状态记录机制
+
+**文档参考**:
+- `docs/v7.4.1_HARDCODE_CLEANUP.md` - 完整修复文档
+- `SESSION_STATE.md` - Session状态记录示例
 
 ### v3.2.0 (2025-11-10)
 **重大更新**:
@@ -1154,6 +1743,6 @@ def check_default_consistency():
 
 ---
 
-**当前版本**: v3.1.1
-**最后更新**: 2025-11-09
+**当前版本**: v3.3.0
+**最后更新**: 2025-11-18
 **适用范围**: 所有系统性增强/优化项目

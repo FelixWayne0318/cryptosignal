@@ -323,15 +323,35 @@ def _analyze_symbol_core(
     elite_prior = {}
     bayesian_boost = 0.0  # 不再使用贝叶斯先验
 
+    # ---- v1.5 Bugfix: K线格式兼容性处理 ----
+    # 支持两种K线格式：
+    # 1. Binance原始格式（列表）：[timestamp, open, high, low, close, ...]
+    # 2. 字典格式：{"timestamp": ..., "open": ..., ...}
+    def _get_kline_field(kline, field: str):
+        """提取K线字段（兼容列表和字典格式）"""
+        if isinstance(kline, dict):
+            # 字典格式
+            return kline.get(field, 0)
+        else:
+            # 列表格式（Binance原始格式）
+            # [timestamp, open, high, low, close, volume, close_time, quote_volume, trades, taker_buy_base, taker_buy_quote, ignore]
+            field_map = {
+                "timestamp": 0, "open": 1, "high": 2, "low": 3,
+                "close": 4, "volume": 5, "close_time": 6, "quote_volume": 7,
+                "trades": 8, "taker_buy_base": 9, "taker_buy_quote": 10
+            }
+            idx = field_map.get(field, 0)
+            return kline[idx] if idx < len(kline) else 0
+
     # ---- 新币检测（优先判断，决定数据要求）----
     # 🔧 v7.3.4: 按照 newstandards/NEWCOIN_SPEC.md § 1 规范修改
     new_coin_cfg = params.get("new_coin", {})
 
     # 计算K线时间戳差值（用于数据受限检测）
     if k1 and len(k1) > 0:
-        # K线格式: [timestamp_ms, open, high, low, close, volume, ...]
-        first_kline_ts = k1[0][0]  # 第一根K线时间戳（毫秒）
-        latest_kline_ts = k1[-1][0]  # 最后一根K线时间戳（毫秒）
+        # v1.5 Bugfix: 使用兼容函数提取时间戳
+        first_kline_ts = _get_kline_field(k1[0], "timestamp")
+        latest_kline_ts = _get_kline_field(k1[-1], "timestamp")
         coin_age_ms = latest_kline_ts - first_kline_ts
         coin_age_hours = coin_age_ms / (1000 * 3600)  # 转换为小时
         bars_1h = len(k1)  # K线根数
@@ -477,12 +497,13 @@ def _analyze_symbol_core(
     if not k1 or len(k1) < min_data:
         return _make_empty_result(symbol, "insufficient_data")
 
-    h = [_to_f(r[2]) for r in k1]
-    l = [_to_f(r[3]) for r in k1]
-    c = [_to_f(r[4]) for r in k1]
-    v = [_to_f(r[5]) for r in k1]  # base volume
-    q = [_to_f(r[7]) for r in k1]  # quote volume
-    c4 = [_to_f(r[4]) for r in k4] if k4 and len(k4) >= 30 else c
+    # v1.5 Bugfix: 使用_get_kline_field()兼容字典格式
+    h = [_to_f(_get_kline_field(r, "high")) for r in k1]
+    l = [_to_f(_get_kline_field(r, "low")) for r in k1]
+    c = [_to_f(_get_kline_field(r, "close")) for r in k1]
+    v = [_to_f(_get_kline_field(r, "volume")) for r in k1]  # base volume
+    q = [_to_f(_get_kline_field(r, "quote_volume")) for r in k1]  # quote volume
+    c4 = [_to_f(_get_kline_field(r, "close")) for r in k4] if k4 and len(k4) >= 30 else c
 
     # 性能监控
     import time
@@ -598,11 +619,13 @@ def _analyze_symbol_core(
                 # 转换为numpy数组（score_independence要求numpy格式）
                 import numpy as np
                 alt_prices_np = np.array(c[-use_len:], dtype=float)
-                btc_prices_np = np.array([_to_f(k[4]) for k in btc_klines[-use_len:]], dtype=float)
+                # v1.5 Bugfix: 使用兼容函数提取close价格
+                btc_prices_np = np.array([_to_f(_get_kline_field(k, "close")) for k in btc_klines[-use_len:]], dtype=float)
 
                 # P0-1修复：提取timestamps用于对齐
-                alt_timestamps_np = np.array([_to_f(k[0]) for k in k1[-use_len:]], dtype=float)
-                btc_timestamps_np = np.array([_to_f(k[0]) for k in btc_klines[-use_len:]], dtype=float)
+                # v1.5 Bugfix: 使用兼容函数提取时间戳
+                alt_timestamps_np = np.array([_to_f(_get_kline_field(k, "timestamp")) for k in k1[-use_len:]], dtype=float)
+                btc_timestamps_np = np.array([_to_f(_get_kline_field(k, "timestamp")) for k in btc_klines[-use_len:]], dtype=float)
 
                 # v7.3.2-Full: 调用新接口score_independence
                 # 返回: (I_score, metadata)
