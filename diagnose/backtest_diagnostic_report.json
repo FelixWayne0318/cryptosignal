@@ -1,10 +1,10 @@
 {
   "timestamp": "2025-11-18",
   "summary": {
-    "p0_issues": 3,
+    "p0_issues": 1,
     "p1_issues": 0,
     "p2_issues": 0,
-    "warnings": 1
+    "warnings": 0
   },
   "issues": [
     {
@@ -15,35 +15,9 @@
       "location": "ats_core/sources/binance.py:99-109",
       "reason": "发送空的X-MBX-APIKEY头会触发Binance 403 Forbidden",
       "fix": "在发送认证头前检查API_KEY是否存在"
-    },
-    {
-      "id": "ENGINE-002",
-      "severity": "P0",
-      "title": "回测引擎未加载BTC K线",
-      "description": "四步系统Step1需要BTC K线进行对齐检测，但引擎未加载",
-      "location": "ats_core/backtest/engine.py:~310",
-      "impact": "Step1的BTC对齐检测无法工作，信号质量下降",
-      "fix": "在主循环中添加btc_klines加载并传递给analyze_symbol"
-    },
-    {
-      "id": "OPTIM-001",
-      "severity": "P0",
-      "title": "存在重复API调用",
-      "description": "发现3处load_klines调用",
-      "location": "ats_core/backtest/engine.py",
-      "impact": "每小时重复加载K线，可能触发速率限制或IP封禁",
-      "reason": "限价单检查和头寸监控都会重新加载K线",
-      "fix": "实现K线缓存机制，在主循环开始时批量加载"
     }
   ],
-  "warnings": [
-    {
-      "id": "OPTIM-002",
-      "severity": "P1",
-      "title": "缺少K线缓存机制",
-      "description": "建议在主循环中实现批量加载和缓存"
-    }
-  ],
+  "warnings": [],
   "info": [
     {
       "id": "INFO-001",
