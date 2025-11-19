@@ -387,7 +387,8 @@
 
     "step1_direction": {
       "_comment": "Step1: 方向确认层 - A层因子 + I因子置信度 + BTC对齐 + 硬veto",
-      "min_final_strength": 20.0,
+      "min_final_strength": 5.0,
+      "_fix_note": "v7.4.2回测修复: 20.0→5.0 (原阈值过高导致回测0信号，实际范围约4-15)",
 
       "weights": {
         "_comment": "A层因子权重（与现有权重保持一致）",

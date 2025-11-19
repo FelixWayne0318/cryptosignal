@@ -172,6 +172,26 @@ pip list | grep -E "numpy|pandas|xgboost"
 
 ## 🔧 常见问题
 
+### Q0: 回测产生0个信号 ✅ 已修复
+
+**症状**: 运行回测后显示"Total Signals: 0"，日志中显示"Final strength insufficient: X.X < 20.0"
+
+**原因**: v7.4.2早期版本中`min_final_strength`阈值设置过高（20.0），导致所有信号被Step1拒绝
+
+**修复**: 已调整阈值至5.0（config/params.json line 390）
+
+**验证**:
+```bash
+# 运行验证脚本
+python3 scripts/validate_p0_fix.py
+
+# 或检查配置
+python3 -c "from ats_core.cfg import CFG; print(CFG.params['four_step_system']['step1_direction']['min_final_strength'])"
+# 应输出: 5.0
+```
+
+---
+
 ### Q1: 提示"403 Forbidden"
 
 **原因**: API密钥未设置或无效
