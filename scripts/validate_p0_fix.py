@@ -55,14 +55,18 @@ def run_quick_backtest():
     print("Step 2: 运行快速回测 (1周数据)")
     print("="*70)
 
-    # Setup
-    end_time = datetime.now()
-    start_time = end_time - timedelta(days=7)
+    # Setup - convert to timestamps (milliseconds)
+    end_dt = datetime.now()
+    start_dt = end_dt - timedelta(days=7)
+
+    # Convert to timestamp (milliseconds)
+    end_time = int(end_dt.timestamp() * 1000)
+    start_time = int(start_dt.timestamp() * 1000)
     symbols = ["ETHUSDT"]
 
     print(f"\n配置:")
     print(f"  Symbol: {symbols[0]}")
-    print(f"  Period: {start_time.strftime('%Y-%m-%d')} ~ {end_time.strftime('%Y-%m-%d')}")
+    print(f"  Period: {start_dt.strftime('%Y-%m-%d')} ~ {end_dt.strftime('%Y-%m-%d')}")
     print(f"  Interval: 1h")
 
     try:
