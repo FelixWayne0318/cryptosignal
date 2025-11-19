@@ -34,11 +34,31 @@ v3.0配置管理（2025-11-09）：
 - price_change_pct: 价格 24小时变化率（%）
 - price_slope: 价格斜率（EMA30的斜率）
 """
-from typing import Dict, Any, Tuple, Optional, List
+from typing import Dict, Any, Tuple, Optional, List, Union
 from ats_core.features.scoring_utils import directional_score
 from ats_core.config.factor_config import get_factor_config
 import math
 import numpy as np
+
+
+def _get_kline_field(kline: Union[dict, list], field: str) -> float:
+    """
+    从K线中提取字段值（兼容字典和列表两种格式）
+
+    P0 Bugfix: 支持回测引擎返回的字典格式K线
+    """
+    if isinstance(kline, dict):
+        return kline.get(field, 0)
+    else:
+        field_map = {
+            "timestamp": 0, "open": 1, "high": 2, "low": 3, "close": 4,
+            "volume": 5, "close_time": 6, "quote_volume": 7
+        }
+        index = field_map.get(field, 0)
+        if isinstance(kline, (list, tuple)) and len(kline) > index:
+            return kline[index]
+        else:
+            return 0
 
 
 def score_fund_leading(
@@ -300,7 +320,8 @@ def score_fund_leading_v2(
     if atr_now <= 0:
         atr_now = 1.0
 
-    closes = [float(k[4]) for k in klines]
+    # P0 Bugfix: 使用兼容函数支持字典格式K线
+    closes = [float(_get_kline_field(k, "close")) for k in klines]
     close_now = closes[-1]
 
     # === 2. 价格变化（6h，约6根K线）===

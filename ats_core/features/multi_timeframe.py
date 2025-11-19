@@ -7,10 +7,30 @@
 
 目标: 验证15m/1h/4h/1d的T/M/C一致性，减少虚假突破
 """
-from typing import Dict, List
+from typing import Dict, List, Union
 from ats_core.sources.binance import get_klines
 from ats_core.logging import log, warn
 import math
+
+
+def _get_kline_field(kline: Union[dict, list], field: str) -> float:
+    """
+    从K线中提取字段值（兼容字典和列表两种格式）
+
+    P0 Bugfix: 支持回测引擎返回的字典格式K线
+    """
+    if isinstance(kline, dict):
+        return kline.get(field, 0)
+    else:
+        field_map = {
+            "timestamp": 0, "open": 1, "high": 2, "low": 3, "close": 4,
+            "volume": 5, "close_time": 6, "quote_volume": 7
+        }
+        index = field_map.get(field, 0)
+        if isinstance(kline, (list, tuple)) and len(kline) > index:
+            return kline[index]
+        else:
+            return 0
 
 
 def calculate_timeframe_score(klines: list, dimension: str) -> float:
@@ -27,7 +47,8 @@ def calculate_timeframe_score(klines: list, dimension: str) -> float:
     if not klines or len(klines) < 30:
         return 0.0
 
-    closes = [float(k[4]) for k in klines]
+    # P0 Bugfix: 使用兼容函数支持字典格式K线
+    closes = [float(_get_kline_field(k, "close")) for k in klines]
 
     if dimension == 'T':
         # 简化趋势计算 (EMA5 vs EMA20)
