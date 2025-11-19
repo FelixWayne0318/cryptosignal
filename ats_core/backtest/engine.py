@@ -262,6 +262,40 @@ class BacktestEngine:
                     f"pending_entries={len(pending_entries)}"
                 )
 
+            # ==================== P0 Bugfix: K线缓存机制 ====================
+            # 批量加载当前时间步的所有K线（避免重复API调用）
+            # 用途：
+            # 1. 限价单成交检查（_try_fill_pending_entry）
+            # 2. 头寸监控（_monitor_active_positions）
+            # 3. 信号生成（analyze_symbol）
+            current_klines_cache = {}
+
+            # 加载BTC K线（用于Step1 BTC对齐检测）
+            try:
+                btc_klines = self.data_loader.load_btc_klines(
+                    start_time=current_timestamp - 300 * interval_ms,
+                    end_time=current_timestamp - interval_ms,
+                    interval=interval
+                )
+            except Exception as e:
+                logger.warning(f"BTC K线加载失败: {e}，Step1 BTC对齐检测将使用降级逻辑")
+                btc_klines = None
+
+            # 批量加载所有symbol的K线（信号生成用）
+            for symbol in symbols:
+                try:
+                    klines = self.data_loader.load_klines(
+                        symbol,
+                        start_time=current_timestamp - 300 * interval_ms,
+                        end_time=current_timestamp - interval_ms,
+                        interval=interval
+                    )
+                    current_klines_cache[symbol] = klines
+                except Exception as e:
+                    logger.error(f"K线加载失败: {symbol} at {current_timestamp} - {e}")
+                    current_klines_cache[symbol] = []
+            # ===============================================================
+
             # v1.5 P0修复：尝试成交待入场订单（限价单模型）
             filled_entries = []
             expired_entries = []
@@ -271,9 +305,9 @@ class BacktestEngine:
                 if current_timestamp < pending.entry_attempt_time:
                     continue  # 尚未到达入场时间
 
-                # 尝试成交限价单
+                # 尝试成交限价单（使用缓存的K线）
                 filled, expired = self._try_fill_pending_entry(
-                    pending, current_timestamp, interval_ms
+                    pending, current_timestamp, interval_ms, current_klines_cache
                 )
 
                 if filled:
@@ -307,15 +341,8 @@ class BacktestEngine:
                             # 仍在冷却期，跳过
                             continue
 
-                    # 加载历史K线（up to current_timestamp）
-                    # 注意：这里使用current_timestamp - interval_ms作为end_time
-                    # 确保不包含当前正在进行的K线（防止未来数据泄漏）
-                    klines_1h = self.data_loader.load_klines(
-                        symbol,
-                        start_time=current_timestamp - 300 * interval_ms,  # 300根K线
-                        end_time=current_timestamp - interval_ms,
-                        interval=interval
-                    )
+                    # P0 Bugfix: 使用缓存的K线（避免重复API调用）
+                    klines_1h = current_klines_cache.get(symbol, [])
 
                     if len(klines_1h) < 100:
                         # K线不足，跳过（避免噪声信号）
@@ -325,10 +352,11 @@ class BacktestEngine:
                     # data_loader.load_klines()已返回字典格式，不需要转换
                     # 移除_convert_to_binance_format()调用，避免Step2崩溃
 
+                    # P0 Bugfix: 传递BTC K线（用于Step1 BTC对齐检测）
                     # 调用四步系统分析
                     analysis_result = analyze_symbol_with_preloaded_klines(
                         symbol=symbol,
-                        k1h=klines_1h,  # 直接传递字典格式
+                        k1h=klines_1h,  # 直接传递字典格式（从缓存读取）
                         k4h=[],  # 暂时不用4h K线（v1.0简化）
                         oi_data=None,
                         spot_k1h=None,
@@ -336,7 +364,7 @@ class BacktestEngine:
                         mark_price=None,
                         funding_rate=None,
                         spot_price=None,
-                        btc_klines=None,
+                        btc_klines=btc_klines,  # P0 Bugfix: 传递BTC K线
                         eth_klines=None
                     )
 
@@ -396,9 +424,9 @@ class BacktestEngine:
                 except Exception as e:
                     logger.error(f"分析失败: {symbol} at {current_timestamp} - {e}")
 
-            # 监控活跃头寸（检查SL/TP触发）
+            # 监控活跃头寸（检查SL/TP触发，使用缓存的K线）
             active_positions = self._monitor_active_positions(
-                active_positions, current_timestamp, interval_ms
+                active_positions, current_timestamp, interval_ms, current_klines_cache
             )
 
             # 移动到下一个时间步
@@ -446,7 +474,8 @@ class BacktestEngine:
         self,
         signal: SimulatedSignal,
         current_timestamp: int,
-        interval_ms: int
+        interval_ms: int,
+        klines_cache: Dict[str, List[Dict]]
     ) -> tuple[bool, bool]:
         """
         尝试成交待入场限价单（v1.5 P0修复）
@@ -455,6 +484,7 @@ class BacktestEngine:
             signal: 待入场信号
             current_timestamp: 当前时间戳（毫秒）
             interval_ms: K线周期（毫秒）
+            klines_cache: K线缓存字典 (P0 Bugfix: 避免重复API调用)
 
         Returns:
             (filled, expired): filled=是否成交, expired=是否超时
@@ -474,14 +504,9 @@ class BacktestEngine:
             signal.exit_time = current_timestamp
             return (False, True)
 
-        # 加载当前K线
+        # P0 Bugfix: 使用缓存的K线（避免重复API调用）
         try:
-            current_klines = self.data_loader.load_klines(
-                signal.symbol,
-                start_time=current_timestamp - interval_ms,
-                end_time=current_timestamp,
-                interval=self.data_loader.default_interval
-            )
+            current_klines = klines_cache.get(signal.symbol, [])
 
             if not current_klines:
                 return (False, False)  # 无K线数据，继续等待
@@ -574,7 +599,8 @@ class BacktestEngine:
         self,
         active_positions: List[SimulatedSignal],
         current_timestamp: int,
-        interval_ms: int
+        interval_ms: int,
+        klines_cache: Dict[str, List[Dict]]
     ) -> List[SimulatedSignal]:
         """
         监控活跃头寸（检查SL/TP触发）
@@ -583,12 +609,13 @@ class BacktestEngine:
             active_positions: 当前活跃头寸列表
             current_timestamp: 当前时间戳（毫秒）
             interval_ms: K线周期（毫秒）
+            klines_cache: K线缓存字典 (P0 Bugfix: 避免重复API调用)
 
         Returns:
             仍然活跃的头寸列表（已平仓的会被移除）
 
         监控逻辑 (v1.5 P0修复 - 悲观假设):
-        1. 加载当前K线（包含high/low价格）
+        1. 从缓存读取当前K线（包含high/low价格）
         2. 检查SL触发：low ≤ SL (做多) 或 high ≥ SL (做空)
         3. 检查TP触发：high ≥ TP (做多) 或 low ≤ TP (做空)
         4. **悲观假设**：如果SL和TP同时触发，优先认为SL触发（先检查SL）
@@ -603,13 +630,8 @@ class BacktestEngine:
                 continue
 
             try:
-                # 加载当前K线（仅需1根）
-                current_klines = self.data_loader.load_klines(
-                    position.symbol,
-                    start_time=current_timestamp - interval_ms,
-                    end_time=current_timestamp,
-                    interval=self.data_loader.default_interval
-                )
+                # P0 Bugfix: 使用缓存的K线（避免重复API调用）
+                current_klines = klines_cache.get(position.symbol, [])
 
                 if not current_klines:
                     # 无K线数据，保持头寸
