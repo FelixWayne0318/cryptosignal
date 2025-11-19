@@ -450,7 +450,8 @@
       "enhanced_f": {
         "_comment": "Enhanced F v2: flow_momentum - price_momentum（只用非价格因子C/O/V/B）",
         "scale": 20.0,
-        "min_threshold": 30.0,
+        "min_threshold": -30.0,
+        "_fix_note": "v7.4.2回测修复(P0-8): 30.0→-30.0 (原阈值过高导致回测0信号，实际范围0.5-3.1，现允许中性时机，只拒绝追涨)",
 
         "flow_weights": {
           "_comment": "Flow因子权重（仅非价格因子，避免自相关）",
@@ -502,8 +503,9 @@
 
       "entry_price": {
         "_comment": "入场价计算（基于Enhanced F和支撑/阻力）",
-        "strong_accumulation_f": 70,
-        "moderate_accumulation_f": 40,
+        "strong_accumulation_f": 15.0,
+        "moderate_accumulation_f": 5.0,
+        "_fix_note": "v7.4.2回测修复(P0-8): 从70/40调整为15/5 (原阈值过高，实际Enhanced_F范围0.5-3.1，现与实际数据对齐)",
         "buffer_strong": 1.000,
         "buffer_moderate": 1.002,
         "buffer_weak": 1.005,

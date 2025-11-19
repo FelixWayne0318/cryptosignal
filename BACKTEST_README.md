@@ -172,23 +172,46 @@ pip list | grep -E "numpy|pandas|xgboost"
 
 ## 🔧 常见问题
 
-### Q0: 回测产生0个信号 ✅ 已修复
+### Q0: 回测产生0个信号 ✅ 已修复 (P0-7 & P0-8)
 
-**症状**: 运行回测后显示"Total Signals: 0"，日志中显示"Final strength insufficient: X.X < 20.0"
+**症状**: 运行回测后显示"Total Signals: 0"
 
-**原因**: v7.4.2早期版本中`min_final_strength`阈值设置过高（20.0），导致所有信号被Step1拒绝
+#### 症状1: Step1拒绝 (P0-7 ✅已修复)
+```
+❌ Step1拒绝: Final strength insufficient: 7.6 < 20.0
+```
 
-**修复**: 已调整阈值至5.0（config/params.json line 390）
+**原因**: `min_final_strength: 20.0` 过高，实际值4-15
+**修复**: 调整为 `5.0` (config/params.json line 390)
+
+#### 症状2: Step2拒绝 (P0-8 ✅已修复)
+```
+✅ Step1通过: final_strength=6.1
+❌ Step2拒绝: Enhanced_F=3.1 < 30.0
+```
+
+**原因**: 四步系统阈值系统性过高
+- Step2 `min_threshold: 30.0` (实际值0.5-3.1)
+- Step3 `moderate_f: 40`, `strong_f: 70` (实际值0.5-3.1)
+
+**修复**:
+- Step2 `min_threshold: 30.0 → -30.0` (允许中性时机)
+- Step3 `moderate_f: 40 → 5.0`, `strong_f: 70 → 15.0`
 
 **验证**:
 ```bash
-# 运行验证脚本
+# 运行验证脚本（验证P0-7和P0-8所有修复）
 python3 scripts/validate_p0_fix.py
 
-# 或检查配置
-python3 -c "from ats_core.cfg import CFG; print(CFG.params['four_step_system']['step1_direction']['min_final_strength'])"
-# 应输出: 5.0
+# 应输出：
+# ✅ P0-7: Step1 min_final_strength = 5.0
+# ✅ P0-8: Step2 min_threshold = -30.0
+# ✅ P0-8: Step3 moderate_f = 5.0, strong_f = 15.0
 ```
+
+**详细文档**:
+- P0-7: `docs/fixes/P0_BACKTEST_ZERO_SIGNALS_FIX.md`
+- P0-8: `docs/fixes/P0_8_FOUR_STEP_THRESHOLDS_FIX.md`
 
 ---
 

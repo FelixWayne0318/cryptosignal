@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 # coding: utf-8
 """
-P0 Bug Fix Validation Script
+P0-7 & P0-8 Bug Fix Validation Script
 验证回测0信号问题的修复
 
 Usage:
     python3 scripts/validate_p0_fix.py
 
 This script:
-1. Validates config changes (min_final_strength: 20.0 → 5.0)
+1. Validates config changes:
+   - P0-7: Step1 min_final_strength: 20.0 → 5.0
+   - P0-8: Step2 min_threshold: 30.0 → -30.0
+   - P0-8: Step3 moderate_accumulation_f: 40 → 5.0
+   - P0-8: Step3 strong_accumulation_f: 70 → 15.0
 2. Runs a quick backtest (1 week, 1 symbol)
 3. Verifies signals are now generated
 """
@@ -32,21 +36,57 @@ def validate_config():
     print("="*70)
 
     params = CFG.params
-    step1_cfg = params.get("four_step_system", {}).get("step1_direction", {})
+    four_step = params.get("four_step_system", {})
+
+    all_pass = True
+
+    # P0-7: Step1 validation
+    print(f"\n【P0-7: Step1 方向确认层】")
+    step1_cfg = four_step.get("step1_direction", {})
     min_strength = step1_cfg.get("min_final_strength")
 
-    print(f"\n✓ Config Path: four_step_system.step1_direction.min_final_strength")
-    print(f"✓ Current Value: {min_strength}")
-
+    print(f"  min_final_strength: {min_strength}")
     if min_strength == 5.0:
-        print(f"✅ SUCCESS: Threshold updated to 5.0 (was 20.0)")
-        return True
-    elif min_strength == 20.0:
-        print(f"❌ FAILED: Still using old threshold 20.0!")
-        return False
+        print(f"  ✅ SUCCESS: 20.0 → 5.0")
     else:
-        print(f"⚠️  WARNING: Unexpected value {min_strength}")
-        return False
+        print(f"  ❌ FAILED: Expected 5.0, got {min_strength}")
+        all_pass = False
+
+    # P0-8: Step2 validation
+    print(f"\n【P0-8: Step2 时机判断层】")
+    step2_cfg = four_step.get("step2_timing", {})
+    enhanced_f_cfg = step2_cfg.get("enhanced_f", {})
+    min_threshold = enhanced_f_cfg.get("min_threshold")
+
+    print(f"  min_threshold: {min_threshold}")
+    if min_threshold == -30.0:
+        print(f"  ✅ SUCCESS: 30.0 → -30.0 (允许中性时机)")
+    else:
+        print(f"  ❌ FAILED: Expected -30.0, got {min_threshold}")
+        all_pass = False
+
+    # P0-8: Step3 validation
+    print(f"\n【P0-8: Step3 入场价阈值】")
+    step3_cfg = four_step.get("step3_risk", {})
+    entry_cfg = step3_cfg.get("entry_price", {})
+    moderate_f = entry_cfg.get("moderate_accumulation_f")
+    strong_f = entry_cfg.get("strong_accumulation_f")
+
+    print(f"  moderate_accumulation_f: {moderate_f}")
+    if moderate_f == 5.0:
+        print(f"  ✅ SUCCESS: 40 → 5.0")
+    else:
+        print(f"  ❌ FAILED: Expected 5.0, got {moderate_f}")
+        all_pass = False
+
+    print(f"  strong_accumulation_f: {strong_f}")
+    if strong_f == 15.0:
+        print(f"  ✅ SUCCESS: 70 → 15.0")
+    else:
+        print(f"  ❌ FAILED: Expected 15.0, got {strong_f}")
+        all_pass = False
+
+    return all_pass
 
 
 def run_quick_backtest():
@@ -113,9 +153,9 @@ def run_quick_backtest():
 
 def main():
     print("\n" + "="*70)
-    print("P0 Bug Fix Validation - CryptoSignal v7.4.2")
-    print("问题: 回测产生0个信号 (min_final_strength过高)")
-    print("修复: config/params.json - min_final_strength: 20.0 → 5.0")
+    print("P0-7 & P0-8 Bug Fix Validation - CryptoSignal v7.4.2")
+    print("问题: 回测产生0个信号 - 四步系统阈值系统性过高")
+    print("修复: P0-7 (Step1) + P0-8 (Step2/3) 阈值调整")
     print("="*70 + "\n")
 
     # Step 1: Validate config
