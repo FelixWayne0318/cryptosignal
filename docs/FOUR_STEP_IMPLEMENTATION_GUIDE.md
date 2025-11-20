@@ -1,9 +1,10 @@
 # CryptoSignal v7.4 · 四步分层决策系统 - 完整实施指南
 # Four-Step Layered Decision System - Complete Implementation Guide
 
-**版本**: v7.4-DS-FINAL
+**版本**: v7.4.4-DS (TrendStage模块)
 **来源**: 专家提供的完整实施方案
 **日期**: 2025-11-16
+**更新**: 2025-11-20 (v7.4.4 TrendStage防追高模块)
 **状态**: ✅ 已评估，可直接实施
 
 ---
@@ -544,6 +545,150 @@
           f"时机不佳: Enhanced_F={ef:.1f} < {min_enhanced_f:.1f}"
       )
       return res
+
+----------------------------------------
+3.6 TrendStage 模块（v7.4.4 新增）
+----------------------------------------
+
+**目的**: 防止追高/追跌，识别趋势阶段并调整时机得分
+
+### 3.6.1 核心概念
+
+TrendStage 通过三个中间量判断当前趋势所处阶段：
+
+| 中间量 | 含义 | 计算方式 |
+|--------|------|----------|
+| move_atr | 累积ATR距离 | 6h内价格累积位移 / ATR |
+| pos_in_range | 区间位置 | 当前价格在24h范围内的位置(0~1) |
+| delta_T | 趋势加速度 | T因子最近3根K线的变化 |
+
+### 3.6.2 阶段判断逻辑
+
+```python
+def determine_trend_stage(move_atr, pos_in_range, delta_T, direction_sign, params):
+    """
+    判断趋势阶段: early / mid / late / blowoff
+
+    direction_sign: +1=多头方向, -1=空头方向 (来源于当前T因子符号)
+    """
+    thresholds = params["trend_stage"]
+
+    # Blowoff检测: 趋势加速度反转
+    if direction_sign > 0 and delta_T < thresholds["delta_T_thresholds"]["blowoff_long"]:
+        return "blowoff"  # 多头末期，T减速
+    if direction_sign < 0 and delta_T > thresholds["delta_T_thresholds"]["blowoff_short"]:
+        return "blowoff"  # 空头末期，T减速
+
+    # 基于move_atr和pos_in_range综合判断
+    move_th = thresholds["move_atr_thresholds"]
+    pos_th = thresholds["pos_thresholds"]
+
+    # Late阶段: 价格已经移动很远 + 处于极端位置
+    if move_atr >= move_th["late"]:
+        if (direction_sign > 0 and pos_in_range > pos_th["high"]) or \
+           (direction_sign < 0 and pos_in_range < pos_th["low"]):
+            return "late"
+
+    # Mid阶段: 中等位移
+    if move_atr >= move_th["mid"]:
+        return "mid"
+
+    # Early阶段: 小位移 + 靠近起点
+    if move_atr < move_th["early"]:
+        if (direction_sign > 0 and pos_in_range < pos_th["high"]) or \
+           (direction_sign < 0 and pos_in_range > pos_th["low"]):
+            return "early"
+
+    return "mid"  # 默认
+```
+
+### 3.6.3 阶段调整分数
+
+| 阶段 | penalty_by_stage | 含义 |
+|------|------------------|------|
+| early | +5 | 鼓励早期入场 |
+| mid | 0 | 正常 |
+| late | -15 | 惩罚追高/追跌 |
+| blowoff | -35 | 强烈惩罚末期入场 |
+
+### 3.6.4 Enhanced F 最终公式
+
+```python
+# v7.4.4 完整公式
+enhanced_f_flow_price = 100 * tanh((flow_momentum - price_momentum) / scale)
+s_adjustment = s_timing_boost if theta > theta_threshold else 0
+
+trend_stage_adjustment = penalty_by_stage[trend_stage]
+
+enhanced_f_final = enhanced_f_flow_price + trend_stage_adjustment + s_adjustment
+
+# Chase Zone 硬拒绝
+if enhanced_f_final <= chase_reject_threshold:  # 默认 -60
+    return REJECT("追高区: enhanced_f_final <= -60")
+```
+
+### 3.6.5 Direction Sign 观测点
+
+**重要**: v7.4.4 增加了 direction_sign 来源对齐的观测日志。
+
+- Step1 的 direction_sign: 来自 A层加权合成得分 的符号
+- Step2 的 direction_sign: 来自 T因子 的符号
+
+两者可能不一致（例如：A层整体看多但T趋势为负）。当前版本只记录观测，不影响判定逻辑。
+
+### 3.6.6 TrendStage 配置示例
+
+```json
+"trend_stage": {
+    "_comment": "v7.4.4新增: 趋势阶段判断（防追高/追跌）",
+    "enabled": true,
+    "atr_lookback": 14,
+    "move_atr_window_hours": 6,
+    "move_atr_thresholds": {
+        "early": 2.0,
+        "mid": 4.0,
+        "late": 6.0
+    },
+    "pos_window_hours": 24,
+    "pos_thresholds": {
+        "low": 0.15,
+        "high": 0.85
+    },
+    "delta_T_lookback": 3,
+    "delta_T_thresholds": {
+        "blowoff_long": -5.0,
+        "blowoff_short": 5.0
+    },
+    "penalty_by_stage": {
+        "early": 5.0,
+        "mid": 0.0,
+        "late": -15.0,
+        "blowoff": -35.0
+    },
+    "chase_reject_threshold": -60.0
+}
+```
+
+### 3.6.7 返回结构扩展
+
+v7.4.4 的 step2_timing_judgment 返回结构增加：
+
+```python
+{
+    # 原有字段...
+    "enhanced_f": float,        # flow vs price 基础分
+    "enhanced_f_final": float,  # 最终分（含TrendStage调整）
+    "trend_stage": str,         # "early" / "mid" / "late" / "blowoff"
+    "is_chase_zone": bool,      # 是否触发追高区硬拒绝
+    "metadata": {
+        "direction_sign": int,  # T因子方向符号
+        "move_atr": float,
+        "pos_in_range": float,
+        "delta_T": float,
+        "trend_stage_adjustment": float
+    }
+}
+```
 
 ==================================================
 4. Step3 · 风险管理层（Risk Management）

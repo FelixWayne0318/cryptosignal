@@ -1,11 +1,173 @@
-# SESSION_STATE - CryptoSignal v7.4.3 Development Log
+# SESSION_STATE - CryptoSignal v7.4.4 Development Log
 
-**Branch**: `claude/reorganize-audit-cryptosignal-01BCwP8umVzbeyT1ESmLsnbB`
+**Branch**: `claude/reorganize-audit-system-01N38pCktomjrY2cjFdXP84L`
 **Standard**: SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0
 
 ---
 
-## 🆕 Session 9: v1.1 REJECT信号记录 - 真实Step通过率计算 (2025-11-20)
+## 🆕 Session 10: v7.4.4 TrendStage防追高模块实现 (2025-11-20)
+
+**Problem**: Step2缺乏趋势阶段判断，无法识别追高/追跌行为
+**Solution**: 实现TrendStage模块，通过move_atr/pos_in_range/delta_T判断趋势阶段，添加阶段惩罚分
+**Impact**: 重大增强 - 防止在趋势末期入场
+**Status**: ✅ Implemented
+
+### 核心概念
+
+TrendStage通过三个中间量判断趋势阶段：
+
+| 中间量 | 含义 | 计算方式 |
+|--------|------|----------|
+| move_atr | 累积ATR距离 | 6h内价格累积位移 / ATR |
+| pos_in_range | 区间位置 | 当前价格在24h范围内的位置(0~1) |
+| delta_T | 趋势加速度 | T因子最近3根K线的变化 |
+
+四个阶段及惩罚分：
+- **early** (+5): 鼓励早期入场
+- **mid** (0): 正常
+- **late** (-15): 惩罚追高/追跌
+- **blowoff** (-35): 强烈惩罚末期入场
+
+### 实现方案
+
+遵循SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0，按文件修改顺序实现：
+
+#### 1. 配置文件 (`config/params.json`)
+
+```json
+"trend_stage": {
+  "_comment": "v7.4.4新增: 趋势阶段判断（防追高/追跌）",
+  "enabled": true,
+  "atr_lookback": 14,
+  "move_atr_window_hours": 6,
+  "move_atr_thresholds": {
+    "early": 2.0,
+    "mid": 4.0,
+    "late": 6.0
+  },
+  "pos_window_hours": 24,
+  "pos_thresholds": {
+    "low": 0.15,
+    "high": 0.85
+  },
+  "delta_T_lookback": 3,
+  "delta_T_thresholds": {
+    "blowoff_long": -5.0,
+    "blowoff_short": 5.0
+  },
+  "penalty_by_stage": {
+    "early": 5.0,
+    "mid": 0.0,
+    "late": -15.0,
+    "blowoff": -35.0
+  },
+  "chase_reject_threshold": -60.0
+}
+```
+
+#### 2. 核心算法 (`ats_core/decision/step2_timing.py`)
+
+**新增6个TrendStage函数**:
+- `calculate_simple_atr()`: 简易ATR计算（含TODO标注函数重复问题）
+- `calculate_move_atr()`: 累积ATR距离计算
+- `calculate_pos_in_range()`: 区间位置计算
+- `calculate_delta_T()`: 趋势加速度计算
+- `determine_trend_stage()`: 阶段判断逻辑
+- `calculate_trend_stage_adjustment()`: 总体调整计算
+
+**更新主函数**:
+- `step2_timing_judgment()`: 集成TrendStage，返回enhanced_f_final/trend_stage/is_chase_zone
+
+**Enhanced F最终公式**:
+```python
+enhanced_f_final = enhanced_f_flow_price + trend_stage_adjustment + s_adjustment
+
+# Chase Zone硬拒绝
+if enhanced_f_final <= chase_reject_threshold:  # -60
+    return REJECT
+```
+
+#### 3. 管道集成 (`ats_core/decision/four_step_system.py`)
+
+**新增direction_sign观测日志**:
+```python
+# v7.4.4: 添加TrendStage相关信息和direction_sign观测
+step2_direction_sign = step2_metadata.get('direction_sign', 0)
+step1_direction_sign = 1 if step1_result['direction_score'] > 0 else -1
+
+# 观测记录：direction_sign来源对齐问题
+if direction_sign_mismatch and step2_direction_sign != 0:
+    warn(f"⚠️ {symbol} - direction_sign不一致: Step1={step1_direction_sign}, Step2(T)={step2_direction_sign}")
+```
+
+**更新日志输出**:
+```python
+log(f"✅ {symbol} - Step2通过: "
+    f"Enhanced_F={step2_result['enhanced_f']:.1f}, "
+    f"final={enhanced_f_final:.1f}, "
+    f"stage={trend_stage}, "
+    f"时机质量={step2_result['timing_quality']}")
+```
+
+#### 4. 文档更新 (`docs/FOUR_STEP_IMPLEMENTATION_GUIDE.md`)
+
+新增Section 3.6 TrendStage模块（v7.4.4新增）：
+- 3.6.1 核心概念
+- 3.6.2 阶段判断逻辑
+- 3.6.3 阶段调整分数
+- 3.6.4 Enhanced F最终公式
+- 3.6.5 Direction Sign观测点
+- 3.6.6 TrendStage配置示例
+- 3.6.7 返回结构扩展
+
+### 文件变更摘要
+
+**Modified**:
+- `config/params.json` (+35 lines): trend_stage配置块
+- `ats_core/decision/step2_timing.py` (+150 lines): TrendStage模块实现
+- `ats_core/decision/four_step_system.py` (+15 lines): direction_sign观测
+- `docs/FOUR_STEP_IMPLEMENTATION_GUIDE.md` (+140 lines): TrendStage文档
+
+### 技术要点
+
+#### Direction Sign观测
+
+**重要**: Step1和Step2的direction_sign来源不同：
+- Step1: A层加权合成得分的符号
+- Step2: T因子的符号
+
+当前版本只记录观测，不影响判定逻辑。
+
+#### ATR函数重复
+
+`calculate_simple_atr`与Step3中的实现重复，已添加TODO标注：
+```python
+# TODO: calculate_simple_atr与Step3中的实现重复，未来可合并为公共工具函数
+```
+
+### 开发流程
+
+严格遵循SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0:
+1. ✅ Phase 0: 阅读开发标准、分析专家方案
+2. ✅ Phase 1: 修改config/params.json（配置优先）
+3. ✅ Phase 2: 修改step2_timing.py（核心算法）
+4. ✅ Phase 3: 修改four_step_system.py（管道集成）
+5. ✅ Phase 4: 更新FOUR_STEP_IMPLEMENTATION_GUIDE.md（文档）
+6. ✅ Phase 5: 更新SESSION_STATE.md
+7. ⏳ Phase 6: Git commit并push
+
+**Total Time**: ~90分钟
+
+### 预期效果
+
+- **防追高**: late阶段惩罚-15分，blowoff惩罚-35分
+- **鼓励早期**: early阶段奖励+5分
+- **硬拒绝**: enhanced_f_final <= -60时直接REJECT
+- **可观测性**: direction_sign不一致时记录警告日志
+
+---
+
+## Session 9: v1.1 REJECT信号记录 - 真实Step通过率计算 (2025-11-20)
 
 **Problem**: 回测只记录ACCEPT信号，无法计算真实的Step1-4通过率（瓶颈分析）
 **Solution**: 实现v1.1增强，记录所有分析结果（包括REJECT），计算真实Step通过率

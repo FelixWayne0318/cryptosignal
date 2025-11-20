@@ -24,13 +24,300 @@ Timing Quality Levels:
     Enhanced_F < -60  → "Chase" (严重追涨)
 
 Author: Claude Code (based on Expert Plan)
-Version: v7.4.2
+Version: v7.4.4
 Created: 2025-11-16
+Updated: 2025-11-20
+
+v7.4.4 Enhancements:
+    - TrendStage module: move_atr, pos_in_range, delta_T
+    - Chase zone hard rejection rule
+    - Parameterized delta_T thresholds for blowoff detection
 """
 
 from typing import Dict, Any, List, Optional
 import math
 from ats_core.logging import log, warn
+
+
+# ============ TrendStage Module (v7.4.4) ============
+
+# TODO: calculate_simple_atr与Step3中的实现重复，未来可合并为公共工具函数
+# (如 ats_core/utils/volatility.py)，以避免长期漂移
+def calculate_simple_atr(klines: List[Dict], period: int = 14) -> float:
+    """
+    计算简单ATR (Average True Range)
+
+    Args:
+        klines: K线数据（至少period+1根）
+        period: ATR周期
+
+    Returns:
+        atr: 平均真实波动幅度
+    """
+    if len(klines) < period + 1:
+        return 0.0
+
+    trs = []
+    for i in range(-period, 0):
+        high = float(klines[i].get("high", 0))
+        low = float(klines[i].get("low", 0))
+        prev_close = float(klines[i-1].get("close", 0))
+
+        tr = max(
+            high - low,
+            abs(high - prev_close),
+            abs(low - prev_close)
+        )
+        trs.append(tr)
+
+    return sum(trs) / len(trs) if trs else 0.0
+
+
+def calculate_move_atr(
+    klines: List[Dict],
+    window_hours: int,
+    atr: float
+) -> float:
+    """
+    计算累积ATR距离（趋势走了多远）
+
+    Formula:
+        move = abs(close_now - close_N_ago)
+        move_atr = move / atr
+
+    Args:
+        klines: K线数据
+        window_hours: 回看窗口
+        atr: ATR值
+
+    Returns:
+        move_atr: 累积ATR距离
+
+    Interpretation:
+        1-2: 早期
+        2-4: 中段
+        4-6: 尾声
+        >6: 透支
+    """
+    if len(klines) < window_hours + 1 or atr <= 0:
+        return 0.0
+
+    close_now = float(klines[-1].get("close", 0))
+    close_ago = float(klines[-(window_hours+1)].get("close", 0))
+    move = abs(close_now - close_ago)
+
+    return move / atr
+
+
+def calculate_pos_in_range(
+    klines: List[Dict],
+    window_hours: int
+) -> float:
+    """
+    计算区间位置（当前价格在近期高低区间的位置）
+
+    Formula:
+        pos = (close_now - lowest) / (highest - lowest)
+
+    Args:
+        klines: K线数据
+        window_hours: 回看窗口
+
+    Returns:
+        pos_in_range: [0, 1]，1=顶部，0=底部
+    """
+    if len(klines) < window_hours:
+        return 0.5  # 默认中间
+
+    closes = [float(k.get("close", 0)) for k in klines[-window_hours:]]
+    highest = max(closes) if closes else 0
+    lowest = min(closes) if closes else 0
+    close_now = closes[-1] if closes else 0
+
+    range_size = highest - lowest
+    if range_size <= 0:
+        return 0.5
+
+    return (close_now - lowest) / range_size
+
+
+def calculate_delta_T(
+    factor_scores_series: List[Dict],
+    lookback: int
+) -> float:
+    """
+    计算趋势加速度（T因子变化，类似二阶导）
+
+    Formula:
+        delta_T = T_now - T_k_ago
+
+    Args:
+        factor_scores_series: 因子历史序列
+        lookback: 回看K线数
+
+    Returns:
+        delta_T: 趋势变化量
+        - 多头时delta_T > 0: 趋势加速
+        - 多头时delta_T < 0: 趋势减速（见顶前钝化）
+    """
+    if len(factor_scores_series) < lookback + 1:
+        return 0.0
+
+    T_now = factor_scores_series[-1].get("T", 0.0)
+    T_ago = factor_scores_series[-(lookback+1)].get("T", 0.0)
+
+    return T_now - T_ago
+
+
+def determine_trend_stage(
+    move_atr: float,
+    pos_in_range: float,
+    delta_T: float,
+    direction_sign: int,
+    params: Dict
+) -> str:
+    """
+    判断趋势阶段
+
+    Args:
+        move_atr: 累积ATR距离
+        pos_in_range: 区间位置
+        delta_T: 趋势加速度
+        direction_sign: 方向符号（+1多头, -1空头）
+        params: 配置
+
+    Returns:
+        stage: "early" | "mid" | "late" | "blowoff"
+    """
+    cfg = params.get("four_step_system", {}).get("step2_timing", {}).get("trend_stage", {})
+
+    thresholds = cfg.get("move_atr_thresholds", {
+        "early": 2.0, "mid": 4.0, "late": 6.0
+    })
+    pos_thresholds = cfg.get("pos_thresholds", {
+        "low": 0.15, "high": 0.85
+    })
+
+    # v7.4.4: 参数化blowoff阈值（原硬编码-5/5）
+    delta_T_thresholds = cfg.get("delta_T_thresholds", {
+        "blowoff_long": -5.0, "blowoff_short": 5.0
+    })
+
+    early_th = thresholds.get("early", 2.0)
+    mid_th = thresholds.get("mid", 4.0)
+    late_th = thresholds.get("late", 6.0)
+    pos_high = pos_thresholds.get("high", 0.85)
+    pos_low = pos_thresholds.get("low", 0.15)
+    blowoff_long_th = delta_T_thresholds.get("blowoff_long", -5.0)
+    blowoff_short_th = delta_T_thresholds.get("blowoff_short", 5.0)
+
+    # 多头方向
+    if direction_sign > 0:
+        # Blowoff: 极端透支
+        if move_atr > late_th and pos_in_range > 0.9 and delta_T < blowoff_long_th:
+            return "blowoff"
+
+        # Late: 尾声
+        if move_atr > mid_th and pos_in_range > pos_high and delta_T < 0:
+            return "late"
+
+        # Early: 早期
+        if move_atr <= early_th and delta_T >= 0:
+            return "early"
+
+        # 中段（默认）
+        return "mid"
+
+    # 空头方向（对称）
+    else:
+        # Blowoff: 极端透支
+        if move_atr > late_th and pos_in_range < 0.1 and delta_T > blowoff_short_th:
+            return "blowoff"
+
+        # Late: 尾声
+        if move_atr > mid_th and pos_in_range < pos_low and delta_T > 0:
+            return "late"
+
+        # Early: 早期
+        if move_atr <= early_th and delta_T <= 0:
+            return "early"
+
+        # 中段（默认）
+        return "mid"
+
+
+def calculate_trend_stage_adjustment(
+    klines: List[Dict],
+    factor_scores_series: List[Dict],
+    direction_sign: int,
+    params: Dict
+) -> Dict[str, Any]:
+    """
+    计算趋势阶段及其调整值
+
+    Args:
+        klines: K线数据
+        factor_scores_series: 因子历史序列
+        direction_sign: 方向符号（+1多头, -1空头）
+        params: 配置
+
+    Returns:
+        dict: {
+            "trend_stage": str,
+            "trend_stage_adjustment": float,
+            "move_atr": float,
+            "pos_in_range": float,
+            "delta_T": float,
+            "atr": float
+        }
+    """
+    cfg = params.get("four_step_system", {}).get("step2_timing", {}).get("trend_stage", {})
+
+    # 检查是否启用
+    if not cfg.get("enabled", True):
+        return {
+            "trend_stage": "unknown",
+            "trend_stage_adjustment": 0.0,
+            "move_atr": 0.0,
+            "pos_in_range": 0.5,
+            "delta_T": 0.0,
+            "atr": 0.0
+        }
+
+    # 获取配置
+    atr_lookback = cfg.get("atr_lookback", 14)
+    move_atr_window = cfg.get("move_atr_window_hours", 6)
+    pos_window = cfg.get("pos_window_hours", 24)
+    delta_T_lookback = cfg.get("delta_T_lookback", 3)
+    penalty_by_stage = cfg.get("penalty_by_stage", {
+        "early": 5.0, "mid": 0.0, "late": -15.0, "blowoff": -35.0
+    })
+
+    # 计算中间量
+    atr = calculate_simple_atr(klines, atr_lookback)
+    move_atr = calculate_move_atr(klines, move_atr_window, atr)
+    pos_in_range = calculate_pos_in_range(klines, pos_window)
+    delta_T = calculate_delta_T(factor_scores_series, delta_T_lookback)
+
+    # 判断阶段
+    trend_stage = determine_trend_stage(
+        move_atr, pos_in_range, delta_T, direction_sign, params
+    )
+
+    # 获取调整值
+    adjustment = penalty_by_stage.get(trend_stage, 0.0)
+
+    return {
+        "trend_stage": trend_stage,
+        "trend_stage_adjustment": adjustment,
+        "move_atr": round(move_atr, 2),
+        "pos_in_range": round(pos_in_range, 3),
+        "delta_T": round(delta_T, 2),
+        "atr": round(atr, 6)
+    }
+
+
+# ============ Original Enhanced F Functions ============
 
 
 def calculate_flow_score(
@@ -288,12 +575,18 @@ def step2_timing_judgment(
     params: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
-    Step2主函数：时机判断层
+    Step2主函数：时机判断层（v7.4.4增强版）
 
     Pipeline:
         1. 计算Enhanced F v2（flow vs price momentum）
-        2. 基于S因子调整时机评分（结构良好时加分）
-        3. 判断是否通过（enhanced_f >= min_threshold）
+        2. 计算TrendStage调整（防追高/追跌）
+        3. 基于S因子调整时机评分
+        4. 合成最终得分并判断
+
+    v7.4.4 Enhancements:
+        - TrendStage模块（move_atr, pos_in_range, delta_T）
+        - Chase zone硬拒绝规则
+        - enhanced_f_final = enhanced_f_flow_price + trend_stage_adjustment + s_adjustment
 
     Note (v7.4.3):
         L因子不再在Step2中使用。根据设计文档，L因子仅用于Step3风险管理层
@@ -308,12 +601,15 @@ def step2_timing_judgment(
     Returns:
         dict: {
             "pass": bool,
-            "enhanced_f": float,
+            "enhanced_f": float,              # 原始Enhanced F (flow_price)
+            "enhanced_f_final": float,        # 最终得分
             "flow_momentum": float,
             "price_momentum": float,
+            "trend_stage": str,
+            "trend_stage_adjustment": float,
+            "s_adjustment": float,
             "timing_quality": str,
-            "s_adjustment": float,        # S因子调整
-            "final_timing_score": float,  # 最终时机得分
+            "is_chase_zone": bool,
             "reject_reason": str or None,
             "metadata": dict
         }
@@ -325,27 +621,21 @@ def step2_timing_judgment(
         params
     )
 
-    if not enhanced_f_result["pass"]:
-        # Enhanced F未通过，直接返回
-        return {
-            "pass": False,
-            "enhanced_f": enhanced_f_result["enhanced_f"],
-            "flow_momentum": enhanced_f_result["flow_momentum"],
-            "price_momentum": enhanced_f_result["price_momentum"],
-            "timing_quality": enhanced_f_result["timing_quality"],
-            "s_adjustment": 0.0,
-            "final_timing_score": enhanced_f_result["enhanced_f"],
-            "reject_reason": enhanced_f_result["reject_reason"],
-            "metadata": {
-                "flow_weights": enhanced_f_result["flow_weights"]
-            }
-        }
-
-    # 获取配置
     step2_cfg = params.get("four_step_system", {}).get("step2_timing", {})
-    s_cfg = step2_cfg.get("S_factor", {})
+    enhanced_f_flow_price = enhanced_f_result["enhanced_f"]
 
-    # 2. S因子调整（结构良好时加分）
+    # 2. 计算TrendStage调整
+    # 从当前因子确定方向符号
+    current_factors = factor_scores_series[-1] if factor_scores_series else {}
+    T_now = current_factors.get("T", 0.0)
+    direction_sign = 1 if T_now >= 0 else -1
+
+    trend_stage_result = calculate_trend_stage_adjustment(
+        klines, factor_scores_series, direction_sign, params
+    )
+
+    # 3. S因子调整
+    s_cfg = step2_cfg.get("S_factor", {})
     s_adjustment = 0.0
     theta = s_factor_meta.get("theta", 0.0)
     theta_threshold = s_cfg.get("theta_threshold", 0.65)
@@ -355,35 +645,80 @@ def step2_timing_judgment(
         s_adjustment = timing_boost
         log(f"✅ S因子结构良好(theta={theta:.2f}), 时机+{timing_boost}")
 
-    # 3. 计算最终时机得分
-    # v7.4.3: L因子不再在Step2中使用，仅用于Step3止损宽度调整
-    final_timing_score = enhanced_f_result["enhanced_f"] + s_adjustment
+    # 4. 合成最终得分
+    # v7.4.4: enhanced_f_final = enhanced_f_flow_price + trend_stage_adjustment + s_adjustment
+    enhanced_f_final = (
+        enhanced_f_flow_price
+        + trend_stage_result["trend_stage_adjustment"]
+        + s_adjustment
+    )
 
-    # 重新判断是否通过（调整后的得分）
-    min_threshold = step2_cfg.get("enhanced_f", {}).get("min_threshold", 30.0)
-    pass_step2 = final_timing_score >= min_threshold
+    # 5. 判定是否通过
+    trend_stage_cfg = step2_cfg.get("trend_stage", {})
+    chase_reject_threshold = trend_stage_cfg.get("chase_reject_threshold", -60.0)
+    min_threshold = step2_cfg.get("enhanced_f", {}).get("min_threshold", -30.0)
 
-    reject_reason = None
-    if not pass_step2:
+    # Chase zone检测
+    is_chase_zone = enhanced_f_final <= chase_reject_threshold
+
+    if is_chase_zone:
+        pass_step2 = False
         reject_reason = (
-            f"时机不佳(调整后): final_timing_score={final_timing_score:.1f} < {min_threshold} "
-            f"(Enhanced_F={enhanced_f_result['enhanced_f']:.1f}, "
+            f"Chase zone: enhanced_f_final={enhanced_f_final:.1f} <= {chase_reject_threshold}, "
+            f"stage={trend_stage_result['trend_stage']}, "
+            f"move_atr={trend_stage_result['move_atr']:.1f}, "
+            f"pos={trend_stage_result['pos_in_range']:.2f}, "
+            f"delta_T={trend_stage_result['delta_T']:.1f}"
+        )
+    elif enhanced_f_final >= min_threshold:
+        pass_step2 = True
+        reject_reason = None
+    else:
+        pass_step2 = False
+        reject_reason = (
+            f"Timing not attractive: enhanced_f_final={enhanced_f_final:.1f} < {min_threshold} "
+            f"(flow_price={enhanced_f_flow_price:.1f}, "
+            f"stage_adj={trend_stage_result['trend_stage_adjustment']:+.0f}, "
             f"S_adj={s_adjustment:+.0f})"
         )
 
+    # 6. 基于enhanced_f_final重新评级timing_quality
+    timing_quality_cfg = step2_cfg.get("timing_quality", {})
+    if enhanced_f_final >= timing_quality_cfg.get("excellent", 80):
+        timing_quality = "Excellent"
+    elif enhanced_f_final >= timing_quality_cfg.get("good", 60):
+        timing_quality = "Good"
+    elif enhanced_f_final >= timing_quality_cfg.get("fair", 30):
+        timing_quality = "Fair"
+    elif enhanced_f_final >= timing_quality_cfg.get("mediocre", -30):
+        timing_quality = "Mediocre"
+    elif enhanced_f_final >= timing_quality_cfg.get("poor", -60):
+        timing_quality = "Poor"
+    else:
+        timing_quality = "Chase"
+
     return {
         "pass": pass_step2,
-        "enhanced_f": enhanced_f_result["enhanced_f"],
+        "enhanced_f": enhanced_f_flow_price,
+        "enhanced_f_final": enhanced_f_final,
         "flow_momentum": enhanced_f_result["flow_momentum"],
         "price_momentum": enhanced_f_result["price_momentum"],
-        "timing_quality": enhanced_f_result["timing_quality"],
+        "trend_stage": trend_stage_result["trend_stage"],
+        "trend_stage_adjustment": trend_stage_result["trend_stage_adjustment"],
         "s_adjustment": s_adjustment,
-        "final_timing_score": final_timing_score,
+        "timing_quality": timing_quality,
+        "is_chase_zone": is_chase_zone,
         "reject_reason": reject_reason,
         "metadata": {
             "flow_weights": enhanced_f_result["flow_weights"],
             "s_theta": theta,
-            "min_threshold": min_threshold
+            "move_atr": trend_stage_result["move_atr"],
+            "pos_in_range": trend_stage_result["pos_in_range"],
+            "delta_T": trend_stage_result["delta_T"],
+            "atr": trend_stage_result.get("atr", 0.0),
+            "direction_sign": direction_sign,
+            "min_threshold": min_threshold,
+            "chase_reject_threshold": chase_reject_threshold
         }
     }
 

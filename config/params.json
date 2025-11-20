@@ -487,6 +487,53 @@
         "timing_boost": 10
       },
 
+      "trend_stage": {
+        "_comment": "v7.4.4新增: 趋势阶段判断（防追高/追跌）- 基于专家复核方案",
+        "enabled": true,
+
+        "atr_lookback": 14,
+        "_atr_note": "计算ATR的回看周期",
+
+        "move_atr_window_hours": 6,
+        "_move_atr_note": "计算累积ATR距离的窗口",
+
+        "move_atr_thresholds": {
+          "_comment": "阶段划分阈值（move_atr = 距离/ATR）",
+          "early": 2.0,
+          "mid": 4.0,
+          "late": 6.0
+        },
+
+        "pos_window_hours": 24,
+        "_pos_note": "计算区间位置的窗口",
+
+        "pos_thresholds": {
+          "_comment": "区间位置阈值",
+          "low": 0.15,
+          "high": 0.85
+        },
+
+        "delta_T_lookback": 3,
+        "_delta_T_note": "计算趋势加速度的回看K线数",
+
+        "delta_T_thresholds": {
+          "_comment": "v7.4.4: 参数化blowoff阶段的delta_T阈值（原硬编码-5/5）",
+          "blowoff_long": -5.0,
+          "blowoff_short": 5.0
+        },
+
+        "penalty_by_stage": {
+          "_comment": "各阶段的时机调整值",
+          "early": 5.0,
+          "mid": 0.0,
+          "late": -15.0,
+          "blowoff": -35.0
+        },
+
+        "chase_reject_threshold": -60.0,
+        "_chase_note": "低于此值直接拒绝（Chase zone硬拒绝）"
+      },
+
       "_L_factor_removed_note": "v7.4.3: L因子时机惩罚已移除。根据设计文档，L因子仅用于Step3止损宽度调整（流动性差→更宽止损），而非Step2时机评分惩罚"
     },
 
