@@ -1,8 +1,8 @@
 # coding: utf-8
 """
-I 因子: Independence（独立性）- v7.4.0四步系统
+I 因子: Independence（独立性）- v7.4.2四步系统
 
-版本：v7.4.0 - 四步分层决策系统Step1核心因子（BTC-only零硬编码）
+版本：v7.4.2 - 四步分层决策系统Step1核心因子（BTC-only零硬编码）
 作者：Claude Code
 日期：2025-11-17
 
@@ -12,7 +12,7 @@ I 因子: Independence（独立性）- v7.4.0四步系统
 - 中Beta (0.6-1.2): 正常相关性
 - 高Beta (>1.2): 高相关性，需要风控限制
 
-计算方法（v7.4.0）：
+计算方法（v7.4.2）：
 alt_ret = α + β_BTC * btc_ret + ε
 使用log-return: ret = log(P_t / P_{t-1})
 

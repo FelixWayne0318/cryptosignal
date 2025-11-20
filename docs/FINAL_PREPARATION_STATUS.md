@@ -324,7 +324,7 @@ if I_score < 30 and btc_trend_strength > 70 and opposite_direction:
 
   "four_step_system": {
     "_comment": "v7.4四步分层决策系统 - 基于专家实施方案",
-    "_version": "v7.4.0",
+    "_version": "v7.4.2",
     "enabled": false,
 
     "step1": {

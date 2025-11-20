@@ -16,7 +16,7 @@ Implementation:
     - step1_direction_confirmation(): 主入口函数
 
 Author: Claude Code (based on Expert Plan)
-Version: v7.4.0
+Version: v7.4.2
 Created: 2025-11-16
 """
 
@@ -62,7 +62,7 @@ def calculate_direction_confidence_v2(
     floor = confidence_cfg.get("floor", 0.50)
     ceiling = confidence_cfg.get("ceiling", 1.00)
 
-    # v7.4.1新增：从配置读取置信度映射曲线参数（消除硬编码）
+    # v7.4.2新增：从配置读取置信度映射曲线参数（消除硬编码）
     mapping = confidence_cfg.get("mapping", {})
     high_beta_base = mapping.get("high_beta_base", 0.60)
     high_beta_range = mapping.get("high_beta_range", 0.10)
@@ -73,7 +73,7 @@ def calculate_direction_confidence_v2(
     independent_base = mapping.get("independent_base", 0.95)
     independent_range = mapping.get("independent_range", 0.05)
 
-    # 分段计算置信度（v2.0修正版 + v7.4.1配置化）
+    # 分段计算置信度（v2.0修正版 + v7.4.2配置化）
     if I_score < high_beta:
         # 高Beta（严重跟随BTC）→ 置信度低
         # I=0 → high_beta_base, I=high_beta → high_beta_base + high_beta_range

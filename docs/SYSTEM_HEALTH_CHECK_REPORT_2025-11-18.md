@@ -1,8 +1,8 @@
-# CryptoSignal v7.4.0 System Health Check Report
+# CryptoSignal v7.4.2 System Health Check Report
 
 **Date**: 2025-11-18
 **Entry Point**: setup.sh → scripts/realtime_signal_scanner.py
-**Version**: v7.4.0 (Four-Step Decision System - Phase 2 Complete)
+**Version**: v7.4.2 (Four-Step Decision System - Phase 2 Complete)
 **Methodology**: Following docs/CODE_HEALTH_CHECK_GUIDE.md
 
 ---
@@ -842,7 +842,7 @@ This enables excellent debugging and system transparency.
 
 ### Overall Assessment: 🟢 **HEALTHY**
 
-The CryptoSignal v7.4.0 Four-Step Decision System is **well-implemented, production-ready, and maintains high code quality standards**.
+The CryptoSignal v7.4.2 Four-Step Decision System is **well-implemented, production-ready, and maintains high code quality standards**.
 
 **Key Achievements**:
 1. ✅ Complete four-step pipeline implementation

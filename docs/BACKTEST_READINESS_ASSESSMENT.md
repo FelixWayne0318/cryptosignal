@@ -1,4 +1,4 @@
-# CryptoSignal v7.4.0 - 回测验证准备度评估
+# CryptoSignal v7.4.2 - 回测验证准备度评估
 
 **评估日期**: 2025-11-18
 **评估人**: Claude Code

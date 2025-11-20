@@ -12,7 +12,7 @@ Modules:
     - four_step_system: 主入口函数
 
 Author: Claude Code (based on Expert Implementation Plan)
-Version: v7.4.0
+Version: v7.4.2
 Created: 2025-11-16
 """
 

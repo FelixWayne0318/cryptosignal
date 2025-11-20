@@ -1,9 +1,9 @@
 #!/bin/bash
 # ==========================================
-# CryptoSignal v7.4.0 一键部署脚本
+# CryptoSignal v7.4.2 一键部署脚本
 # 用途：拉取代码、检测环境、安装依赖、启动系统
 # 特点：自动更新代码、清理缓存、验证结构、可配置化
-# v7.4.0: 四步分层决策系统 - 从打分到价格（Entry/SL/TP）
+# v7.4.2: 四步分层决策系统 - P0紧急修复（CVD验证+入场价+Gate2动态阈值）
 # ==========================================
 #
 # 环境变量配置（可选）:
@@ -30,8 +30,8 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 echo "=============================================="
-echo "🚀 CryptoSignal v7.4.0 一键部署"
-echo "   四步分层决策系统 - Dual Run模式"
+echo "🚀 CryptoSignal v7.4.2 一键部署"
+echo "   四步分层决策系统 - P0修复版"
 echo "=============================================="
 echo ""
 
@@ -85,14 +85,14 @@ find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 find . -name "*.pyc" -delete 2>/dev/null || true
 echo -e "${GREEN}✅ Python缓存已清理${NC}"
 
-# 0.4 验证重组后的目录结构（v7.4.0特性）
+# 0.4 验证重组后的目录结构（v7.4.2特性）
 echo ""
-echo "🔍 验证v7.4.0目录结构..."
+echo "🔍 验证v7.4.2目录结构..."
 
-# v7.4.0: 检查目录是否存在
+# v7.4.2: 检查目录是否存在
 # 必需目录: tests/, diagnose/, docs/, standards/, config/, ats_core/decision/
 if [ -d "tests" ] && [ -d "diagnose" ] && [ -d "docs" ] && [ -d "standards" ] && [ -d "ats_core/decision" ]; then
-    echo -e "${GREEN}✅ v7.4.0目录结构正确（含四步决策系统）${NC}"
+    echo -e "${GREEN}✅ v7.4.2目录结构正确（含四步决策系统）${NC}"
 
     # 统计文件数量（可选信息）
     TEST_FILES=$(find tests -name "*.py" -o -name "*.md" 2>/dev/null | wc -l)
@@ -105,7 +105,7 @@ if [ -d "tests" ] && [ -d "diagnose" ] && [ -d "docs" ] && [ -d "standards" ] &&
     echo "   - docs/: $DOC_FILES 个文档"
     echo "   - standards/: $STANDARD_FILES 个规范"
 else
-    echo -e "${YELLOW}⚠️  目录结构可能不是v7.4.0版本${NC}"
+    echo -e "${YELLOW}⚠️  目录结构可能不是v7.4.2版本${NC}"
     echo "   请确保存在以下目录: tests/, diagnose/, docs/, standards/, ats_core/decision/"
 fi
 
@@ -167,13 +167,13 @@ echo -e "${GREEN}✅ Telegram配置存在${NC}"
 # ==========================================
 # 注意：定时任务配置已移至部署脚本
 # ==========================================
-# v7.4.0方案B架构调整：
+# v7.4.2方案B架构调整：
 #   - crontab配置应由部署脚本负责（服务器基础设施层）
 #   - setup.sh只负责应用启动（应用执行层）
 #   - 这样职责清晰，避免每次git pull都修改系统配置
 #
 # 如果需要配置定时任务，请使用：
-#   deploy_server_v7.4.0_planB_PRODUCTION.sh（全新部署）
+#   deploy_server_v7.4.2_planB_PRODUCTION.sh（全新部署）
 #   或手动配置：crontab -e
 #     添加：0 3 * * * ~/cryptosignal/auto_restart.sh
 # ==========================================
@@ -195,7 +195,7 @@ echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━
 echo -e "${GREEN}✅ 环境准备完成！${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo "🚀 正在启动 v7.4.0 扫描器（后台模式 + 实时日志）..."
+echo "🚀 正在启动 v7.4.2 扫描器（后台模式 + 实时日志）..."
 echo "   特性: 四步分层决策系统 | Dual Run模式 | Entry/SL/TP价格"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
@@ -213,7 +213,7 @@ SCANNER_SCRIPT="${SCANNER_SCRIPT:-scripts/realtime_signal_scanner.py}"
 SCAN_INTERVAL="${SCAN_INTERVAL:-300}"
 AUTO_COMMIT_REPORTS="${AUTO_COMMIT_REPORTS:-false}"
 
-echo "📝 后台启动扫描器（v7.4.0 - 四步决策系统 | Dual Run）..."
+echo "📝 后台启动扫描器（v7.4.2 - 四步决策系统 | Dual Run）..."
 echo "   📍 扫描器脚本: $SCANNER_SCRIPT"
 echo "   ⏰ 扫描间隔: ${SCAN_INTERVAL}秒"
 echo "   📍 自动提交: $AUTO_COMMIT_REPORTS"
@@ -239,7 +239,7 @@ if ps -p $PID > /dev/null 2>&1; then
     echo "  查看日志: tail -f $LOG_FILE"
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "⚙️  v7.4.0 配置:"
+    echo "⚙️  v7.4.2 配置:"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "  ✅ 自动提交已禁用（AUTO_COMMIT_REPORTS=false）"
     echo "  📁 扫描报告保存位置："
@@ -247,7 +247,7 @@ if ps -p $PID > /dev/null 2>&1; then
     echo "     - reports/trends.json"
     echo "  💡 如需启用自动提交，请修改 setup.sh 删除该设置"
     echo ""
-    echo "  🆕 v7.4.0 革命性升级："
+    echo "  🆕 v7.4.2 革命性升级："
     echo "    ✅ Step1: 方向确认层（A层+I因子+BTC对齐+硬veto）"
     echo "    ✅ Step2: 时机判断层（Enhanced F v2 + 六级评分）"
     echo "    ✅ Step3: 风险管理层（Entry/SL/TP精确价格）"

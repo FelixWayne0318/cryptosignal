@@ -1,5 +1,5 @@
 """
-运行时配置中心 - v7.4.0
+运行时配置中心 - v7.4.2
 
 ✅ 职责范围（推荐使用）:
 - numeric_stability.json: 数值稳定性配置
@@ -23,7 +23,7 @@
 - cfg.py: 仅负责params.json（旧系统，v8.0废弃）
 - RuntimeConfig: 负责所有其他配置（推荐）
 
-🆕 v7.4.0架构:
+🆕 v7.4.2架构:
 - 四步分层决策系统配置支持
 - 统一路径解析器 (path_resolver.py)
 - 支持环境变量 CRYPTOSIGNAL_CONFIG_ROOT
@@ -45,7 +45,7 @@
     fmt = RuntimeConfig.get_logging_float_format()
     decimals = fmt["decimals"]
 
-版本：v7.4.0
+版本：v7.4.2
 作者：Claude Code
 创建日期：2025-11-15
 最后更新：2025-11-16

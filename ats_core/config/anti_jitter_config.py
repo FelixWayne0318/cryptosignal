@@ -250,7 +250,7 @@ def get_config_5m_aggressive() -> AntiJitterConfig:
 
 def get_config_2h_diversified() -> AntiJitterConfig:
     """
-    2小时多样化配置 - 强制币种轮换，降低集中风险（v7.4.0推荐）
+    2小时多样化配置 - 强制币种轮换，降低集中风险（v7.4.2推荐）
 
     设计理念：
     - 每个币种发出信号后2小时内不再发送
@@ -306,7 +306,7 @@ def get_config(preset: Literal["15m", "1h", "5m", "2h", "default"] = "default") 
             - "15m": 标准15分钟配置（cooldown=15min）
             - "1h": 保守1小时配置（cooldown=1h）
             - "5m": 激进5分钟配置（cooldown=5min）
-            - "2h": 多样化2小时配置（cooldown=2h，v7.4.0推荐）
+            - "2h": 多样化2小时配置（cooldown=2h，v7.4.2推荐）
             - "default": 默认配置（15m）
 
     Returns:

@@ -24,7 +24,7 @@ from dataclasses import dataclass, field, asdict
 from statistics import mean, median, stdev
 from typing import Dict, List, Optional
 
-from ats_core.backtest.engine import BacktestResult, SimulatedSignal
+from ats_core.backtest.engine import BacktestResult, SimulatedSignal, RejectedAnalysis
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +156,8 @@ class BacktestMetrics:
 
         # 计算各级指标
         signal_metrics = self.calculate_signal_metrics(signals)
-        step_metrics = self.calculate_step_metrics(signals)
+        # v1.1增强：传递rejected_analyses以计算真实Step通过率
+        step_metrics = self.calculate_step_metrics(signals, backtest_result.rejected_analyses)
         portfolio_metrics = self.calculate_portfolio_metrics(signals)
         distribution_metrics = self.calculate_distribution_metrics(signals)
 
@@ -251,21 +252,34 @@ class BacktestMetrics:
             median_holding_hours=round(median_holding, 2)
         )
 
-    def calculate_step_metrics(self, signals: List[SimulatedSignal]) -> StepMetrics:
+    def calculate_step_metrics(
+        self,
+        signals: List[SimulatedSignal],
+        rejected_analyses: List[RejectedAnalysis] = None
+    ) -> StepMetrics:
         """
         计算步骤级指标（四步系统瓶颈分析）
 
         Args:
-            signals: 信号列表
+            signals: ACCEPT信号列表
+            rejected_analyses: REJECT分析列表（v1.1新增）
 
         Returns:
             步骤级指标
 
-        注意: 由于回测只记录ACCEPT的信号，无法计算真实通过率
-              这里计算的是"信号质量分布"而非"通过率"
-              v1.1将增强支持记录REJECT信号
+        v1.1增强：使用ACCEPT信号和REJECT分析计算真实通过率
+        - Step1通过率 = 通过Step1的数量 / 总分析数量
+        - Step2通过率 = 通过Step2的数量 / 通过Step1的数量
+        - Step3通过率 = 通过Step3的数量 / 通过Step2的数量
+        - Step4通过率 = 通过Step4的数量 / 通过Step3的数量
+        - 最终通过率 = ACCEPT数量 / 总分析数量
         """
-        if not signals:
+        rejected_analyses = rejected_analyses or []
+
+        # 总分析数量 = ACCEPT信号 + REJECT分析
+        total_analyses = len(signals) + len(rejected_analyses)
+
+        if total_analyses == 0:
             return StepMetrics(
                 step1_pass_rate=0.0,
                 step2_pass_rate=0.0,
@@ -275,25 +289,76 @@ class BacktestMetrics:
                 bottleneck_step=1
             )
 
-        # v1.0限制：只有ACCEPT信号，无法计算真实通过率
-        # 作为替代，统计步骤结果的分布
-        total = len(signals)
+        # 如果没有REJECT分析记录（v1.0模式或未启用记录），返回100%
+        if not rejected_analyses:
+            logger.info(
+                "Step metrics: 无REJECT分析记录，使用v1.0模式（所有通过率100%）"
+            )
+            return StepMetrics(
+                step1_pass_rate=100.0,
+                step2_pass_rate=100.0,
+                step3_pass_rate=100.0,
+                step4_pass_rate=100.0,
+                final_pass_rate=100.0,
+                bottleneck_step=1
+            )
 
-        # 示例：统计各步骤的"质量"（这里简化为100%，因为都是ACCEPT）
-        # v1.1将改进为记录所有分析结果（包括REJECT）
-        step1_pass = total
-        step2_pass = total
-        step3_pass = total
-        step4_pass = total
-        final_pass = total
+        # v1.1真实通过率计算
+        # ACCEPT信号默认所有步骤都通过
+        accept_count = len(signals)
+
+        # 统计各步骤的通过数量
+        # Step1通过 = ACCEPT + 在Step2/3/4被拒绝的REJECT
+        step1_pass_count = accept_count + sum(
+            1 for r in rejected_analyses if r.step1_passed
+        )
+
+        # Step2通过 = ACCEPT + 在Step3/4被拒绝的REJECT
+        step2_pass_count = accept_count + sum(
+            1 for r in rejected_analyses if r.step2_passed
+        )
+
+        # Step3通过 = ACCEPT + 在Step4被拒绝的REJECT
+        step3_pass_count = accept_count + sum(
+            1 for r in rejected_analyses if r.step3_passed
+        )
+
+        # Step4通过 = ACCEPT
+        step4_pass_count = accept_count + sum(
+            1 for r in rejected_analyses if r.step4_passed
+        )
+
+        # 计算通过率（条件概率）
+        step1_rate = (step1_pass_count / total_analyses * 100) if total_analyses > 0 else 0.0
+        step2_rate = (step2_pass_count / step1_pass_count * 100) if step1_pass_count > 0 else 0.0
+        step3_rate = (step3_pass_count / step2_pass_count * 100) if step2_pass_count > 0 else 0.0
+        step4_rate = (step4_pass_count / step3_pass_count * 100) if step3_pass_count > 0 else 0.0
+        final_rate = (accept_count / total_analyses * 100) if total_analyses > 0 else 0.0
+
+        # 确定瓶颈步骤（通过率最低的步骤）
+        rates = [
+            (1, step1_rate),
+            (2, step2_rate),
+            (3, step3_rate),
+            (4, step4_rate)
+        ]
+        bottleneck = min(rates, key=lambda x: x[1])[0]
+
+        logger.info(
+            f"Step metrics (v1.1): "
+            f"total={total_analyses}, accept={accept_count}, "
+            f"S1={step1_rate:.1f}%, S2={step2_rate:.1f}%, "
+            f"S3={step3_rate:.1f}%, S4={step4_rate:.1f}%, "
+            f"final={final_rate:.1f}%, bottleneck=Step{bottleneck}"
+        )
 
         return StepMetrics(
-            step1_pass_rate=100.0,
-            step2_pass_rate=100.0,
-            step3_pass_rate=100.0,
-            step4_pass_rate=100.0,
-            final_pass_rate=100.0,
-            bottleneck_step=1  # 无瓶颈（v1.0限制）
+            step1_pass_rate=round(step1_rate, 2),
+            step2_pass_rate=round(step2_rate, 2),
+            step3_pass_rate=round(step3_rate, 2),
+            step4_pass_rate=round(step4_rate, 2),
+            final_pass_rate=round(final_rate, 2),
+            bottleneck_step=bottleneck
         )
 
     def calculate_portfolio_metrics(

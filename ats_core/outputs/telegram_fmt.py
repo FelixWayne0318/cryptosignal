@@ -2139,8 +2139,8 @@ def render_v67_rich(r: Dict[str, Any]) -> str:
     # UTC时区（统一使用UTC，与Binance API保持一致）
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
-    # v7.4.0: 从RuntimeConfig读取版本号（消除P0-V1硬编码）
-    version = "v7.4.0"  # 默认值
+    # v7.4.2: 从RuntimeConfig读取版本号（消除P0-V1硬编码）
+    version = "v7.4.2"  # 默认值
     if CONFIG_AVAILABLE:
         try:
             version = RuntimeConfig.VERSION
@@ -2388,7 +2388,7 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     momentum_desc = momentum_grading.get("description", "正常模式")
     F_v2 = _get(v72, "F_v2") or 0
 
-    # 构建头部（v7.4.0：反映四步系统通过状态）
+    # 构建头部（v7.4.2：反映四步系统通过状态）
     if momentum_level == 3:
         header = f"🚀🚀 v7.4智能信号 · 极早期蓄势\n"
     elif momentum_level == 2:
@@ -2537,7 +2537,7 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
             align_icon = ""
             align_desc = ""
 
-        # v7.4.0：简化I因子显示，让非专业人士也能看懂
+        # v7.4.2：简化I因子显示，让非专业人士也能看懂
         factors += f"\n\n🎯 市场独立性 ({I_v2_int}分)\n{I_icon} {I_desc}"
         factors += f"\n   {market_icon} 当前大盘{market_trend}"
         if align_desc:
@@ -2646,7 +2646,7 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
         B_icon, B_desc = _factor_status_b(B_raw)
         details += f"\n  {B_icon} 基差 B  {B_raw:3d}  {B_desc}"
 
-    # ========== 5. Step4: 质量控制（v7.4.0：四道闸门）==========
+    # ========== 5. Step4: 质量控制（v7.4.2：四道闸门）==========
     quality = f"\n\n━━━ ✅ Step4: 质量控制 ━━━\n"
 
     # 获取gate_details（v7.2新格式）
@@ -2665,7 +2665,7 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
         gate_num = gate_info.get("gate")
         gates[f"gate{gate_num}"] = gate_info
 
-    # v7.4.0：提取四道闸门
+    # v7.4.2：提取四道闸门
     gate1 = gates.get("gate1", {})
     gate2 = gates.get("gate2", {})
     gate3 = gates.get("gate3", {})
@@ -2688,7 +2688,7 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     g3_icon = "✅" if g3_pass else "❌"
     g4_icon = "✅" if g4_pass else "❌"
 
-    # v7.4.0：四道闸门显示（简化描述）
+    # v7.4.2：四道闸门显示（简化描述）
     quality += f"\n{g1_icon} 成交量充足 ({bars_count}根K线)"
     quality += f"\n{g2_icon} 资金流向 (F={F_dir:.0f}分)"
     quality += f"\n{g3_icon} 收益质量 (EV={EV_gate:+.1%})"
@@ -2699,7 +2699,7 @@ def render_signal_v72(r: Dict[str, Any], is_watch: bool = False) -> str:
     time_str = _format_timestamp(timestamp)
 
     footer = f"\n\n⏱ {time_str}\n"
-    footer += f"🏷 v7.4.0 四步决策系统\n"
+    footer += f"🏷 v7.4.2 四步决策系统\n"
     footer += f"\n#trade #{sym}"
 
     # ========== 组装完整消息 ==========

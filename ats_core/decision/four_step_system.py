@@ -15,7 +15,7 @@ Phase 2 Implementation (阶段2):
     ✅ Step3 + Step4完整实现（阶段2完成）
 
 Author: Claude Code (based on Expert Plan)
-Version: v7.4.0 (Phase 2)
+Version: v7.4.2 (Phase 2)
 Created: 2025-11-16
 """
 
@@ -114,12 +114,12 @@ def run_four_step_decision_phase1(
         f"最终强度={step1_result['final_strength']:.1f}")
 
     # ---- Step2: 时机判断层 ----
+    # v7.4.3: L因子不再用于Step2时机惩罚，仅用于Step3止损宽度调整
     log(f"⏰ Step2: 时机判断...")
     step2_result = step2_timing_judgment(
         factor_scores_series=factor_scores_series,
         klines=klines,
         s_factor_meta=s_factor_meta,
-        l_score=l_score,
         params=params
     )
 
@@ -283,12 +283,12 @@ def run_four_step_decision(
         f"最终强度={step1_result['final_strength']:.1f}")
 
     # ---- Step2: 时机判断层 ----
+    # v7.4.3: L因子不再用于Step2时机惩罚，仅用于Step3止损宽度调整
     log(f"⏰ Step2: 时机判断...")
     step2_result = step2_timing_judgment(
         factor_scores_series=factor_scores_series,
         klines=klines,
         s_factor_meta=s_factor_meta,
-        l_score=l_score,
         params=params
     )
 

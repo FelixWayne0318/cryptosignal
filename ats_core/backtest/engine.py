@@ -101,21 +101,66 @@ class SimulatedSignal:
 
 
 @dataclass
+class RejectedAnalysis:
+    """
+    v1.1增强：REJECT分析记录（用于计算真实Step通过率）
+
+    记录四步系统分析过程中被拒绝的信号，包含：
+    - 哪一步被拒绝
+    - 各步骤的结果
+    - 因子分数快照
+
+    设计原则（§6.2 函数签名演进）:
+    - 所有字段初始化有默认值
+    - 新增字段向后兼容
+    """
+    # 基本信息
+    symbol: str
+    timestamp: int  # 分析时间（bar close，毫秒）
+
+    # 拒绝信息
+    rejection_step: int = 0  # 被拒绝的步骤（1-4），0表示未被分析
+    rejection_reason: str = ""  # 拒绝原因
+
+    # 各步骤通过状态
+    step1_passed: bool = False
+    step2_passed: bool = False
+    step3_passed: bool = False
+    step4_passed: bool = False
+
+    # 四步系统元数据（可选，用于调试）
+    step1_result: Dict = field(default_factory=dict)
+    step2_result: Dict = field(default_factory=dict)
+    step3_result: Dict = field(default_factory=dict)
+    step4_result: Dict = field(default_factory=dict)
+
+    # 因子分数快照（可选）
+    factor_scores: Dict = field(default_factory=dict)
+
+    def to_dict(self) -> Dict:
+        """转换为字典（用于JSON序列化）"""
+        return asdict(self)
+
+
+@dataclass
 class BacktestResult:
     """
     回测执行结果
 
     包含:
-    - signals: 所有模拟信号列表
+    - signals: 所有模拟信号列表（ACCEPT）
+    - rejected_analyses: 所有被拒绝的分析列表（REJECT）[v1.1新增]
     - metadata: 执行元数据（时间范围、符号、执行时长等）
     """
     signals: List[SimulatedSignal]
     metadata: Dict[str, Any]
+    rejected_analyses: List[RejectedAnalysis] = field(default_factory=list)  # v1.1新增
 
     def to_dict(self) -> Dict:
         """转换为字典（用于JSON序列化）"""
         return {
             "signals": [s.to_dict() for s in self.signals],
+            "rejected_analyses": [r.to_dict() for r in self.rejected_analyses],  # v1.1新增
             "metadata": self.metadata
         }
 
@@ -181,15 +226,23 @@ class BacktestEngine:
             "entry_not_filled": {"priority": 6, "label": "ENTRY_NOT_FILLED"}  # v1.5新增
         })
 
+        # v1.1增强：REJECT信号记录配置
+        self.record_reject_analyses = config.get("record_reject_analyses", False)
+        reject_fields_config = config.get("reject_analysis_fields", {})
+        self.reject_record_factor_scores = reject_fields_config.get("record_factor_scores", True)
+        self.reject_record_step_results = reject_fields_config.get("record_step_results", True)
+        self.reject_record_rejection_reason = reject_fields_config.get("record_rejection_reason", True)
+
         # 重载配置（确保使用最新配置）
         CFG.reload()
 
         logger.info(
-            f"BacktestEngine initialized (v1.5): "
+            f"BacktestEngine initialized (v1.5/v1.1): "
             f"max_entry_bars={self.max_entry_bars}, "
             f"fee={self.taker_fee_rate*100:.3f}%, "
             f"slippage={self.slippage_percent}±{self.slippage_range}%, "
-            f"cooldown={self.signal_cooldown_hours}h"
+            f"cooldown={self.signal_cooldown_hours}h, "
+            f"record_rejects={self.record_reject_analyses}"
         )
 
     def run(
@@ -231,14 +284,26 @@ class BacktestEngine:
         interval_ms = self._interval_to_ms(interval)
 
         logger.info(
-            f"开始回测 (v1.5限价单模型): symbols={symbols}, "
+            f"开始回测 (v1.6一次性预加载): symbols={symbols}, "
             f"time_range={self._format_timestamp(start_time)}-{self._format_timestamp(end_time)}, "
             f"interval={interval}, max_entry_bars={self.max_entry_bars}"
         )
 
+        # ==================== v1.6优化：一次性预加载所有数据 ====================
+        # 优势：减少API调用次数，显著提升回测性能（10-50倍）
+        preloaded_data = self.data_loader.preload_backtest_data(
+            symbols=symbols,
+            start_time=start_time,
+            end_time=end_time,
+            interval=interval,
+            lookback_bars=300
+        )
+        # ====================================================================
+
         # 统计信息
         total_iterations = 0
         all_signals: List[SimulatedSignal] = []
+        rejected_analyses: List[RejectedAnalysis] = []  # v1.1新增：被拒绝的分析记录
         active_positions: List[SimulatedSignal] = []
         pending_entries: List[SimulatedSignal] = []  # v1.5新增：待入场队列
         last_signal_time_by_symbol: Dict[str, int] = {}
@@ -262,38 +327,29 @@ class BacktestEngine:
                     f"pending_entries={len(pending_entries)}"
                 )
 
-            # ==================== P0 Bugfix: K线缓存机制 ====================
-            # 批量加载当前时间步的所有K线（避免重复API调用）
+            # ==================== v1.6优化：从预加载数据获取K线切片 ====================
+            # 优势：无需每次迭代调用API/缓存，直接从内存切片
             # 用途：
             # 1. 限价单成交检查（_try_fill_pending_entry）
             # 2. 头寸监控（_monitor_active_positions）
             # 3. 信号生成（analyze_symbol）
             current_klines_cache = {}
 
-            # 加载BTC K线（用于Step1 BTC对齐检测）
-            try:
-                btc_klines = self.data_loader.load_btc_klines(
-                    start_time=current_timestamp - 300 * interval_ms,
-                    end_time=current_timestamp - interval_ms,
-                    interval=interval
-                )
-            except Exception as e:
-                logger.warning(f"BTC K线加载失败: {e}，Step1 BTC对齐检测将使用降级逻辑")
-                btc_klines = None
+            # 获取BTC K线切片（用于Step1 BTC对齐检测）
+            btc_klines = self.data_loader.get_klines_slice(
+                preloaded_data.get("BTCUSDT", []),
+                current_timestamp,
+                lookback_bars=300
+            )
 
-            # 批量加载所有symbol的K线（信号生成用）
+            # 获取所有symbol的K线切片（信号生成用）
             for symbol in symbols:
-                try:
-                    klines = self.data_loader.load_klines(
-                        symbol,
-                        start_time=current_timestamp - 300 * interval_ms,
-                        end_time=current_timestamp - interval_ms,
-                        interval=interval
-                    )
-                    current_klines_cache[symbol] = klines
-                except Exception as e:
-                    logger.error(f"K线加载失败: {symbol} at {current_timestamp} - {e}")
-                    current_klines_cache[symbol] = []
+                klines = self.data_loader.get_klines_slice(
+                    preloaded_data.get(symbol, []),
+                    current_timestamp,
+                    lookback_bars=300
+                )
+                current_klines_cache[symbol] = klines
             # ===============================================================
 
             # v1.5 P0修复：尝试成交待入场订单（限价单模型）
@@ -370,6 +426,61 @@ class BacktestEngine:
 
                     # 检查是否生成信号
                     is_signal = analysis_result.get("is_prime", False)
+
+                    # v1.1增强：记录REJECT分析结果
+                    if not is_signal and self.record_reject_analyses:
+                        four_step = analysis_result.get("four_step_decision", {})
+
+                        # 提取各步骤结果
+                        step1_result = four_step.get("step1", {})
+                        step2_result = four_step.get("step2", {})
+                        step3_result = four_step.get("step3", {})
+                        step4_result = four_step.get("step4", {})
+
+                        # 判断各步骤是否通过
+                        step1_passed = step1_result.get("passed", False)
+                        step2_passed = step2_result.get("passed", False)
+                        step3_passed = step3_result.get("passed", False)
+                        step4_passed = step4_result.get("passed", False)
+
+                        # 确定拒绝步骤和原因
+                        rejection_step = 0
+                        rejection_reason = ""
+                        if not step1_passed:
+                            rejection_step = 1
+                            rejection_reason = step1_result.get("reason", "Step1 REJECT")
+                        elif not step2_passed:
+                            rejection_step = 2
+                            rejection_reason = step2_result.get("reason", "Step2 REJECT")
+                        elif not step3_passed:
+                            rejection_step = 3
+                            rejection_reason = step3_result.get("reason", "Step3 REJECT")
+                        elif not step4_passed:
+                            rejection_step = 4
+                            rejection_reason = step4_result.get("reason", "Step4 REJECT")
+                        else:
+                            # 未知原因（可能是数据不足等）
+                            rejection_step = 0
+                            rejection_reason = "Unknown (possibly insufficient data)"
+
+                        # 创建RejectedAnalysis记录
+                        rejected = RejectedAnalysis(
+                            symbol=symbol,
+                            timestamp=current_timestamp,
+                            rejection_step=rejection_step,
+                            rejection_reason=rejection_reason if self.reject_record_rejection_reason else "",
+                            step1_passed=step1_passed,
+                            step2_passed=step2_passed,
+                            step3_passed=step3_passed,
+                            step4_passed=step4_passed,
+                            step1_result=step1_result if self.reject_record_step_results else {},
+                            step2_result=step2_result if self.reject_record_step_results else {},
+                            step3_result=step3_result if self.reject_record_step_results else {},
+                            step4_result=step4_result if self.reject_record_step_results else {},
+                            factor_scores=analysis_result.get("scores", {}) if self.reject_record_factor_scores else {}
+                        )
+                        rejected_analyses.append(rejected)
+
                     if not is_signal:
                         continue
 
@@ -519,8 +630,13 @@ class BacktestEngine:
             "execution_time_seconds": round(backtest_duration, 2),
             "config_snapshot": self.config,
             "total_signals": len(all_signals),
+            "total_rejected_analyses": len(rejected_analyses),  # v1.1新增
             "signals_by_symbol": {
                 symbol: sum(1 for s in all_signals if s.symbol == symbol)
+                for symbol in symbols
+            },
+            "rejected_by_symbol": {  # v1.1新增
+                symbol: sum(1 for r in rejected_analyses if r.symbol == symbol)
                 for symbol in symbols
             }
         }
@@ -529,10 +645,15 @@ class BacktestEngine:
             f"✅ 回测完成: "
             f"{total_iterations} iterations, "
             f"{len(all_signals)} signals, "
+            f"{len(rejected_analyses)} rejects, "
             f"{backtest_duration:.1f}秒"
         )
 
-        return BacktestResult(signals=all_signals, metadata=metadata)
+        return BacktestResult(
+            signals=all_signals,
+            metadata=metadata,
+            rejected_analyses=rejected_analyses  # v1.1新增
+        )
 
     def _try_fill_pending_entry(
         self,

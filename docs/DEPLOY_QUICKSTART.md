@@ -100,9 +100,9 @@ tail -f ~/cryptosignal_*.log
 - 📖 [完整部署文档](docs/DEPLOY_SERVER.md)
 - 🔧 [部署启动器指南](docs/DEPLOY_LAUNCHER_GUIDE.md)
 - 📋 [四步决策系统](docs/FOUR_STEP_IMPLEMENTATION_GUIDE.md)
-- 🏆 [审计报告](AUDIT_REPORT_v7.4.0.md)
+- 🏆 [审计报告](AUDIT_REPORT_v7.4.2.md)
 
 ---
 
-**版本**: v7.4.0
+**版本**: v7.4.2
 **最后更新**: 2025-11-18

@@ -24,7 +24,7 @@ Timing Quality Levels:
     Enhanced_F < -60  → "Chase" (严重追涨)
 
 Author: Claude Code (based on Expert Plan)
-Version: v7.4.0
+Version: v7.4.2
 Created: 2025-11-16
 """
 
@@ -85,8 +85,8 @@ def calculate_flow_momentum(
         factor_scores_series: 历史因子得分序列（7个时间点）
         weights: Flow权重
         lookback_hours: 回溯小时数（默认6）
-        flow_weak_threshold: Flow弱阈值（v7.4.1配置化，默认1.0）
-        base_min_value: base最小值（v7.4.1配置化，默认10.0）
+        flow_weak_threshold: Flow弱阈值（v7.4.2配置化，默认1.0）
+        base_min_value: base最小值（v7.4.2配置化，默认10.0）
 
     Returns:
         flow_momentum: Flow动量百分比
@@ -104,11 +104,11 @@ def calculate_flow_momentum(
     flow_now = flow_series[-1]
     flow_6h_ago = flow_series[0]
 
-    # v7.4.1配置化：flow值都很弱（接近0）时认为无动量
+    # v7.4.2配置化：flow值都很弱（接近0）时认为无动量
     if abs(flow_now) < flow_weak_threshold and abs(flow_6h_ago) < flow_weak_threshold:
         return 0.0
 
-    # v7.4.1配置化：计算变化百分比，使用配置的base_min_value避免除0
+    # v7.4.2配置化：计算变化百分比，使用配置的base_min_value避免除0
     flow_change = flow_now - flow_6h_ago
     base = max(abs(flow_now), abs(flow_6h_ago), base_min_value)
     flow_momentum = (flow_change / base) * 100.0
@@ -196,7 +196,7 @@ def calculate_enhanced_f_v2(
     })
     lookback_hours = enhanced_f_cfg.get("lookback_hours", 6)
 
-    # v7.4.1新增：Flow动量计算参数（消除硬编码）
+    # v7.4.2新增：Flow动量计算参数（消除硬编码）
     flow_weak_threshold = enhanced_f_cfg.get("flow_weak_threshold", 1.0)
     base_min_value = enhanced_f_cfg.get("base_min_value", 10.0)
 
@@ -223,7 +223,7 @@ def calculate_enhanced_f_v2(
             "reject_reason": f"K线不足: 需要{lookback_hours+1}根，实际{len(klines)}根"
         }
 
-    # 计算Flow动量（v7.4.1: 传入配置参数，消除硬编码）
+    # 计算Flow动量（v7.4.2: 传入配置参数，消除硬编码）
     flow_momentum = calculate_flow_momentum(
         factor_scores_series,
         flow_weights,
@@ -285,7 +285,6 @@ def step2_timing_judgment(
     factor_scores_series: List[Dict[str, float]],
     klines: List[Dict[str, Any]],
     s_factor_meta: Dict[str, Any],
-    l_score: float,
     params: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
@@ -294,14 +293,16 @@ def step2_timing_judgment(
     Pipeline:
         1. 计算Enhanced F v2（flow vs price momentum）
         2. 基于S因子调整时机评分（结构良好时加分）
-        3. 基于L因子调整时机评分（流动性差时减分）
-        4. 判断是否通过（enhanced_f >= min_threshold）
+        3. 判断是否通过（enhanced_f >= min_threshold）
+
+    Note (v7.4.3):
+        L因子不再在Step2中使用。根据设计文档，L因子仅用于Step3风险管理层
+        调整止损宽度（流动性差→更宽止损），而非时机评分惩罚。
 
     Args:
         factor_scores_series: 历史因子得分序列（7个时间点）
         klines: 1小时K线数据
         s_factor_meta: S因子元数据（包含theta、timing等）
-        l_score: L因子流动性得分
         params: 配置参数
 
     Returns:
@@ -312,7 +313,6 @@ def step2_timing_judgment(
             "price_momentum": float,
             "timing_quality": str,
             "s_adjustment": float,        # S因子调整
-            "l_adjustment": float,        # L因子调整
             "final_timing_score": float,  # 最终时机得分
             "reject_reason": str or None,
             "metadata": dict
@@ -334,7 +334,6 @@ def step2_timing_judgment(
             "price_momentum": enhanced_f_result["price_momentum"],
             "timing_quality": enhanced_f_result["timing_quality"],
             "s_adjustment": 0.0,
-            "l_adjustment": 0.0,
             "final_timing_score": enhanced_f_result["enhanced_f"],
             "reject_reason": enhanced_f_result["reject_reason"],
             "metadata": {
@@ -345,7 +344,6 @@ def step2_timing_judgment(
     # 获取配置
     step2_cfg = params.get("four_step_system", {}).get("step2_timing", {})
     s_cfg = step2_cfg.get("S_factor", {})
-    l_cfg = step2_cfg.get("L_factor", {})
 
     # 2. S因子调整（结构良好时加分）
     s_adjustment = 0.0
@@ -357,17 +355,9 @@ def step2_timing_judgment(
         s_adjustment = timing_boost
         log(f"✅ S因子结构良好(theta={theta:.2f}), 时机+{timing_boost}")
 
-    # 3. L因子调整（流动性差时减分）
-    l_adjustment = 0.0
-    liquidity_min = l_cfg.get("liquidity_min", 30)
-    timing_penalty = l_cfg.get("timing_penalty", 15)
-
-    if l_score < liquidity_min:
-        l_adjustment = -timing_penalty
-        warn(f"⚠️  L因子流动性差(L={l_score:.0f}), 时机-{timing_penalty}")
-
-    # 4. 计算最终时机得分
-    final_timing_score = enhanced_f_result["enhanced_f"] + s_adjustment + l_adjustment
+    # 3. 计算最终时机得分
+    # v7.4.3: L因子不再在Step2中使用，仅用于Step3止损宽度调整
+    final_timing_score = enhanced_f_result["enhanced_f"] + s_adjustment
 
     # 重新判断是否通过（调整后的得分）
     min_threshold = step2_cfg.get("enhanced_f", {}).get("min_threshold", 30.0)
@@ -378,7 +368,7 @@ def step2_timing_judgment(
         reject_reason = (
             f"时机不佳(调整后): final_timing_score={final_timing_score:.1f} < {min_threshold} "
             f"(Enhanced_F={enhanced_f_result['enhanced_f']:.1f}, "
-            f"S_adj={s_adjustment:+.0f}, L_adj={l_adjustment:+.0f})"
+            f"S_adj={s_adjustment:+.0f})"
         )
 
     return {
@@ -388,13 +378,11 @@ def step2_timing_judgment(
         "price_momentum": enhanced_f_result["price_momentum"],
         "timing_quality": enhanced_f_result["timing_quality"],
         "s_adjustment": s_adjustment,
-        "l_adjustment": l_adjustment,
         "final_timing_score": final_timing_score,
         "reject_reason": reject_reason,
         "metadata": {
             "flow_weights": enhanced_f_result["flow_weights"],
             "s_theta": theta,
-            "l_score": l_score,
             "min_threshold": min_threshold
         }
     }
@@ -438,10 +426,6 @@ if __name__ == "__main__":
                 "S_factor": {
                     "theta_threshold": 0.65,
                     "timing_boost": 10
-                },
-                "L_factor": {
-                    "liquidity_min": 30,
-                    "timing_penalty": 15
                 }
             }
         }
@@ -469,7 +453,6 @@ if __name__ == "__main__":
         factor_scores_series=factor_series_strong,
         klines=klines_flat,
         s_factor_meta={"theta": 0.70, "timing": 0.8},
-        l_score=70.0,
         params=test_params
     )
     print(f"   通过: {result1['pass']}")
@@ -501,7 +484,6 @@ if __name__ == "__main__":
         factor_scores_series=factor_series_chase,
         klines=klines_rally,
         s_factor_meta={"theta": 0.40, "timing": 0.3},
-        l_score=20.0,
         params=test_params
     )
     print(f"   通过: {result2['pass']}")

@@ -83,7 +83,9 @@
     "spread_weight": 0.25,
     "impact_weight": 0.40,
     "obi_weight": 0.20,
-    "coverage_weight": 0.15
+    "coverage_weight": 0.15,
+    "default_score_when_unavailable": 50,
+    "_default_note": "v7.4.3: 当订单簿数据不可用时（如回测），使用此默认值而非0，避免错误惩罚"
   },
 
   "basis_funding": {
@@ -129,8 +131,8 @@
   },
 
   "weights": {
-    "_source": "从 config/factors_unified.json 自动加载（v7.4.0配置统一）",
-    "_version": "v7.4.0",
+    "_source": "从 config/factors_unified.json 自动加载（v7.4.2配置统一）",
+    "_version": "v7.4.2",
     "T": 23.0,
     "M": 10.0,
     "C": 26.0,
@@ -144,7 +146,7 @@
     "E": 0.0
   },
   "weights_comment": {
-    "_version": "v7.4.0 - 四步分层决策系统（革命性架构升级）",
+    "_version": "v7.4.2 - 四步分层决策系统（革命性架构升级）",
     "_total_weight": "100%（A层6因子权重百分比系统）",
     "_layer1_price_action": "Layer 1 价格行为层（44%）: T(23%) + M(10%) + V(11%)",
     "_layer2_capital_flow": "Layer 2 资金流层（46%）: C(26%) + O(20%)",
@@ -370,7 +372,7 @@
 
   "four_step_system": {
     "_comment": "v7.4四步分层决策系统 - 基于专家实施方案",
-    "_version": "v7.4.0",
+    "_version": "v7.4.2",
     "_description": "革命性架构：不仅给方向，更给具体价格（入场/止损/止盈）",
     "enabled": true,
 
@@ -387,7 +389,8 @@
 
     "step1_direction": {
       "_comment": "Step1: 方向确认层 - A层因子 + I因子置信度 + BTC对齐 + 硬veto",
-      "min_final_strength": 20.0,
+      "min_final_strength": 5.0,
+      "_fix_note": "v7.4.2回测修复: 20.0→5.0 (原阈值过高导致回测0信号，实际范围约4-15)",
 
       "weights": {
         "_comment": "A层因子权重（与现有权重保持一致）",
@@ -428,7 +431,7 @@
         "floor": 0.50,
         "ceiling": 1.00,
 
-        "_comment_mapping": "I因子置信度映射曲线（v7.4.1配置化，消除硬编码）",
+        "_comment_mapping": "I因子置信度映射曲线（v7.4.2配置化，消除硬编码）",
         "mapping": {
           "high_beta_base": 0.60,
           "high_beta_range": 0.10,
@@ -449,7 +452,8 @@
       "enhanced_f": {
         "_comment": "Enhanced F v2: flow_momentum - price_momentum（只用非价格因子C/O/V/B）",
         "scale": 20.0,
-        "min_threshold": 30.0,
+        "min_threshold": -30.0,
+        "_fix_note": "v7.4.2回测修复(P0-8): 30.0→-30.0 (原阈值过高导致回测0信号，实际范围0.5-3.1，现允许中性时机，只拒绝追涨)",
 
         "flow_weights": {
           "_comment": "Flow因子权重（仅非价格因子，避免自相关）",
@@ -462,7 +466,7 @@
         "lookback_hours": 6,
         "_note": "计算6小时前后的flow_score差异",
 
-        "_comment_flow_params": "Flow动量计算参数（v7.4.1配置化，消除硬编码）",
+        "_comment_flow_params": "Flow动量计算参数（v7.4.2配置化，消除硬编码）",
         "flow_weak_threshold": 1.0,
         "base_min_value": 10.0,
         "_flow_params_note": "flow值弱于threshold时认为无动量，base取max(..., base_min_value)避免除0"
@@ -483,11 +487,7 @@
         "timing_boost": 10
       },
 
-      "L_factor": {
-        "_comment": "L因子（流动性）时机过滤",
-        "liquidity_min": 30,
-        "timing_penalty": 15
-      }
+      "_L_factor_removed_note": "v7.4.3: L因子时机惩罚已移除。根据设计文档，L因子仅用于Step3止损宽度调整（流动性差→更宽止损），而非Step2时机评分惩罚"
     },
 
     "step3_risk": {
@@ -501,16 +501,18 @@
 
       "entry_price": {
         "_comment": "入场价计算（基于Enhanced F和支撑/阻力）",
-        "strong_accumulation_f": 70,
-        "moderate_accumulation_f": 40,
+        "strong_accumulation_f": 15.0,
+        "moderate_accumulation_f": 5.0,
+        "_fix_note": "v7.4.2回测修复(P0-8): 从70/40调整为15/5 (原阈值过高，实际Enhanced_F范围0.5-3.1，现与实际数据对齐)",
         "buffer_strong": 1.000,
         "buffer_moderate": 1.002,
         "buffer_weak": 1.005,
 
-        "_comment_fallback": "无支撑/阻力时的fallback buffer（v7.4.1配置化，消除硬编码）",
-        "fallback_moderate_buffer": 0.998,
-        "fallback_weak_buffer": 0.995,
-        "_fallback_note": "无支撑时做多用current_price * fallback_buffer，无阻力时做空用current_price / fallback_buffer"
+        "_comment_fallback": "无支撑/阻力时的fallback buffer（v7.4.2配置化，v7.4.2调整为更保守）",
+        "fallback_moderate_buffer": 0.999,
+        "fallback_weak_buffer": 0.997,
+        "_fallback_note": "无支撑时做多用current_price * fallback_buffer，无阻力时做空用current_price / fallback_buffer",
+        "_fallback_p0_5_fix": "v7.4.2 P0-5修复：从0.998/0.995调整为0.999/0.997（更保守，减少滑点风险）"
       },
 
       "stop_loss": {
@@ -550,7 +552,7 @@
       },
 
       "orderbook": {
-        "_comment": "订单簿分析参数（从L因子元数据提取）- v7.4.0完整版",
+        "_comment": "订单簿分析参数（从L因子元数据提取）- v7.4.2完整版",
         "enabled": true,
 
         "_comment_wall_detection": "买墙/卖墙检测阈值",
@@ -584,7 +586,7 @@
           "score_multiplier": 2.0
         },
 
-        "_note": "v7.4.0: 从硬编码升级为配置化，便于后续调优"
+        "_note": "v7.4.2: 从硬编码升级为配置化，便于后续调优"
       }
     },
 
@@ -592,18 +594,43 @@
       "_comment": "Step4: 质量控制层 - 四道闸门验证",
 
       "gate1_volume": {
-        "_comment": "Gate1: 基础成交量筛选",
-        "min_volume_24h": 1000000
+        "_comment": "Gate1: 基础成交量筛选 - v7.4.3已禁用（选币阶段已过滤成交量）",
+        "enabled": false,
+        "_disable_reason": "选币阶段已通过min_volume_24h_usdt过滤低流动性币种，此处重复检查无意义",
+        "min_volume_24h": 1000000,
+        "_legacy_note": "原阈值以币数计量（非USDT），保留仅供参考"
       },
 
       "gate2_noise": {
-        "_comment": "Gate2: 噪声过滤（ATR/Price）",
-        "max_noise_ratio": 0.15
+        "_comment": "Gate2: 噪声过滤（ATR/Price） - v7.4.2: 添加资产类别动态阈值",
+        "max_noise_ratio": 0.15,
+
+        "_comment_dynamic": "基于资产类别的动态阈值（P0-6修复：稳定币/主流币/山寨币分级）",
+        "enable_dynamic": true,
+        "dynamic_thresholds": {
+          "stablecoins": {
+            "_comment": "稳定币（USDT, BUSD, USDC等）- 低波动性",
+            "max_noise_ratio": 0.05,
+            "symbols": ["USDTUSDT", "BUSDUSDT", "USDCUSDT", "TUSDUSDT", "DAIUSDT"]
+          },
+          "blue_chip": {
+            "_comment": "蓝筹币（BTC, ETH, BNB等主流币）- 中等波动性",
+            "max_noise_ratio": 0.10,
+            "symbols": ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "ADAUSDT", "XRPUSDT", "DOTUSDT", "AVAXUSDT", "MATICUSDT", "LINKUSDT"]
+          },
+          "altcoins": {
+            "_comment": "山寨币（其他所有币种）- 高波动性",
+            "max_noise_ratio": 0.20
+          }
+        },
+
+        "_p0_6_rationale": "稳定币波动小用0.05过滤异常，主流币用0.10，山寨币用0.20避免过度拒绝高质量信号"
       },
 
       "gate3_strength": {
         "_comment": "Gate3: 信号强度门槛",
-        "min_prime_strength": 35
+        "min_prime_strength": 5.0,
+        "_fix_note": "v7.4.2回测修复(P0-8续): 35→5.0 (原阈值过高导致Step4拒绝，实际prime_strength约5-15，现与Step1阈值对齐)"
       },
 
       "gate4_contradiction": {
@@ -647,8 +674,8 @@
     },
 
     "symbol_refresh": {
-      "_comment": "币种列表动态刷新配置 - v7.4.0方案B（无需重启发现新币）",
-      "_version": "v7.4.0",
+      "_comment": "币种列表动态刷新配置 - v7.4.2方案B（无需重启发现新币）",
+      "_version": "v7.4.2",
       "_feature": "动态币种发现机制",
 
       "enabled": true,
@@ -774,6 +801,17 @@
         "max_holding_exceeded": {"priority": 4, "label": "TIMEOUT"},
         "manual_close": {"priority": 5, "label": "MANUAL"},
         "entry_not_filled": {"priority": 6, "label": "ENTRY_NOT_FILLED"}
+      },
+
+      "_comment_v1_1": "=== v1.1增强：REJECT信号记录（计算真实Step通过率） ===",
+      "record_reject_analyses": true,
+      "_record_reject_note": "启用后记录所有分析结果（包括REJECT），用于计算真实Step1-4通过率",
+
+      "reject_analysis_fields": {
+        "_comment": "REJECT分析记录字段配置",
+        "record_factor_scores": true,
+        "record_step_results": true,
+        "record_rejection_reason": true
       }
     },
 
@@ -792,6 +830,71 @@
       "json_indent": 2,
       "markdown_include_charts": false,
       "csv_delimiter": ","
+    }
+  },
+
+  "paper_trading": {
+    "_comment": "Real-Time Paper Trading配置 - v1.0",
+    "_version": "v1.0.0",
+    "_design_doc": "参考QuantConnect架构，适配CryptoSignal四步系统",
+
+    "enabled": true,
+    "symbols": ["BNBUSDT"],
+    "interval": "1h",
+    "initial_equity": 100000,
+
+    "data_feed": {
+      "_comment": "数据流配置",
+      "source": "binance_mainnet",
+      "use_1m_bar_simulation": true,
+      "_use_1m_note": "使用1m bar模拟tick执行（简化版，后续可升级到真正tick）",
+      "reconnect_delay": 5,
+      "reconnect_max_retries": 10,
+      "buffer_size": 1000,
+      "kline_lookback_bars": 300
+    },
+
+    "execution": {
+      "_comment": "执行模拟配置",
+      "taker_fee_rate": 0.0005,
+      "_fee_note": "Taker手续费率0.05%，双边收费",
+
+      "slippage_bps": 2,
+      "_slippage_note": "滑点基点(2bps = 0.02%)，多头买贵/空头卖便宜",
+
+      "max_entry_minutes": 240,
+      "_max_entry_note": "限价单有效期（240分钟 = 4小时），超时未成交则信号失效",
+
+      "max_holding_minutes": 2880,
+      "_max_holding_note": "最大持仓时长（2880分钟 = 48小时），超时强制平仓"
+    },
+
+    "risk": {
+      "_comment": "风险管理配置",
+      "per_trade_risk_pct": 0.01,
+      "_risk_note": "单笔交易最大风险1%权益",
+
+      "max_concurrent_positions": 3,
+      "_max_pos_note": "最大并发持仓数",
+
+      "max_daily_trades": 10,
+      "_daily_note": "每日最大交易次数",
+
+      "max_drawdown_percent": 5.0,
+      "_dd_note": "最大回撤5%触发交易暂停"
+    },
+
+    "reporting": {
+      "_comment": "报告与状态配置",
+      "log_interval_minutes": 60,
+      "_log_note": "每60分钟输出一次性能摘要",
+
+      "save_state_interval": 300,
+      "_save_note": "每5分钟保存一次状态（用于重启恢复）",
+
+      "state_file": "data/paper_state.json",
+      "trades_file": "data/paper_trades.json",
+      "equity_curve_file": "data/paper_equity.json"
     }
   }
 }

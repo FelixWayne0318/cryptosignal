@@ -263,7 +263,7 @@ class ScanStatistics:
         # I因子默认值检测（I=50表示数据不足或计算失败）
         I_default_coins = []
         beta_btc_values = []
-        # v7.4.0: 移除beta_eth（BTC-only回归，专注BTC独立性）
+        # v7.4.2: 移除beta_eth（BTC-only回归，专注BTC独立性）
 
         for d in self.symbols_data:
             I_value = d.get('I', 0)
@@ -279,7 +279,7 @@ class ScanStatistics:
                         'error': error
                     })
 
-            # 收集Beta系数（v7.4.0: 仅BTC独立性分析）
+            # 收集Beta系数（v7.4.2: 仅BTC独立性分析）
             if I_meta and 'error' not in I_meta:
                 beta_btc = I_meta.get('beta_btc')
                 if beta_btc != 'N/A' and beta_btc is not None:
@@ -289,7 +289,7 @@ class ScanStatistics:
         anomalies['I_default']['pct'] = len(I_default_coins) / total * 100 if total > 0 else 0
         anomalies['I_default']['coins'] = I_default_coins[:10]
 
-        # I因子元数据统计（v7.4.0: BTC独立性分析）
+        # I因子元数据统计（v7.4.2: BTC独立性分析）
         if beta_btc_values:
             anomalies['I_meta_summary'] = {
                 'beta_btc': self._calc_simple_stats(beta_btc_values)
@@ -330,7 +330,7 @@ class ScanStatistics:
         report.append(f"📉 过滤数量: {len(self.symbols_data) - len(self.signals)} 个")
         report.append("")
 
-        # v7.4.0：系统配置区块
+        # v7.4.2：系统配置区块
         report.append("⚙️  【系统配置】")
         try:
             from ats_core.cfg import CFG
@@ -341,7 +341,7 @@ class ScanStatistics:
             fusion_enabled = params.get("four_step_system", {}).get("fusion_mode", {}).get("enabled", False)
 
             if four_step_enabled and fusion_enabled:
-                report.append(f"  🚀 v7.4.0 四步决策系统（融合模式）")
+                report.append(f"  🚀 v7.4.2 四步决策系统（融合模式）")
                 report.append(f"     Step1: 方向确认（A层+I因子+BTC对齐+硬veto）")
                 report.append(f"     Step2: 时机判断（Enhanced F v2 六级评分）")
                 report.append(f"     Step3: 风险管理（Entry/SL/TP精确价格）")
@@ -353,14 +353,14 @@ class ScanStatistics:
                 config = get_thresholds()
                 confidence_min = config.get_gate_threshold('gate6_综合质量', 'confidence_min', 20)
                 prime_strength_min = config.get_gate_threshold('gate6_综合质量', 'prime_strength_min', 45)
-                report.append(f"  ⚠️  v7.4.0 四步系统未启用（运行v6.6旧系统）")
+                report.append(f"  ⚠️  v7.4.2 四步系统未启用（运行v6.6旧系统）")
                 report.append(f"  Gate6阈值: confidence_min={confidence_min}, prime_strength_min={prime_strength_min}")
                 report.append(f"  配置文件: ✅ 已加载 (config/signal_thresholds.json)")
         except Exception as e:
             report.append(f"  ⚠️  配置加载失败: {e}")
         report.append("")
 
-        # v7.4.0：四步系统/旧系统增强统计
+        # v7.4.2：四步系统/旧系统增强统计
         if self.v72_enhanced_count > 0 or self.v72_failed_count > 0:
             total_count = self.v72_enhanced_count + self.v72_failed_count
             enhanced_pct = self.v72_enhanced_count / total_count * 100 if total_count > 0 else 0
@@ -375,7 +375,7 @@ class ScanStatistics:
                 fusion_enabled = params.get("four_step_system", {}).get("fusion_mode", {}).get("enabled", False)
 
                 if four_step_enabled and fusion_enabled:
-                    report.append("🚀 【v7.4.0 四步系统统计】")
+                    report.append("🚀 【v7.4.2 四步系统统计】")
                     report.append(f"  四步分析完成: {self.v72_enhanced_count}个 ({enhanced_pct:.1f}%)")
                     if self.v72_failed_count > 0:
                         report.append(f"  分析失败: {self.v72_failed_count}个 ({failed_pct:.1f}%) ⚠️")
@@ -420,7 +420,7 @@ class ScanStatistics:
                 default_count = anomalies['I_default']['count']
                 default_pct = anomalies['I_default']['pct']
                 report.append(f"  ⚠️  I因子降级: {default_count}个币种 ({default_pct:.1f}%) 使用默认值")
-                report.append(f"     可能原因: BTC K线数据不足（v7.4.0需要48h BTC数据用于独立性分析）")
+                report.append(f"     可能原因: BTC K线数据不足（v7.4.2需要48h BTC数据用于独立性分析）")
 
             report.append("")
 
@@ -539,7 +539,7 @@ class ScanStatistics:
                         f"Max={beta_btc_stats.get('max', 0):.2f} "
                         f"({beta_btc_stats.get('count', 0)}个币种)"
                     )
-                # v7.4.0: 移除beta_eth显示（已废弃ETH依赖）
+                # v7.4.2: 移除beta_eth显示（已废弃ETH依赖）
 
             report.append("")
 

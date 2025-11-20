@@ -18,7 +18,7 @@ Functions:
     - step4_quality_control(): 主函数
 
 Author: Claude Code (based on Expert Implementation Plan)
-Version: v7.4.0
+Version: v7.4.2
 Created: 2025-11-16
 """
 
@@ -39,8 +39,18 @@ def check_gate1_volume(
 
     Returns:
         (pass: bool, reason: str | None)
+
+    v7.4.3更新：
+        - 添加enabled开关，默认禁用
+        - 选币阶段已通过min_volume_24h_usdt过滤，此处重复检查无意义
     """
     gate1_cfg = params.get("four_step_system", {}).get("step4_quality", {}).get("gate1_volume", {})
+
+    # v7.4.3: 支持enabled开关，默认禁用
+    enabled = gate1_cfg.get("enabled", False)
+    if not enabled:
+        return True, None  # 禁用时直接通过
+
     min_volume = gate1_cfg.get("min_volume_24h", 1_000_000.0)
 
     # 计算24h成交量
@@ -56,6 +66,7 @@ def check_gate1_volume(
 
 
 def check_gate2_noise(
+    symbol: str,
     klines: List[Dict[str, Any]],
     params: Dict[str, Any]
 ) -> Tuple[bool, Optional[str]]:
@@ -65,16 +76,44 @@ def check_gate2_noise(
     Logic:
         noise_ratio = ATR / close_price
         若noise_ratio > max_noise_ratio（默认15%），说明波动太大，拒绝
+        v7.4.2 P0-6修复：基于资产类别动态调整阈值
 
     Args:
+        symbol: 交易对符号（v7.4.2新增，用于资产分类）
         klines: K线数据
         params: 配置参数
 
     Returns:
         (pass: bool, reason: str | None)
+
+    P0-6修复说明：
+        - 稳定币（USDT等）：max_noise_ratio = 0.05（低波动性）
+        - 蓝筹币（BTC/ETH/BNB）：max_noise_ratio = 0.10（中等波动性）
+        - 山寨币（其他）：max_noise_ratio = 0.20（高波动性）
     """
     gate2_cfg = params.get("four_step_system", {}).get("step4_quality", {}).get("gate2_noise", {})
-    max_noise = gate2_cfg.get("max_noise_ratio", 0.15)
+
+    # v7.4.2 P0-6修复：动态阈值逻辑
+    enable_dynamic = gate2_cfg.get("enable_dynamic", True)
+
+    if enable_dynamic and "dynamic_thresholds" in gate2_cfg:
+        dynamic_cfg = gate2_cfg["dynamic_thresholds"]
+
+        # 判断资产类别
+        asset_type = "altcoins"  # 默认山寨币
+
+        if symbol in dynamic_cfg.get("stablecoins", {}).get("symbols", []):
+            asset_type = "stablecoins"
+        elif symbol in dynamic_cfg.get("blue_chip", {}).get("symbols", []):
+            asset_type = "blue_chip"
+
+        # 获取对应类别的阈值
+        max_noise = dynamic_cfg.get(asset_type, {}).get("max_noise_ratio", 0.15)
+        threshold_source = f"{asset_type}_dynamic"
+    else:
+        # 降级：使用固定阈值
+        max_noise = gate2_cfg.get("max_noise_ratio", 0.15)
+        threshold_source = "default"
 
     if not klines:
         return False, "K线数据为空"
@@ -90,7 +129,7 @@ def check_gate2_noise(
     if noise_ratio <= max_noise:
         return True, None
     else:
-        return False, f"噪声过高: {noise_ratio:.2%} > {max_noise:.2%}"
+        return False, f"噪声过高[{threshold_source}]: {noise_ratio:.2%} > {max_noise:.2%}"
 
 
 def check_gate3_strength(
@@ -223,8 +262,8 @@ def step4_quality_control(
     # Gate1: 成交量
     gate1_pass, gate1_reason = check_gate1_volume(klines, params)
 
-    # Gate2: 噪声
-    gate2_pass, gate2_reason = check_gate2_noise(klines, params)
+    # Gate2: 噪声 (v7.4.2 P0-6修复: 添加symbol参数支持动态阈值)
+    gate2_pass, gate2_reason = check_gate2_noise(symbol, klines, params)
 
     # Gate3: 强度
     gate3_pass, gate3_reason = check_gate3_strength(prime_strength, params)
