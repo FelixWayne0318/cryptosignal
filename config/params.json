@@ -819,5 +819,70 @@
       "markdown_include_charts": false,
       "csv_delimiter": ","
     }
+  },
+
+  "paper_trading": {
+    "_comment": "Real-Time Paper Trading配置 - v1.0",
+    "_version": "v1.0.0",
+    "_design_doc": "参考QuantConnect架构，适配CryptoSignal四步系统",
+
+    "enabled": true,
+    "symbols": ["BNBUSDT"],
+    "interval": "1h",
+    "initial_equity": 100000,
+
+    "data_feed": {
+      "_comment": "数据流配置",
+      "source": "binance_mainnet",
+      "use_1m_bar_simulation": true,
+      "_use_1m_note": "使用1m bar模拟tick执行（简化版，后续可升级到真正tick）",
+      "reconnect_delay": 5,
+      "reconnect_max_retries": 10,
+      "buffer_size": 1000,
+      "kline_lookback_bars": 300
+    },
+
+    "execution": {
+      "_comment": "执行模拟配置",
+      "taker_fee_rate": 0.0005,
+      "_fee_note": "Taker手续费率0.05%，双边收费",
+
+      "slippage_bps": 2,
+      "_slippage_note": "滑点基点(2bps = 0.02%)，多头买贵/空头卖便宜",
+
+      "max_entry_minutes": 240,
+      "_max_entry_note": "限价单有效期（240分钟 = 4小时），超时未成交则信号失效",
+
+      "max_holding_minutes": 2880,
+      "_max_holding_note": "最大持仓时长（2880分钟 = 48小时），超时强制平仓"
+    },
+
+    "risk": {
+      "_comment": "风险管理配置",
+      "per_trade_risk_pct": 0.01,
+      "_risk_note": "单笔交易最大风险1%权益",
+
+      "max_concurrent_positions": 3,
+      "_max_pos_note": "最大并发持仓数",
+
+      "max_daily_trades": 10,
+      "_daily_note": "每日最大交易次数",
+
+      "max_drawdown_percent": 5.0,
+      "_dd_note": "最大回撤5%触发交易暂停"
+    },
+
+    "reporting": {
+      "_comment": "报告与状态配置",
+      "log_interval_minutes": 60,
+      "_log_note": "每60分钟输出一次性能摘要",
+
+      "save_state_interval": 300,
+      "_save_note": "每5分钟保存一次状态（用于重启恢复）",
+
+      "state_file": "data/paper_state.json",
+      "trades_file": "data/paper_trades.json",
+      "equity_curve_file": "data/paper_equity.json"
+    }
   }
 }

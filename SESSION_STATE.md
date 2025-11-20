@@ -5,7 +5,129 @@
 
 ---
 
-## 🆕 Session 4: P0-8续 Step4 Gate3阈值修复 (2025-11-20)
+## 🆕 Session 5: Real-Time Paper Trading架构实现 (2025-11-20)
+
+**Problem**: 缺乏实时Paper Trading能力，无法在实盘前验证策略
+**Solution**: 实现完整的Real-Time Paper Trading系统，统一Broker架构
+**Impact**: 高优先级 - 策略验证闭环
+**Status**: ✅ Implemented
+
+### 实现概述
+
+基于专家方案实现Real-Time Paper Trading系统：
+- **Broker抽象层**: 统一Paper/Backtest/Live执行逻辑
+- **1m Bar模拟**: 使用1分钟K线模拟tick级执行
+- **WebSocket数据源**: Binance Mainnet实时数据
+- **状态持久化**: 支持崩溃恢复和交易日志
+
+### 架构设计
+
+```
+┌─────────────────────────────────────────────┐
+│           PaperTrader Controller            │
+├─────────────────────────────────────────────┤
+│  DataFeed    │  PaperBroker  │ StateManager │
+│  (WebSocket) │  (Execution)  │ (Persist)    │
+└─────────────────────────────────────────────┘
+            │           │            │
+            ▼           ▼            ▼
+    Binance     Four-Step      data/
+    Mainnet     System         paper_state.json
+```
+
+### 新增文件
+
+**配置**:
+- `config/params.json` (+64 lines): paper_trading配置节点
+
+**核心模块**:
+- `ats_core/broker/__init__.py` (+41 lines): Broker模块入口
+- `ats_core/broker/base.py` (+329 lines): 基础类型和Broker接口
+- `ats_core/broker/paper_broker.py` (+434 lines): Paper Trading执行
+- `ats_core/broker/backtest_broker.py` (+230 lines): 回测Broker
+
+**实时组件**:
+- `ats_core/realtime/__init__.py` (+27 lines): Realtime模块入口
+- `ats_core/realtime/data_feed.py` (+340 lines): WebSocket数据源
+- `ats_core/realtime/state_manager.py` (+260 lines): 状态管理
+- `ats_core/realtime/paper_trader.py` (+420 lines): 控制器
+
+**CLI脚本**:
+- `scripts/paper_trader.py` (+160 lines): 命令行入口
+
+### 关键特性
+
+1. **执行契约**
+   - 限价单模型：价格触及才成交
+   - 滑点模拟：2bps (0.02%)
+   - 手续费：双边Taker 0.05%
+   - 悲观假设：SL/TP同时触发优先止损
+
+2. **风险控制**
+   - 单笔风险比例：1%
+   - 最大并发持仓：3
+   - 每日交易上限：10
+   - 最大回撤限制：5%
+
+3. **状态管理**
+   - 定期自动保存（5分钟）
+   - 崩溃恢复
+   - JSONL交易日志
+
+### 使用方法
+
+```bash
+# 默认配置运行
+python3 scripts/paper_trader.py
+
+# 指定交易对和资金
+python3 scripts/paper_trader.py --symbols BNBUSDT --equity 50000
+
+# 重置状态
+python3 scripts/paper_trader.py --reset
+```
+
+### 配置示例
+
+```json
+{
+  "paper_trading": {
+    "enabled": true,
+    "symbols": ["BNBUSDT"],
+    "interval": "1h",
+    "initial_equity": 100000,
+    "execution": {
+      "taker_fee_rate": 0.0005,
+      "slippage_bps": 2
+    },
+    "risk": {
+      "per_trade_risk_pct": 0.01,
+      "max_concurrent_positions": 3
+    }
+  }
+}
+```
+
+### 验证计划
+
+1. **单元测试**: 验证Broker执行逻辑
+2. **集成测试**: MockDataFeed模拟数据
+3. **实盘验证**: BNBUSDT 1周运行
+
+### Git Commit
+
+待提交（当前session）
+
+### 后续优化
+
+- [ ] 添加更多风险指标（Sharpe, Sortino）
+- [ ] WebSocket断线重连优化
+- [ ] 多Symbol并行处理
+- [ ] 与回测结果对比分析
+
+---
+
+## Session 4: P0-8续 Step4 Gate3阈值修复 (2025-11-20)
 
 **Problem**: P0-8修复后Step1/2/3全部通过，但被Step4 Gate3拒绝，回测仍产生0信号
 **Root Cause**: Step4 Gate3的min_prime_strength阈值35远高于实际final_strength值5.2-6.1
