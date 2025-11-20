@@ -477,7 +477,8 @@ def calculate_enhanced_f_v2(
     enhanced_f_cfg = step2_cfg.get("enhanced_f", {})
 
     scale = enhanced_f_cfg.get("scale", 20.0)
-    min_threshold = enhanced_f_cfg.get("min_threshold", 30.0)
+    # v7.4.4：与 step2_timing_judgment 内默认值对齐，避免默认配置不一致
+    min_threshold = enhanced_f_cfg.get("min_threshold", -30.0)
     flow_weights = enhanced_f_cfg.get("flow_weights", {
         "C": 0.40, "O": 0.30, "V": 0.20, "B": 0.10
     })
@@ -701,6 +702,8 @@ def step2_timing_judgment(
         "pass": pass_step2,
         "enhanced_f": enhanced_f_flow_price,
         "enhanced_f_final": enhanced_f_final,
+        # 兼容旧调用：final_timing_score 作为 enhanced_f_final 的别名
+        "final_timing_score": enhanced_f_final,
         "flow_momentum": enhanced_f_result["flow_momentum"],
         "price_momentum": enhanced_f_result["price_momentum"],
         "trend_stage": trend_stage_result["trend_stage"],
@@ -742,7 +745,8 @@ if __name__ == "__main__":
             "step2_timing": {
                 "enhanced_f": {
                     "scale": 20.0,
-                    "min_threshold": 30.0,
+                    # 与当前正式逻辑保持一致：默认阈值 -30.0
+                    "min_threshold": -30.0,
                     "flow_weights": {
                         "C": 0.40,
                         "O": 0.30,
