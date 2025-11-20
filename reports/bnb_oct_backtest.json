@@ -1,0 +1,66 @@
+{
+  "signals": [],
+  "metadata": {
+    "start_time": 1727740800000,
+    "end_time": 1730419200000,
+    "symbols": [
+      "BNBUSDT"
+    ],
+    "interval": "1h",
+    "total_iterations": 745,
+    "execution_time_seconds": 0.0,
+    "config_snapshot": {
+      "_comment": "回测引擎配置（v1.5 P0修复：限价单模型 + 手续费 + 悲观假设）",
+      "batch_size": 1,
+      "progress_log_interval": 100,
+      "signal_cooldown_hours": 2,
+      "_comment_execution": "=== 交易执行参数（v1.5 P0修复） ===",
+      "max_entry_bars": 4,
+      "_max_entry_bars_note": "限价单有效期（1h bar数），超时未成交则信号失效（专家方案：防止未来信息泄露）",
+      "taker_fee_rate": 0.0005,
+      "_taker_fee_rate_note": "Taker手续费率（0.05%），双边收费（入场+出场）",
+      "slippage_percent": 0.02,
+      "_slippage_percent_note": "滑点基数（0.02% = 2bps），做多买贵/做空卖便宜（v1.5调整：从0.1%降至0.02%更真实）",
+      "slippage_range": 0.01,
+      "_slippage_range_note": "滑点随机范围（±0.01%），模拟真实市场波动",
+      "_comment_position": "=== 仓位管理参数 ===",
+      "position_size_usdt": 100,
+      "_position_size_note": "固定仓位大小（v1.0简化版，v1.6将改为基于风险%的动态仓位）",
+      "max_holding_hours": 168,
+      "_max_holding_note": "最大持仓时长（168h = 7天），超时强制平仓",
+      "enable_anti_jitter": true,
+      "_anti_jitter_note": "启用Anti-Jitter冷却期（2小时），与实盘一致",
+      "exit_classification": {
+        "_comment": "退出原因分类（§6.4分段逻辑配置）",
+        "sl_hit": {
+          "priority": 1,
+          "label": "SL_HIT"
+        },
+        "tp1_hit": {
+          "priority": 2,
+          "label": "TP1_HIT"
+        },
+        "tp2_hit": {
+          "priority": 3,
+          "label": "TP2_HIT"
+        },
+        "max_holding_exceeded": {
+          "priority": 4,
+          "label": "TIMEOUT"
+        },
+        "manual_close": {
+          "priority": 5,
+          "label": "MANUAL"
+        },
+        "entry_not_filled": {
+          "priority": 6,
+          "label": "ENTRY_NOT_FILLED"
+        }
+      }
+    },
+    "total_signals": 0,
+    "signals_by_symbol": {
+      "BNBUSDT": 0
+    }
+  }
+}
