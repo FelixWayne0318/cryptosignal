@@ -431,33 +431,34 @@ class BacktestEngine:
                     if not is_signal and self.record_reject_analyses:
                         four_step = analysis_result.get("four_step_decision", {})
 
-                        # 提取各步骤结果
-                        step1_result = four_step.get("step1", {})
-                        step2_result = four_step.get("step2", {})
-                        step3_result = four_step.get("step3", {})
-                        step4_result = four_step.get("step4", {})
+                        # v7.4.4 修复：正确获取四步系统各步骤结果（键名修正）
+                        step1_result = four_step.get("step1_direction", {})
+                        step2_result = four_step.get("step2_timing", {})
+                        step3_result = four_step.get("step3_risk", {})
+                        step4_result = four_step.get("step4_quality", {})
 
-                        # 判断各步骤是否通过
-                        step1_passed = step1_result.get("passed", False)
-                        step2_passed = step2_result.get("passed", False)
-                        step3_passed = step3_result.get("passed", False)
-                        step4_passed = step4_result.get("passed", False)
+                        # 判断各步骤是否通过（字段名是"pass"而非"passed"）
+                        step1_passed = step1_result.get("pass", False)
+                        step2_passed = step2_result.get("pass", False)
+                        step3_passed = step3_result.get("pass", False)
+                        # step4使用"all_gates_pass"
+                        step4_passed = step4_result.get("all_gates_pass", False)
 
-                        # 确定拒绝步骤和原因
+                        # 确定拒绝步骤和原因（字段名是"reject_reason"而非"reason"）
                         rejection_step = 0
                         rejection_reason = ""
                         if not step1_passed:
                             rejection_step = 1
-                            rejection_reason = step1_result.get("reason", "Step1 REJECT")
+                            rejection_reason = step1_result.get("reject_reason", "Step1 REJECT")
                         elif not step2_passed:
                             rejection_step = 2
-                            rejection_reason = step2_result.get("reason", "Step2 REJECT")
+                            rejection_reason = step2_result.get("reject_reason", "Step2 REJECT")
                         elif not step3_passed:
                             rejection_step = 3
-                            rejection_reason = step3_result.get("reason", "Step3 REJECT")
+                            rejection_reason = step3_result.get("reject_reason", "Step3 REJECT")
                         elif not step4_passed:
                             rejection_step = 4
-                            rejection_reason = step4_result.get("reason", "Step4 REJECT")
+                            rejection_reason = step4_result.get("reject_reason", "Step4 REJECT")
                         else:
                             # 未知原因（可能是数据不足等）
                             rejection_step = 0
@@ -567,6 +568,8 @@ class BacktestEngine:
                     # =============================================================================
 
                     # 创建模拟信号
+                    # v7.4.4 修复：正确获取四步系统各步骤结果（键名修正）
+                    four_step_decision = analysis_result.get("four_step_decision", {})
                     signal = SimulatedSignal(
                         symbol=symbol,
                         timestamp=current_timestamp,
@@ -576,10 +579,10 @@ class BacktestEngine:
                         take_profit_1_recommended=take_profit_1_rec,
                         take_profit_2_recommended=take_profit_2_rec,
                         factor_scores=analysis_result.get("scores", {}),
-                        step1_result=analysis_result.get("four_step_decision", {}).get("step1", {}),
-                        step2_result=analysis_result.get("four_step_decision", {}).get("step2", {}),
-                        step3_result=analysis_result.get("four_step_decision", {}).get("step3", {}),
-                        step4_result=analysis_result.get("four_step_decision", {}).get("step4", {})
+                        step1_result=four_step_decision.get("step1_direction", {}),
+                        step2_result=four_step_decision.get("step2_timing", {}),
+                        step3_result=four_step_decision.get("step3_risk", {}),
+                        step4_result=four_step_decision.get("step4_quality", {})
                     )
 
                     # v1.5 P0修复：不立即执行，加入待入场队列（限价单模型）
