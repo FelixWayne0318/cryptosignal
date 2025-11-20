@@ -116,7 +116,7 @@ def run_quick_backtest():
     # Convert to timestamp (milliseconds)
     end_time = int(end_dt.timestamp() * 1000)
     start_time = int(start_dt.timestamp() * 1000)
-    symbols = ["ETHUSDT"]
+    symbols = ["BNBUSDT"]
 
     print(f"\n配置:")
     print(f"  Symbol: {symbols[0]}")
@@ -193,7 +193,7 @@ def main():
         print("   ./RUN_BACKTEST.sh")
     elif config_ok:
         print("\n✅ 配置修复成功，建议运行更长时间段的回测:")
-        print("   python3 scripts/backtest_four_step.py --symbols ETHUSDT --start 2024-10-01 --end 2024-11-01")
+        print("   python3 scripts/backtest_four_step.py --symbols BNBUSDT --start 2024-10-01 --end 2024-11-01")
     else:
         print("\n❌ 修复验证失败，请检查配置")
         sys.exit(1)
