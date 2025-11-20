@@ -149,9 +149,13 @@ def run_quick_backtest():
             sample = result.signals[0]
             print(f"\n示例信号:")
             print(f"  Symbol: {sample.symbol}")
-            print(f"  Direction: {sample.direction}")
-            print(f"  Entry Price: {sample.entry_price:.2f}")
-            print(f"  Final Strength: {sample.metadata.get('final_strength', 'N/A'):.2f}")
+            print(f"  Side: {sample.side}")
+            print(f"  Entry Price: {sample.entry_price_recommended:.2f}")
+            final_strength = sample.step1_result.get('final_strength', 'N/A')
+            if isinstance(final_strength, (int, float)):
+                print(f"  Final Strength: {final_strength:.2f}")
+            else:
+                print(f"  Final Strength: {final_strength}")
 
             return True
         else:
