@@ -7,19 +7,8 @@
 import json
 import sys
 
-def analyze_enhanced_f_distribution(report_path):
+def analyze_enhanced_f_distribution(signals, rejects):
     """分析Step2 enhanced_f_final分布"""
-    try:
-        import numpy as np
-    except ImportError:
-        print("Warning: numpy not available, using basic statistics")
-        np = None
-
-    with open(report_path) as f:
-        data = json.load(f)
-
-    signals = data.get('signals', [])
-    rejects = data.get('rejected_analyses', [])
 
     print(f"Signals (ACCEPT): {len(signals)}")
     print(f"Rejected analyses: {len(rejects)}")
@@ -116,5 +105,36 @@ def analyze_enhanced_f_distribution(report_path):
         print("   → 可能是闸门接线问题，请检查回测引擎")
 
 if __name__ == "__main__":
-    path = sys.argv[1] if len(sys.argv) > 1 else "reports/bnb_backtest_v743.json"
-    analyze_enhanced_f_distribution(path)
+    # 默认读取回测结果目录
+    import os
+    result_dir = sys.argv[1] if len(sys.argv) > 1 else "data/backtest_results"
+
+    # 支持两种格式：单文件或目录
+    if os.path.isdir(result_dir):
+        # 新格式：signals.json + rejected_analyses.json
+        signals_file = os.path.join(result_dir, "signals.json")
+        rejects_file = os.path.join(result_dir, "rejected_analyses.json")
+
+        signals = []
+        rejects = []
+
+        if os.path.exists(signals_file):
+            with open(signals_file) as f:
+                signals = json.load(f)
+
+        if os.path.exists(rejects_file):
+            with open(rejects_file) as f:
+                rejects = json.load(f)
+
+        data = {"signals": signals, "rejected_analyses": rejects}
+        print(f"从目录加载: {result_dir}")
+        print(f"  - {len(signals)} 信号")
+        print(f"  - {len(rejects)} REJECT记录")
+    else:
+        # 旧格式：单个JSON文件
+        with open(result_dir) as f:
+            data = json.load(f)
+        signals = data.get('signals', [])
+        rejects = data.get('rejected_analyses', [])
+
+    analyze_enhanced_f_distribution(signals, rejects)
