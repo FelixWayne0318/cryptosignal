@@ -441,14 +441,15 @@ class BacktestEngine:
 
                     # v1.1增强：记录REJECT分析结果
                     if not is_signal and self.record_reject_analyses:
-                        four_step = analysis_result.get("four_step_decision", {})
+                        four_step = analysis_result.get("four_step_decision", {}) or {}
                         logger.info(f"📝 记录REJECT: {symbol}, four_step exists: {bool(four_step)}")
 
                         # v7.4.4 修复：正确获取四步系统各步骤结果（键名修正）
-                        step1_result = four_step.get("step1_direction", {})
-                        step2_result = four_step.get("step2_timing", {})
-                        step3_result = four_step.get("step3_risk", {})
-                        step4_result = four_step.get("step4_quality", {})
+                        # 使用 or {} 处理值为None的情况
+                        step1_result = four_step.get("step1_direction", {}) or {}
+                        step2_result = four_step.get("step2_timing", {}) or {}
+                        step3_result = four_step.get("step3_risk", {}) or {}
+                        step4_result = four_step.get("step4_quality", {}) or {}
 
                         # 判断各步骤是否通过（字段名是"pass"而非"passed"）
                         step1_passed = step1_result.get("pass", False)
