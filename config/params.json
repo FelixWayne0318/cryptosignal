@@ -83,7 +83,9 @@
     "spread_weight": 0.25,
     "impact_weight": 0.40,
     "obi_weight": 0.20,
-    "coverage_weight": 0.15
+    "coverage_weight": 0.15,
+    "default_score_when_unavailable": 50,
+    "_default_note": "v7.4.3: 当订单簿数据不可用时（如回测），使用此默认值而非0，避免错误惩罚"
   },
 
   "basis_funding": {

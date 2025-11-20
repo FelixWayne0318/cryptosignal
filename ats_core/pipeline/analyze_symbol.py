@@ -587,16 +587,19 @@ def _analyze_symbol_core(
     # 流动性（L）：-100（差）到 +100（好）
     # v6.2修复：calculate_liquidity已返回标准化后的±100分数，无需再次映射
     t0 = time.time()
+    liquidity_params = params.get("liquidity", {})
     if orderbook is not None:
         try:
-            L, L_meta = calculate_liquidity(orderbook, params.get("liquidity", {}))
+            L, L_meta = calculate_liquidity(orderbook, liquidity_params)
             # L已经是±100范围，直接使用
         except Exception as e:
             from ats_core.logging import warn
             warn(f"L因子计算失败: {e}")
             L, L_meta = 0, {"error": str(e)}
     else:
-        L, L_meta = 0, {"note": "无订单簿数据"}
+        # v7.4.3修复：使用配置的默认值而非0，避免回测时错误惩罚
+        default_l_score = liquidity_params.get("default_score_when_unavailable", 50)
+        L, L_meta = default_l_score, {"note": f"无订单簿数据，使用默认值{default_l_score}"}
     perf['L流动性'] = time.time() - t0
 
     # 结构（S）：-100（差）到 +100（好）
