@@ -13,6 +13,7 @@ This script:
    - P0-8: Step2 min_threshold: 30.0 → -30.0
    - P0-8: Step3 moderate_accumulation_f: 40 → 5.0
    - P0-8: Step3 strong_accumulation_f: 70 → 15.0
+   - P0-8: Step4 min_prime_strength: 35 → 5.0
 2. Runs a quick backtest (1 week, 1 symbol)
 3. Verifies signals are now generated
 """
@@ -86,6 +87,19 @@ def validate_config():
         print(f"  ❌ FAILED: Expected 15.0, got {strong_f}")
         all_pass = False
 
+    # P0-8: Step4 validation
+    print(f"\n【P0-8: Step4 质量控制层 Gate3】")
+    step4_cfg = four_step.get("step4_quality", {})
+    gate3_cfg = step4_cfg.get("gate3_strength", {})
+    min_prime_strength = gate3_cfg.get("min_prime_strength")
+
+    print(f"  min_prime_strength: {min_prime_strength}")
+    if min_prime_strength == 5.0:
+        print(f"  ✅ SUCCESS: 35 → 5.0 (与Step1阈值对齐)")
+    else:
+        print(f"  ❌ FAILED: Expected 5.0, got {min_prime_strength}")
+        all_pass = False
+
     return all_pass
 
 
@@ -155,7 +169,7 @@ def main():
     print("\n" + "="*70)
     print("P0-7 & P0-8 Bug Fix Validation - CryptoSignal v7.4.2")
     print("问题: 回测产生0个信号 - 四步系统阈值系统性过高")
-    print("修复: P0-7 (Step1) + P0-8 (Step2/3) 阈值调整")
+    print("修复: P0-7 (Step1) + P0-8 (Step2/3/4) 阈值调整")
     print("="*70 + "\n")
 
     # Step 1: Validate config

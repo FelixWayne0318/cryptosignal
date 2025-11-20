@@ -628,7 +628,8 @@
 
       "gate3_strength": {
         "_comment": "Gate3: 信号强度门槛",
-        "min_prime_strength": 35
+        "min_prime_strength": 5.0,
+        "_fix_note": "v7.4.2回测修复(P0-8续): 35→5.0 (原阈值过高导致Step4拒绝，实际prime_strength约5-15，现与Step1阈值对齐)"
       },
 
       "gate4_contradiction": {

@@ -57,6 +57,7 @@ Enhanced_F = 100 * tanh((flow_momentum - price_momentum) / scale)
 | **Step2** | `min_threshold: 30.0` | 0.5 ~ 3.1 | **10倍** | 100%拒绝 |
 | **Step3** | `moderate_f: 40` | 0.5 ~ 3.1 | **13倍** | 永远弱吸筹 |
 | **Step3** | `strong_f: 70` | 0.5 ~ 3.1 | **23倍** | 永不触发 |
+| **Step4** | `min_prime_strength: 35` | 5.2 ~ 6.1 | **6倍** | 100%拒绝 |
 
 ### 三、Timing Quality分级分析
 
@@ -141,7 +142,26 @@ else:                   # 弱吸筹 → 保守入场
 - **15.0**: 保持约3倍关系，Enhanced_F > 15认为强吸筹
 - **对齐**: 与实际数据分布对齐（0.5-3.1可触发各策略）
 
-#### 3. 新的策略分布
+#### 3. Step4: 质量控制层 Gate3
+
+**配置文件**: `config/params.json` Line 631
+
+```json
+{
+  "gate3_strength": {
+    "min_prime_strength": 5.0,  // Changed from 35
+    "_fix_note": "v7.4.2回测修复(P0-8续): 35→5.0 (原阈值过高导致Step4拒绝，实际prime_strength约5-15，现与Step1阈值对齐)"
+  }
+}
+```
+
+**理由**:
+- **prime_strength = final_strength**: Step4 Gate3检查的就是Step1计算的final_strength
+- **实际数据**: 回测日志显示final_strength约5.2-6.1，远低于阈值35
+- **与Step1对齐**: Step1使用5.0作为通过阈值，Step4也应使用5.0
+- **保持一致性**: 通过Step1的信号，不应被Step4同一指标拒绝
+
+#### 4. 新的策略分布
 
 | Enhanced_F范围 | Step2判定 | Step3策略 | 说明 |
 |----------------|-----------|-----------|------|
@@ -160,12 +180,14 @@ else:                   # 弱吸筹 → 保守入场
 ✅ Step2 min_threshold: -30.0
 ✅ Step3 moderate_accumulation_f: 5.0
 ✅ Step3 strong_accumulation_f: 15.0
+✅ Step4 min_prime_strength: 5.0
 ```
 
 ### Phase 2: Core逻辑验证
 ```
 ✅ ats_core/decision/step2_timing.py:193 正确读取-30.0
 ✅ ats_core/decision/step3_risk.py:319-320 正确读取5.0/15.0
+✅ ats_core/decision/step4_quality.py:140 正确读取5.0
 ```
 
 ### Phase 3: 决策逻辑模拟
@@ -183,11 +205,13 @@ else:                   # 弱吸筹 → 保守入场
 
 ### Modified
 
-**config/params.json** (+4 lines):
+**config/params.json** (+6 lines):
 ```
 Line 453: min_threshold: 30.0 → -30.0
 Line 454: Added _fix_note
 Lines 506-508: strong/moderate_accumulation_f调整 + _fix_note
+Line 631: min_prime_strength: 35 → 5.0
+Line 632: Added _fix_note
 ```
 
 ### Updated
@@ -215,12 +239,12 @@ Step2: ❌ REJECT (3.1 < 30.0)
 Result: 0 signals
 ```
 
-### 修复后 (P0-8)
+### 修复后 (P0-8完整)
 ```
 Step1: ✅ PASS (6.1 >= 5.0)
-Step2: ✅ PASS (3.1 >= -30.0)
-Step3: ✅ Entry Strategy: Weak (0.5-3.1 < 5.0) → 保守入场
-Step4: ⏳ 待验证
+Step2: ✅ PASS (0.0 >= -30.0)
+Step3: ✅ Entry Strategy: Weak (0.0 < 5.0) → 保守入场
+Step4: ✅ PASS Gate3 (6.1 >= 5.0)
 Result: 预期产生信号 > 0
 ```
 
@@ -293,18 +317,18 @@ Result: 预期产生信号 > 0
 
 - [x] 问题诊断完成
 - [x] 根因分析完成（Enhanced_F函数特性+实际数据分析）
-- [x] 配置修复完成（Step2/3共3个阈值）
+- [x] 配置修复完成（Step2/3/4共4个阈值）
 - [x] JSON格式验证通过
 - [x] Core逻辑验证通过
 - [x] 决策逻辑模拟测试通过
 - [x] 验证脚本更新完成
-- [x] 文档创建完成
+- [x] 文档更新完成
 - [ ] Git提交完成
 - [ ] SESSION_STATE.md更新完成
 - [ ] 用户服务器验证完成
 
 ---
 
-**Last Updated**: 2025-11-19
+**Last Updated**: 2025-11-20
 **Author**: Claude (AI Assistant)
 **Review**: Pending user validation on server
