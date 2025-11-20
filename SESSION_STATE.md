@@ -5,7 +5,74 @@
 
 ---
 
-## 🆕 Session 10: v7.4.4 TrendStage防追高模块实现 (2025-11-20)
+## 🆕 Session 11: v7.4.4 Step2小Bug修复 (2025-11-20)
+
+**Problem**: Step2存在三个小bug导致兼容性和测试配置问题
+**Solution**: 修复final_timing_score兼容字段、min_threshold默认值统一、测试配置更新
+**Impact**: Bug修复 - 提升代码一致性和测试准确性
+**Status**: ✅ Fixed
+
+### 问题描述
+
+在Session 10实现TrendStage模块后，发现Step2中存在三个小bug需要修复：
+
+1. **缺少final_timing_score兼容字段**: 旧代码可能期望`final_timing_score`字段
+2. **min_threshold默认值不一致**: `calculate_enhanced_f_v2`函数默认值30.0与`step2_timing_judgment`内的-30.0不一致
+3. **测试配置使用错误阈值**: `__main__`测试使用30.0而非正式版本的-30.0
+
+### 修复内容
+
+#### Bug 1: 添加final_timing_score兼容字段
+**文件**: `ats_core/decision/step2_timing.py` (line 704-705)
+```python
+return {
+    "pass": pass_step2,
+    "enhanced_f": enhanced_f_flow_price,
+    "enhanced_f_final": enhanced_f_final,
+    # 兼容旧调用：final_timing_score 作为 enhanced_f_final 的别名
+    "final_timing_score": enhanced_f_final,
+    ...
+}
+```
+
+#### Bug 2: 统一min_threshold默认值
+**文件**: `ats_core/decision/step2_timing.py` (line 480-481)
+```python
+scale = enhanced_f_cfg.get("scale", 20.0)
+# v7.4.4：与 step2_timing_judgment 内默认值对齐，避免默认配置不一致
+min_threshold = enhanced_f_cfg.get("min_threshold", -30.0)
+```
+
+#### Bug 3: 更新测试配置
+**文件**: `ats_core/decision/step2_timing.py` (line 748-749)
+```python
+"enhanced_f": {
+    "scale": 20.0,
+    # 与当前正式逻辑保持一致：默认阈值 -30.0
+    "min_threshold": -30.0,
+    ...
+}
+```
+
+### Git Commit
+
+```
+02b3633 fix(step2): 修复Step2时机判断三个小bug
+```
+
+### 开发流程
+
+1. ✅ 修复Bug 1: 添加final_timing_score兼容字段
+2. ✅ 修复Bug 2: 统一min_threshold默认值为-30.0
+3. ✅ 修复Bug 3: 更新测试配置min_threshold为-30.0
+4. ✅ Git commit并push
+5. ✅ 更新SESSION_STATE.md
+
+**Total Time**: ~15分钟
+
+---
+
+## Session 10: v7.4.4 TrendStage防追高模块实现 (2025-11-20)
 
 **Problem**: Step2缺乏趋势阶段判断，无法识别追高/追跌行为
 **Solution**: 实现TrendStage模块，通过move_atr/pos_in_range/delta_T判断趋势阶段，添加阶段惩罚分
