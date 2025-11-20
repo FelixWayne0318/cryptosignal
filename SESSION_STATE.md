@@ -5,7 +5,80 @@
 
 ---
 
-## 🆕 Session 7: L因子体检与修复 (2025-11-20)
+## 🆕 Session 8: L因子设计合规性修复 (2025-11-20)
+
+**Problem**: L因子在Step2中用于时机惩罚(-15分)，但设计文档指定L因子应仅用于Step3止损宽度调整
+**Solution**: 移除Step2中的L因子时机惩罚，使实现符合设计文档
+**Impact**: 设计合规性修复 - L因子回归正确用途
+**Status**: ✅ Fixed
+
+### 问题分析
+
+**设计文档规定** (`docs/FOUR_STEP_IMPLEMENTATION_GUIDE.md`):
+- L因子是B层调制器，不用于评分
+- L因子仅在Step3风险管理层用于**止损宽度调整**（流动性差→更宽止损）
+- Step2时机判断应只使用Enhanced F v2和S因子
+
+**当前实现偏差**:
+```python
+# step2_timing.py:360-367 - 错误用法
+if l_score < liquidity_min:
+    l_adjustment = -timing_penalty  # 时机-15
+```
+
+用户确认："设计文档中关于L因子的设计更加科学。L用在止盈止损和入场价方面比较合理"
+
+### 修复方案
+
+**1. 移除Step2的L因子惩罚** (`ats_core/decision/step2_timing.py`):
+- 从函数签名移除`l_score`参数
+- 删除L因子调整代码
+- 更新docstring说明v7.4.3变更
+- 从返回值移除`l_adjustment`字段
+
+**2. 更新调用方** (`ats_core/decision/four_step_system.py`):
+- 移除`step2_timing_judgment()`调用中的`l_score=l_score`参数
+- 添加v7.4.3注释说明
+
+**3. 更新配置** (`config/params.json`):
+- 移除step2_timing中的L_factor配置节点
+- 添加移除说明注释
+
+### 代码变更摘要
+
+**step2_timing.py**:
+```python
+# 修改前
+def step2_timing_judgment(factor_scores_series, klines, s_factor_meta, l_score, params):
+    ...
+    if l_score < liquidity_min:
+        l_adjustment = -timing_penalty
+
+# 修改后
+def step2_timing_judgment(factor_scores_series, klines, s_factor_meta, params):
+    # v7.4.3: L因子不再在Step2中使用，仅用于Step3止损宽度调整
+    ...
+    final_timing_score = enhanced_f + s_adjustment  # 无L因子惩罚
+```
+
+### 验证结果
+
+| 测试项 | 结果 |
+|--------|------|
+| Python语法验证 | ✅ 通过 |
+| JSON格式验证 | ✅ 通过 |
+| Step2模块测试 | ✅ 通过 |
+| 最终得分计算 | ✅ Enhanced_F + S_adj (无L_adj) |
+
+### 预期效果
+
+- 回测时不再因L因子被扣15分
+- L因子回归设计文档规定的用途（Step3止损宽度）
+- 时机评分更准确反映资金流动vs价格动量
+
+---
+
+## Session 7: L因子体检与修复 (2025-11-20)
 
 **Problem**: L因子在回测中永远返回0，导致每个信号被错误扣15分
 **Solution**: 当订单簿数据不可用时使用配置的默认值(50)而非0

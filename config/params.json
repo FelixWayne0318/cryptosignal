@@ -487,11 +487,7 @@
         "timing_boost": 10
       },
 
-      "L_factor": {
-        "_comment": "L因子（流动性）时机过滤",
-        "liquidity_min": 30,
-        "timing_penalty": 15
-      }
+      "_L_factor_removed_note": "v7.4.3: L因子时机惩罚已移除。根据设计文档，L因子仅用于Step3止损宽度调整（流动性差→更宽止损），而非Step2时机评分惩罚"
     },
 
     "step3_risk": {
