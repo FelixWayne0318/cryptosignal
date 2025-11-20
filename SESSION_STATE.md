@@ -5,7 +5,171 @@
 
 ---
 
-## 🆕 Session 8: L因子设计合规性修复 (2025-11-20)
+## 🆕 Session 9: v1.1 REJECT信号记录 - 真实Step通过率计算 (2025-11-20)
+
+**Problem**: 回测只记录ACCEPT信号，无法计算真实的Step1-4通过率（瓶颈分析）
+**Solution**: 实现v1.1增强，记录所有分析结果（包括REJECT），计算真实Step通过率
+**Impact**: 重要增强 - 支持四步系统瓶颈分析
+**Status**: ✅ Implemented
+
+### 问题分析
+
+**设计文档规定** (`docs/BACKTEST_FRAMEWORK_v1.0_DESIGN.md`):
+- v1.1将增强支持记录REJECT信号
+- 用于计算真实Step1-4通过率
+- 识别四步系统瓶颈
+
+**当前实现限制** (`ats_core/backtest/metrics.py:264-266`):
+```python
+# 注意: 由于回测只记录ACCEPT的信号，无法计算真实通过率
+#       这里计算的是"信号质量分布"而非"通过率"
+#       v1.1将增强支持记录REJECT信号
+```
+
+### 实现方案
+
+遵循SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0，按文件修改顺序实现：
+
+#### 1. 配置文件 (`config/params.json`)
+```json
+"_comment_v1_1": "=== v1.1增强：REJECT信号记录（计算真实Step通过率） ===",
+"record_reject_analyses": true,
+"_record_reject_note": "启用后记录所有分析结果（包括REJECT），用于计算真实Step1-4通过率",
+
+"reject_analysis_fields": {
+  "_comment": "REJECT分析记录字段配置",
+  "record_factor_scores": true,
+  "record_step_results": true,
+  "record_rejection_reason": true
+}
+```
+
+#### 2. 数据类 (`ats_core/backtest/engine.py`)
+
+**新增RejectedAnalysis数据类**:
+```python
+@dataclass
+class RejectedAnalysis:
+    """v1.1增强：REJECT分析记录（用于计算真实Step通过率）"""
+    symbol: str
+    timestamp: int
+    rejection_step: int = 0  # 被拒绝的步骤（1-4）
+    rejection_reason: str = ""
+    step1_passed: bool = False
+    step2_passed: bool = False
+    step3_passed: bool = False
+    step4_passed: bool = False
+    step1_result: Dict = field(default_factory=dict)
+    step2_result: Dict = field(default_factory=dict)
+    step3_result: Dict = field(default_factory=dict)
+    step4_result: Dict = field(default_factory=dict)
+    factor_scores: Dict = field(default_factory=dict)
+```
+
+**更新BacktestResult**:
+```python
+@dataclass
+class BacktestResult:
+    signals: List[SimulatedSignal]
+    metadata: Dict[str, Any]
+    rejected_analyses: List[RejectedAnalysis] = field(default_factory=list)  # v1.1新增
+```
+
+#### 3. 引擎修改 (`ats_core/backtest/engine.py`)
+
+**配置读取**:
+```python
+# v1.1增强：REJECT信号记录配置
+self.record_reject_analyses = config.get("record_reject_analyses", False)
+reject_fields_config = config.get("reject_analysis_fields", {})
+self.reject_record_factor_scores = reject_fields_config.get("record_factor_scores", True)
+self.reject_record_step_results = reject_fields_config.get("record_step_results", True)
+self.reject_record_rejection_reason = reject_fields_config.get("record_rejection_reason", True)
+```
+
+**REJECT记录逻辑**:
+- 当`is_prime=False`且`record_reject_analyses=True`时记录
+- 提取四步系统各步骤结果
+- 判断各步骤通过状态
+- 确定拒绝步骤和原因
+- 创建RejectedAnalysis记录
+
+#### 4. 指标计算 (`ats_core/backtest/metrics.py`)
+
+**真实Step通过率计算**:
+```python
+def calculate_step_metrics(
+    self,
+    signals: List[SimulatedSignal],
+    rejected_analyses: List[RejectedAnalysis] = None
+) -> StepMetrics:
+    """
+    v1.1增强：使用ACCEPT信号和REJECT分析计算真实通过率
+    - Step1通过率 = 通过Step1的数量 / 总分析数量
+    - Step2通过率 = 通过Step2的数量 / 通过Step1的数量
+    - Step3通过率 = 通过Step3的数量 / 通过Step2的数量
+    - Step4通过率 = 通过Step4的数量 / 通过Step3的数量
+    - 最终通过率 = ACCEPT数量 / 总分析数量
+    """
+```
+
+**瓶颈识别**:
+- 计算各步骤条件通过率
+- 识别通过率最低的步骤作为瓶颈
+
+### 文件变更摘要
+
+**Modified**:
+- `config/params.json` (+15 lines): v1.1 REJECT记录配置
+- `ats_core/backtest/engine.py` (+100 lines): RejectedAnalysis数据类、记录逻辑
+- `ats_core/backtest/metrics.py` (+70 lines): 真实Step通过率计算
+
+### 验证结果
+
+| 测试项 | 结果 |
+|--------|------|
+| JSON格式验证 | ✅ 通过 |
+| 配置加载验证 | ✅ record_reject_analyses=true |
+| 数据类定义 | ✅ RejectedAnalysis正确定义 |
+| 引擎集成 | ✅ 正确记录REJECT分析 |
+| 指标计算 | ✅ 条件通过率正确计算 |
+
+### 预期效果
+
+- **真实通过率**: 从100%（v1.0限制）→ 实际值（如Step1=45%, Step2=80%等）
+- **瓶颈识别**: 自动识别最低通过率步骤
+- **优化方向**: 指导阈值调整和系统改进
+- **向后兼容**: `record_reject_analyses=false`时行为与v1.0一致
+
+### 使用示例
+
+运行回测后，指标报告将包含：
+```
+Step metrics (v1.1): total=1000, accept=50,
+S1=45.0%, S2=80.0%, S3=95.0%, S4=90.0%,
+final=5.0%, bottleneck=Step1
+```
+
+这表示：
+- 总共1000次分析，50次ACCEPT
+- Step1是瓶颈（只有45%通过）
+- 建议降低Step1阈值以提高信号产出
+
+### 开发流程
+
+严格遵循SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0:
+1. ✅ Phase 0: 阅读开发标准、规划实现方案
+2. ✅ Phase 1: 修改config/params.json（配置优先）
+3. ✅ Phase 2: 修改ats_core/backtest/engine.py（核心算法）
+4. ✅ Phase 3: 修改ats_core/backtest/metrics.py（指标计算）
+5. ✅ Phase 4: 更新SESSION_STATE.md（文档）
+6. ⏳ Phase 5: Git commit并push
+
+**Total Time**: ~60分钟
+
+---
+
+## Session 8: L因子设计合规性修复 (2025-11-20)
 
 **Problem**: L因子在Step2中用于时机惩罚(-15分)，但设计文档指定L因子应仅用于Step3止损宽度调整
 **Solution**: 移除Step2中的L因子时机惩罚，使实现符合设计文档

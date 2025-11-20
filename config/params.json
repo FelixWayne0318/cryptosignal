@@ -801,6 +801,17 @@
         "max_holding_exceeded": {"priority": 4, "label": "TIMEOUT"},
         "manual_close": {"priority": 5, "label": "MANUAL"},
         "entry_not_filled": {"priority": 6, "label": "ENTRY_NOT_FILLED"}
+      },
+
+      "_comment_v1_1": "=== v1.1增强：REJECT信号记录（计算真实Step通过率） ===",
+      "record_reject_analyses": true,
+      "_record_reject_note": "启用后记录所有分析结果（包括REJECT），用于计算真实Step1-4通过率",
+
+      "reject_analysis_fields": {
+        "_comment": "REJECT分析记录字段配置",
+        "record_factor_scores": true,
+        "record_step_results": true,
+        "record_rejection_reason": true
       }
     },
 

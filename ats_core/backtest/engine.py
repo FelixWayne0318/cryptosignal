@@ -101,21 +101,66 @@ class SimulatedSignal:
 
 
 @dataclass
+class RejectedAnalysis:
+    """
+    v1.1增强：REJECT分析记录（用于计算真实Step通过率）
+
+    记录四步系统分析过程中被拒绝的信号，包含：
+    - 哪一步被拒绝
+    - 各步骤的结果
+    - 因子分数快照
+
+    设计原则（§6.2 函数签名演进）:
+    - 所有字段初始化有默认值
+    - 新增字段向后兼容
+    """
+    # 基本信息
+    symbol: str
+    timestamp: int  # 分析时间（bar close，毫秒）
+
+    # 拒绝信息
+    rejection_step: int = 0  # 被拒绝的步骤（1-4），0表示未被分析
+    rejection_reason: str = ""  # 拒绝原因
+
+    # 各步骤通过状态
+    step1_passed: bool = False
+    step2_passed: bool = False
+    step3_passed: bool = False
+    step4_passed: bool = False
+
+    # 四步系统元数据（可选，用于调试）
+    step1_result: Dict = field(default_factory=dict)
+    step2_result: Dict = field(default_factory=dict)
+    step3_result: Dict = field(default_factory=dict)
+    step4_result: Dict = field(default_factory=dict)
+
+    # 因子分数快照（可选）
+    factor_scores: Dict = field(default_factory=dict)
+
+    def to_dict(self) -> Dict:
+        """转换为字典（用于JSON序列化）"""
+        return asdict(self)
+
+
+@dataclass
 class BacktestResult:
     """
     回测执行结果
 
     包含:
-    - signals: 所有模拟信号列表
+    - signals: 所有模拟信号列表（ACCEPT）
+    - rejected_analyses: 所有被拒绝的分析列表（REJECT）[v1.1新增]
     - metadata: 执行元数据（时间范围、符号、执行时长等）
     """
     signals: List[SimulatedSignal]
     metadata: Dict[str, Any]
+    rejected_analyses: List[RejectedAnalysis] = field(default_factory=list)  # v1.1新增
 
     def to_dict(self) -> Dict:
         """转换为字典（用于JSON序列化）"""
         return {
             "signals": [s.to_dict() for s in self.signals],
+            "rejected_analyses": [r.to_dict() for r in self.rejected_analyses],  # v1.1新增
             "metadata": self.metadata
         }
 
@@ -181,15 +226,23 @@ class BacktestEngine:
             "entry_not_filled": {"priority": 6, "label": "ENTRY_NOT_FILLED"}  # v1.5新增
         })
 
+        # v1.1增强：REJECT信号记录配置
+        self.record_reject_analyses = config.get("record_reject_analyses", False)
+        reject_fields_config = config.get("reject_analysis_fields", {})
+        self.reject_record_factor_scores = reject_fields_config.get("record_factor_scores", True)
+        self.reject_record_step_results = reject_fields_config.get("record_step_results", True)
+        self.reject_record_rejection_reason = reject_fields_config.get("record_rejection_reason", True)
+
         # 重载配置（确保使用最新配置）
         CFG.reload()
 
         logger.info(
-            f"BacktestEngine initialized (v1.5): "
+            f"BacktestEngine initialized (v1.5/v1.1): "
             f"max_entry_bars={self.max_entry_bars}, "
             f"fee={self.taker_fee_rate*100:.3f}%, "
             f"slippage={self.slippage_percent}±{self.slippage_range}%, "
-            f"cooldown={self.signal_cooldown_hours}h"
+            f"cooldown={self.signal_cooldown_hours}h, "
+            f"record_rejects={self.record_reject_analyses}"
         )
 
     def run(
@@ -250,6 +303,7 @@ class BacktestEngine:
         # 统计信息
         total_iterations = 0
         all_signals: List[SimulatedSignal] = []
+        rejected_analyses: List[RejectedAnalysis] = []  # v1.1新增：被拒绝的分析记录
         active_positions: List[SimulatedSignal] = []
         pending_entries: List[SimulatedSignal] = []  # v1.5新增：待入场队列
         last_signal_time_by_symbol: Dict[str, int] = {}
@@ -372,6 +426,61 @@ class BacktestEngine:
 
                     # 检查是否生成信号
                     is_signal = analysis_result.get("is_prime", False)
+
+                    # v1.1增强：记录REJECT分析结果
+                    if not is_signal and self.record_reject_analyses:
+                        four_step = analysis_result.get("four_step_decision", {})
+
+                        # 提取各步骤结果
+                        step1_result = four_step.get("step1", {})
+                        step2_result = four_step.get("step2", {})
+                        step3_result = four_step.get("step3", {})
+                        step4_result = four_step.get("step4", {})
+
+                        # 判断各步骤是否通过
+                        step1_passed = step1_result.get("passed", False)
+                        step2_passed = step2_result.get("passed", False)
+                        step3_passed = step3_result.get("passed", False)
+                        step4_passed = step4_result.get("passed", False)
+
+                        # 确定拒绝步骤和原因
+                        rejection_step = 0
+                        rejection_reason = ""
+                        if not step1_passed:
+                            rejection_step = 1
+                            rejection_reason = step1_result.get("reason", "Step1 REJECT")
+                        elif not step2_passed:
+                            rejection_step = 2
+                            rejection_reason = step2_result.get("reason", "Step2 REJECT")
+                        elif not step3_passed:
+                            rejection_step = 3
+                            rejection_reason = step3_result.get("reason", "Step3 REJECT")
+                        elif not step4_passed:
+                            rejection_step = 4
+                            rejection_reason = step4_result.get("reason", "Step4 REJECT")
+                        else:
+                            # 未知原因（可能是数据不足等）
+                            rejection_step = 0
+                            rejection_reason = "Unknown (possibly insufficient data)"
+
+                        # 创建RejectedAnalysis记录
+                        rejected = RejectedAnalysis(
+                            symbol=symbol,
+                            timestamp=current_timestamp,
+                            rejection_step=rejection_step,
+                            rejection_reason=rejection_reason if self.reject_record_rejection_reason else "",
+                            step1_passed=step1_passed,
+                            step2_passed=step2_passed,
+                            step3_passed=step3_passed,
+                            step4_passed=step4_passed,
+                            step1_result=step1_result if self.reject_record_step_results else {},
+                            step2_result=step2_result if self.reject_record_step_results else {},
+                            step3_result=step3_result if self.reject_record_step_results else {},
+                            step4_result=step4_result if self.reject_record_step_results else {},
+                            factor_scores=analysis_result.get("scores", {}) if self.reject_record_factor_scores else {}
+                        )
+                        rejected_analyses.append(rejected)
+
                     if not is_signal:
                         continue
 
@@ -521,8 +630,13 @@ class BacktestEngine:
             "execution_time_seconds": round(backtest_duration, 2),
             "config_snapshot": self.config,
             "total_signals": len(all_signals),
+            "total_rejected_analyses": len(rejected_analyses),  # v1.1新增
             "signals_by_symbol": {
                 symbol: sum(1 for s in all_signals if s.symbol == symbol)
+                for symbol in symbols
+            },
+            "rejected_by_symbol": {  # v1.1新增
+                symbol: sum(1 for r in rejected_analyses if r.symbol == symbol)
                 for symbol in symbols
             }
         }
@@ -531,10 +645,15 @@ class BacktestEngine:
             f"✅ 回测完成: "
             f"{total_iterations} iterations, "
             f"{len(all_signals)} signals, "
+            f"{len(rejected_analyses)} rejects, "
             f"{backtest_duration:.1f}秒"
         )
 
-        return BacktestResult(signals=all_signals, metadata=metadata)
+        return BacktestResult(
+            signals=all_signals,
+            metadata=metadata,
+            rejected_analyses=rejected_analyses  # v1.1新增
+        )
 
     def _try_fill_pending_entry(
         self,
