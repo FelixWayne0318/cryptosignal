@@ -300,6 +300,9 @@ class BacktestEngine:
         )
         # ====================================================================
 
+        # v7.4.4 调试：确认REJECT记录配置
+        logger.info(f"REJECT记录配置: record_reject_analyses={self.record_reject_analyses}")
+
         # 统计信息
         total_iterations = 0
         all_signals: List[SimulatedSignal] = []
@@ -424,12 +427,18 @@ class BacktestEngine:
                         eth_klines=None
                     )
 
+                    # v7.4.4 修复：检查分析结果是否有效（防止NoneType错误）
+                    if analysis_result is None:
+                        logger.warning(f"分析返回None: {symbol} at {current_timestamp}")
+                        continue
+
                     # 检查是否生成信号
                     is_signal = analysis_result.get("is_prime", False)
 
                     # v1.1增强：记录REJECT分析结果
                     if not is_signal and self.record_reject_analyses:
                         four_step = analysis_result.get("four_step_decision", {})
+                        logger.debug(f"记录REJECT: {symbol} at {current_timestamp}, four_step_decision exists: {bool(four_step)}")
 
                         # v7.4.4 修复：正确获取四步系统各步骤结果（键名修正）
                         step1_result = four_step.get("step1_direction", {})
