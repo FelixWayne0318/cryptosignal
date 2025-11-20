@@ -596,8 +596,11 @@
       "_comment": "Step4: 质量控制层 - 四道闸门验证",
 
       "gate1_volume": {
-        "_comment": "Gate1: 基础成交量筛选",
-        "min_volume_24h": 1000000
+        "_comment": "Gate1: 基础成交量筛选 - v7.4.3已禁用（选币阶段已过滤成交量）",
+        "enabled": false,
+        "_disable_reason": "选币阶段已通过min_volume_24h_usdt过滤低流动性币种，此处重复检查无意义",
+        "min_volume_24h": 1000000,
+        "_legacy_note": "原阈值以币数计量（非USDT），保留仅供参考"
       },
 
       "gate2_noise": {

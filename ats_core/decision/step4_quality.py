@@ -39,8 +39,18 @@ def check_gate1_volume(
 
     Returns:
         (pass: bool, reason: str | None)
+
+    v7.4.3更新：
+        - 添加enabled开关，默认禁用
+        - 选币阶段已通过min_volume_24h_usdt过滤，此处重复检查无意义
     """
     gate1_cfg = params.get("four_step_system", {}).get("step4_quality", {}).get("gate1_volume", {})
+
+    # v7.4.3: 支持enabled开关，默认禁用
+    enabled = gate1_cfg.get("enabled", False)
+    if not enabled:
+        return True, None  # 禁用时直接通过
+
     min_volume = gate1_cfg.get("min_volume_24h", 1_000_000.0)
 
     # 计算24h成交量
