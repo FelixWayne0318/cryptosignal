@@ -1,0 +1,50 @@
+# CryptoSignal Freqtrade 策略配置
+#
+# 用于配置 cs_ext/backtest/freqtrade_bridge.py 中的策略参数
+#
+# Usage:
+#   from cs_ext.backtest.freqtrade_bridge import create_strategy_from_config
+#   Strategy = create_strategy_from_config("cs_ext/config/freqtrade_strategy_config.yml")
+
+# CryptoSignal 配置文件路径
+cs_config_path: "config/params.json"
+
+# 时间框架
+timeframe: "5m"
+
+# 信号过滤
+min_signal_strength: 0.3    # 最小信号强度 [0, 1]
+use_cs_quality_gate: true   # 是否使用 Step4 质量控制
+use_cs_stoploss: true       # 是否使用 Step3 动态止损
+
+# Freqtrade 止损
+stoploss: -0.05             # 默认止损 5%
+
+# 最小ROI目标
+minimal_roi:
+  "0": 0.10      # 立即: 10%
+  "30": 0.05     # 30分钟: 5%
+  "60": 0.02     # 60分钟: 2%
+  "120": 0.01    # 120分钟: 1%
+
+---
+# 保守型配置示例
+
+# min_signal_strength: 0.5
+# use_cs_quality_gate: true
+# stoploss: -0.03
+# minimal_roi:
+#   "0": 0.15
+#   "60": 0.08
+#   "120": 0.04
+
+---
+# 激进型配置示例
+
+# min_signal_strength: 0.2
+# use_cs_quality_gate: false
+# stoploss: -0.08
+# minimal_roi:
+#   "0": 0.08
+#   "30": 0.04
+#   "60": 0.02

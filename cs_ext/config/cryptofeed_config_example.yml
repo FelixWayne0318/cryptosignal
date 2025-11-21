@@ -1,0 +1,63 @@
+# CryptoFeed 数据流配置示例
+#
+# 用于 cs_ext/data/cryptofeed_stream.py
+#
+# Usage:
+#   from cs_ext.data.cryptofeed_stream import create_stream_from_yaml
+#   stream = create_stream_from_yaml("cs_ext/config/cryptofeed_config.yml")
+#   stream.start()
+
+# 交易所列表
+# 支持: BINANCE, BINANCE_FUTURES, OKX, BYBIT
+exchanges:
+  - BINANCE_FUTURES
+
+# 交易对列表
+# 格式: BASE-QUOTE-PERP (永续合约)
+symbols:
+  - BTC-USDT-PERP
+  - ETH-USDT-PERP
+  - SOL-USDT-PERP
+
+# 数据频道
+# 可选: trades, l2_book, l3_book, funding, open_interest, liquidations
+channels:
+  - trades           # 逐笔成交
+  - l2_book          # L2订单簿
+  - funding          # 资金费率
+  - open_interest    # 持仓量
+
+# 订单簿深度 (L2_BOOK)
+book_depth: 20
+
+# 成交缓存大小
+max_trades_cache: 1000
+
+# 高级配置 (可选)
+# advanced:
+#   # 重连设置
+#   reconnect_interval: 5
+#   max_reconnects: 10
+#
+#   # 数据过滤
+#   min_trade_size: 0.001
+#
+#   # 日志级别
+#   log_level: INFO
+
+---
+# 多交易所配置示例
+
+# exchanges:
+#   - BINANCE_FUTURES
+#   - OKX
+#   - BYBIT
+#
+# symbols:
+#   - BTC-USDT-PERP
+#   - ETH-USDT-PERP
+#
+# channels:
+#   - trades
+#   - l2_book
+#   - funding

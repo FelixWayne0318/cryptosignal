@@ -5,6 +5,82 @@
 
 ---
 
+## 🆕 Session 17: 外部框架集成 - Cryptofeed & Freqtrade (2025-11-21)
+
+**Problem**: CryptoSignal缺乏实时数据流和回测基础设施
+**Solution**: 集成Cryptofeed (WebSocket数据) 和 Freqtrade (回测/仓位管理)
+**Impact**: 新功能 - 完整的量化交易基础设施
+**Status**: ✅ Implemented
+
+### 架构设计
+
+```
+CryptoSignal (信号引擎)
+    ↑ 因子计算          ↓ 交易信号
+Cryptofeed ←→ cs_ext 适配层 ←→ Freqtrade
+(实时数据)                    (回测/执行)
+```
+
+### 目录结构
+
+```
+externals/
+├── cryptofeed/          # Cryptofeed源码 (git clone)
+└── freqtrade/           # Freqtrade源码 (git clone)
+
+cs_ext/                  # 适配层 (新增)
+├── __init__.py
+├── data/
+│   ├── __init__.py
+│   └── cryptofeed_stream.py   # WebSocket数据流适配器
+├── backtest/
+│   ├── __init__.py
+│   └── freqtrade_bridge.py    # Freqtrade策略桥接器
+└── config/
+    ├── cryptofeed_config_example.yml
+    └── freqtrade_strategy_config.yml
+```
+
+### 核心组件
+
+#### 1. CryptoFeedStream (cs_ext/data/cryptofeed_stream.py)
+
+WebSocket数据流管理器，将Cryptofeed数据转换为CryptoSignal统一格式。
+
+**支持数据类型**: trades, l2_book, funding, open_interest
+
+**核心方法**:
+- `get_orderbook(symbol)`: 获取订单簿
+- `get_recent_trades(symbol)`: 获取最近成交
+- `calculate_cvd(symbol)`: 计算CVD
+- `calculate_obi(symbol)`: 计算OBI
+
+#### 2. CryptoSignalStrategy (cs_ext/backtest/freqtrade_bridge.py)
+
+Freqtrade策略包装器，将CryptoSignal四步决策系统集成到回测框架。
+
+**策略变体**: CryptoSignalStrategy, CryptoSignalConservative, CryptoSignalAggressive
+
+### 文件变更摘要
+
+| 文件 | 类型 | 说明 |
+|------|------|------|
+| externals/ | 依赖 | Cryptofeed和Freqtrade源码 |
+| cs_ext/data/cryptofeed_stream.py | 新增 | WebSocket数据流适配器 |
+| cs_ext/backtest/freqtrade_bridge.py | 新增 | Freqtrade策略桥接器 |
+| cs_ext/config/*.yml | 新增 | 配置示例文件 |
+
+### 安装依赖
+
+```bash
+pip install -e externals/cryptofeed
+pip install -e externals/freqtrade
+```
+
+---
+
+## Session 16: v7.6.1 因子系统审计问题修复 (2025-11-21)
+
 ## 🆕 Session 16: v7.6.1 因子系统审计问题修复 (2025-11-21)
 
 **Problem**: 因子系统审计发现3个严重问题(C1-C3)和3个重要问题(M4/M6)
