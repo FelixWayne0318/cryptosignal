@@ -27,3 +27,12 @@ python-dotenv==1.0.0
 
 # ==================== 可选：进度条 ====================
 # tqdm==4.66.1
+
+# ==================== 外部量化框架 ====================
+# Cryptofeed: WebSocket实时数据流 (trades, orderbook, funding, OI)
+cryptofeed>=2.4.0
+
+# Freqtrade: 回测框架和交易执行
+# 注意: freqtrade依赖较多，可选安装
+# pip install freqtrade
+# freqtrade>=2024.1
