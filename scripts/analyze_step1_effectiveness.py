@@ -12,21 +12,30 @@ import json
 import os
 import sys
 
-def load_data(result_dir="data/backtest_results"):
-    """加载回测数据"""
-    signals_file = os.path.join(result_dir, "signals.json")
-    rejects_file = os.path.join(result_dir, "rejected_analyses.json")
-
+def load_data(result_path="data/backtest_results"):
+    """加载回测数据（支持单文件或目录格式）"""
     signals = []
     rejects = []
 
-    if os.path.exists(signals_file):
-        with open(signals_file) as f:
-            signals = json.load(f)
+    if os.path.isdir(result_path):
+        # 目录格式
+        signals_file = os.path.join(result_path, "signals.json")
+        rejects_file = os.path.join(result_path, "rejected_analyses.json")
 
-    if os.path.exists(rejects_file):
-        with open(rejects_file) as f:
-            rejects = json.load(f)
+        if os.path.exists(signals_file):
+            with open(signals_file) as f:
+                signals = json.load(f)
+
+        if os.path.exists(rejects_file):
+            with open(rejects_file) as f:
+                rejects = json.load(f)
+    else:
+        # 单文件格式
+        if os.path.exists(result_path):
+            with open(result_path) as f:
+                data = json.load(f)
+            signals = data.get('signals', [])
+            rejects = data.get('rejected_analyses', [])
 
     return signals, rejects
 
