@@ -69,3 +69,6 @@ server_deploy_private.sh*
 .cryptosignal-private.sh
 
 # External dependencies (clone separately)
+
+# External dependencies (clone separately)
+externals/
