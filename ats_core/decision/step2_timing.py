@@ -37,40 +37,10 @@ v7.4.4 Enhancements:
 from typing import Dict, Any, List, Optional
 import math
 from ats_core.logging import log, warn
+from ats_core.utils.volatility import calculate_simple_atr  # v7.6.1: 使用公共ATR函数
 
 
 # ============ TrendStage Module (v7.4.4) ============
-
-# TODO: calculate_simple_atr与Step3中的实现重复，未来可合并为公共工具函数
-# (如 ats_core/utils/volatility.py)，以避免长期漂移
-def calculate_simple_atr(klines: List[Dict], period: int = 14) -> float:
-    """
-    计算简单ATR (Average True Range)
-
-    Args:
-        klines: K线数据（至少period+1根）
-        period: ATR周期
-
-    Returns:
-        atr: 平均真实波动幅度
-    """
-    if len(klines) < period + 1:
-        return 0.0
-
-    trs = []
-    for i in range(-period, 0):
-        high = float(klines[i].get("high", 0))
-        low = float(klines[i].get("low", 0))
-        prev_close = float(klines[i-1].get("close", 0))
-
-        tr = max(
-            high - low,
-            abs(high - prev_close),
-            abs(low - prev_close)
-        )
-        trs.append(tr)
-
-    return sum(trs) / len(trs) if trs else 0.0
 
 
 def calculate_move_atr(

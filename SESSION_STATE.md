@@ -18,6 +18,7 @@
 |------|------|---------|------|
 | C1 | Step2方向符号来源不一致 | 🔴 严重 | ✅ 已修复 |
 | C3 | Enhanced F scale过小导致饱和 | 🔴 严重 | ✅ 已修复 |
+| M1 | ATR函数重复实现 | 🟡 重要 | ✅ 已修复 |
 | M4 | Gate4矛盾检测阈值过高 | 🟡 重要 | ✅ 已修复 |
 | M6 | B因子除零风险 | 🟡 重要 | ✅ 已修复 |
 
@@ -78,12 +79,23 @@
 "safe_divisor_ratio": 0.001
 ```
 
+#### 5. M1修复: ATR函数重复消除
+
+**问题**: step2_timing.py和step3_risk.py都有相同的calculate_simple_atr函数，增加维护成本
+
+**修复方案**:
+- 创建公共工具模块: `ats_core/utils/volatility.py`
+- step2_timing.py和step3_risk.py导入公共函数
+- 删除本地重复实现
+
 ### 文件变更摘要
 
 | 文件 | 修改类型 | 说明 |
 |------|----------|------|
 | config/params.json | 配置 | 添加4个修复配置 |
-| ats_core/decision/step2_timing.py | 核心 | C1修复 - direction_score参数 |
+| ats_core/utils/volatility.py | 新增 | M1修复 - 公共ATR函数 |
+| ats_core/decision/step2_timing.py | 核心 | C1修复+M1修复 |
+| ats_core/decision/step3_risk.py | 核心 | M1修复 - 导入公共ATR |
 | ats_core/decision/four_step_system.py | 管道 | C1修复 - 传递direction_score |
 | ats_core/decision/step4_quality.py | 核心 | M4修复 - 联合条件矛盾检测 |
 | ats_core/features/fund_leading.py | 核心 | M6修复 - 安全除数 |
