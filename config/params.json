@@ -426,6 +426,18 @@
         "strong_btc_threshold": 70.0
       },
 
+      "btc_special_handling": {
+        "_comment": "v7.4.4新增: BTC特殊处理（BTC是参考资产，不应与自己比较）",
+        "enabled": true,
+        "reference_symbol": "BTCUSDT",
+        "fixed_I_score": 100,
+        "_I_score_note": "BTC是所有币独立性计算的参考资产，自身独立性应为100（完全独立）",
+        "fixed_btc_alignment": 1.0,
+        "_alignment_note": "BTC与自身的方向对齐应为1.0（完美对齐）",
+        "fixed_direction_confidence": 1.0,
+        "_confidence_note": "BTC作为市场领导者，方向确定性最高"
+      },
+
       "confidence": {
         "_comment": "置信度范围和曲线参数",
         "floor": 0.50,

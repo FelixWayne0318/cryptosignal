@@ -5,7 +5,101 @@
 
 ---
 
-## 🆕 Session 11: v7.4.4 Step2小Bug修复 (2025-11-20)
+## 🆕 Session 12: v7.4.4 BTC特殊处理修复 (2025-11-21)
+
+**Problem**: BTC作为参考资产，I_score和btc_alignment计算错误（I=57常数，alignment=0.84常数）
+**Solution**: 添加BTC特殊处理配置和逻辑，BTC使用固定值（I=100, alignment=1.0, confidence=1.0）
+**Impact**: Bug修复 - BTC正确作为独立参考资产
+**Status**: ✅ Fixed
+
+### 问题描述
+
+在Step1方向确认层的BTC回测诊断中发现：
+
+1. **BTC I_score = 57（常数）**: 所有185个BTC信号的I_score都是57
+2. **BTC btc_alignment = 0.84（常数）**: 所有信号的btc_alignment都是0.84
+3. **BTC direction_confidence = 0.96（常数）**: 由错误的I_score计算得出
+
+**根因分析**:
+- BTC是所有币独立性计算的参考资产
+- BTC不应该与自身进行比较计算
+- 正确值应为：I=100（完全独立）, alignment=1.0（完美对齐）, confidence=1.0
+
+### 修复内容
+
+#### 1. 配置文件修改 (config/params.json)
+
+在`four_step_system.step1_direction`中新增`btc_special_handling`配置：
+
+```json
+"btc_special_handling": {
+  "_comment": "v7.4.4新增: BTC特殊处理（BTC是参考资产，不应与自己比较）",
+  "enabled": true,
+  "reference_symbol": "BTCUSDT",
+  "fixed_I_score": 100,
+  "fixed_btc_alignment": 1.0,
+  "fixed_direction_confidence": 1.0
+}
+```
+
+#### 2. 核心逻辑修改 (ats_core/decision/step1_direction.py)
+
+- 函数签名添加`symbol: Optional[str] = None`参数
+- 检测BTCUSDT时使用固定值
+- 返回结果标记`is_btc_special: True`
+- 添加测试用例验证BTC特殊处理
+
+#### 3. 调用点更新 (ats_core/decision/four_step_system.py)
+
+两处调用`step1_direction_confirmation`均添加`symbol=symbol`参数
+
+### 测试验证
+
+```bash
+python3 -m ats_core.decision.step1_direction
+```
+
+结果：
+```
+🔶 测试用例0：BTC特殊处理（I=100, alignment=1.0, confidence=1.0）
+   通过: True
+   方向得分: 68.3
+   置信度: 1.00 (应为1.0) ✅
+   BTC对齐: 1.00 (应为1.0) ✅
+   最终强度: 68.3
+   is_btc_special: True ✅
+```
+
+### 文件变更摘要
+
+| 文件 | 修改类型 | 说明 |
+|------|----------|------|
+| config/params.json | 配置 | 新增btc_special_handling配置节 |
+| ats_core/decision/step1_direction.py | 核心 | BTC特殊处理逻辑和测试用例 |
+| ats_core/decision/four_step_system.py | 核心 | 传递symbol参数 |
+| docs/fixes/P0_BTC_SPECIAL_HANDLING_FIX.md | 文档 | 完整修复说明 |
+
+### 预期效果
+
+- BTC的`final_strength`提高（confidence和alignment从0.84/0.96提高到1.0）
+- BTC信号更容易通过Step1
+- BTC正确作为市场方向的参考基准
+
+### 开发流程
+
+严格遵循SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0:
+1. ✅ Phase 1: 需求分析 - 确定BTC特殊处理修复方案
+2. ✅ Phase 2.1: 配置文件 - 添加BTC特殊处理参数
+3. ✅ Phase 2.2: 核心逻辑 - 修改step1_direction.py支持BTC特殊处理
+4. ✅ Phase 3: 测试验证 - 验证配置和逻辑
+5. ✅ Phase 4: 文档更新 - 创建修复文档
+6. ✅ Phase 5: Git提交和SESSION_STATE更新
+
+**Total Time**: ~30分钟
+
+---
+
+## Session 11: v7.4.4 Step2小Bug修复 (2025-11-20)
 
 **Problem**: Step2存在三个小bug导致兼容性和测试配置问题
 **Solution**: 修复final_timing_score兼容字段、min_threshold默认值统一、测试配置更新

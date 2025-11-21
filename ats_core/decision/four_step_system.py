@@ -79,7 +79,8 @@ def run_four_step_decision_phase1(
     step1_result = step1_direction_confirmation(
         factor_scores=factor_scores,
         btc_factor_scores=btc_factor_scores,
-        params=params
+        params=params,
+        symbol=symbol  # v7.4.4: 传递symbol用于BTC特殊处理
     )
 
     if not step1_result["pass"]:
@@ -242,7 +243,8 @@ def run_four_step_decision(
     step1_result = step1_direction_confirmation(
         factor_scores=factor_scores,
         btc_factor_scores=btc_factor_scores,
-        params=params
+        params=params,
+        symbol=symbol  # v7.4.4: 传递symbol用于BTC特殊处理
     )
 
     if not step1_result["pass"]:

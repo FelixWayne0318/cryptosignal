@@ -228,7 +228,8 @@ def check_hard_veto(
 def step1_direction_confirmation(
     factor_scores: Dict[str, float],
     btc_factor_scores: Dict[str, float],
-    params: Dict[str, Any]
+    params: Dict[str, Any],
+    symbol: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Step1主函数：方向确认层
@@ -241,10 +242,16 @@ def step1_direction_confirmation(
         5. 计算最终强度 = direction_strength * confidence * alignment
         6. 判断是否通过（final_strength >= min_final_strength）
 
+    v7.4.4新增: BTC特殊处理
+        - BTC是所有币独立性计算的参考资产
+        - BTC的I_score应为100（完全独立）
+        - BTC的btc_alignment应为1.0（与自身完美对齐）
+
     Args:
         factor_scores: 本币因子得分 {"T": float, "M": float, ...}
         btc_factor_scores: BTC因子得分 {"T": float, ...}
         params: 配置参数
+        symbol: 币种代码（可选，用于BTC特殊处理）
 
     Returns:
         dict: {
@@ -288,6 +295,52 @@ def step1_direction_confirmation(
     I_score = factor_scores.get("I", 50.0)  # 默认中性
     btc_direction_score = btc_factor_scores.get("T", 0.0)
     btc_trend_strength = abs(btc_direction_score)
+
+    # v7.4.4新增: BTC特殊处理
+    btc_special_cfg = step1_cfg.get("btc_special_handling", {})
+    is_btc_special = (
+        btc_special_cfg.get("enabled", False) and
+        symbol is not None and
+        symbol.upper() == btc_special_cfg.get("reference_symbol", "BTCUSDT").upper()
+    )
+
+    if is_btc_special:
+        # BTC是参考资产，使用固定值
+        fixed_I_score = btc_special_cfg.get("fixed_I_score", 100)
+        fixed_alignment = btc_special_cfg.get("fixed_btc_alignment", 1.0)
+        fixed_confidence = btc_special_cfg.get("fixed_direction_confidence", 1.0)
+
+        # 计算最终强度（BTC使用固定参数）
+        final_strength = direction_strength * fixed_confidence * fixed_alignment
+
+        # 判断是否通过
+        pass_step1 = final_strength >= min_final_strength
+        reject_reason = None
+        if not pass_step1:
+            reject_reason = (
+                f"Final strength insufficient: {final_strength:.1f} < {min_final_strength}"
+            )
+
+        log(f"BTC特殊处理: I={fixed_I_score}, alignment={fixed_alignment}, confidence={fixed_confidence}")
+
+        return {
+            "pass": pass_step1,
+            "direction_score": direction_score,
+            "direction_strength": direction_strength,
+            "direction_confidence": fixed_confidence,
+            "btc_alignment": fixed_alignment,
+            "final_strength": final_strength,
+            "hard_veto": False,
+            "reject_reason": reject_reason,
+            "metadata": {
+                "I_score": fixed_I_score,
+                "btc_direction_score": btc_direction_score,
+                "btc_trend_strength": btc_trend_strength,
+                "is_btc_special": True,
+                "weights": weights,
+                "min_final_strength": min_final_strength
+            }
+        }
 
     # 2. 检查硬veto（优先级最高）
     veto_result = check_hard_veto(
@@ -405,10 +458,32 @@ if __name__ == "__main__":
                 "confidence": {
                     "floor": 0.50,
                     "ceiling": 1.00
+                },
+                "btc_special_handling": {
+                    "enabled": True,
+                    "reference_symbol": "BTCUSDT",
+                    "fixed_I_score": 100,
+                    "fixed_btc_alignment": 1.0,
+                    "fixed_direction_confidence": 1.0
                 }
             }
         }
     }
+
+    # 测试用例0：BTC特殊处理
+    print("\n🔶 测试用例0：BTC特殊处理（I=100, alignment=1.0, confidence=1.0）")
+    result0 = step1_direction_confirmation(
+        factor_scores={"T": 70, "M": 20, "C": 85, "V": 60, "O": 75, "B": 65, "I": 50},  # 原始I=50会被覆盖
+        btc_factor_scores={"T": 70},
+        params=test_params,
+        symbol="BTCUSDT"  # v7.4.4: BTC特殊处理
+    )
+    print(f"   通过: {result0['pass']}")
+    print(f"   方向得分: {result0['direction_score']:.1f}")
+    print(f"   置信度: {result0['direction_confidence']:.2f} (应为1.0)")
+    print(f"   BTC对齐: {result0['btc_alignment']:.2f} (应为1.0)")
+    print(f"   最终强度: {result0['final_strength']:.1f}")
+    print(f"   is_btc_special: {result0['metadata'].get('is_btc_special', False)}")
 
     # 测试用例1：高独立性 + 同向BTC
     print("\n📊 测试用例1：高独立性币(I=90) + 同向BTC(T_BTC=80)")
