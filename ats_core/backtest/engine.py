@@ -353,6 +353,10 @@ class BacktestEngine:
                     lookback_bars=300
                 )
                 current_klines_cache[symbol] = klines
+
+            # v7.4.4新增：获取OI和资金费率数据
+            oi_data_all = preloaded_data.get("_oi_data", {})
+            funding_data_all = preloaded_data.get("_funding_data", {})
             # ===============================================================
 
             # v1.5 P0修复：尝试成交待入场订单（限价单模型）
@@ -412,17 +416,43 @@ class BacktestEngine:
                     # 移除_convert_to_binance_format()调用，避免Step2崩溃
 
                     # P0 Bugfix: 传递BTC K线（用于Step1 BTC对齐检测）
+                    # v7.4.4修复：加载OI和资金费率数据（修复C和B因子为0的问题）
+
+                    # 获取当前symbol的OI数据切片
+                    symbol_oi_all = oi_data_all.get(symbol, [])
+                    oi_data = self.data_loader.get_oi_slice(
+                        symbol_oi_all,
+                        current_timestamp,
+                        lookback_bars=300
+                    )
+
+                    # 获取当前时间点的资金费率
+                    symbol_funding_all = funding_data_all.get(symbol, [])
+                    funding_rate = self.data_loader.get_funding_at_timestamp(
+                        symbol_funding_all,
+                        current_timestamp
+                    )
+
+                    # 计算mark_price和spot_price（使用最新K线收盘价近似）
+                    mark_price = None
+                    spot_price = None
+                    if klines_1h:
+                        latest_kline = klines_1h[-1]
+                        mark_price = float(latest_kline.get("close", 0))
+                        # spot_price近似为mark_price（实际应该从现货数据获取）
+                        spot_price = mark_price
+
                     # 调用四步系统分析
                     analysis_result = analyze_symbol_with_preloaded_klines(
                         symbol=symbol,
                         k1h=klines_1h,  # 直接传递字典格式（从缓存读取）
                         k4h=[],  # 暂时不用4h K线（v1.0简化）
-                        oi_data=None,
+                        oi_data=oi_data,  # v7.4.4修复：传递OI数据
                         spot_k1h=None,
                         orderbook=None,
-                        mark_price=None,
-                        funding_rate=None,
-                        spot_price=None,
+                        mark_price=mark_price,  # v7.4.4修复：传递标记价格
+                        funding_rate=funding_rate,  # v7.4.4修复：传递资金费率
+                        spot_price=spot_price,  # v7.4.4修复：传递现货价格
                         btc_klines=btc_klines,  # P0 Bugfix: 传递BTC K线
                         eth_klines=None
                     )
