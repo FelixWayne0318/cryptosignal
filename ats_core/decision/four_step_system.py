@@ -122,7 +122,8 @@ def run_four_step_decision_phase1(
         factor_scores_series=factor_scores_series,
         klines=klines,
         s_factor_meta=s_factor_meta,
-        params=params
+        params=params,
+        direction_score=step1_result['direction_score']  # v7.6.1修复(C1): 传递Step1方向分
     )
 
     if not step2_result["pass"]:
@@ -292,7 +293,8 @@ def run_four_step_decision(
         factor_scores_series=factor_scores_series,
         klines=klines,
         s_factor_meta=s_factor_meta,
-        params=params
+        params=params,
+        direction_score=step1_result['direction_score']  # v7.6.1修复(C1): 传递Step1方向分
     )
 
     if not step2_result["pass"]:

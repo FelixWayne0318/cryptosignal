@@ -1,11 +1,118 @@
-# SESSION_STATE - CryptoSignal v7.6.0 Development Log
+# SESSION_STATE - CryptoSignal v7.6.1 Development Log
 
-**Branch**: `claude/reorganize-audit-system-01N38pCktomjrY2cjFdXP84L`
+**Branch**: `claude/reorganize-audit-system-01BUG6SrCk68u3VFQspLpmhw`
 **Standard**: SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0
 
 ---
 
-## 🆕 Session 15: v7.6.0 方向敏感强度映射 (2025-11-21)
+## 🆕 Session 16: v7.6.1 因子系统审计问题修复 (2025-11-21)
+
+**Problem**: 因子系统审计发现3个严重问题(C1-C3)和3个重要问题(M4/M6)
+**Solution**: 按照SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0规范，从配置到代码依次修复
+**Impact**: Bug修复 - 提升信号准确性和系统稳定性
+**Status**: ✅ Implemented
+
+### 修复内容概览
+
+| 编号 | 问题 | 风险等级 | 状态 |
+|------|------|---------|------|
+| C1 | Step2方向符号来源不一致 | 🔴 严重 | ✅ 已修复 |
+| C3 | Enhanced F scale过小导致饱和 | 🔴 严重 | ✅ 已修复 |
+| M4 | Gate4矛盾检测阈值过高 | 🟡 重要 | ✅ 已修复 |
+| M6 | B因子除零风险 | 🟡 重要 | ✅ 已修复 |
+
+### 修复详情
+
+#### 1. C1修复: Step2方向符号来源统一
+
+**问题**: Step2的direction_sign从T因子判断，而Step1从加权合成分判断，可能导致TrendStage调整应用错误
+
+**修复方案**:
+- config/params.json: 添加`direction_sign_source`配置
+- step2_timing.py: 函数签名新增`direction_score`参数
+- four_step_system.py: 传递Step1的direction_score
+
+**配置**:
+```json
+"direction_sign_source": "step1_direction_score"
+```
+
+#### 2. C3修复: Enhanced F scale参数调整
+
+**问题**: scale=20.0，但输入范围约[-50,50]，导致tanh快速饱和
+
+**修复方案**:
+- config/params.json: scale从20.0调整为50.0
+
+**配置**:
+```json
+"scale": 50.0
+```
+
+#### 3. M4修复: Gate4矛盾检测联合条件
+
+**问题**: abs_threshold=60过高，漏检部分矛盾
+
+**修复方案**:
+- config/params.json: 添加`sum_threshold`配置
+- step4_quality.py: 改用联合条件检测
+
+**配置**:
+```json
+"abs_threshold": 50,
+"sum_threshold": 100
+```
+
+**新逻辑**: `opposite_direction and (|C|+|O|>100 or (|C|>50 and |O|>50))`
+
+#### 4. M6修复: B因子安全除数
+
+**问题**: cvd_6h_ago接近0时，使用1e-9可能产生极端值
+
+**修复方案**:
+- config/params.json: 添加`safe_divisor_ratio`配置
+- fund_leading.py: 使用相对于数据量级的安全除数
+
+**配置**:
+```json
+"safe_divisor_ratio": 0.001
+```
+
+### 文件变更摘要
+
+| 文件 | 修改类型 | 说明 |
+|------|----------|------|
+| config/params.json | 配置 | 添加4个修复配置 |
+| ats_core/decision/step2_timing.py | 核心 | C1修复 - direction_score参数 |
+| ats_core/decision/four_step_system.py | 管道 | C1修复 - 传递direction_score |
+| ats_core/decision/step4_quality.py | 核心 | M4修复 - 联合条件矛盾检测 |
+| ats_core/features/fund_leading.py | 核心 | M6修复 - 安全除数 |
+
+### 测试验证
+
+```bash
+✅ JSON格式验证通过
+✅ 配置加载成功
+   safe_divisor_ratio = 0.001
+   direction_sign_source = step1_direction_score
+   enhanced_f_scale = 50.0
+   gate4_c_vs_o_sum_threshold = 100
+```
+
+### 开发流程
+
+严格遵循SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0:
+1. ✅ Phase 1: 配置文件更新 (config/params.json)
+2. ✅ Phase 2: 核心代码修复 (C1/C3/M4/M6)
+3. ✅ Phase 3: 测试验证
+4. ✅ Phase 4: 文档更新
+5. ✅ Phase 5: Git提交
+
+**Total Time**: ~60分钟
+
+---
+
+## Session 15: v7.6.0 方向敏感强度映射 (2025-11-21)
 
 **Problem**: v7.5.0 U形映射错误地将高强度短信号（顺势空头）压制为低分，导致胜率无改善
 **Solution**: 单调饱和映射 + 方向敏感惩罚（仅追涨多头和反趋势空头受惩罚）
