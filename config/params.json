@@ -389,8 +389,8 @@
 
     "step1_direction": {
       "_comment": "Step1: 方向确认层 - A层因子 + I因子置信度 + BTC对齐 + 硬veto",
-      "min_final_strength": 5.0,
-      "_fix_note": "v7.4.2回测修复: 20.0→5.0 (原阈值过高导致回测0信号，实际范围约4-15)",
+      "min_final_strength": 7.0,
+      "_fix_note": "v7.4.6阈值调优: 5.0→7.0 (回测显示[5,7)区间胜率仅15.8%，提高门槛过滤低质量信号)",
 
       "weights": {
         "_comment": "A层因子权重（与现有权重保持一致）",
@@ -426,6 +426,64 @@
         "strong_btc_threshold": 70.0
       },
 
+      "btc_special_handling": {
+        "_comment": "v7.4.4新增: BTC特殊处理（BTC是参考资产，不应与自己比较）",
+        "enabled": true,
+        "reference_symbol": "BTCUSDT",
+        "fixed_I_score": 100,
+        "_I_score_note": "BTC是所有币独立性计算的参考资产，自身独立性应为100（完全独立）",
+        "fixed_btc_alignment": 1.0,
+        "_alignment_note": "BTC与自身的方向对齐应为1.0（完美对齐）",
+        "fixed_direction_confidence": 1.0,
+        "_confidence_note": "BTC作为市场领导者，方向确定性最高"
+      },
+
+      "strength_mapping": {
+        "_comment": "v7.5.0: A层方向强度非线性映射（已废弃，由v7.6.0替代）",
+        "enabled": false
+      },
+
+      "strength_mapping_v76": {
+        "_comment": "v7.6.0: A层强度映射（方向敏感 + 非对称设计）",
+        "enabled": true,
+
+        "_section_1": "基础映射边界",
+        "min_prime": 7.0,
+        "max_prime": 20.0,
+
+        "_section_2": "单调映射参数（raw_strength -> base_prime）",
+        "raw_mid": 12.0,
+        "_raw_mid_note": "中值附近从线性过渡到饱和",
+        "raw_max_ref": 25.0,
+        "_raw_max_ref_note": "参考最大raw_strength",
+        "mid_prime": 17.0,
+        "_mid_prime_note": "raw_strength在raw_mid时对应的base_prime",
+        "high_decay": 0.15,
+        "_high_decay_note": "高位指数衰减参数，越大越快饱和",
+
+        "_section_3": "T因子阈值",
+        "T_hot_long": 40.0,
+        "_T_hot_long_note": "多头：T>=40视为追涨风险",
+        "T_cold_short": -40.0,
+        "_T_cold_short_note": "空头：T<=-40视为强顺势（当前版本仅用于理解）",
+
+        "_section_4": "多头追涨惩罚",
+        "long_overheat_raw_min": 12.0,
+        "_long_overheat_raw_min_note": "raw_strength>=12才开始追涨风险",
+        "long_overheat_raw_cap": 25.0,
+        "_long_overheat_raw_cap_note": "raw_strength>=25惩罚到最强",
+        "min_factor_long": 0.7,
+        "_min_factor_long_note": "多头最多打30%折扣",
+
+        "_section_5": "反趋势空头惩罚（T>0且direction_score<0）",
+        "short_contra_raw_cap": 25.0,
+        "_short_contra_raw_cap_note": "raw_strength达到25时视为最危险",
+        "min_factor_short_contra": 0.5,
+        "_min_factor_short_contra_note": "反趋势空头最多打50%折扣",
+
+        "_design_note": "单调递增映射+方向敏感惩罚：顺势空头(T<=0)不惩罚，追涨多头和反趋势空头惩罚"
+      },
+
       "confidence": {
         "_comment": "置信度范围和曲线参数",
         "floor": 0.50,
@@ -452,8 +510,8 @@
       "enhanced_f": {
         "_comment": "Enhanced F v2: flow_momentum - price_momentum（只用非价格因子C/O/V/B）",
         "scale": 20.0,
-        "min_threshold": -30.0,
-        "_fix_note": "v7.4.2回测修复(P0-8): 30.0→-30.0 (原阈值过高导致回测0信号，实际范围0.5-3.1，现允许中性时机，只拒绝追涨)",
+        "min_threshold": 0.0,
+        "_fix_note": "v7.4.6阈值调优: -30.0→0.0 (实际enhanced_f范围[-2.2,6.4]，原阈值-30完全无效，现要求>=0通过)",
 
         "flow_weights": {
           "_comment": "Flow因子权重（仅非价格因子，避免自相关）",
@@ -473,18 +531,65 @@
       },
 
       "timing_quality": {
-        "_comment": "时机质量评级阈值",
-        "excellent": 80,
-        "good": 60,
-        "fair": 30,
-        "mediocre": -30,
-        "poor": -60
+        "_comment": "v7.4.6阈值调优: 压缩到实际分布[-5,10]附近，方便诊断",
+        "excellent": 5.0,
+        "good": 3.0,
+        "fair": 1.0,
+        "mediocre": -1.0,
+        "poor": -3.0
       },
 
       "S_factor": {
         "_comment": "S因子（结构）时机增强",
         "theta_threshold": 0.65,
         "timing_boost": 10
+      },
+
+      "trend_stage": {
+        "_comment": "v7.4.4新增: 趋势阶段判断（防追高/追跌）- 基于专家复核方案",
+        "enabled": true,
+
+        "atr_lookback": 14,
+        "_atr_note": "计算ATR的回看周期",
+
+        "move_atr_window_hours": 6,
+        "_move_atr_note": "计算累积ATR距离的窗口",
+
+        "move_atr_thresholds": {
+          "_comment": "v7.4.6阈值调优: 收紧阈值让趋势尾声更容易被识别 (2,4,6)→(1.5,3,4.5)",
+          "early": 1.5,
+          "mid": 3.0,
+          "late": 4.5
+        },
+
+        "pos_window_hours": 24,
+        "_pos_note": "计算区间位置的窗口",
+
+        "pos_thresholds": {
+          "_comment": "v7.4.6阈值调优: 略微放宽高位/低位定义",
+          "low": 0.20,
+          "high": 0.80
+        },
+
+        "delta_T_lookback": 3,
+        "_delta_T_note": "计算趋势加速度的回看K线数",
+
+        "delta_T_thresholds": {
+          "_comment": "v7.4.4: 参数化blowoff阶段的delta_T阈值（原硬编码-5/5）",
+          "blowoff_long": -5.0,
+          "blowoff_short": 5.0
+        },
+
+        "penalty_by_stage": {
+          "_comment": "各阶段的时机调整值",
+          "early": 5.0,
+          "mid": 0.0,
+          "late": -15.0,
+          "blowoff": -35.0
+        },
+
+        "chase_reject_threshold": -1.0,
+        "_chase_note": "v7.4.6阈值调优: -60.0→-1.0 (实际分布[-2.2,6.4]，<=-1.0视为Chase zone硬拒)"
       },
 
       "_L_factor_removed_note": "v7.4.3: L因子时机惩罚已移除。根据设计文档，L因子仅用于Step3止损宽度调整（流动性差→更宽止损），而非Step2时机评分惩罚"

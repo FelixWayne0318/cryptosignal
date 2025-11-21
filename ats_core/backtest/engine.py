@@ -300,6 +300,9 @@ class BacktestEngine:
         )
         # ====================================================================
 
+        # v7.4.4 调试：确认REJECT记录配置
+        logger.info(f"REJECT记录配置: record_reject_analyses={self.record_reject_analyses}")
+
         # 统计信息
         total_iterations = 0
         all_signals: List[SimulatedSignal] = []
@@ -350,6 +353,10 @@ class BacktestEngine:
                     lookback_bars=300
                 )
                 current_klines_cache[symbol] = klines
+
+            # v7.4.4新增：获取OI和资金费率数据
+            oi_data_all = preloaded_data.get("_oi_data", {})
+            funding_data_all = preloaded_data.get("_funding_data", {})
             # ===============================================================
 
             # v1.5 P0修复：尝试成交待入场订单（限价单模型）
@@ -409,55 +416,93 @@ class BacktestEngine:
                     # 移除_convert_to_binance_format()调用，避免Step2崩溃
 
                     # P0 Bugfix: 传递BTC K线（用于Step1 BTC对齐检测）
+                    # v7.4.4修复：加载OI和资金费率数据（修复C和B因子为0的问题）
+
+                    # 获取当前symbol的OI数据切片
+                    symbol_oi_all = oi_data_all.get(symbol, [])
+                    oi_data = self.data_loader.get_oi_slice(
+                        symbol_oi_all,
+                        current_timestamp,
+                        lookback_bars=300
+                    )
+
+                    # 获取当前时间点的资金费率
+                    symbol_funding_all = funding_data_all.get(symbol, [])
+                    funding_rate = self.data_loader.get_funding_at_timestamp(
+                        symbol_funding_all,
+                        current_timestamp
+                    )
+
+                    # 计算mark_price和spot_price（使用最新K线收盘价近似）
+                    mark_price = None
+                    spot_price = None
+                    if klines_1h:
+                        latest_kline = klines_1h[-1]
+                        mark_price = float(latest_kline.get("close", 0))
+                        # spot_price近似为mark_price（实际应该从现货数据获取）
+                        spot_price = mark_price
+
                     # 调用四步系统分析
                     analysis_result = analyze_symbol_with_preloaded_klines(
                         symbol=symbol,
                         k1h=klines_1h,  # 直接传递字典格式（从缓存读取）
                         k4h=[],  # 暂时不用4h K线（v1.0简化）
-                        oi_data=None,
+                        oi_data=oi_data,  # v7.4.4修复：传递OI数据
                         spot_k1h=None,
                         orderbook=None,
-                        mark_price=None,
-                        funding_rate=None,
-                        spot_price=None,
+                        mark_price=mark_price,  # v7.4.4修复：传递标记价格
+                        funding_rate=funding_rate,  # v7.4.4修复：传递资金费率
+                        spot_price=spot_price,  # v7.4.4修复：传递现货价格
                         btc_klines=btc_klines,  # P0 Bugfix: 传递BTC K线
                         eth_klines=None
                     )
 
+                    # v7.4.4 修复：检查分析结果是否有效（防止NoneType错误）
+                    if analysis_result is None:
+                        logger.warning(f"分析返回None: {symbol} at {current_timestamp}")
+                        continue
+
                     # 检查是否生成信号
                     is_signal = analysis_result.get("is_prime", False)
 
+                    # v7.4.4 调试：追踪is_prime值
+                    if not is_signal:
+                        logger.info(f"📝 分析结果: {symbol} is_prime=False, 准备记录REJECT")
+
                     # v1.1增强：记录REJECT分析结果
                     if not is_signal and self.record_reject_analyses:
-                        four_step = analysis_result.get("four_step_decision", {})
+                        four_step = analysis_result.get("four_step_decision", {}) or {}
+                        logger.info(f"📝 记录REJECT: {symbol}, four_step exists: {bool(four_step)}")
 
-                        # 提取各步骤结果
-                        step1_result = four_step.get("step1", {})
-                        step2_result = four_step.get("step2", {})
-                        step3_result = four_step.get("step3", {})
-                        step4_result = four_step.get("step4", {})
+                        # v7.4.4 修复：正确获取四步系统各步骤结果（键名修正）
+                        # 使用 or {} 处理值为None的情况
+                        step1_result = four_step.get("step1_direction", {}) or {}
+                        step2_result = four_step.get("step2_timing", {}) or {}
+                        step3_result = four_step.get("step3_risk", {}) or {}
+                        step4_result = four_step.get("step4_quality", {}) or {}
 
-                        # 判断各步骤是否通过
-                        step1_passed = step1_result.get("passed", False)
-                        step2_passed = step2_result.get("passed", False)
-                        step3_passed = step3_result.get("passed", False)
-                        step4_passed = step4_result.get("passed", False)
+                        # 判断各步骤是否通过（字段名是"pass"而非"passed"）
+                        step1_passed = step1_result.get("pass", False)
+                        step2_passed = step2_result.get("pass", False)
+                        step3_passed = step3_result.get("pass", False)
+                        # step4使用"all_gates_pass"
+                        step4_passed = step4_result.get("all_gates_pass", False)
 
-                        # 确定拒绝步骤和原因
+                        # 确定拒绝步骤和原因（字段名是"reject_reason"而非"reason"）
                         rejection_step = 0
                         rejection_reason = ""
                         if not step1_passed:
                             rejection_step = 1
-                            rejection_reason = step1_result.get("reason", "Step1 REJECT")
+                            rejection_reason = step1_result.get("reject_reason", "Step1 REJECT")
                         elif not step2_passed:
                             rejection_step = 2
-                            rejection_reason = step2_result.get("reason", "Step2 REJECT")
+                            rejection_reason = step2_result.get("reject_reason", "Step2 REJECT")
                         elif not step3_passed:
                             rejection_step = 3
-                            rejection_reason = step3_result.get("reason", "Step3 REJECT")
+                            rejection_reason = step3_result.get("reject_reason", "Step3 REJECT")
                         elif not step4_passed:
                             rejection_step = 4
-                            rejection_reason = step4_result.get("reason", "Step4 REJECT")
+                            rejection_reason = step4_result.get("reject_reason", "Step4 REJECT")
                         else:
                             # 未知原因（可能是数据不足等）
                             rejection_step = 0
@@ -567,6 +612,8 @@ class BacktestEngine:
                     # =============================================================================
 
                     # 创建模拟信号
+                    # v7.4.4 修复：正确获取四步系统各步骤结果（键名修正）
+                    four_step_decision = analysis_result.get("four_step_decision", {})
                     signal = SimulatedSignal(
                         symbol=symbol,
                         timestamp=current_timestamp,
@@ -576,10 +623,10 @@ class BacktestEngine:
                         take_profit_1_recommended=take_profit_1_rec,
                         take_profit_2_recommended=take_profit_2_rec,
                         factor_scores=analysis_result.get("scores", {}),
-                        step1_result=analysis_result.get("four_step_decision", {}).get("step1", {}),
-                        step2_result=analysis_result.get("four_step_decision", {}).get("step2", {}),
-                        step3_result=analysis_result.get("four_step_decision", {}).get("step3", {}),
-                        step4_result=analysis_result.get("four_step_decision", {}).get("step4", {})
+                        step1_result=four_step_decision.get("step1_direction", {}),
+                        step2_result=four_step_decision.get("step2_timing", {}),
+                        step3_result=four_step_decision.get("step3_risk", {}),
+                        step4_result=four_step_decision.get("step4_quality", {})
                     )
 
                     # v1.5 P0修复：不立即执行，加入待入场队列（限价单模型）

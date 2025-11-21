@@ -189,18 +189,31 @@ def get_spot_klines(
 
 # ------------------------- 未平仓量历史 -------------------------
 
-def get_open_interest_hist(symbol: str, period: str = "1h", limit: int = 200) -> List[dict]:
+def get_open_interest_hist(
+    symbol: str,
+    period: str = "1h",
+    limit: int = 200,
+    start_time: Optional[Union[int, float]] = None,
+    end_time: Optional[Union[int, float]] = None,
+) -> List[dict]:
     """
     /futures/data/openInterestHist
     返回形如：
       [{"symbol":"BTCUSDT","sumOpenInterest":"1234.5","sumOpenInterestValue":"...","timestamp":1690000000000}, ...]
     period: "5m"|"15m"|"30m"|"1h"|"2h"|"4h"|"6h"|"12h"|"1d"
+
+    v7.4.4新增：支持startTime/endTime参数用于回测
     """
     symbol = symbol.upper()
     limit = int(max(1, min(int(limit), 500)))
+    params: Dict[str, Any] = {"symbol": symbol, "period": period, "limit": limit}
+    if start_time is not None:
+        params["startTime"] = int(start_time)
+    if end_time is not None:
+        params["endTime"] = int(end_time)
     return _get(
         "/futures/data/openInterestHist",
-        {"symbol": symbol, "period": period, "limit": limit},
+        params,
         timeout=8.0,
         retries=2,
     )

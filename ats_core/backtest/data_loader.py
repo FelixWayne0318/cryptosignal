@@ -275,29 +275,46 @@ class HistoricalDataLoader:
             if cached_data is not None:
                 return cached_data
 
-        # 2. 从API加载（带重试）
+        # 2. 从API加载（带重试）- v7.4.4修复：OI历史API限制处理
+        # 注意：Binance的openInterestHist API可能不支持长时间范围
+        # 策略：先尝试带时间范围，失败后用无时间范围（最新500条）
         logger.info(f"从API加载持仓量: {symbol} {period} {start_time}-{end_time}")
         oi_data = []
 
-        for attempt in range(self.api_retry_count + 1):
-            try:
-                oi_data = get_open_interest_hist(
-                    symbol=symbol,
-                    period=period,
-                    limit=500  # Binance最大500
-                )
-                break
-            except Exception as e:
-                if attempt < self.api_retry_count:
-                    delay = self._calculate_retry_delay(attempt)
-                    logger.warning(
-                        f"持仓量加载失败 (attempt {attempt+1}/{self.api_retry_count+1}): {e}"
-                        f"\n重试延迟: {delay:.1f}秒"
+        # 尝试1：带时间范围
+        try:
+            oi_data = get_open_interest_hist(
+                symbol=symbol,
+                period=period,
+                limit=500,
+                start_time=start_time,
+                end_time=end_time
+            )
+            logger.info(f"OI加载成功（带时间范围）: {len(oi_data)}条")
+        except Exception as e:
+            logger.warning(f"带时间范围OI加载失败: {e}，尝试无时间范围模式")
+
+            # 尝试2：无时间范围（最新数据）
+            for attempt in range(self.api_retry_count + 1):
+                try:
+                    oi_data = get_open_interest_hist(
+                        symbol=symbol,
+                        period=period,
+                        limit=500  # 只用limit，不带时间范围
                     )
-                    time.sleep(delay)
-                else:
-                    logger.error(f"持仓量加载失败（已重试{self.api_retry_count}次）: {e}")
-                    raise
+                    logger.info(f"OI加载成功（无时间范围）: {len(oi_data)}条")
+                    break
+                except Exception as e2:
+                    if attempt < self.api_retry_count:
+                        delay = self._calculate_retry_delay(attempt)
+                        logger.warning(
+                            f"持仓量加载失败 (attempt {attempt+1}/{self.api_retry_count+1}): {e2}"
+                            f"\n重试延迟: {delay:.1f}秒"
+                        )
+                        time.sleep(delay)
+                    else:
+                        logger.error(f"持仓量加载失败（已重试{self.api_retry_count}次）: {e2}")
+                        raise
 
         # 3. 保存缓存
         if self.cache_enabled:
@@ -311,8 +328,10 @@ class HistoricalDataLoader:
         start_time: int,
         end_time: int,
         interval: Optional[str] = None,
-        lookback_bars: int = 300
-    ) -> Dict[str, List[Dict]]:
+        lookback_bars: int = 300,
+        load_oi: bool = True,
+        load_funding: bool = True
+    ) -> Dict[str, Union[List[Dict], Dict]]:
         """
         一次性预加载回测所需的所有数据
 
@@ -327,6 +346,8 @@ class HistoricalDataLoader:
             end_time: 回测结束时间（毫秒）
             interval: K线周期（默认使用配置）
             lookback_bars: 回看窗口大小（默认300，用于因子计算）
+            load_oi: v7.4.4新增 - 是否加载OI数据（用于C因子）
+            load_funding: v7.4.4新增 - 是否加载资金费率（用于B因子）
 
         Returns:
             预加载数据字典：
@@ -334,6 +355,8 @@ class HistoricalDataLoader:
                 "BNBUSDT": [kline1, kline2, ...],
                 "BTCUSDT": [kline1, kline2, ...],  # BTC用于Step1对齐
                 ...
+                "_oi_data": {"BNBUSDT": [...], ...},     # v7.4.4新增
+                "_funding_data": {"BNBUSDT": [...], ...} # v7.4.4新增
             }
 
         使用方式：
@@ -393,6 +416,41 @@ class HistoricalDataLoader:
             f"共{total_klines}条K线"
         )
 
+        # v7.4.4新增：加载OI数据（用于C因子）
+        if load_oi:
+            oi_data_all = {}
+            for symbol in symbols:
+                try:
+                    oi_data = self.load_oi_history(
+                        symbol=symbol,
+                        start_time=actual_start,
+                        end_time=end_time,
+                        period="1h"
+                    )
+                    oi_data_all[symbol] = oi_data
+                    logger.info(f"OI数据加载完成: {symbol} - {len(oi_data)}条记录")
+                except Exception as e:
+                    logger.warning(f"OI数据加载失败: {symbol} - {e}")
+                    oi_data_all[symbol] = []
+            preloaded_data["_oi_data"] = oi_data_all
+
+        # v7.4.4新增：加载资金费率（用于B因子）
+        if load_funding:
+            funding_data_all = {}
+            for symbol in symbols:
+                try:
+                    funding_data = self.load_funding_rate_history(
+                        symbol=symbol,
+                        start_time=actual_start,
+                        end_time=end_time
+                    )
+                    funding_data_all[symbol] = funding_data
+                    logger.info(f"资金费率加载完成: {symbol} - {len(funding_data)}条记录")
+                except Exception as e:
+                    logger.warning(f"资金费率加载失败: {symbol} - {e}")
+                    funding_data_all[symbol] = []
+            preloaded_data["_funding_data"] = funding_data_all
+
         return preloaded_data
 
     def get_klines_slice(
@@ -426,6 +484,72 @@ class HistoricalDataLoader:
             return klines_before_current[-lookback_bars:]
         else:
             return klines_before_current
+
+    def get_oi_slice(
+        self,
+        all_oi: List[Dict],
+        current_timestamp: int,
+        lookback_bars: int = 300
+    ) -> List[Dict]:
+        """
+        v7.4.4新增：从预加载OI数据中获取指定时间点的切片
+
+        Args:
+            all_oi: 预加载的完整OI数据
+            current_timestamp: 当前时间戳（毫秒）
+            lookback_bars: 回看窗口大小
+
+        Returns:
+            OI数据切片列表
+        """
+        if not all_oi:
+            return []
+
+        # 找到当前时间戳之前的OI数据
+        oi_before_current = [
+            oi for oi in all_oi
+            if oi.get("timestamp", 0) < current_timestamp
+        ]
+
+        # 取最近lookback_bars条
+        if len(oi_before_current) > lookback_bars:
+            return oi_before_current[-lookback_bars:]
+        else:
+            return oi_before_current
+
+    def get_funding_at_timestamp(
+        self,
+        all_funding: List[Dict],
+        current_timestamp: int
+    ) -> Optional[float]:
+        """
+        v7.4.4新增：获取指定时间点最近的资金费率
+
+        Args:
+            all_funding: 预加载的完整资金费率数据
+            current_timestamp: 当前时间戳（毫秒）
+
+        Returns:
+            资金费率值，如果没有数据则返回None
+        """
+        if not all_funding:
+            return None
+
+        # 找到当前时间戳之前最近的资金费率
+        funding_before = [
+            f for f in all_funding
+            if f.get("fundingTime", 0) <= current_timestamp
+        ]
+
+        if not funding_before:
+            return None
+
+        # 返回最近的资金费率
+        latest = max(funding_before, key=lambda x: x.get("fundingTime", 0))
+        try:
+            return float(latest.get("fundingRate", 0))
+        except (ValueError, TypeError):
+            return None
 
     def _format_timestamp(self, ts_ms: int) -> str:
         """格式化时间戳为可读字符串"""

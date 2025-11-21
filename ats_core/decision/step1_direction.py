@@ -20,8 +20,135 @@ Version: v7.4.2
 Created: 2025-11-16
 """
 
+import math
 from typing import Dict, Any, Optional
 from ats_core.logging import log, warn
+
+
+def shape_prime_strength_v76(
+    raw_strength: float,
+    T: float,
+    direction_score: float,
+    params: Dict[str, Any]
+) -> Dict[str, float]:
+    """
+    v7.6.0: Step1 A层强度映射（方向敏感 + 非对称设计）
+
+    设计原则:
+        - 单调饱和映射：原始强度越高，prime_strength越高（但增速递减）
+        - 方向敏感惩罚：
+          * 多头 + T>=40 + 高原始强度 → 追涨惩罚
+          * 空头 + T<=0 → 顺势空头，不惩罚
+          * 空头 + T>0 → 反趋势空头，惩罚
+
+    映射公式:
+        低强度区(rs <= raw_mid): 线性映射 min_prime → mid_prime
+        高强度区(rs > raw_mid):  指数衰减趋近 max_prime
+
+    Args:
+        raw_strength: |direction_score|
+        T: T因子分数（有符号）
+        direction_score: A层加权合成后的方向分数（有符号，用于判断多空）
+        params: 全局配置
+
+    Returns:
+        {
+            "raw_strength": float,       # 原始强度
+            "prime_strength": float,     # 映射+惩罚后的强度
+            "t_overheat_factor": float,  # T过热惩罚因子
+            "base_prime": float          # 映射后、惩罚前的强度
+        }
+    """
+    cfg = params.get("four_step_system", {}).get("step1_direction", {})
+    shape_cfg = cfg.get("strength_mapping_v76", {})
+
+    # 如果未启用，回退到简单绝对值
+    if not shape_cfg.get("enabled", True):
+        return {
+            "raw_strength": raw_strength,
+            "prime_strength": raw_strength,
+            "t_overheat_factor": 1.0,
+            "base_prime": raw_strength
+        }
+
+    # 基础映射边界
+    min_prime = float(shape_cfg.get("min_prime", 7.0))
+    max_prime = float(shape_cfg.get("max_prime", 20.0))
+
+    # 单调映射参数
+    raw_mid = float(shape_cfg.get("raw_mid", 12.0))
+    mid_prime = float(shape_cfg.get("mid_prime", 17.0))
+    high_decay = float(shape_cfg.get("high_decay", 0.15))
+
+    # 方向敏感参数
+    T_hot_long = float(shape_cfg.get("T_hot_long", 40.0))
+    T_cold_short = float(shape_cfg.get("T_cold_short", -40.0))
+    long_overheat_raw_min = float(shape_cfg.get("long_overheat_raw_min", 12.0))
+    long_overheat_raw_cap = float(shape_cfg.get("long_overheat_raw_cap", 25.0))
+    min_factor_long = float(shape_cfg.get("min_factor_long", 0.7))
+    short_contra_raw_cap = float(shape_cfg.get("short_contra_raw_cap", 25.0))
+    min_factor_short_contra = float(shape_cfg.get("min_factor_short_contra", 0.5))
+
+    rs = max(0.0, float(raw_strength))
+
+    # ========== 1. 单调饱和映射 ==========
+    if rs <= raw_mid:
+        # 低强度区：线性映射 [0, raw_mid] → [min_prime, mid_prime]
+        if raw_mid > 1e-6:
+            k = (mid_prime - min_prime) / raw_mid
+            base_prime = min_prime + k * rs
+        else:
+            base_prime = min_prime
+    else:
+        # 高强度区：指数衰减趋近 max_prime
+        # base_prime = max_prime - A * exp(-decay * (rs - raw_mid))
+        A = max_prime - mid_prime
+        base_prime = max_prime - A * math.exp(-high_decay * (rs - raw_mid))
+
+    # 确保在[min_prime, max_prime]范围内
+    base_prime = max(min_prime, min(max_prime, base_prime))
+
+    # ========== 2. 方向敏感惩罚 ==========
+    t_overheat_factor = 1.0
+
+    # 判断交易方向：direction_score >= 0 为多头，< 0 为空头
+    trade_direction = 1 if direction_score >= 0 else -1
+
+    if trade_direction > 0:
+        # 多头：T>=40 且 高原始强度 → 追涨惩罚
+        if T >= T_hot_long and rs >= long_overheat_raw_min:
+            # 惩罚强度随rs增加：rs=12 → factor=1.0，rs>=25 → factor=min_factor_long
+            if long_overheat_raw_cap > long_overheat_raw_min:
+                ratio = min(1.0, (rs - long_overheat_raw_min) / (long_overheat_raw_cap - long_overheat_raw_min))
+            else:
+                ratio = 1.0
+            t_overheat_factor = 1.0 - ratio * (1.0 - min_factor_long)
+    else:
+        # 空头
+        if T > 0.0:
+            # 反趋势空头（T>0做空）→ 惩罚
+            # 惩罚强度随rs和T增加
+            if short_contra_raw_cap > 0:
+                ratio_rs = min(1.0, rs / short_contra_raw_cap)
+            else:
+                ratio_rs = 1.0
+            # T越大，惩罚越重
+            ratio_T = min(1.0, T / 50.0)  # T=50时达到最大惩罚
+            ratio = max(ratio_rs, ratio_T)
+            t_overheat_factor = 1.0 - ratio * (1.0 - min_factor_short_contra)
+        else:
+            # 顺势空头（T<=0做空）→ 不惩罚
+            t_overheat_factor = 1.0
+
+    # ========== 3. 最终强度 ==========
+    prime_strength = base_prime * t_overheat_factor
+
+    return {
+        "raw_strength": float(rs),
+        "prime_strength": float(prime_strength),
+        "t_overheat_factor": float(t_overheat_factor),
+        "base_prime": float(base_prime)
+    }
 
 
 def calculate_direction_confidence_v2(
@@ -228,7 +355,8 @@ def check_hard_veto(
 def step1_direction_confirmation(
     factor_scores: Dict[str, float],
     btc_factor_scores: Dict[str, float],
-    params: Dict[str, Any]
+    params: Dict[str, Any],
+    symbol: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Step1主函数：方向确认层
@@ -241,10 +369,16 @@ def step1_direction_confirmation(
         5. 计算最终强度 = direction_strength * confidence * alignment
         6. 判断是否通过（final_strength >= min_final_strength）
 
+    v7.4.4新增: BTC特殊处理
+        - BTC是所有币独立性计算的参考资产
+        - BTC的I_score应为100（完全独立）
+        - BTC的btc_alignment应为1.0（与自身完美对齐）
+
     Args:
         factor_scores: 本币因子得分 {"T": float, "M": float, ...}
         btc_factor_scores: BTC因子得分 {"T": float, ...}
         params: 配置参数
+        symbol: 币种代码（可选，用于BTC特殊处理）
 
     Returns:
         dict: {
@@ -289,6 +423,64 @@ def step1_direction_confirmation(
     btc_direction_score = btc_factor_scores.get("T", 0.0)
     btc_trend_strength = abs(btc_direction_score)
 
+    # v7.4.4新增: BTC特殊处理
+    btc_special_cfg = step1_cfg.get("btc_special_handling", {})
+    is_btc_special = (
+        btc_special_cfg.get("enabled", False) and
+        symbol is not None and
+        symbol.upper() == btc_special_cfg.get("reference_symbol", "BTCUSDT").upper()
+    )
+
+    if is_btc_special:
+        # BTC是参考资产，使用固定值
+        fixed_I_score = btc_special_cfg.get("fixed_I_score", 100)
+        fixed_alignment = btc_special_cfg.get("fixed_btc_alignment", 1.0)
+        fixed_confidence = btc_special_cfg.get("fixed_direction_confidence", 1.0)
+
+        # v7.6.0: 方向敏感强度映射
+        T_score = factor_scores.get("T", 0.0)
+        raw_strength = abs(direction_score)
+        remap_result = shape_prime_strength_v76(raw_strength, T_score, direction_score, params)
+        prime_strength = remap_result["prime_strength"]
+        t_overheat_factor = remap_result["t_overheat_factor"]
+        base_prime = remap_result["base_prime"]
+
+        # 计算最终强度（BTC使用固定参数）
+        final_strength = prime_strength * fixed_confidence * fixed_alignment
+
+        # 判断是否通过
+        pass_step1 = final_strength >= min_final_strength
+        reject_reason = None
+        if not pass_step1:
+            reject_reason = (
+                f"Final strength insufficient: {final_strength:.1f} < {min_final_strength}"
+            )
+
+        log(f"BTC特殊处理: I={fixed_I_score}, alignment={fixed_alignment}, confidence={fixed_confidence}, prime_strength={prime_strength:.1f}, base_prime={base_prime:.1f}, t_overheat={t_overheat_factor:.2f}")
+
+        return {
+            "pass": pass_step1,
+            "direction_score": direction_score,
+            "direction_strength": direction_strength,
+            "raw_strength": raw_strength,           # v7.6.0
+            "prime_strength": prime_strength,
+            "base_prime": base_prime,               # v7.6.0新增
+            "direction_confidence": fixed_confidence,
+            "btc_alignment": fixed_alignment,
+            "final_strength": final_strength,
+            "t_overheat_factor": t_overheat_factor, # v7.6.0
+            "hard_veto": False,
+            "reject_reason": reject_reason,
+            "metadata": {
+                "I_score": fixed_I_score,
+                "btc_direction_score": btc_direction_score,
+                "btc_trend_strength": btc_trend_strength,
+                "is_btc_special": True,
+                "weights": weights,
+                "min_final_strength": min_final_strength
+            }
+        }
+
     # 2. 检查硬veto（优先级最高）
     veto_result = check_hard_veto(
         direction_score,
@@ -330,10 +522,18 @@ def step1_direction_confirmation(
         params
     )
 
-    # 5. 计算最终强度
-    final_strength = direction_strength * direction_confidence * btc_alignment
+    # 5. v7.6.0: 方向敏感强度映射
+    T_score = factor_scores.get("T", 0.0)
+    raw_strength = abs(direction_score)
+    remap_result = shape_prime_strength_v76(raw_strength, T_score, direction_score, params)
+    prime_strength = remap_result["prime_strength"]
+    t_overheat_factor = remap_result["t_overheat_factor"]
+    base_prime = remap_result["base_prime"]
 
-    # 6. 判断是否通过
+    # 6. 计算最终强度（使用prime_strength替代direction_strength）
+    final_strength = prime_strength * direction_confidence * btc_alignment
+
+    # 7. 判断是否通过
     pass_step1 = final_strength >= min_final_strength
 
     reject_reason = None
@@ -347,9 +547,13 @@ def step1_direction_confirmation(
         "pass": pass_step1,
         "direction_score": direction_score,
         "direction_strength": direction_strength,
+        "raw_strength": raw_strength,           # v7.6.0
+        "prime_strength": prime_strength,
+        "base_prime": base_prime,               # v7.6.0新增
         "direction_confidence": direction_confidence,
         "btc_alignment": btc_alignment,
         "final_strength": final_strength,
+        "t_overheat_factor": t_overheat_factor, # v7.6.0
         "hard_veto": False,
         "reject_reason": reject_reason,
         "metadata": {
@@ -379,7 +583,7 @@ if __name__ == "__main__":
     test_params = {
         "four_step_system": {
             "step1_direction": {
-                "min_final_strength": 20.0,
+                "min_final_strength": 7.0,  # v7.5.0: 配合新映射降低门槛
                 "weights": {
                     "T": 0.23, "M": 0.10, "C": 0.26,
                     "V": 0.11, "O": 0.20, "B": 0.10
@@ -405,10 +609,48 @@ if __name__ == "__main__":
                 "confidence": {
                     "floor": 0.50,
                     "ceiling": 1.00
+                },
+                "btc_special_handling": {
+                    "enabled": True,
+                    "reference_symbol": "BTCUSDT",
+                    "fixed_I_score": 100,
+                    "fixed_btc_alignment": 1.0,
+                    "fixed_direction_confidence": 1.0
+                },
+                "strength_mapping_v76": {
+                    "_comment": "v7.6.0: A层强度映射（方向敏感 + 非对称设计）",
+                    "enabled": True,
+                    "min_prime": 7.0,
+                    "max_prime": 20.0,
+                    "raw_mid": 12.0,
+                    "mid_prime": 17.0,
+                    "high_decay": 0.15,
+                    "T_hot_long": 40.0,
+                    "T_cold_short": -40.0,
+                    "long_overheat_raw_min": 12.0,
+                    "long_overheat_raw_cap": 25.0,
+                    "min_factor_long": 0.7,
+                    "short_contra_raw_cap": 25.0,
+                    "min_factor_short_contra": 0.5
                 }
             }
         }
     }
+
+    # 测试用例0：BTC特殊处理
+    print("\n🔶 测试用例0：BTC特殊处理（I=100, alignment=1.0, confidence=1.0）")
+    result0 = step1_direction_confirmation(
+        factor_scores={"T": 70, "M": 20, "C": 85, "V": 60, "O": 75, "B": 65, "I": 50},  # 原始I=50会被覆盖
+        btc_factor_scores={"T": 70},
+        params=test_params,
+        symbol="BTCUSDT"  # v7.4.4: BTC特殊处理
+    )
+    print(f"   通过: {result0['pass']}")
+    print(f"   方向得分: {result0['direction_score']:.1f}")
+    print(f"   置信度: {result0['direction_confidence']:.2f} (应为1.0)")
+    print(f"   BTC对齐: {result0['btc_alignment']:.2f} (应为1.0)")
+    print(f"   最终强度: {result0['final_strength']:.1f}")
+    print(f"   is_btc_special: {result0['metadata'].get('is_btc_special', False)}")
 
     # 测试用例1：高独立性 + 同向BTC
     print("\n📊 测试用例1：高独立性币(I=90) + 同向BTC(T_BTC=80)")

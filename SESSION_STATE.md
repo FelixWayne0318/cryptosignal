@@ -1,11 +1,442 @@
-# SESSION_STATE - CryptoSignal v7.4.3 Development Log
+# SESSION_STATE - CryptoSignal v7.6.0 Development Log
 
-**Branch**: `claude/reorganize-audit-cryptosignal-01BCwP8umVzbeyT1ESmLsnbB`
+**Branch**: `claude/reorganize-audit-system-01N38pCktomjrY2cjFdXP84L`
 **Standard**: SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0
 
 ---
 
-## 🆕 Session 9: v1.1 REJECT信号记录 - 真实Step通过率计算 (2025-11-20)
+## 🆕 Session 15: v7.6.0 方向敏感强度映射 (2025-11-21)
+
+**Problem**: v7.5.0 U形映射错误地将高强度短信号（顺势空头）压制为低分，导致胜率无改善
+**Solution**: 单调饱和映射 + 方向敏感惩罚（仅追涨多头和反趋势空头受惩罚）
+**Impact**: 核心优化 - 修复强度映射逻辑，保护盈利信号
+**Status**: ✅ Implemented
+
+### 问题分析
+
+v7.5.0回测结果（138信号，26.09%胜率）分析发现：
+
+1. **高raw_strength + T<0的空头信号实际盈利**
+   - 例：raw_strength=20.85, T=-53 → 结果盈利+10.4%
+   - 但v7.5.0将其映射为极低分（7.24）
+
+2. **U形映射假设错误**
+   - 假设"高强度=噪声"
+   - 实际上高强度+顺势=强信号
+
+3. **对称惩罚不合理**
+   - v7.5.0对|T|惩罚，不区分多空
+   - 顺势空头不应受惩罚
+
+### 修复内容
+
+#### 1. 新增配置 (config/params.json)
+
+```json
+"strength_mapping_v76": {
+  "_comment": "v7.6.0: A层强度映射（方向敏感 + 非对称设计）",
+  "enabled": true,
+  "min_prime": 7.0,
+  "max_prime": 20.0,
+  "raw_mid": 12.0,
+  "mid_prime": 17.0,
+  "high_decay": 0.15,
+  "T_hot_long": 40.0,
+  "T_cold_short": -40.0,
+  "long_overheat_raw_min": 12.0,
+  "long_overheat_raw_cap": 25.0,
+  "min_factor_long": 0.7,
+  "short_contra_raw_cap": 25.0,
+  "min_factor_short_contra": 0.5
+}
+```
+
+#### 2. 新函数 (ats_core/decision/step1_direction.py)
+
+`shape_prime_strength_v76()` 替代 `remap_direction_strength()`
+
+**单调映射公式**:
+- 低强度区 (rs <= 12): 线性 7→17
+- 高强度区 (rs > 12): 指数衰减趋近20
+
+**方向敏感惩罚**:
+| 条件 | 惩罚 | 理由 |
+|------|------|------|
+| 多头 + T>=40 + 高rs | ×0.7 | 追涨惩罚 |
+| 空头 + T<=0 | ×1.0 | 顺势空头，不惩罚 |
+| 空头 + T>0 | ×0.5 | 反趋势空头 |
+
+#### 3. 返回值新增
+
+- `base_prime`: 映射后、惩罚前的强度
+
+### 测试验证
+
+```bash
+python3 -m ats_core.decision.step1_direction
+```
+
+结果：
+```
+🔶 测试用例0：BTC特殊处理
+   prime_strength=14.0, base_prime=20.0, t_overheat=0.70
+   （正确应用追涨惩罚：T=70, rs=68.3）
+
+📊 测试用例1：高独立性币
+   最终强度: 13.7
+
+⚠️  测试用例3：中等独立性 + 反向BTC
+   最终强度: 10.5
+```
+
+### 文件变更摘要
+
+| 文件 | 修改类型 | 说明 |
+|------|----------|------|
+| config/params.json | 配置 | 新增strength_mapping_v76，禁用v7.5.0 |
+| ats_core/decision/step1_direction.py | 核心 | 新函数shape_prime_strength_v76 |
+
+### 预期效果
+
+- 顺势空头（T<0做空）保留高分
+- 追涨多头（T>40做多）受惩罚
+- 反趋势空头（T>0做空）受重惩罚
+- 整体胜率提升预期（目标30%+）
+
+### 开发流程
+
+1. ✅ Phase 2.1: 配置文件 - 添加strength_mapping_v76
+2. ✅ Phase 2.2: 核心逻辑 - 实现shape_prime_strength_v76
+3. ✅ Phase 3: 测试验证 - 验证配置和逻辑
+4. ✅ Phase 4: 文档更新 - 更新SESSION_STATE.md
+5. ✅ Phase 5: Git提交
+
+---
+
+## Session 12: v7.4.4 BTC特殊处理修复 (2025-11-21)
+
+**Problem**: BTC作为参考资产，I_score和btc_alignment计算错误（I=57常数，alignment=0.84常数）
+**Solution**: 添加BTC特殊处理配置和逻辑，BTC使用固定值（I=100, alignment=1.0, confidence=1.0）
+**Impact**: Bug修复 - BTC正确作为独立参考资产
+**Status**: ✅ Fixed
+
+### 问题描述
+
+在Step1方向确认层的BTC回测诊断中发现：
+
+1. **BTC I_score = 57（常数）**: 所有185个BTC信号的I_score都是57
+2. **BTC btc_alignment = 0.84（常数）**: 所有信号的btc_alignment都是0.84
+3. **BTC direction_confidence = 0.96（常数）**: 由错误的I_score计算得出
+
+**根因分析**:
+- BTC是所有币独立性计算的参考资产
+- BTC不应该与自身进行比较计算
+- 正确值应为：I=100（完全独立）, alignment=1.0（完美对齐）, confidence=1.0
+
+### 修复内容
+
+#### 1. 配置文件修改 (config/params.json)
+
+在`four_step_system.step1_direction`中新增`btc_special_handling`配置：
+
+```json
+"btc_special_handling": {
+  "_comment": "v7.4.4新增: BTC特殊处理（BTC是参考资产，不应与自己比较）",
+  "enabled": true,
+  "reference_symbol": "BTCUSDT",
+  "fixed_I_score": 100,
+  "fixed_btc_alignment": 1.0,
+  "fixed_direction_confidence": 1.0
+}
+```
+
+#### 2. 核心逻辑修改 (ats_core/decision/step1_direction.py)
+
+- 函数签名添加`symbol: Optional[str] = None`参数
+- 检测BTCUSDT时使用固定值
+- 返回结果标记`is_btc_special: True`
+- 添加测试用例验证BTC特殊处理
+
+#### 3. 调用点更新 (ats_core/decision/four_step_system.py)
+
+两处调用`step1_direction_confirmation`均添加`symbol=symbol`参数
+
+### 测试验证
+
+```bash
+python3 -m ats_core.decision.step1_direction
+```
+
+结果：
+```
+🔶 测试用例0：BTC特殊处理（I=100, alignment=1.0, confidence=1.0）
+   通过: True
+   方向得分: 68.3
+   置信度: 1.00 (应为1.0) ✅
+   BTC对齐: 1.00 (应为1.0) ✅
+   最终强度: 68.3
+   is_btc_special: True ✅
+```
+
+### 文件变更摘要
+
+| 文件 | 修改类型 | 说明 |
+|------|----------|------|
+| config/params.json | 配置 | 新增btc_special_handling配置节 |
+| ats_core/decision/step1_direction.py | 核心 | BTC特殊处理逻辑和测试用例 |
+| ats_core/decision/four_step_system.py | 核心 | 传递symbol参数 |
+| docs/fixes/P0_BTC_SPECIAL_HANDLING_FIX.md | 文档 | 完整修复说明 |
+
+### 预期效果
+
+- BTC的`final_strength`提高（confidence和alignment从0.84/0.96提高到1.0）
+- BTC信号更容易通过Step1
+- BTC正确作为市场方向的参考基准
+
+### 开发流程
+
+严格遵循SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0:
+1. ✅ Phase 1: 需求分析 - 确定BTC特殊处理修复方案
+2. ✅ Phase 2.1: 配置文件 - 添加BTC特殊处理参数
+3. ✅ Phase 2.2: 核心逻辑 - 修改step1_direction.py支持BTC特殊处理
+4. ✅ Phase 3: 测试验证 - 验证配置和逻辑
+5. ✅ Phase 4: 文档更新 - 创建修复文档
+6. ✅ Phase 5: Git提交和SESSION_STATE更新
+
+**Total Time**: ~30分钟
+
+---
+
+## Session 11: v7.4.4 Step2小Bug修复 (2025-11-20)
+
+**Problem**: Step2存在三个小bug导致兼容性和测试配置问题
+**Solution**: 修复final_timing_score兼容字段、min_threshold默认值统一、测试配置更新
+**Impact**: Bug修复 - 提升代码一致性和测试准确性
+**Status**: ✅ Fixed
+
+### 问题描述
+
+在Session 10实现TrendStage模块后，发现Step2中存在三个小bug需要修复：
+
+1. **缺少final_timing_score兼容字段**: 旧代码可能期望`final_timing_score`字段
+2. **min_threshold默认值不一致**: `calculate_enhanced_f_v2`函数默认值30.0与`step2_timing_judgment`内的-30.0不一致
+3. **测试配置使用错误阈值**: `__main__`测试使用30.0而非正式版本的-30.0
+
+### 修复内容
+
+#### Bug 1: 添加final_timing_score兼容字段
+**文件**: `ats_core/decision/step2_timing.py` (line 704-705)
+```python
+return {
+    "pass": pass_step2,
+    "enhanced_f": enhanced_f_flow_price,
+    "enhanced_f_final": enhanced_f_final,
+    # 兼容旧调用：final_timing_score 作为 enhanced_f_final 的别名
+    "final_timing_score": enhanced_f_final,
+    ...
+}
+```
+
+#### Bug 2: 统一min_threshold默认值
+**文件**: `ats_core/decision/step2_timing.py` (line 480-481)
+```python
+scale = enhanced_f_cfg.get("scale", 20.0)
+# v7.4.4：与 step2_timing_judgment 内默认值对齐，避免默认配置不一致
+min_threshold = enhanced_f_cfg.get("min_threshold", -30.0)
+```
+
+#### Bug 3: 更新测试配置
+**文件**: `ats_core/decision/step2_timing.py` (line 748-749)
+```python
+"enhanced_f": {
+    "scale": 20.0,
+    # 与当前正式逻辑保持一致：默认阈值 -30.0
+    "min_threshold": -30.0,
+    ...
+}
+```
+
+### Git Commit
+
+```
+02b3633 fix(step2): 修复Step2时机判断三个小bug
+```
+
+### 开发流程
+
+1. ✅ 修复Bug 1: 添加final_timing_score兼容字段
+2. ✅ 修复Bug 2: 统一min_threshold默认值为-30.0
+3. ✅ 修复Bug 3: 更新测试配置min_threshold为-30.0
+4. ✅ Git commit并push
+5. ✅ 更新SESSION_STATE.md
+
+**Total Time**: ~15分钟
+
+---
+
+## Session 10: v7.4.4 TrendStage防追高模块实现 (2025-11-20)
+
+**Problem**: Step2缺乏趋势阶段判断，无法识别追高/追跌行为
+**Solution**: 实现TrendStage模块，通过move_atr/pos_in_range/delta_T判断趋势阶段，添加阶段惩罚分
+**Impact**: 重大增强 - 防止在趋势末期入场
+**Status**: ✅ Implemented
+
+### 核心概念
+
+TrendStage通过三个中间量判断趋势阶段：
+
+| 中间量 | 含义 | 计算方式 |
+|--------|------|----------|
+| move_atr | 累积ATR距离 | 6h内价格累积位移 / ATR |
+| pos_in_range | 区间位置 | 当前价格在24h范围内的位置(0~1) |
+| delta_T | 趋势加速度 | T因子最近3根K线的变化 |
+
+四个阶段及惩罚分：
+- **early** (+5): 鼓励早期入场
+- **mid** (0): 正常
+- **late** (-15): 惩罚追高/追跌
+- **blowoff** (-35): 强烈惩罚末期入场
+
+### 实现方案
+
+遵循SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0，按文件修改顺序实现：
+
+#### 1. 配置文件 (`config/params.json`)
+
+```json
+"trend_stage": {
+  "_comment": "v7.4.4新增: 趋势阶段判断（防追高/追跌）",
+  "enabled": true,
+  "atr_lookback": 14,
+  "move_atr_window_hours": 6,
+  "move_atr_thresholds": {
+    "early": 2.0,
+    "mid": 4.0,
+    "late": 6.0
+  },
+  "pos_window_hours": 24,
+  "pos_thresholds": {
+    "low": 0.15,
+    "high": 0.85
+  },
+  "delta_T_lookback": 3,
+  "delta_T_thresholds": {
+    "blowoff_long": -5.0,
+    "blowoff_short": 5.0
+  },
+  "penalty_by_stage": {
+    "early": 5.0,
+    "mid": 0.0,
+    "late": -15.0,
+    "blowoff": -35.0
+  },
+  "chase_reject_threshold": -60.0
+}
+```
+
+#### 2. 核心算法 (`ats_core/decision/step2_timing.py`)
+
+**新增6个TrendStage函数**:
+- `calculate_simple_atr()`: 简易ATR计算（含TODO标注函数重复问题）
+- `calculate_move_atr()`: 累积ATR距离计算
+- `calculate_pos_in_range()`: 区间位置计算
+- `calculate_delta_T()`: 趋势加速度计算
+- `determine_trend_stage()`: 阶段判断逻辑
+- `calculate_trend_stage_adjustment()`: 总体调整计算
+
+**更新主函数**:
+- `step2_timing_judgment()`: 集成TrendStage，返回enhanced_f_final/trend_stage/is_chase_zone
+
+**Enhanced F最终公式**:
+```python
+enhanced_f_final = enhanced_f_flow_price + trend_stage_adjustment + s_adjustment
+
+# Chase Zone硬拒绝
+if enhanced_f_final <= chase_reject_threshold:  # -60
+    return REJECT
+```
+
+#### 3. 管道集成 (`ats_core/decision/four_step_system.py`)
+
+**新增direction_sign观测日志**:
+```python
+# v7.4.4: 添加TrendStage相关信息和direction_sign观测
+step2_direction_sign = step2_metadata.get('direction_sign', 0)
+step1_direction_sign = 1 if step1_result['direction_score'] > 0 else -1
+
+# 观测记录：direction_sign来源对齐问题
+if direction_sign_mismatch and step2_direction_sign != 0:
+    warn(f"⚠️ {symbol} - direction_sign不一致: Step1={step1_direction_sign}, Step2(T)={step2_direction_sign}")
+```
+
+**更新日志输出**:
+```python
+log(f"✅ {symbol} - Step2通过: "
+    f"Enhanced_F={step2_result['enhanced_f']:.1f}, "
+    f"final={enhanced_f_final:.1f}, "
+    f"stage={trend_stage}, "
+    f"时机质量={step2_result['timing_quality']}")
+```
+
+#### 4. 文档更新 (`docs/FOUR_STEP_IMPLEMENTATION_GUIDE.md`)
+
+新增Section 3.6 TrendStage模块（v7.4.4新增）：
+- 3.6.1 核心概念
+- 3.6.2 阶段判断逻辑
+- 3.6.3 阶段调整分数
+- 3.6.4 Enhanced F最终公式
+- 3.6.5 Direction Sign观测点
+- 3.6.6 TrendStage配置示例
+- 3.6.7 返回结构扩展
+
+### 文件变更摘要
+
+**Modified**:
+- `config/params.json` (+35 lines): trend_stage配置块
+- `ats_core/decision/step2_timing.py` (+150 lines): TrendStage模块实现
+- `ats_core/decision/four_step_system.py` (+15 lines): direction_sign观测
+- `docs/FOUR_STEP_IMPLEMENTATION_GUIDE.md` (+140 lines): TrendStage文档
+
+### 技术要点
+
+#### Direction Sign观测
+
+**重要**: Step1和Step2的direction_sign来源不同：
+- Step1: A层加权合成得分的符号
+- Step2: T因子的符号
+
+当前版本只记录观测，不影响判定逻辑。
+
+#### ATR函数重复
+
+`calculate_simple_atr`与Step3中的实现重复，已添加TODO标注：
+```python
+# TODO: calculate_simple_atr与Step3中的实现重复，未来可合并为公共工具函数
+```
+
+### 开发流程
+
+严格遵循SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0:
+1. ✅ Phase 0: 阅读开发标准、分析专家方案
+2. ✅ Phase 1: 修改config/params.json（配置优先）
+3. ✅ Phase 2: 修改step2_timing.py（核心算法）
+4. ✅ Phase 3: 修改four_step_system.py（管道集成）
+5. ✅ Phase 4: 更新FOUR_STEP_IMPLEMENTATION_GUIDE.md（文档）
+6. ✅ Phase 5: 更新SESSION_STATE.md
+7. ⏳ Phase 6: Git commit并push
+
+**Total Time**: ~90分钟
+
+### 预期效果
+
+- **防追高**: late阶段惩罚-15分，blowoff惩罚-35分
+- **鼓励早期**: early阶段奖励+5分
+- **硬拒绝**: enhanced_f_final <= -60时直接REJECT
+- **可观测性**: direction_sign不一致时记录警告日志
+
+---
+
+## Session 9: v1.1 REJECT信号记录 - 真实Step通过率计算 (2025-11-20)
 
 **Problem**: 回测只记录ACCEPT信号，无法计算真实的Step1-4通过率（瓶颈分析）
 **Solution**: 实现v1.1增强，记录所有分析结果（包括REJECT），计算真实Step通过率
@@ -1691,7 +2122,133 @@ exit_label = self.exit_classification[f"tp{level}_hit"]["label"]
 **Session Status**: 95% Complete (Ready for Git Commit)  
 **Next Action**: Phase 5 - Git Commit & Push
 
-**Total Development Time**: ~8 hours  
-**Total Lines Written**: 4,174 lines  
+**Total Development Time**: ~8 hours
+**Total Lines Written**: 4,174 lines
 **Standard Compliance**: 100% (SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0)
+
+---
+
+## 🔧 v7.4.5 Step1非线性强度整形 (2025-11-21)
+
+### 问题背景
+基于BTC回测数据（202信号，26.24%胜率）分析发现：
+- 中等强度区间(7-10)胜率最高(45-50%)
+- 极端强度(>15)胜率反而较低(21%)
+
+### 修复内容
+1. **配置**: 新增 `prime_strength` 配置块
+2. **核心**: 添加 `shape_direction_strength()` 分段线性整形函数
+3. **集成**: Step1主函数（包括BTC分支）使用prime_strength计算final_strength
+
+### 整形公式
+```
+x ≤ 12:      y = x (不变)
+12 < x ≤ 20: y = 12 + (x - 12) × 0.7
+x > 20:      y = 17.6 + (x - 20) × 0.5
+```
+
+### 修改文件
+| 文件 | 说明 |
+|------|------|
+| config/params.json | 新增prime_strength配置节 |
+| ats_core/decision/step1_direction.py | shape函数和集成 |
+| docs/fixes/P1_PRIME_STRENGTH_SHAPING.md | 修复文档 |
+
+### 测试结果
+- BTC特殊处理: prime_strength=41.8, final_strength=41.8 ✅
+- 高独立性币: final_strength=40.9 ✅
+- Hard Veto: 正常触发 ✅
+
+### 预期效果
+- 压制极端高强度信号的虚假置信度
+- 提高整体胜率（从26%提升）
+
+---
+
+## 🔧 v7.4.6 Step1/Step2阈值调优 (2025-11-21)
+
+### 问题背景
+v7.4.5回测结果分析：
+- final_strength [5,7) 胜率仅15.8%，严重拉低整体
+- enhanced_f_final 实际范围[-2.2, 6.4]，原阈值-30完全无效
+- TrendStage阈值过宽松，late/blowoff几乎不出现
+
+### 修复内容（专家方案）
+
+#### Step1调整
+| 参数 | 原值 | 新值 | 说明 |
+|------|------|------|------|
+| min_final_strength | 5.0 | 7.0 | 过滤低质量信号 |
+
+#### Step2调整
+| 参数 | 原值 | 新值 | 说明 |
+|------|------|------|------|
+| enhanced_f.min_threshold | -30.0 | 0.0 | 要求时机>=0 |
+| timing_quality | {80,60,30,-30,-60} | {5,3,1,-1,-3} | 压缩到实际分布 |
+| move_atr_thresholds | {2,4,6} | {1.5,3,4.5} | 收紧趋势阶段 |
+| pos_thresholds | {0.15,0.85} | {0.20,0.80} | 放宽高低位定义 |
+| chase_reject_threshold | -60.0 | -1.0 | Chase zone硬拒 |
+
+### 预期效果
+- Step1过滤[5,7)区间38个低质量信号
+- Step2过滤enhanced_f<0的差时机信号
+- 整体胜率从26%提升至30%+
+
+### 验证命令
+```bash
+python3 scripts/backtest_four_step.py --symbols BTCUSDT --start 2024-11-01 --end 2024-11-21 --output reports/btc_backtest_nov_v746.json
+python3 scripts/diagnose_step1_full.py reports/btc_backtest_nov_v746.json
+```
+
+---
+
+## 🔧 v7.5.0 Step1强度映射重构 (2025-11-21)
+
+### 问题背景
+v7.4.6回测显示严重负相关：
+- final_strength越高，胜率反而越低
+- [7,8)区间胜率60%，[10,15)区间胜率18.6%
+- 高|T|（>50）胜率极差（13.6%）
+
+### 解决方案：中间凸起映射 + T过热惩罚
+
+#### 1. 中间凸起映射
+| 区间 | 映射方式 |
+|------|----------|
+| raw < 7 | prime = 0 (拒绝) |
+| [7, 8) | 线性升到max |
+| [8, 12] | prime = max (甜蜜区) |
+| (12, 18] | 线性降到mid_floor |
+| (18, 30] | 线性降到tail_floor |
+| > 30 | 固定tail_floor |
+
+#### 2. T因子过热惩罚
+| |T| | 惩罚因子 |
+|-----|----------|
+| < 40 | 1.0 (无惩罚) |
+| 40-70 | 0.8 (温和惩罚) |
+| >= 70 | 0.6 (严重惩罚) |
+
+### 修改文件
+| 文件 | 说明 |
+|------|------|
+| config/params.json | 新增strength_mapping配置（替代prime_strength） |
+| ats_core/decision/step1_direction.py | remap_direction_strength函数 |
+| scripts/diagnose_step1_full.py | 新增raw/prime/t_overheat分析 |
+
+### 新增返回字段
+- `raw_strength`: 原始强度|direction_score|
+- `prime_strength`: 映射后强度
+- `t_overheat_factor`: T过热惩罚因子
+
+### 验证命令
+```bash
+python3 scripts/backtest_four_step.py --symbols BTCUSDT --start 2024-11-01 --end 2024-11-21 --output reports/btc_backtest_nov_v750.json
+python3 scripts/diagnose_step1_full.py reports/btc_backtest_nov_v750.json
+```
+
+### 预期效果
+- 解决final_strength与胜率负相关问题
+- 甜蜜区间[8,12]获得最高分
+- 高|T|过热信号被有效压制
 

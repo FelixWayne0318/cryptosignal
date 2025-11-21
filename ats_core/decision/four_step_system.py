@@ -15,8 +15,9 @@ Phase 2 Implementation (阶段2):
     ✅ Step3 + Step4完整实现（阶段2完成）
 
 Author: Claude Code (based on Expert Plan)
-Version: v7.4.2 (Phase 2)
+Version: v7.4.4 (Phase 2 + TrendStage)
 Created: 2025-11-16
+Updated: 2025-11-20
 """
 
 from typing import Dict, Any, List, Optional
@@ -78,7 +79,8 @@ def run_four_step_decision_phase1(
     step1_result = step1_direction_confirmation(
         factor_scores=factor_scores,
         btc_factor_scores=btc_factor_scores,
-        params=params
+        params=params,
+        symbol=symbol  # v7.4.4: 传递symbol用于BTC特殊处理
     )
 
     if not step1_result["pass"]:
@@ -241,7 +243,8 @@ def run_four_step_decision(
     step1_result = step1_direction_confirmation(
         factor_scores=factor_scores,
         btc_factor_scores=btc_factor_scores,
-        params=params
+        params=params,
+        symbol=symbol  # v7.4.4: 传递symbol用于BTC特殊处理
     )
 
     if not step1_result["pass"]:
@@ -321,10 +324,25 @@ def run_four_step_decision(
         }
 
     # Step2通过
+    # v7.4.4: 添加TrendStage相关信息和direction_sign观测
+    enhanced_f_final = step2_result.get('enhanced_f_final', step2_result.get('final_timing_score', 0))
+    trend_stage = step2_result.get('trend_stage', 'unknown')
+
+    # 提取direction_sign用于观测
+    step2_metadata = step2_result.get('metadata', {})
+    step2_direction_sign = step2_metadata.get('direction_sign', 0)
+    step1_direction_sign = 1 if step1_result['direction_score'] > 0 else -1
+
+    # 观测记录：direction_sign来源对齐问题（暂不改判定，只观测）
+    direction_sign_mismatch = step2_direction_sign != step1_direction_sign
+    if direction_sign_mismatch and step2_direction_sign != 0:
+        warn(f"⚠️  {symbol} - direction_sign不一致: Step1={step1_direction_sign}, Step2(T)={step2_direction_sign}")
+
     log(f"✅ {symbol} - Step2通过: "
         f"Enhanced_F={step2_result['enhanced_f']:.1f}, "
-        f"时机质量={step2_result['timing_quality']}, "
-        f"最终得分={step2_result['final_timing_score']:.1f}")
+        f"final={enhanced_f_final:.1f}, "
+        f"stage={trend_stage}, "
+        f"时机质量={step2_result['timing_quality']}")
 
     # ---- Step3: 风险管理层 ----
     log(f"💰 Step3: 风险管理...")
