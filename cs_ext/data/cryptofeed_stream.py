@@ -157,14 +157,28 @@ class CryptofeedStream:
                 },
             )
         )
+
+        # Python 3.10+ 兼容：确保有事件循环
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
         self._fh.run()
 
     def run_in_background(self):
         """
         把 Cryptofeed 跑在独立异步任务中（如果你的主程序已有 asyncio loop，可以用此方式）。
         """
-        loop = asyncio.get_event_loop()
-        loop.create_task(self._run_async())
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self._run_async())
+        except RuntimeError:
+            # Python 3.10+ 兼容：没有运行中的事件循环时创建新的
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.create_task(self._run_async())
 
     async def _run_async(self):
         self._fh.add_feed(
