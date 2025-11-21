@@ -275,31 +275,46 @@ class HistoricalDataLoader:
             if cached_data is not None:
                 return cached_data
 
-        # 2. 从API加载（带重试）- v7.4.4修复：支持时间范围
+        # 2. 从API加载（带重试）- v7.4.4修复：OI历史API限制处理
+        # 注意：Binance的openInterestHist API可能不支持长时间范围
+        # 策略：先尝试带时间范围，失败后用无时间范围（最新500条）
         logger.info(f"从API加载持仓量: {symbol} {period} {start_time}-{end_time}")
         oi_data = []
 
-        for attempt in range(self.api_retry_count + 1):
-            try:
-                oi_data = get_open_interest_hist(
-                    symbol=symbol,
-                    period=period,
-                    limit=500,  # Binance最大500
-                    start_time=start_time,  # v7.4.4新增
-                    end_time=end_time  # v7.4.4新增
-                )
-                break
-            except Exception as e:
-                if attempt < self.api_retry_count:
-                    delay = self._calculate_retry_delay(attempt)
-                    logger.warning(
-                        f"持仓量加载失败 (attempt {attempt+1}/{self.api_retry_count+1}): {e}"
-                        f"\n重试延迟: {delay:.1f}秒"
+        # 尝试1：带时间范围
+        try:
+            oi_data = get_open_interest_hist(
+                symbol=symbol,
+                period=period,
+                limit=500,
+                start_time=start_time,
+                end_time=end_time
+            )
+            logger.info(f"OI加载成功（带时间范围）: {len(oi_data)}条")
+        except Exception as e:
+            logger.warning(f"带时间范围OI加载失败: {e}，尝试无时间范围模式")
+
+            # 尝试2：无时间范围（最新数据）
+            for attempt in range(self.api_retry_count + 1):
+                try:
+                    oi_data = get_open_interest_hist(
+                        symbol=symbol,
+                        period=period,
+                        limit=500  # 只用limit，不带时间范围
                     )
-                    time.sleep(delay)
-                else:
-                    logger.error(f"持仓量加载失败（已重试{self.api_retry_count}次）: {e}")
-                    raise
+                    logger.info(f"OI加载成功（无时间范围）: {len(oi_data)}条")
+                    break
+                except Exception as e2:
+                    if attempt < self.api_retry_count:
+                        delay = self._calculate_retry_delay(attempt)
+                        logger.warning(
+                            f"持仓量加载失败 (attempt {attempt+1}/{self.api_retry_count+1}): {e2}"
+                            f"\n重试延迟: {delay:.1f}秒"
+                        )
+                        time.sleep(delay)
+                    else:
+                        logger.error(f"持仓量加载失败（已重试{self.api_retry_count}次）: {e2}")
+                        raise
 
         # 3. 保存缓存
         if self.cache_enabled:
