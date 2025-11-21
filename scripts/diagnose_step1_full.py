@@ -95,6 +95,9 @@ def diagnose_step1(signals, rejects):
     # 收集Step1各中间变量
     direction_scores = []
     direction_strengths = []
+    raw_strengths = []          # v7.5.0新增
+    prime_strengths = []        # v7.5.0新增
+    t_overheat_factors = []     # v7.5.0新增
     direction_confidences = []
     btc_alignments = []
     final_strengths = []
@@ -109,6 +112,9 @@ def diagnose_step1(signals, rejects):
 
         ds = step1.get('direction_score')
         dst = step1.get('direction_strength')
+        raw_s = step1.get('raw_strength')           # v7.5.0
+        prime_s = step1.get('prime_strength')       # v7.5.0
+        t_oh = step1.get('t_overheat_factor')       # v7.5.0
         dc = step1.get('direction_confidence')
         ba = step1.get('btc_alignment')
         fs = step1.get('final_strength')
@@ -119,6 +125,12 @@ def diagnose_step1(signals, rejects):
             direction_scores.append(ds)
         if dst is not None:
             direction_strengths.append(dst)
+        if raw_s is not None:
+            raw_strengths.append(raw_s)
+        if prime_s is not None:
+            prime_strengths.append(prime_s)
+        if t_oh is not None:
+            t_overheat_factors.append(t_oh)
         if dc is not None:
             direction_confidences.append(dc)
         if ba is not None:
@@ -155,6 +167,9 @@ def diagnose_step1(signals, rejects):
 
     print_dist("direction_score (A层加权合成)", direction_scores)
     print_dist("direction_strength (|direction_score|)", direction_strengths)
+    print_dist("raw_strength (v7.5.0: 原始强度)", raw_strengths)
+    print_dist("prime_strength (v7.5.0: 映射后强度)", prime_strengths)
+    print_dist("t_overheat_factor (v7.5.0: T过热因子)", t_overheat_factors)
     print_dist("direction_confidence (置信度映射)", direction_confidences)
     print_dist("btc_alignment (BTC对齐因子)", btc_alignments)
     print_dist("I_score (独立性因子)", i_scores)
@@ -165,24 +180,28 @@ def diagnose_step1(signals, rejects):
     print("4. 计算公式验证")
     print("=" * 80)
 
-    print("\n理论公式:")
-    print("  final_strength = direction_strength × direction_confidence × btc_alignment")
+    print("\n理论公式 (v7.5.0):")
+    print("  final_strength = prime_strength × direction_confidence × btc_alignment")
 
     # 验证几个样本
     print("\n验证样本 (前5个信号):")
     for i, sig in enumerate(signals[:5]):
         step1 = sig.get('step1_result', {})
         dst = step1.get('direction_strength', 0)
+        raw_s = step1.get('raw_strength', dst)  # 兼容旧版本
+        prime_s = step1.get('prime_strength', dst)  # 兼容旧版本
+        t_oh = step1.get('t_overheat_factor', 1.0)  # 兼容旧版本
         dc = step1.get('direction_confidence', 0)
         ba = step1.get('btc_alignment', 0)
         fs = step1.get('final_strength', 0)
-        calculated = dst * dc * ba
+        calculated = prime_s * dc * ba
 
         print(f"\n  信号 {i+1}:")
-        print(f"    direction_strength = {dst:.2f}")
+        print(f"    raw_strength = {raw_s:.2f}")
+        print(f"    prime_strength = {prime_s:.2f} (t_overheat={t_oh:.2f})")
         print(f"    direction_confidence = {dc:.3f}")
         print(f"    btc_alignment = {ba:.3f}")
-        print(f"    计算值 = {dst:.2f} × {dc:.3f} × {ba:.3f} = {calculated:.2f}")
+        print(f"    计算值 = {prime_s:.2f} × {dc:.3f} × {ba:.3f} = {calculated:.2f}")
         print(f"    实际值 = {fs:.2f}")
         print(f"    差异 = {abs(calculated - fs):.4f}")
 

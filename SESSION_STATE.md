@@ -2092,3 +2092,55 @@ python3 scripts/backtest_four_step.py --symbols BTCUSDT --start 2024-11-01 --end
 python3 scripts/diagnose_step1_full.py reports/btc_backtest_nov_v746.json
 ```
 
+---
+
+## 🔧 v7.5.0 Step1强度映射重构 (2025-11-21)
+
+### 问题背景
+v7.4.6回测显示严重负相关：
+- final_strength越高，胜率反而越低
+- [7,8)区间胜率60%，[10,15)区间胜率18.6%
+- 高|T|（>50）胜率极差（13.6%）
+
+### 解决方案：中间凸起映射 + T过热惩罚
+
+#### 1. 中间凸起映射
+| 区间 | 映射方式 |
+|------|----------|
+| raw < 7 | prime = 0 (拒绝) |
+| [7, 8) | 线性升到max |
+| [8, 12] | prime = max (甜蜜区) |
+| (12, 18] | 线性降到mid_floor |
+| (18, 30] | 线性降到tail_floor |
+| > 30 | 固定tail_floor |
+
+#### 2. T因子过热惩罚
+| |T| | 惩罚因子 |
+|-----|----------|
+| < 40 | 1.0 (无惩罚) |
+| 40-70 | 0.8 (温和惩罚) |
+| >= 70 | 0.6 (严重惩罚) |
+
+### 修改文件
+| 文件 | 说明 |
+|------|------|
+| config/params.json | 新增strength_mapping配置（替代prime_strength） |
+| ats_core/decision/step1_direction.py | remap_direction_strength函数 |
+| scripts/diagnose_step1_full.py | 新增raw/prime/t_overheat分析 |
+
+### 新增返回字段
+- `raw_strength`: 原始强度|direction_score|
+- `prime_strength`: 映射后强度
+- `t_overheat_factor`: T过热惩罚因子
+
+### 验证命令
+```bash
+python3 scripts/backtest_four_step.py --symbols BTCUSDT --start 2024-11-01 --end 2024-11-21 --output reports/btc_backtest_nov_v750.json
+python3 scripts/diagnose_step1_full.py reports/btc_backtest_nov_v750.json
+```
+
+### 预期效果
+- 解决final_strength与胜率负相关问题
+- 甜蜜区间[8,12]获得最高分
+- 高|T|过热信号被有效压制
+

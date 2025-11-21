@@ -438,23 +438,46 @@
         "_confidence_note": "BTC作为市场领导者，方向确定性最高"
       },
 
-      "prime_strength": {
-        "_comment": "v7.4.5新增: Step1非线性强度整形（全币种统一，温和压制极端值）",
+      "strength_mapping": {
+        "_comment": "v7.5.0: A层方向强度非线性映射 + T过热惩罚（替代v7.4.5 prime_strength）",
         "enabled": true,
 
-        "mid_high": 12.0,
-        "_mid_high_note": "中等强度上限，此值以内保持线性不变",
+        "_section_1": "原始强度区间（基于BTC分布）",
+        "entry_min_raw": 7.0,
+        "_entry_min_note": "最低入场强度，低于此值Step1直接拒绝",
+        "sweet_spot_low_raw": 8.0,
+        "_sweet_spot_low_note": "甜蜜区间下界",
+        "sweet_spot_high_raw": 12.0,
+        "_sweet_spot_high_note": "甜蜜区间上界，此区间获得最高分",
+        "extreme_raw_start": 18.0,
+        "_extreme_raw_start_note": "过热开始阈值",
+        "extreme_raw_max": 30.0,
+        "_extreme_raw_max_note": "极端强度上限",
 
-        "extreme_high": 20.0,
-        "_extreme_high_note": "极端强度阈值，超过此值进一步压缩",
+        "_section_2": "映射后分数上限",
+        "max_strength": 20.0,
 
-        "high_band_scale": 0.7,
-        "_high_band_scale_note": "高强度区间(mid_high~extreme_high)的压缩系数",
+        "_section_3": "衰减底座比例（占max_strength）",
+        "low_floor_ratio": 0.5,
+        "_low_floor_note": "刚过entry_min时的底座比例",
+        "mid_floor_ratio": 0.5,
+        "_mid_floor_note": "extreme_raw_start附近的底座比例",
+        "tail_floor_ratio": 0.3,
+        "_tail_floor_note": "extreme_raw_max及以上的最终底座比例",
 
-        "extreme_band_scale": 0.5,
-        "_extreme_band_scale_note": "极端强度区间(>extreme_high)的压缩系数",
+        "_section_4": "T因子过热惩罚",
+        "t_overheat_thresholds": {
+          "_comment": "|T|超过阈值视为过热（趋势尾声/拥挤）",
+          "mild": 40.0,
+          "severe": 70.0
+        },
+        "t_overheat_factors": {
+          "_comment": "过热时对prime_strength的折扣比例",
+          "mild": 0.8,
+          "severe": 0.6
+        },
 
-        "_design_note": "mid_high以内保持线性，>mid_high做温和压缩；参数来自BTC诊断，当前对所有币统一使用，后续可按品种微调"
+        "_design_note": "中间凸起映射：甜蜜区间[8,12]获得最高分20，两端衰减；高|T|额外惩罚"
       },
 
       "confidence": {
