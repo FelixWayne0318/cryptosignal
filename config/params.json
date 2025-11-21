@@ -389,8 +389,8 @@
 
     "step1_direction": {
       "_comment": "Step1: 方向确认层 - A层因子 + I因子置信度 + BTC对齐 + 硬veto",
-      "min_final_strength": 5.0,
-      "_fix_note": "v7.4.2回测修复: 20.0→5.0 (原阈值过高导致回测0信号，实际范围约4-15)",
+      "min_final_strength": 7.0,
+      "_fix_note": "v7.4.6阈值调优: 5.0→7.0 (回测显示[5,7)区间胜率仅15.8%，提高门槛过滤低质量信号)",
 
       "weights": {
         "_comment": "A层因子权重（与现有权重保持一致）",
@@ -483,8 +483,8 @@
       "enhanced_f": {
         "_comment": "Enhanced F v2: flow_momentum - price_momentum（只用非价格因子C/O/V/B）",
         "scale": 20.0,
-        "min_threshold": -30.0,
-        "_fix_note": "v7.4.2回测修复(P0-8): 30.0→-30.0 (原阈值过高导致回测0信号，实际范围0.5-3.1，现允许中性时机，只拒绝追涨)",
+        "min_threshold": 0.0,
+        "_fix_note": "v7.4.6阈值调优: -30.0→0.0 (实际enhanced_f范围[-2.2,6.4]，原阈值-30完全无效，现要求>=0通过)",
 
         "flow_weights": {
           "_comment": "Flow因子权重（仅非价格因子，避免自相关）",
@@ -504,12 +504,12 @@
       },
 
       "timing_quality": {
-        "_comment": "时机质量评级阈值",
-        "excellent": 80,
-        "good": 60,
-        "fair": 30,
-        "mediocre": -30,
-        "poor": -60
+        "_comment": "v7.4.6阈值调优: 压缩到实际分布[-5,10]附近，方便诊断",
+        "excellent": 5.0,
+        "good": 3.0,
+        "fair": 1.0,
+        "mediocre": -1.0,
+        "poor": -3.0
       },
 
       "S_factor": {
@@ -529,19 +529,19 @@
         "_move_atr_note": "计算累积ATR距离的窗口",
 
         "move_atr_thresholds": {
-          "_comment": "阶段划分阈值（move_atr = 距离/ATR）",
-          "early": 2.0,
-          "mid": 4.0,
-          "late": 6.0
+          "_comment": "v7.4.6阈值调优: 收紧阈值让趋势尾声更容易被识别 (2,4,6)→(1.5,3,4.5)",
+          "early": 1.5,
+          "mid": 3.0,
+          "late": 4.5
         },
 
         "pos_window_hours": 24,
         "_pos_note": "计算区间位置的窗口",
 
         "pos_thresholds": {
-          "_comment": "区间位置阈值",
-          "low": 0.15,
-          "high": 0.85
+          "_comment": "v7.4.6阈值调优: 略微放宽高位/低位定义",
+          "low": 0.20,
+          "high": 0.80
         },
 
         "delta_T_lookback": 3,
@@ -561,8 +561,8 @@
           "blowoff": -35.0
         },
 
-        "chase_reject_threshold": -60.0,
-        "_chase_note": "低于此值直接拒绝（Chase zone硬拒绝）"
+        "chase_reject_threshold": -1.0,
+        "_chase_note": "v7.4.6阈值调优: -60.0→-1.0 (实际分布[-2.2,6.4]，<=-1.0视为Chase zone硬拒)"
       },
 
       "_L_factor_removed_note": "v7.4.3: L因子时机惩罚已移除。根据设计文档，L因子仅用于Step3止损宽度调整（流动性差→更宽止损），而非Step2时机评分惩罚"
