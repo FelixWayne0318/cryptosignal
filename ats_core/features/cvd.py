@@ -10,8 +10,42 @@ def _to_f(x) -> float:
     except Exception:
         return float('nan')
 
-def _col(kl: Sequence[Sequence], idx: int) -> List[float]:
-    return [_to_f(r[idx]) for r in kl if isinstance(r, (list, tuple)) and len(r) > idx]
+# v7.4.4新增：数组索引到字典键的映射
+_INDEX_TO_KEY = {
+    0: "timestamp",
+    1: "open",
+    2: "high",
+    3: "low",
+    4: "close",
+    5: "volume",
+    6: "close_time",
+    7: "quote_volume",
+    8: "trades",
+    9: "taker_buy_base",
+    10: "taker_buy_quote"
+}
+
+def _col(kl: Sequence, idx: int) -> List[float]:
+    """
+    从K线数据中提取指定列
+
+    v7.4.4修复：支持数组格式和字典格式K线
+    - 数组格式: [[timestamp, open, high, low, close, ...], ...]
+    - 字典格式: [{"timestamp": ..., "open": ..., ...}, ...]
+    """
+    result = []
+    key = _INDEX_TO_KEY.get(idx)
+
+    for r in kl:
+        if isinstance(r, dict):
+            # 字典格式K线
+            if key and key in r:
+                result.append(_to_f(r[key]))
+        elif isinstance(r, (list, tuple)) and len(r) > idx:
+            # 数组格式K线
+            result.append(_to_f(r[idx]))
+
+    return result
 
 def _pct_change(arr: Sequence[float]) -> List[float]:
     out: List[float] = []
@@ -87,10 +121,20 @@ def cvd_from_klines(
     # v7.4.2 P0-1修复: 增强K线格式验证
     if use_taker_buy and klines:
         try:
-            # 检查K线格式：需要至少11列（index 0-10用于Quote CVD）
-            if not klines[0] or len(klines[0]) < 11:
-                # 降级：K线格式不足，返回零CVD
-                return ([0.0] * len(klines), {"degraded": True, "reason": "insufficient_kline_columns"}) if expose_meta else [0.0] * len(klines)
+            # v7.4.4修复：支持字典格式和数组格式K线
+            first_kline = klines[0]
+            if isinstance(first_kline, dict):
+                # 字典格式：检查是否有必要的键
+                required_keys = ["taker_buy_quote", "quote_volume"] if use_quote else ["taker_buy_base", "volume"]
+                if not all(k in first_kline for k in required_keys):
+                    return ([0.0] * len(klines), {"degraded": True, "reason": "missing_required_keys"}) if expose_meta else [0.0] * len(klines)
+            elif isinstance(first_kline, (list, tuple)):
+                # 数组格式：检查是否有足够的列
+                if len(first_kline) < 11:
+                    return ([0.0] * len(klines), {"degraded": True, "reason": "insufficient_kline_columns"}) if expose_meta else [0.0] * len(klines)
+            else:
+                # 未知格式
+                return ([0.0] * len(klines), {"degraded": True, "reason": "unknown_kline_format"}) if expose_meta else [0.0] * len(klines)
 
             # v7.3.44: 优化方法，支持Quote CVD和Base CVD
             if use_quote:
