@@ -5,6 +5,69 @@
 
 ---
 
+## 🆕 Session 18: V8架构有机融合 (2025-11-21)
+
+**Problem**: V8组件已创建但未与CryptoSignal有机融合
+**Solution**: 创建实时因子计算器和集成管道，连接Cryptofeed→因子→决策→执行
+**Impact**: 新功能 - V8完整实时交易系统
+**Status**: ✅ Implemented
+
+### V8架构数据流
+
+```
+Cryptofeed (WebSocket)
+    ↓ trades/orderbook
+RealtimeFactorCalculator
+    ↓ CVD/OBI/LDI/VWAP
+V8RealtimePipeline (决策引擎)
+    ↓ V8Signal
+CcxtExecutor (执行) + CryptostoreAdapter (存储)
+```
+
+### 文件变更摘要
+
+| 文件 | 类型 | 说明 |
+|------|------|------|
+| config/signal_thresholds.json | 更新 | 添加v8_integration配置节 |
+| ats_core/realtime/factor_calculator.py | 新增 | V8实时因子计算器 |
+| ats_core/realtime/__init__.py | 更新 | 导出V8组件 |
+| ats_core/pipeline/v8_realtime_pipeline.py | 新增 | V8集成管道 |
+| scripts/start_realtime_stream.py | 更新 | 支持simple/full两种模式 |
+
+### V8配置结构 (config/signal_thresholds.json)
+
+```json
+{
+  "v8_integration": {
+    "cryptofeed_stream": { "enabled": true, ... },
+    "realtime_factor": { "cvd_window_trades": 500, ... },
+    "decision_pipeline": { "min_confidence_for_signal": 0.6, ... },
+    "execution_layer": { "dry_run": true, ... },
+    "storage_layer": { "storage_path": "data/v8_storage", ... },
+    "monitoring": { "health_check_interval_sec": 60, ... }
+  }
+}
+```
+
+### 使用方法
+
+```bash
+# 简单模式（仅数据流）
+python scripts/start_realtime_stream.py --mode simple
+
+# 完整V8模式（因子计算+信号生成）
+python scripts/start_realtime_stream.py --mode full --symbols BTC,ETH
+```
+
+### 测试验证
+
+- ✅ JSON配置格式验证通过
+- ✅ V8配置加载成功
+- ✅ RealtimeFactorCalculator初始化成功
+- ✅ V8RealtimePipeline初始化成功
+
+---
+
 ## 🆕 Session 17: 外部框架集成 - Cryptofeed & Freqtrade (2025-11-21)
 
 **Problem**: CryptoSignal缺乏实时数据流和回测基础设施
