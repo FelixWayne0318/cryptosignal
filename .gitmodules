@@ -1,0 +1,6 @@
+[submodule "externals/cryptofeed"]
+	path = externals/cryptofeed
+	url = https://github.com/bmoscon/cryptofeed.git
+[submodule "externals/freqtrade"]
+	path = externals/freqtrade
+	url = https://github.com/freqtrade/freqtrade.git
