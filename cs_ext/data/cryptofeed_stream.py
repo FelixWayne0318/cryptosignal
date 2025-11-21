@@ -106,9 +106,9 @@ class CryptofeedStream:
         bids_raw = book.book.bids
         asks_raw = book.book.asks
 
-        # bids/asks 是 SortedDict {price: size}
-        bids = [[float(p), float(s)] for p, s in bids_raw.items()]
-        asks = [[float(p), float(s)] for p, s in asks_raw.items()]
+        # bids/asks 是 SortedDict {price: size}，需要转换为 dict
+        bids = [[float(p), float(s)] for p, s in bids_raw.to_dict().items()]
+        asks = [[float(p), float(s)] for p, s in asks_raw.to_dict().items()]
 
         # 按价格排序：bids 从高到低，asks 从低到高
         bids.sort(key=lambda x: x[0], reverse=True)
