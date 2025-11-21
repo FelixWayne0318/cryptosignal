@@ -32,6 +32,9 @@ python-dotenv==1.0.0
 # Cryptofeed: WebSocket实时数据流 (trades, orderbook, funding, OI)
 cryptofeed>=2.4.0
 
+# CCXT: 统一交易所API (V8执行层)
+ccxt>=4.0.0
+
 # Freqtrade: 回测框架和交易执行
 # 注意: freqtrade依赖较多，可选安装
 # pip install freqtrade
