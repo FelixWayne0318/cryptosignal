@@ -439,45 +439,49 @@
       },
 
       "strength_mapping": {
-        "_comment": "v7.5.0: A层方向强度非线性映射 + T过热惩罚（替代v7.4.5 prime_strength）",
+        "_comment": "v7.5.0: A层方向强度非线性映射（已废弃，由v7.6.0替代）",
+        "enabled": false
+      },
+
+      "strength_mapping_v76": {
+        "_comment": "v7.6.0: A层强度映射（方向敏感 + 非对称设计）",
         "enabled": true,
 
-        "_section_1": "原始强度区间（基于BTC分布）",
-        "entry_min_raw": 7.0,
-        "_entry_min_note": "最低入场强度，低于此值Step1直接拒绝",
-        "sweet_spot_low_raw": 8.0,
-        "_sweet_spot_low_note": "甜蜜区间下界",
-        "sweet_spot_high_raw": 12.0,
-        "_sweet_spot_high_note": "甜蜜区间上界，此区间获得最高分",
-        "extreme_raw_start": 18.0,
-        "_extreme_raw_start_note": "过热开始阈值",
-        "extreme_raw_max": 30.0,
-        "_extreme_raw_max_note": "极端强度上限",
+        "_section_1": "基础映射边界",
+        "min_prime": 7.0,
+        "max_prime": 20.0,
 
-        "_section_2": "映射后分数上限",
-        "max_strength": 20.0,
+        "_section_2": "单调映射参数（raw_strength -> base_prime）",
+        "raw_mid": 12.0,
+        "_raw_mid_note": "中值附近从线性过渡到饱和",
+        "raw_max_ref": 25.0,
+        "_raw_max_ref_note": "参考最大raw_strength",
+        "mid_prime": 17.0,
+        "_mid_prime_note": "raw_strength在raw_mid时对应的base_prime",
+        "high_decay": 0.15,
+        "_high_decay_note": "高位指数衰减参数，越大越快饱和",
 
-        "_section_3": "衰减底座比例（占max_strength）",
-        "low_floor_ratio": 0.5,
-        "_low_floor_note": "刚过entry_min时的底座比例",
-        "mid_floor_ratio": 0.5,
-        "_mid_floor_note": "extreme_raw_start附近的底座比例",
-        "tail_floor_ratio": 0.3,
-        "_tail_floor_note": "extreme_raw_max及以上的最终底座比例",
+        "_section_3": "T因子阈值",
+        "T_hot_long": 40.0,
+        "_T_hot_long_note": "多头：T>=40视为追涨风险",
+        "T_cold_short": -40.0,
+        "_T_cold_short_note": "空头：T<=-40视为强顺势（当前版本仅用于理解）",
 
-        "_section_4": "T因子过热惩罚",
-        "t_overheat_thresholds": {
-          "_comment": "|T|超过阈值视为过热（趋势尾声/拥挤）",
-          "mild": 40.0,
-          "severe": 70.0
-        },
-        "t_overheat_factors": {
-          "_comment": "过热时对prime_strength的折扣比例",
-          "mild": 0.8,
-          "severe": 0.6
-        },
+        "_section_4": "多头追涨惩罚",
+        "long_overheat_raw_min": 12.0,
+        "_long_overheat_raw_min_note": "raw_strength>=12才开始追涨风险",
+        "long_overheat_raw_cap": 25.0,
+        "_long_overheat_raw_cap_note": "raw_strength>=25惩罚到最强",
+        "min_factor_long": 0.7,
+        "_min_factor_long_note": "多头最多打30%折扣",
 
-        "_design_note": "中间凸起映射：甜蜜区间[8,12]获得最高分20，两端衰减；高|T|额外惩罚"
+        "_section_5": "反趋势空头惩罚（T>0且direction_score<0）",
+        "short_contra_raw_cap": 25.0,
+        "_short_contra_raw_cap_note": "raw_strength达到25时视为最危险",
+        "min_factor_short_contra": 0.5,
+        "_min_factor_short_contra_note": "反趋势空头最多打50%折扣",
+
+        "_design_note": "单调递增映射+方向敏感惩罚：顺势空头(T<=0)不惩罚，追涨多头和反趋势空头惩罚"
       },
 
       "confidence": {

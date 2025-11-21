@@ -20,134 +20,134 @@ Version: v7.4.2
 Created: 2025-11-16
 """
 
+import math
 from typing import Dict, Any, Optional
 from ats_core.logging import log, warn
 
 
-def remap_direction_strength(
+def shape_prime_strength_v76(
+    raw_strength: float,
+    T: float,
     direction_score: float,
-    T_score: float,
     params: Dict[str, Any]
 ) -> Dict[str, float]:
     """
-    v7.5.0: A层方向强度非线性映射 + T过热惩罚
+    v7.6.0: Step1 A层强度映射（方向敏感 + 非对称设计）
 
     设计原则:
-        - 中间凸起映射：甜蜜区间获得最高分，两端衰减
-        - 解决"高强度反而低胜率"的负相关问题
-        - T因子过热惩罚：高|T|视为趋势尾声/拥挤
+        - 单调饱和映射：原始强度越高，prime_strength越高（但增速递减）
+        - 方向敏感惩罚：
+          * 多头 + T>=40 + 高原始强度 → 追涨惩罚
+          * 空头 + T<=0 → 顺势空头，不惩罚
+          * 空头 + T>0 → 反趋势空头，惩罚
 
-    映射曲线:
-        raw < entry_min:           prime = 0 (拒绝)
-        [entry_min, sweet_low):    prime 从 low_floor*max 线性升到 max
-        [sweet_low, sweet_high]:   prime = max (最高分)
-        (sweet_high, extreme_start]: prime 从 max 线性降到 mid_floor*max
-        (extreme_start, extreme_max]: prime 从 mid_floor*max 线性降到 tail_floor*max
-        > extreme_max:             prime = tail_floor*max (固定)
+    映射公式:
+        低强度区(rs <= raw_mid): 线性映射 min_prime → mid_prime
+        高强度区(rs > raw_mid):  指数衰减趋近 max_prime
 
     Args:
-        direction_score: A层加权合成后的方向分数（有符号）
-        T_score: T因子当前分数
+        raw_strength: |direction_score|
+        T: T因子分数（有符号）
+        direction_score: A层加权合成后的方向分数（有符号，用于判断多空）
         params: 全局配置
 
     Returns:
         {
-            "raw_strength": float,      # |direction_score|
-            "prime_strength": float,    # 非线性 + 过热校正后的强度
-            "t_overheat_factor": float  # T过热惩罚因子
+            "raw_strength": float,       # 原始强度
+            "prime_strength": float,     # 映射+惩罚后的强度
+            "t_overheat_factor": float,  # T过热惩罚因子
+            "base_prime": float          # 映射后、惩罚前的强度
         }
     """
-    cfg_step1 = params.get("four_step_system", {}).get("step1_direction", {})
-    map_cfg = cfg_step1.get("strength_mapping", {})
+    cfg = params.get("four_step_system", {}).get("step1_direction", {})
+    shape_cfg = cfg.get("strength_mapping_v76", {})
 
     # 如果未启用，回退到简单绝对值
-    if not map_cfg.get("enabled", True):
-        raw_strength = abs(direction_score)
+    if not shape_cfg.get("enabled", True):
         return {
             "raw_strength": raw_strength,
             "prime_strength": raw_strength,
-            "t_overheat_factor": 1.0
+            "t_overheat_factor": 1.0,
+            "base_prime": raw_strength
         }
 
-    # 读取映射参数
-    entry_min = float(map_cfg.get("entry_min_raw", 7.0))
-    sweet_low = float(map_cfg.get("sweet_spot_low_raw", 8.0))
-    sweet_high = float(map_cfg.get("sweet_spot_high_raw", 12.0))
-    extreme_start = float(map_cfg.get("extreme_raw_start", 18.0))
-    extreme_max = float(map_cfg.get("extreme_raw_max", 30.0))
-    max_strength = float(map_cfg.get("max_strength", 20.0))
+    # 基础映射边界
+    min_prime = float(shape_cfg.get("min_prime", 7.0))
+    max_prime = float(shape_cfg.get("max_prime", 20.0))
 
-    low_floor_ratio = float(map_cfg.get("low_floor_ratio", 0.5))
-    mid_floor_ratio = float(map_cfg.get("mid_floor_ratio", 0.5))
-    tail_floor_ratio = float(map_cfg.get("tail_floor_ratio", 0.3))
+    # 单调映射参数
+    raw_mid = float(shape_cfg.get("raw_mid", 12.0))
+    mid_prime = float(shape_cfg.get("mid_prime", 17.0))
+    high_decay = float(shape_cfg.get("high_decay", 0.15))
 
-    # T过热参数
-    th = map_cfg.get("t_overheat_thresholds", {})
-    tf = map_cfg.get("t_overheat_factors", {})
-    t_mild = float(th.get("mild", 40.0))
-    t_severe = float(th.get("severe", 70.0))
-    f_mild = float(tf.get("mild", 0.8))
-    f_severe = float(tf.get("severe", 0.6))
+    # 方向敏感参数
+    T_hot_long = float(shape_cfg.get("T_hot_long", 40.0))
+    T_cold_short = float(shape_cfg.get("T_cold_short", -40.0))
+    long_overheat_raw_min = float(shape_cfg.get("long_overheat_raw_min", 12.0))
+    long_overheat_raw_cap = float(shape_cfg.get("long_overheat_raw_cap", 25.0))
+    min_factor_long = float(shape_cfg.get("min_factor_long", 0.7))
+    short_contra_raw_cap = float(shape_cfg.get("short_contra_raw_cap", 25.0))
+    min_factor_short_contra = float(shape_cfg.get("min_factor_short_contra", 0.5))
 
-    # 1) 原始强度
-    raw_strength = abs(direction_score)
+    rs = max(0.0, float(raw_strength))
 
-    # 2) 太弱：直接返回0
-    if raw_strength < entry_min:
-        return {
-            "raw_strength": raw_strength,
-            "prime_strength": 0.0,
-            "t_overheat_factor": 1.0
-        }
-
-    # 3) 映射比例 f ∈ [0, 1]，再乘 max_strength
-    clamped_raw = min(max(raw_strength, entry_min), extreme_max)
-
-    if clamped_raw <= sweet_low:
-        # 从 entry_min 到 sweet_low：从 low_floor_ratio → 1.0 线性上升
-        if sweet_low == entry_min:
-            f = 1.0
+    # ========== 1. 单调饱和映射 ==========
+    if rs <= raw_mid:
+        # 低强度区：线性映射 [0, raw_mid] → [min_prime, mid_prime]
+        if raw_mid > 1e-6:
+            k = (mid_prime - min_prime) / raw_mid
+            base_prime = min_prime + k * rs
         else:
-            ratio = (clamped_raw - entry_min) / (sweet_low - entry_min)
-            f = low_floor_ratio + (1.0 - low_floor_ratio) * ratio
-
-    elif clamped_raw <= sweet_high:
-        # 甜蜜区间：保持 1.0
-        f = 1.0
-
-    elif clamped_raw <= extreme_start:
-        # 从 sweet_high 到 extreme_start：从 1.0 → mid_floor_ratio 线性下降
-        if extreme_start == sweet_high:
-            f = mid_floor_ratio
-        else:
-            ratio = (clamped_raw - sweet_high) / (extreme_start - sweet_high)
-            f = 1.0 - (1.0 - mid_floor_ratio) * ratio
-
+            base_prime = min_prime
     else:
-        # 从 extreme_start 到 extreme_max：从 mid_floor_ratio → tail_floor_ratio 线性下降
-        if extreme_max == extreme_start:
-            f = tail_floor_ratio
-        else:
-            ratio = (clamped_raw - extreme_start) / (extreme_max - extreme_start)
-            f = mid_floor_ratio - (mid_floor_ratio - tail_floor_ratio) * ratio
+        # 高强度区：指数衰减趋近 max_prime
+        # base_prime = max_prime - A * exp(-decay * (rs - raw_mid))
+        A = max_prime - mid_prime
+        base_prime = max_prime - A * math.exp(-high_decay * (rs - raw_mid))
 
-    prime_strength_base = max_strength * max(0.0, min(1.0, f))
+    # 确保在[min_prime, max_prime]范围内
+    base_prime = max(min_prime, min(max_prime, base_prime))
 
-    # 4) T因子过热惩罚
-    t_abs = abs(T_score)
-    if t_abs >= t_severe:
-        t_factor = f_severe
-    elif t_abs >= t_mild:
-        t_factor = f_mild
+    # ========== 2. 方向敏感惩罚 ==========
+    t_overheat_factor = 1.0
+
+    # 判断交易方向：direction_score >= 0 为多头，< 0 为空头
+    trade_direction = 1 if direction_score >= 0 else -1
+
+    if trade_direction > 0:
+        # 多头：T>=40 且 高原始强度 → 追涨惩罚
+        if T >= T_hot_long and rs >= long_overheat_raw_min:
+            # 惩罚强度随rs增加：rs=12 → factor=1.0，rs>=25 → factor=min_factor_long
+            if long_overheat_raw_cap > long_overheat_raw_min:
+                ratio = min(1.0, (rs - long_overheat_raw_min) / (long_overheat_raw_cap - long_overheat_raw_min))
+            else:
+                ratio = 1.0
+            t_overheat_factor = 1.0 - ratio * (1.0 - min_factor_long)
     else:
-        t_factor = 1.0
+        # 空头
+        if T > 0.0:
+            # 反趋势空头（T>0做空）→ 惩罚
+            # 惩罚强度随rs和T增加
+            if short_contra_raw_cap > 0:
+                ratio_rs = min(1.0, rs / short_contra_raw_cap)
+            else:
+                ratio_rs = 1.0
+            # T越大，惩罚越重
+            ratio_T = min(1.0, T / 50.0)  # T=50时达到最大惩罚
+            ratio = max(ratio_rs, ratio_T)
+            t_overheat_factor = 1.0 - ratio * (1.0 - min_factor_short_contra)
+        else:
+            # 顺势空头（T<=0做空）→ 不惩罚
+            t_overheat_factor = 1.0
 
-    prime_strength = prime_strength_base * t_factor
+    # ========== 3. 最终强度 ==========
+    prime_strength = base_prime * t_overheat_factor
 
     return {
-        "raw_strength": raw_strength,
-        "prime_strength": prime_strength,
-        "t_overheat_factor": t_factor
+        "raw_strength": float(rs),
+        "prime_strength": float(prime_strength),
+        "t_overheat_factor": float(t_overheat_factor),
+        "base_prime": float(base_prime)
     }
 
 
@@ -437,12 +437,13 @@ def step1_direction_confirmation(
         fixed_alignment = btc_special_cfg.get("fixed_btc_alignment", 1.0)
         fixed_confidence = btc_special_cfg.get("fixed_direction_confidence", 1.0)
 
-        # v7.5.0: 非线性强度映射 + T过热惩罚
+        # v7.6.0: 方向敏感强度映射
         T_score = factor_scores.get("T", 0.0)
-        remap_result = remap_direction_strength(direction_score, T_score, params)
-        raw_strength = remap_result["raw_strength"]
+        raw_strength = abs(direction_score)
+        remap_result = shape_prime_strength_v76(raw_strength, T_score, direction_score, params)
         prime_strength = remap_result["prime_strength"]
         t_overheat_factor = remap_result["t_overheat_factor"]
+        base_prime = remap_result["base_prime"]
 
         # 计算最终强度（BTC使用固定参数）
         final_strength = prime_strength * fixed_confidence * fixed_alignment
@@ -455,18 +456,19 @@ def step1_direction_confirmation(
                 f"Final strength insufficient: {final_strength:.1f} < {min_final_strength}"
             )
 
-        log(f"BTC特殊处理: I={fixed_I_score}, alignment={fixed_alignment}, confidence={fixed_confidence}, prime_strength={prime_strength:.1f}, t_overheat={t_overheat_factor:.2f}")
+        log(f"BTC特殊处理: I={fixed_I_score}, alignment={fixed_alignment}, confidence={fixed_confidence}, prime_strength={prime_strength:.1f}, base_prime={base_prime:.1f}, t_overheat={t_overheat_factor:.2f}")
 
         return {
             "pass": pass_step1,
             "direction_score": direction_score,
             "direction_strength": direction_strength,
-            "raw_strength": raw_strength,           # v7.5.0新增
+            "raw_strength": raw_strength,           # v7.6.0
             "prime_strength": prime_strength,
+            "base_prime": base_prime,               # v7.6.0新增
             "direction_confidence": fixed_confidence,
             "btc_alignment": fixed_alignment,
             "final_strength": final_strength,
-            "t_overheat_factor": t_overheat_factor, # v7.5.0新增
+            "t_overheat_factor": t_overheat_factor, # v7.6.0
             "hard_veto": False,
             "reject_reason": reject_reason,
             "metadata": {
@@ -520,12 +522,13 @@ def step1_direction_confirmation(
         params
     )
 
-    # 5. v7.5.0: 非线性强度映射 + T过热惩罚
+    # 5. v7.6.0: 方向敏感强度映射
     T_score = factor_scores.get("T", 0.0)
-    remap_result = remap_direction_strength(direction_score, T_score, params)
-    raw_strength = remap_result["raw_strength"]
+    raw_strength = abs(direction_score)
+    remap_result = shape_prime_strength_v76(raw_strength, T_score, direction_score, params)
     prime_strength = remap_result["prime_strength"]
     t_overheat_factor = remap_result["t_overheat_factor"]
+    base_prime = remap_result["base_prime"]
 
     # 6. 计算最终强度（使用prime_strength替代direction_strength）
     final_strength = prime_strength * direction_confidence * btc_alignment
@@ -544,12 +547,13 @@ def step1_direction_confirmation(
         "pass": pass_step1,
         "direction_score": direction_score,
         "direction_strength": direction_strength,
-        "raw_strength": raw_strength,           # v7.5.0新增
+        "raw_strength": raw_strength,           # v7.6.0
         "prime_strength": prime_strength,
+        "base_prime": base_prime,               # v7.6.0新增
         "direction_confidence": direction_confidence,
         "btc_alignment": btc_alignment,
         "final_strength": final_strength,
-        "t_overheat_factor": t_overheat_factor, # v7.5.0新增
+        "t_overheat_factor": t_overheat_factor, # v7.6.0
         "hard_veto": False,
         "reject_reason": reject_reason,
         "metadata": {
@@ -613,19 +617,21 @@ if __name__ == "__main__":
                     "fixed_btc_alignment": 1.0,
                     "fixed_direction_confidence": 1.0
                 },
-                "strength_mapping": {
+                "strength_mapping_v76": {
+                    "_comment": "v7.6.0: A层强度映射（方向敏感 + 非对称设计）",
                     "enabled": True,
-                    "entry_min_raw": 7.0,
-                    "sweet_spot_low_raw": 8.0,
-                    "sweet_spot_high_raw": 12.0,
-                    "extreme_raw_start": 18.0,
-                    "extreme_raw_max": 30.0,
-                    "max_strength": 20.0,
-                    "low_floor_ratio": 0.5,
-                    "mid_floor_ratio": 0.5,
-                    "tail_floor_ratio": 0.3,
-                    "t_overheat_thresholds": {"mild": 40.0, "severe": 70.0},
-                    "t_overheat_factors": {"mild": 0.8, "severe": 0.6}
+                    "min_prime": 7.0,
+                    "max_prime": 20.0,
+                    "raw_mid": 12.0,
+                    "mid_prime": 17.0,
+                    "high_decay": 0.15,
+                    "T_hot_long": 40.0,
+                    "T_cold_short": -40.0,
+                    "long_overheat_raw_min": 12.0,
+                    "long_overheat_raw_cap": 25.0,
+                    "min_factor_long": 0.7,
+                    "short_contra_raw_cap": 25.0,
+                    "min_factor_short_contra": 0.5
                 }
             }
         }

@@ -1,11 +1,119 @@
-# SESSION_STATE - CryptoSignal v7.4.4 Development Log
+# SESSION_STATE - CryptoSignal v7.6.0 Development Log
 
 **Branch**: `claude/reorganize-audit-system-01N38pCktomjrY2cjFdXP84L`
 **Standard**: SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0
 
 ---
 
-## 🆕 Session 12: v7.4.4 BTC特殊处理修复 (2025-11-21)
+## 🆕 Session 15: v7.6.0 方向敏感强度映射 (2025-11-21)
+
+**Problem**: v7.5.0 U形映射错误地将高强度短信号（顺势空头）压制为低分，导致胜率无改善
+**Solution**: 单调饱和映射 + 方向敏感惩罚（仅追涨多头和反趋势空头受惩罚）
+**Impact**: 核心优化 - 修复强度映射逻辑，保护盈利信号
+**Status**: ✅ Implemented
+
+### 问题分析
+
+v7.5.0回测结果（138信号，26.09%胜率）分析发现：
+
+1. **高raw_strength + T<0的空头信号实际盈利**
+   - 例：raw_strength=20.85, T=-53 → 结果盈利+10.4%
+   - 但v7.5.0将其映射为极低分（7.24）
+
+2. **U形映射假设错误**
+   - 假设"高强度=噪声"
+   - 实际上高强度+顺势=强信号
+
+3. **对称惩罚不合理**
+   - v7.5.0对|T|惩罚，不区分多空
+   - 顺势空头不应受惩罚
+
+### 修复内容
+
+#### 1. 新增配置 (config/params.json)
+
+```json
+"strength_mapping_v76": {
+  "_comment": "v7.6.0: A层强度映射（方向敏感 + 非对称设计）",
+  "enabled": true,
+  "min_prime": 7.0,
+  "max_prime": 20.0,
+  "raw_mid": 12.0,
+  "mid_prime": 17.0,
+  "high_decay": 0.15,
+  "T_hot_long": 40.0,
+  "T_cold_short": -40.0,
+  "long_overheat_raw_min": 12.0,
+  "long_overheat_raw_cap": 25.0,
+  "min_factor_long": 0.7,
+  "short_contra_raw_cap": 25.0,
+  "min_factor_short_contra": 0.5
+}
+```
+
+#### 2. 新函数 (ats_core/decision/step1_direction.py)
+
+`shape_prime_strength_v76()` 替代 `remap_direction_strength()`
+
+**单调映射公式**:
+- 低强度区 (rs <= 12): 线性 7→17
+- 高强度区 (rs > 12): 指数衰减趋近20
+
+**方向敏感惩罚**:
+| 条件 | 惩罚 | 理由 |
+|------|------|------|
+| 多头 + T>=40 + 高rs | ×0.7 | 追涨惩罚 |
+| 空头 + T<=0 | ×1.0 | 顺势空头，不惩罚 |
+| 空头 + T>0 | ×0.5 | 反趋势空头 |
+
+#### 3. 返回值新增
+
+- `base_prime`: 映射后、惩罚前的强度
+
+### 测试验证
+
+```bash
+python3 -m ats_core.decision.step1_direction
+```
+
+结果：
+```
+🔶 测试用例0：BTC特殊处理
+   prime_strength=14.0, base_prime=20.0, t_overheat=0.70
+   （正确应用追涨惩罚：T=70, rs=68.3）
+
+📊 测试用例1：高独立性币
+   最终强度: 13.7
+
+⚠️  测试用例3：中等独立性 + 反向BTC
+   最终强度: 10.5
+```
+
+### 文件变更摘要
+
+| 文件 | 修改类型 | 说明 |
+|------|----------|------|
+| config/params.json | 配置 | 新增strength_mapping_v76，禁用v7.5.0 |
+| ats_core/decision/step1_direction.py | 核心 | 新函数shape_prime_strength_v76 |
+
+### 预期效果
+
+- 顺势空头（T<0做空）保留高分
+- 追涨多头（T>40做多）受惩罚
+- 反趋势空头（T>0做空）受重惩罚
+- 整体胜率提升预期（目标30%+）
+
+### 开发流程
+
+1. ✅ Phase 2.1: 配置文件 - 添加strength_mapping_v76
+2. ✅ Phase 2.2: 核心逻辑 - 实现shape_prime_strength_v76
+3. ✅ Phase 3: 测试验证 - 验证配置和逻辑
+4. ✅ Phase 4: 文档更新 - 更新SESSION_STATE.md
+5. ✅ Phase 5: Git提交
+
+---
+
+## Session 12: v7.4.4 BTC特殊处理修复 (2025-11-21)
 
 **Problem**: BTC作为参考资产，I_score和btc_alignment计算错误（I=57常数，alignment=0.84常数）
 **Solution**: 添加BTC特殊处理配置和逻辑，BTC使用固定值（I=100, alignment=1.0, confidence=1.0）
