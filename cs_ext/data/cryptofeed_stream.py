@@ -75,27 +75,19 @@ class CryptofeedStream:
 
         self._fh = FeedHandler()
 
-    async def _trade_callback(
-        self,
-        feed: str,
-        symbol: str,
-        order_id: str,
-        timestamp: float,
-        side: str,
-        amount: Decimal,
-        price: Decimal,
-        receipt_timestamp: float,
-        **kwargs,
-    ):
+    async def _trade_callback(self, trade, receipt_timestamp: float):
+        """
+        新版 cryptofeed 回调签名：(trade_obj, receipt_timestamp)
+        """
         if not self.on_trade:
             return
 
         evt = TradeEvent(
-            symbol=symbol,
-            ts=timestamp,
-            price=float(price),
-            size=float(amount),
-            side=side,
+            symbol=trade.symbol,
+            ts=trade.timestamp,
+            price=float(trade.price),
+            size=float(trade.amount),
+            side=trade.side.lower(),
         )
         try:
             self.on_trade(evt)
@@ -103,22 +95,18 @@ class CryptofeedStream:
             # 防止单个回调异常导致整体中断
             print(f"[CryptofeedStream] on_trade error: {e} for event {evt}")
 
-    async def _l2_book_callback(
-        self,
-        feed: str,
-        symbol: str,
-        book: Dict[str, Any],
-        timestamp: float,
-        receipt_timestamp: float,
-        **kwargs,
-    ):
+    async def _l2_book_callback(self, book, receipt_timestamp: float):
+        """
+        新版 cryptofeed 回调签名：(book_obj, receipt_timestamp)
+        """
         if not self.on_orderbook:
             return
 
-        bids_raw = book.get("bid", {})
-        asks_raw = book.get("ask", {})
+        # 新版 book 对象有 .book.bids 和 .book.asks
+        bids_raw = book.book.bids
+        asks_raw = book.book.asks
 
-        # book["bid"] / ["ask"] 是 {price: size} 的 dict
+        # bids/asks 是 SortedDict {price: size}
         bids = [[float(p), float(s)] for p, s in bids_raw.items()]
         asks = [[float(p), float(s)] for p, s in asks_raw.items()]
 
@@ -131,8 +119,8 @@ class CryptofeedStream:
             asks = asks[: self.max_depth]
 
         evt = OrderBookEvent(
-            symbol=symbol,
-            ts=timestamp,
+            symbol=book.symbol,
+            ts=book.timestamp,
             bids=bids,
             asks=asks,
         )
