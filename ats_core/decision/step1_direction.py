@@ -24,6 +24,61 @@ from typing import Dict, Any, Optional
 from ats_core.logging import log, warn
 
 
+def shape_direction_strength(
+    raw_strength: float,
+    params: Dict[str, Any]
+) -> float:
+    """
+    v7.4.5: Step1非线性强度整形
+
+    设计原则:
+        - mid_high以内保持线性（不改变）
+        - mid_high~extreme_high温和压缩（scale=high_band_scale）
+        - extreme_high以上进一步压缩（scale=extreme_band_scale）
+        - 仅改变强度形状，不负责任何"拒绝/通过"逻辑
+
+    数学公式（分段线性，保证连续）:
+        x <= mid_high:           y = x
+        mid_high < x <= extreme: y = mid_high + (x - mid_high) * high_scale
+        x > extreme:             y = mid_high + (extreme - mid_high) * high_scale
+                                     + (x - extreme) * extreme_scale
+
+    Args:
+        raw_strength: abs(direction_score) >= 0
+        params: 全局配置
+
+    Returns:
+        prime_strength: 经非线性整形后的强度（>=0）
+    """
+    cfg_step1 = params.get("four_step_system", {}).get("step1_direction", {})
+    cfg = cfg_step1.get("prime_strength", {})
+
+    # 如果未启用，直接返回原值
+    if not cfg.get("enabled", True):
+        return raw_strength
+
+    # 从配置读取参数（零硬编码）
+    mid_high = float(cfg.get("mid_high", 12.0))
+    extreme_high = float(cfg.get("extreme_high", 20.0))
+    high_band_scale = float(cfg.get("high_band_scale", 0.7))
+    extreme_band_scale = float(cfg.get("extreme_band_scale", 0.5))
+
+    x = float(max(raw_strength, 0.0))
+
+    # 分段线性整形
+    # 1) mid_high以内：保持线性不变
+    if x <= mid_high:
+        return x
+
+    # 2) mid_high ~ extreme_high：温和压缩
+    if x <= extreme_high:
+        return mid_high + (x - mid_high) * high_band_scale
+
+    # 3) x > extreme_high：进一步压缩
+    compressed_mid_to_extreme = (extreme_high - mid_high) * high_band_scale
+    return mid_high + compressed_mid_to_extreme + (x - extreme_high) * extreme_band_scale
+
+
 def calculate_direction_confidence_v2(
     direction_score: float,
     I_score: float,
@@ -310,8 +365,11 @@ def step1_direction_confirmation(
         fixed_alignment = btc_special_cfg.get("fixed_btc_alignment", 1.0)
         fixed_confidence = btc_special_cfg.get("fixed_direction_confidence", 1.0)
 
+        # v7.4.5: 非线性强度整形（对所有币统一执行，包括BTC）
+        prime_strength = shape_direction_strength(direction_strength, params)
+
         # 计算最终强度（BTC使用固定参数）
-        final_strength = direction_strength * fixed_confidence * fixed_alignment
+        final_strength = prime_strength * fixed_confidence * fixed_alignment
 
         # 判断是否通过
         pass_step1 = final_strength >= min_final_strength
@@ -321,12 +379,13 @@ def step1_direction_confirmation(
                 f"Final strength insufficient: {final_strength:.1f} < {min_final_strength}"
             )
 
-        log(f"BTC特殊处理: I={fixed_I_score}, alignment={fixed_alignment}, confidence={fixed_confidence}")
+        log(f"BTC特殊处理: I={fixed_I_score}, alignment={fixed_alignment}, confidence={fixed_confidence}, prime_strength={prime_strength:.1f}")
 
         return {
             "pass": pass_step1,
             "direction_score": direction_score,
             "direction_strength": direction_strength,
+            "prime_strength": prime_strength,  # v7.4.5新增
             "direction_confidence": fixed_confidence,
             "btc_alignment": fixed_alignment,
             "final_strength": final_strength,
@@ -383,10 +442,13 @@ def step1_direction_confirmation(
         params
     )
 
-    # 5. 计算最终强度
-    final_strength = direction_strength * direction_confidence * btc_alignment
+    # 5. v7.4.5: 非线性强度整形
+    prime_strength = shape_direction_strength(direction_strength, params)
 
-    # 6. 判断是否通过
+    # 6. 计算最终强度（使用prime_strength替代direction_strength）
+    final_strength = prime_strength * direction_confidence * btc_alignment
+
+    # 7. 判断是否通过
     pass_step1 = final_strength >= min_final_strength
 
     reject_reason = None
@@ -400,6 +462,7 @@ def step1_direction_confirmation(
         "pass": pass_step1,
         "direction_score": direction_score,
         "direction_strength": direction_strength,
+        "prime_strength": prime_strength,  # v7.4.5新增
         "direction_confidence": direction_confidence,
         "btc_alignment": btc_alignment,
         "final_strength": final_strength,
@@ -465,6 +528,13 @@ if __name__ == "__main__":
                     "fixed_I_score": 100,
                     "fixed_btc_alignment": 1.0,
                     "fixed_direction_confidence": 1.0
+                },
+                "prime_strength": {
+                    "enabled": True,
+                    "mid_high": 12.0,
+                    "extreme_high": 20.0,
+                    "high_band_scale": 0.7,
+                    "extreme_band_scale": 0.5
                 }
             }
         }

@@ -2014,7 +2014,44 @@ exit_label = self.exit_classification[f"tp{level}_hit"]["label"]
 **Session Status**: 95% Complete (Ready for Git Commit)  
 **Next Action**: Phase 5 - Git Commit & Push
 
-**Total Development Time**: ~8 hours  
-**Total Lines Written**: 4,174 lines  
+**Total Development Time**: ~8 hours
+**Total Lines Written**: 4,174 lines
 **Standard Compliance**: 100% (SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0)
+
+---
+
+## 🔧 v7.4.5 Step1非线性强度整形 (2025-11-21)
+
+### 问题背景
+基于BTC回测数据（202信号，26.24%胜率）分析发现：
+- 中等强度区间(7-10)胜率最高(45-50%)
+- 极端强度(>15)胜率反而较低(21%)
+
+### 修复内容
+1. **配置**: 新增 `prime_strength` 配置块
+2. **核心**: 添加 `shape_direction_strength()` 分段线性整形函数
+3. **集成**: Step1主函数（包括BTC分支）使用prime_strength计算final_strength
+
+### 整形公式
+```
+x ≤ 12:      y = x (不变)
+12 < x ≤ 20: y = 12 + (x - 12) × 0.7
+x > 20:      y = 17.6 + (x - 20) × 0.5
+```
+
+### 修改文件
+| 文件 | 说明 |
+|------|------|
+| config/params.json | 新增prime_strength配置节 |
+| ats_core/decision/step1_direction.py | shape函数和集成 |
+| docs/fixes/P1_PRIME_STRENGTH_SHAPING.md | 修复文档 |
+
+### 测试结果
+- BTC特殊处理: prime_strength=41.8, final_strength=41.8 ✅
+- 高独立性币: final_strength=40.9 ✅
+- Hard Veto: 正常触发 ✅
+
+### 预期效果
+- 压制极端高强度信号的虚假置信度
+- 提高整体胜率（从26%提升）
 

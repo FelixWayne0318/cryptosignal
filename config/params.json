@@ -438,6 +438,25 @@
         "_confidence_note": "BTC作为市场领导者，方向确定性最高"
       },
 
+      "prime_strength": {
+        "_comment": "v7.4.5新增: Step1非线性强度整形（全币种统一，温和压制极端值）",
+        "enabled": true,
+
+        "mid_high": 12.0,
+        "_mid_high_note": "中等强度上限，此值以内保持线性不变",
+
+        "extreme_high": 20.0,
+        "_extreme_high_note": "极端强度阈值，超过此值进一步压缩",
+
+        "high_band_scale": 0.7,
+        "_high_band_scale_note": "高强度区间(mid_high~extreme_high)的压缩系数",
+
+        "extreme_band_scale": 0.5,
+        "_extreme_band_scale_note": "极端强度区间(>extreme_high)的压缩系数",
+
+        "_design_note": "mid_high以内保持线性，>mid_high做温和压缩；参数来自BTC诊断，当前对所有币统一使用，后续可按品种微调"
+      },
+
       "confidence": {
         "_comment": "置信度范围和曲线参数",
         "floor": 0.50,
