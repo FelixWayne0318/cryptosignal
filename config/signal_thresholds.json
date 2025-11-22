@@ -902,6 +902,52 @@
       "log_level": "INFO",
       "metrics_enabled": true,
       "_comment": "系统健康监控和告警"
+    },
+    "backtest": {
+      "_description": "V8回测系统配置 - 使用CCXT+Cryptostore+Freqtrade",
+      "enabled": true,
+      "data_source": {
+        "_description": "数据源配置",
+        "provider": "ccxt",
+        "exchange_id": "binanceusdm",
+        "testnet": false,
+        "rate_limit_enabled": true,
+        "max_retries": 3,
+        "retry_delay_base": 2.0,
+        "retry_delay_range": 2.0,
+        "timeout_seconds": 30,
+        "_alternatives": ["ccxt", "cryptofeed_historical", "local_cache"]
+      },
+      "cache": {
+        "_description": "数据缓存配置 (Cryptostore)",
+        "enabled": true,
+        "storage_path": "data/v8_backtest_cache",
+        "format": "parquet",
+        "ttl_hours": 168,
+        "max_size_mb": 1000,
+        "compression": "snappy",
+        "_comment": "使用Cryptostore适配器缓存历史数据"
+      },
+      "engine": {
+        "_description": "回测引擎配置",
+        "type": "freqtrade",
+        "use_cryptosignal_strategy": true,
+        "default_timeframe": "1h",
+        "lookback_bars": 300,
+        "max_open_trades": 10,
+        "stake_amount": 1000,
+        "stake_currency": "USDT",
+        "fee_rate": 0.0005,
+        "slippage_pct": 0.0002,
+        "_fallback_engine": "internal"
+      },
+      "symbols": {
+        "_description": "回测交易对配置",
+        "default": ["BTC/USDT:USDT", "ETH/USDT:USDT"],
+        "symbol_format": "ccxt",
+        "_format_note": "CCXT格式: BTC/USDT:USDT (永续), 旧格式: BTCUSDT"
+      },
+      "_comment": "V8回测架构: CCXT数据获取 → Cryptostore缓存 → CryptoSignal分析 → Freqtrade引擎"
     }
   }
 }

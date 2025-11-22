@@ -5,6 +5,76 @@
 
 ---
 
+## 🆕 Session 20: V8回测系统升级 (2025-11-22)
+
+**Problem**: 回测系统未使用V8架构，仍使用直接Binance API调用
+**Solution**: 升级回测系统到V8架构，使用CCXT+Cryptostore+Freqtrade
+**Impact**: 新功能 - V8完整回测管道
+**Status**: ✅ Implemented
+
+### V8回测架构
+
+```
+CCXT (数据获取) → Cryptostore (缓存) → CryptoSignal (分析) → Engine (回测) → Metrics (评估)
+```
+
+### 文件变更摘要
+
+| 文件 | 类型 | 说明 |
+|------|------|------|
+| config/signal_thresholds.json | 更新 | 添加v8_integration.backtest配置节 |
+| ats_core/backtest/v8_data_loader.py | 新增 | V8回测数据加载器(CCXT+缓存) |
+| ats_core/backtest/__init__.py | 更新 | 导出V8组件，版本升至1.1.0 |
+| ats_core/pipeline/v8_backtest_pipeline.py | 新增 | V8回测管道(支持Freqtrade) |
+| scripts/backtest_v8.py | 新增 | V8回测CLI脚本 |
+
+### V8回测配置结构
+
+```json
+{
+  "v8_integration": {
+    "backtest": {
+      "data_source": { "provider": "ccxt", "exchange_id": "binanceusdm" },
+      "cache": { "storage_path": "data/v8_backtest_cache", "format": "parquet" },
+      "engine": { "type": "freqtrade", "default_timeframe": "1h" },
+      "symbols": { "default": ["BTC/USDT:USDT", "ETH/USDT:USDT"] }
+    }
+  }
+}
+```
+
+### 使用方法
+
+```bash
+# V8回测 (使用CCXT获取数据)
+python scripts/backtest_v8.py --symbols BTCUSDT --start 2024-11-01 --end 2024-11-21
+
+# 指定引擎
+python scripts/backtest_v8.py --symbols BTCUSDT --start 2024-11-01 --end 2024-11-21 --engine freqtrade
+```
+
+### 测试验证
+
+```
+✅ 测试1: V8BacktestDataLoader导入成功
+✅ 测试2: V8BacktestPipeline导入成功
+✅ 测试3: V8 backtest配置加载成功
+✅ 测试4: V8BacktestDataLoader初始化成功 (CCXT已连接)
+✅ 测试5: V8BacktestPipeline初始化成功
+```
+
+### V8组件启用状态
+
+| 组件 | 回测中状态 |
+|------|------------|
+| Cryptofeed | ⏳ 预留(历史数据接口) |
+| CryptoSignal | ✅ 使用中 |
+| Freqtrade | ✅ 可选引擎(需安装) |
+| CCXT | ✅ 数据获取层 |
+| Cryptostore | ✅ 缓存落盘层 |
+
+---
+
 ## 🆕 Session 19: V8系统集成验证 (2025-11-21)
 
 **Problem**: 需要从setup.sh出发验证整个系统的V8有机融合状态
