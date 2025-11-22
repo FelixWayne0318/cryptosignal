@@ -5,7 +5,43 @@
 
 ---
 
-## 🆕 Session 28: 六层架构四步决策系统完整集成 (2025-11-22)
+## 🆕 Session 29: 六层架构集成关键问题修复 (2025-11-22)
+
+**Problem**: 六层架构集成存在三个问题导致四步决策系统无法生效
+**Solution**: 修复K线缓存初始化、格式转换使用、配置默认值一致性
+**Impact**: Bug修复 - V8四步决策系统现在可以正常运行
+**Status**: ✅ Completed
+
+### 问题分析与修复
+
+| 问题 | 严重性 | 原因 | 修复方案 |
+|------|--------|------|----------|
+| K线缓存未初始化 | 🔴 严重 | `self.kline_cache = None` 永远是 None | 使用 `get_kline_cache()` 获取全局单例 |
+| Cryptofeed格式转换未使用 | 🟡 中等 | 导入但未调用 `normalize_symbol` | TradeEvent/OrderBookEvent 中调用 |
+| 配置默认值不一致 | 🟢 低 | 代码默认 `True`，配置 `false` | 默认值改为 `False` |
+
+### 主要变更
+
+| 文件 | 类型 | 说明 |
+|------|------|------|
+| ats_core/pipeline/v8_realtime_pipeline.py | Bug修复 | K线缓存单例+默认值修正 |
+| cs_ext/data/cryptofeed_stream.py | 增强 | 实际使用normalize_symbol |
+
+### 测试验证
+
+- ✅ 语法检查通过
+- ✅ get_kline_cache()单例测试通过
+- ✅ Cryptofeed格式转换测试通过
+
+### Git Commit
+
+```
+9e0ec00 fix(v8): 修复六层架构集成三个关键问题
+```
+
+---
+
+## Session 28: 六层架构四步决策系统完整集成 (2025-11-22)
 
 **Problem**: V8六层架构尚未与四步决策系统有机融合
 **Solution**: 实现Phase 3-7，完成所有层的四步决策集成
