@@ -357,8 +357,8 @@ class V8RealtimePipeline:
                 max_depth=stream_cfg.get("max_depth", 50),
             )
 
-            # 启动流
-            self.stream.run_forever()
+            # 启动流 - 使用异步方法避免事件循环嵌套问题
+            await self.stream._run_async()
 
         except ImportError as e:
             logger.error(f"无法导入Cryptofeed组件: {e}")
