@@ -5,6 +5,57 @@
 
 ---
 
+## 🆕 Session 21: Freqtrade安装与V8集成 (2025-11-22)
+
+**Problem**: V8回测系统缺少Freqtrade引擎支持
+**Solution**: 从externals/freqtrade安装Freqtrade并验证V8集成
+**Impact**: 系统增强 - V8六层架构完整可用
+**Status**: ✅ Installed
+
+### 安装步骤
+
+```bash
+# 从本地源码安装（无deps模式避免sdnotify问题）
+pip install --no-deps -e externals/freqtrade
+
+# 安装核心依赖
+pip install SQLAlchemy python-telegram-bot humanize ... ft-pandas-ta janus pyarrow
+```
+
+### 文件变更
+
+| 文件 | 说明 |
+|------|------|
+| requirements.txt | 添加Freqtrade本地安装指令 |
+
+### 测试验证
+
+```
+✅ 测试1: CryptoSignalStrategy导入成功
+✅ 测试2: V8BacktestPipeline - freqtrade_available: True
+✅ 测试3: V8BacktestDataLoader初始化成功
+```
+
+### V8六层架构状态
+
+| 层级 | 组件 | 状态 |
+|------|------|------|
+| Layer 1 | Cryptofeed (数据) | ✅ 可用 |
+| Layer 2 | CryptoSignal (因子) | ✅ 可用 |
+| Layer 3 | Freqtrade (回测) | ✅ **已安装** |
+| Layer 4 | Hummingbot (执行) | ⏳ 待集成 |
+| Layer 5 | CCXT (API) | ✅ 可用 |
+| Layer 6 | Cryptostore (存储) | ✅ 可用 |
+
+### 使用方法
+
+```bash
+# 使用Freqtrade引擎进行V8回测
+python scripts/backtest_v8.py --symbols BTCUSDT --start 2024-11-01 --end 2024-11-21 --engine freqtrade
+```
+
+---
+
 ## 🆕 Session 20: V8回测系统升级 (2025-11-22)
 
 **Problem**: 回测系统未使用V8架构，仍使用直接Binance API调用

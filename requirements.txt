@@ -35,7 +35,7 @@ cryptofeed>=2.4.0
 # CCXT: 统一交易所API (V8执行层)
 ccxt>=4.0.0
 
-# Freqtrade: 回测框架和交易执行
-# 注意: freqtrade依赖较多，可选安装
-# pip install freqtrade
-# freqtrade>=2024.1
+# Freqtrade: 回测框架和交易执行 (V8回测层)
+# 从本地源码安装: pip install -e externals/freqtrade
+# 依赖TA-Lib C库，需先安装: apt-get install libta-lib-dev
+-e externals/freqtrade
