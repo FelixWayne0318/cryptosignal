@@ -207,37 +207,26 @@ class CryptofeedStream:
         print(f"[CryptofeedStream] Feed已添加，启动数据流...")
         print(f"[CryptofeedStream] 正在连接 Binance Futures WebSocket...")
 
+        # 使用 nest_asyncio 允许嵌套事件循环
+        # 这解决了 Python 3.10+ 和 uvloop 的兼容性问题
+        if _NEST_ASYNCIO_AVAILABLE:
+            import nest_asyncio
+            nest_asyncio.apply()
+            print(f"[CryptofeedStream] nest_asyncio 已启用")
+
         # 检测是否已经在事件循环中运行
         try:
             loop = asyncio.get_running_loop()
-            # 已有事件循环，不能再创建新的
-            # 需要使用 run_async() 或在外部使用 await
-            print(f"[CryptofeedStream] 检测到现有事件循环，使用异步模式...")
-
-            # 直接在当前循环中运行
-            async def _run_in_existing_loop():
-                await self._fh.run_async()
-
-            # 创建任务并等待
-            import nest_asyncio
-            nest_asyncio.apply()
-            loop.run_until_complete(_run_in_existing_loop())
-
+            print(f"[CryptofeedStream] 检测到现有事件循环，嵌套运行...")
         except RuntimeError:
             # 没有运行中的事件循环，创建新的
-            print(f"[CryptofeedStream] 创建新事件循环 (独立模式)")
+            print(f"[CryptofeedStream] 创建新事件循环...")
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
 
-            async def _run_feeds():
-                await self._fh.run_async()
-
-            try:
-                asyncio.run(_run_feeds())
-            except AttributeError as e:
-                print(f"[CryptofeedStream] run_async 不可用: {e}")
-                print(f"[CryptofeedStream] 尝试备用启动方式...")
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                self._fh.run()
+        # 调用 Cryptofeed 的 run() 方法
+        print(f"[CryptofeedStream] 启动 Cryptofeed...")
+        self._fh.run()
 
     def run_in_background(self):
         """
