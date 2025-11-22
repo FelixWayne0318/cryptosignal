@@ -163,9 +163,12 @@ else
     print_info "正在安装 Python 3.11..."
     add-apt-repository -y ppa:deadsnakes/ppa
     apt-get update -qq
-    apt-get install -y python3.11 python3.11-venv python3.11-dev python3.11-distutils --quiet
-    print_success "Python 3.11 安装完成"
 fi
+
+# 确保开发包已安装（编译 cryptofeed 需要 Python.h）
+print_info "确保 Python 3.11 开发包已安装..."
+apt-get install -y python3.11 python3.11-venv python3.11-dev python3.11-distutils --quiet
+print_success "Python 3.11 开发包已安装"
 
 # 确保 pip 安装
 if ! python3.11 -m pip --version &> /dev/null; then
