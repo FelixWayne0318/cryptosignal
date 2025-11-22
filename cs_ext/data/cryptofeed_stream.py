@@ -272,8 +272,9 @@ class CryptofeedStream:
         loop = asyncio.get_event_loop()
 
         # 启动所有 feeds（传入事件循环）
+        # 注意：feed.start() 是同步方法，返回 None，不能用 await
         for f in self._fh.feeds:
-            await f.start(loop)
+            f.start(loop)
 
         print(f"[CryptofeedStream] ✅ 数据流已启动，等待数据...")
 

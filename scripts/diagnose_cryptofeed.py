@@ -146,11 +146,11 @@ async def test_cryptofeed_connection():
         loop = asyncio.get_event_loop()
 
         if 'loop' in params:
-            print(f"  使用 await feed.start(loop)...")
-            await feed.start(loop)
+            print(f"  使用 feed.start(loop)（同步方法）...")
+            feed.start(loop)
         else:
-            print(f"  使用 await feed.start()...")
-            await feed.start()
+            print(f"  使用 feed.start()（同步方法）...")
+            feed.start()
 
         print("  ✅ Feed.start() 成功")
 
