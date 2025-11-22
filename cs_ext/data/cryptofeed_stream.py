@@ -205,6 +205,7 @@ class CryptofeedStream:
         )
 
         print(f"[CryptofeedStream] Feed已添加，启动数据流...")
+        print(f"[CryptofeedStream] 正在连接 Binance Futures WebSocket...")
 
         # 检查是否已有运行中的事件循环
         try:
@@ -217,6 +218,7 @@ class CryptofeedStream:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
+        print(f"[CryptofeedStream] 事件循环已准备，开始运行...")
         self._fh.run()
 
     def run_in_background(self):
