@@ -159,6 +159,24 @@ if [ ! -f "config/binance_credentials.json" ]; then
 fi
 echo -e "${GREEN}✅ Binance配置存在${NC}"
 
+# 从配置文件加载API密钥到环境变量
+if [ -z "$BINANCE_API_KEY" ] || [ -z "$BINANCE_API_SECRET" ]; then
+    echo "🔑 从配置文件加载API密钥..."
+
+    # 使用Python解析JSON（更可靠）
+    export BINANCE_API_KEY=$(python3 -c "import json; print(json.load(open('config/binance_credentials.json'))['binance']['api_key'])" 2>/dev/null)
+    export BINANCE_API_SECRET=$(python3 -c "import json; print(json.load(open('config/binance_credentials.json'))['binance']['api_secret'])" 2>/dev/null)
+
+    if [ -n "$BINANCE_API_KEY" ] && [ -n "$BINANCE_API_SECRET" ]; then
+        echo -e "${GREEN}✅ API密钥已加载到环境变量${NC}"
+    else
+        echo -e "${YELLOW}⚠️  无法从配置文件读取API密钥${NC}"
+        echo "   请检查 config/binance_credentials.json 格式"
+    fi
+else
+    echo -e "${GREEN}✅ API密钥已从环境变量获取${NC}"
+fi
+
 # 检查Telegram配置
 if [ ! -f "config/telegram.json" ]; then
     echo -e "${YELLOW}⚠️  Telegram配置不存在，创建默认配置（禁用）${NC}"
