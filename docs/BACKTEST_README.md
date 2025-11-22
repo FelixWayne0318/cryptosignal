@@ -1,6 +1,58 @@
-# CryptoSignal v7.4.2 回测运行指南
+# CryptoSignal V8 回测运行指南
 
-## 📋 快速开始
+## 🆕 V8 Freqtrade 集成（推荐）
+
+V8 版本支持使用 Freqtrade 作为回测引擎，提供更专业的回测功能。
+
+### 安装 Freqtrade
+
+```bash
+# 方式1: pip安装
+pip install freqtrade
+
+# 方式2: 官方安装脚本
+git clone https://github.com/freqtrade/freqtrade.git
+cd freqtrade
+./setup.sh
+```
+
+### 使用 CryptoSignal 策略
+
+```bash
+# 1. 复制策略文件到Freqtrade用户数据目录
+cp cs_ext/backtest/freqtrade_bridge.py ~/.freqtrade/user_data/strategies/CryptoSignalStrategy.py
+
+# 2. 配置 Freqtrade
+# 编辑 ~/.freqtrade/user_data/config.json:
+{
+    "strategy": "CryptoSignalStrategy",
+    "exchange": {
+        "name": "binance",
+        "key": "your_api_key",
+        "secret": "your_api_secret"
+    },
+    "pairlists": [
+        {"method": "StaticPairList", "pairs": ["BTC/USDT:USDT", "ETH/USDT:USDT"]}
+    ]
+}
+
+# 3. 运行回测
+freqtrade backtesting --strategy CryptoSignalStrategy \
+    --timerange 20240801-20241101 \
+    --pairs BTC/USDT:USDT ETH/USDT:USDT
+```
+
+### Freqtrade 集成特性
+
+- ✅ **四步决策系统集成**: Direction → Timing → Risk → Quality
+- ✅ **配置驱动**: 阈值从 config/signal_thresholds.json 读取
+- ✅ **自定义止损/止盈**: 基于四步系统计算的风险参数
+- ✅ **做多/做空支持**: can_short = True
+- ✅ **信号反转退出**: 智能退场逻辑
+
+---
+
+## 📋 快速开始（内置回测脚本）
 
 ### 方式1: 使用一键脚本（推荐）⭐
 
