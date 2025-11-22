@@ -5,6 +5,72 @@
 
 ---
 
+## 🆕 Session 26: V8 Telegram集成与零硬编码 (2025-11-22)
+
+**Problem**: V8实时管道缺少Telegram通知，阈值硬编码，信号生成条件过严
+**Solution**: 集成Telegram通知，所有阈值从配置读取，放宽信号条件
+**Impact**: 功能增强 - V8现在可以发送Telegram信号，配置完全可调
+**Status**: ✅ Implemented
+
+### 主要变更
+
+| 文件 | 类型 | 说明 |
+|------|------|------|
+| ats_core/pipeline/v8_realtime_pipeline.py | 重大更新 | Telegram集成、零硬编码 |
+| ats_core/realtime/factor_calculator.py | 增强 | 添加mid_price字段 |
+| config/signal_thresholds.json | 配置更新 | 添加信号阈值配置 |
+
+### 实现特性
+
+1. **Telegram通知集成**
+   - `_notify_signal`: 发送信号到Telegram
+   - `_format_signal_for_telegram`: 格式化V8Signal为telegram_fmt格式
+   - 支持render_signal_v72模板
+   - 配置来源: config/telegram.json 或环境变量
+
+2. **零硬编码配置**
+   - `cvd_z_threshold`: 0.5 (原1.0，放宽条件)
+   - `obi_threshold`: 0.1 (原0.2)
+   - `base_confidence`: 0.5
+   - 所有值从signal_thresholds.json读取
+
+3. **Bug修复**
+   - `executor.submit` → `submit_signal` (P0问题)
+   - 使用配置的exchange_id和default_order_quantity
+
+4. **RealtimeFactors增强**
+   - 添加`mid_price`字段
+   - `_calc_orderbook_factors`返回6个值
+
+5. **四步决策系统集成计划**
+   - `_evaluate_signal`中添加详细集成文档
+   - 计划在v8.1.0实现完整四步验证
+
+### 配置说明
+
+```json
+// config/signal_thresholds.json
+"decision_pipeline": {
+  "signal_thresholds": {
+    "cvd_z_threshold": 0.5,
+    "obi_threshold": 0.1,
+    "base_confidence": 0.5
+  },
+  "telegram_notification": {
+    "enabled": true,
+    "use_v72_template": true
+  }
+}
+```
+
+### 下一步
+
+- v8.1.0: 完整集成run_four_step_decision()
+- 需要K线数据获取和传统因子计算
+- 提供精确Entry/SL/TP价格
+
+---
+
 ## 🆕 Session 25: Freqtrade 回测集成完善 (2025-11-22)
 
 **Problem**: Freqtrade 回测桥接代码为骨架版，无法正常调用四步决策系统
