@@ -833,11 +833,13 @@
       "mode": "full",
       "dynamic_symbols": true,
       "min_volume_usdt": 3000000,
-      "max_symbols": 100,
+      "max_symbols": null,
       "scan_interval_seconds": 300,
       "telegram_enabled": true,
       "data_recording_enabled": true,
-      "_comment": "mode=full使用完整V8管道，max_symbols=100避免API限制"
+      "batch_size": 30,
+      "batch_delay_seconds": 3.0,
+      "_comment": "分批订阅避免API限制：每批30币种，间隔3秒，支持全市场200+币种"
     },
     "cryptofeed_stream": {
       "_description": "Cryptofeed实时数据流配置",

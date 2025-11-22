@@ -5,12 +5,12 @@
 
 ---
 
-## 🆕 Session 23: Binance API限制修复 (2025-11-22)
+## 🆕 Session 23: Binance API限制修复 - 分批订阅方案 (2025-11-22)
 
 **Problem**: V8订阅200+币种导致Binance API 429限制错误
-**Solution**: 限制max_symbols=100，减少orderbook深度从1000到50
-**Impact**: Bug修复 - 避免API请求超限
-**Status**: ✅ Fixed
+**Solution**: 分批订阅+延迟，恢复全市场覆盖
+**Impact**: 性能优化 - 支持200+币种无API限制
+**Status**: ✅ Implemented
 
 ### 错误原因
 
@@ -19,20 +19,36 @@ Too many requests; current limit of IP is 2400 requests per minute
 x-mbx-used-weight-1m: 2402, 2422, 2442...
 ```
 
-Cryptofeed订阅L2_BOOK时需要REST快照，200+币种×20权重=4000+，超出限制。
+Cryptofeed启动时同时发送所有币种的REST快照请求导致超限。
 
 ### 文件变更
 
 | 文件 | 类型 | 说明 |
 |------|------|------|
-| config/signal_thresholds.json | 更新 | max_symbols: null → 100 |
-| cs_ext/data/cryptofeed_stream.py | 更新 | 传递max_depth到BinanceFutures |
+| cs_ext/data/cryptofeed_stream.py | 更新 | 添加分批订阅逻辑，batch_size/batch_delay参数 |
+| config/signal_thresholds.json | 更新 | 恢复max_symbols=null，添加batch_size=30, batch_delay=3s |
 
-### 修复方案
+### 分批订阅方案
 
-1. **限制币种数量**: `max_symbols: 100` (top 100高流动性)
-2. **减少订单簿深度**: `max_depth: 50` (从1000降到50)
-3. API权重: 100币种 × 10权重 = 1000 < 2400限制
+```python
+# 200币种 ÷ 30/批 = 7批
+# 7批 × 3秒间隔 = 21秒完成全部订阅
+# 每批请求: 30 × 10权重 = 300 << 2400限制
+```
+
+**优势**:
+1. 恢复全市场200+币种覆盖
+2. 无需限制币种数量
+3. 启动稍慢(~21秒)但运行时无影响
+
+### 配置参数
+
+```json
+{
+  "batch_size": 30,
+  "batch_delay_seconds": 3.0
+}
+```
 
 ---
 

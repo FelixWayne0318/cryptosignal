@@ -75,11 +75,15 @@ class CryptofeedStream:
         on_trade: Optional[Callable[[TradeEvent], None]] = None,
         on_orderbook: Optional[Callable[[OrderBookEvent], None]] = None,
         max_depth: int = 50,
+        batch_size: int = 30,
+        batch_delay: float = 3.0,
     ):
         self.symbols = symbols
         self.on_trade = on_trade
         self.on_orderbook = on_orderbook
         self.max_depth = max_depth
+        self.batch_size = batch_size  # 每批订阅的币种数量
+        self.batch_delay = batch_delay  # 批次间延迟(秒)
 
         self._fh = FeedHandler()
 
@@ -171,9 +175,17 @@ class CryptofeedStream:
 
         return supported
 
+    def _split_into_batches(self, symbols: List[str]) -> List[List[str]]:
+        """将币种列表分割成多个批次"""
+        batches = []
+        for i in range(0, len(symbols), self.batch_size):
+            batches.append(symbols[i:i + self.batch_size])
+        return batches
+
     def run_forever(self):
         """
         阻塞式启动事件循环。适合独立进程或专用线程使用。
+        使用分批订阅避免API限制。
         """
         channels = [TRADES, L2_BOOK]
 
@@ -184,17 +196,32 @@ class CryptofeedStream:
             print("[CryptofeedStream] 错误: 没有可用的币种")
             return
 
-        self._fh.add_feed(
-            BinanceFutures(
-                channels=channels,
-                symbols=valid_symbols,
-                callbacks={
-                    TRADES: self._trade_callback,
-                    L2_BOOK: self._l2_book_callback,
-                },
-                max_depth=self.max_depth,  # 减少订单簿深度，降低API权重
+        # 分批订阅避免API限制
+        batches = self._split_into_batches(valid_symbols)
+        total_batches = len(batches)
+
+        print(f"[CryptofeedStream] 分 {total_batches} 批订阅，每批 {self.batch_size} 个币种，间隔 {self.batch_delay}s")
+
+        for i, batch_symbols in enumerate(batches):
+            self._fh.add_feed(
+                BinanceFutures(
+                    channels=channels,
+                    symbols=batch_symbols,
+                    callbacks={
+                        TRADES: self._trade_callback,
+                        L2_BOOK: self._l2_book_callback,
+                    },
+                    max_depth=self.max_depth,
+                )
             )
-        )
+
+            # 批次间延迟（最后一批不需要延迟）
+            if i < total_batches - 1:
+                import time
+                print(f"[CryptofeedStream] 批次 {i+1}/{total_batches} 已添加 ({len(batch_symbols)} 个币种)，等待 {self.batch_delay}s...")
+                time.sleep(self.batch_delay)
+
+        print(f"[CryptofeedStream] 所有 {total_batches} 批次已添加，启动数据流...")
 
         # 检查是否已有运行中的事件循环
         try:
@@ -230,15 +257,29 @@ class CryptofeedStream:
             print("[CryptofeedStream] 错误: 没有可用的币种")
             return
 
-        self._fh.add_feed(
-            BinanceFutures(
-                channels=[TRADES, L2_BOOK],
-                symbols=valid_symbols,
-                callbacks={
-                    TRADES: self._trade_callback,
-                    L2_BOOK: self._l2_book_callback,
-                },
-                max_depth=self.max_depth,  # 减少订单簿深度，降低API权重
+        # 分批订阅避免API限制
+        batches = self._split_into_batches(valid_symbols)
+        total_batches = len(batches)
+
+        print(f"[CryptofeedStream] 分 {total_batches} 批订阅，每批 {self.batch_size} 个币种，间隔 {self.batch_delay}s")
+
+        for i, batch_symbols in enumerate(batches):
+            self._fh.add_feed(
+                BinanceFutures(
+                    channels=[TRADES, L2_BOOK],
+                    symbols=batch_symbols,
+                    callbacks={
+                        TRADES: self._trade_callback,
+                        L2_BOOK: self._l2_book_callback,
+                    },
+                    max_depth=self.max_depth,
+                )
             )
-        )
+
+            # 批次间延迟
+            if i < total_batches - 1:
+                print(f"[CryptofeedStream] 批次 {i+1}/{total_batches} 已添加 ({len(batch_symbols)} 个币种)，等待 {self.batch_delay}s...")
+                await asyncio.sleep(self.batch_delay)
+
+        print(f"[CryptofeedStream] 所有 {total_batches} 批次已添加，启动数据流...")
         await self._fh.start()
