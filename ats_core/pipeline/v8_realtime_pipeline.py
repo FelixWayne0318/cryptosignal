@@ -288,11 +288,24 @@ class V8RealtimePipeline:
         try:
             # 延迟导入避免循环依赖
             if self.executor is None:
+                import os
                 from cs_ext.execution.ccxt_executor import CcxtExecutor
                 from cs_ext.api.ccxt_wrapper import CcxtExchange
 
                 exec_cfg = self.config.get("execution_layer", {})
-                exchange = CcxtExchange("binance")
+
+                # 从环境变量加载API密钥
+                api_key = os.environ.get("BINANCE_API_KEY", "")
+                api_secret = os.environ.get("BINANCE_API_SECRET", "")
+
+                if not api_key or not api_secret:
+                    logger.warning("未设置BINANCE_API_KEY/BINANCE_API_SECRET，执行功能受限")
+
+                exchange = CcxtExchange(
+                    "binanceusdm",  # 使用USDT永续合约
+                    api_key=api_key,
+                    secret=api_secret,
+                )
                 self.executor = CcxtExecutor(
                     exchange=exchange,
                     dry_run=self.dry_run,

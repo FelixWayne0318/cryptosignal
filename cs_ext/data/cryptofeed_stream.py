@@ -75,15 +75,11 @@ class CryptofeedStream:
         on_trade: Optional[Callable[[TradeEvent], None]] = None,
         on_orderbook: Optional[Callable[[OrderBookEvent], None]] = None,
         max_depth: int = 50,
-        batch_size: int = 30,
-        batch_delay: float = 3.0,
     ):
         self.symbols = symbols
         self.on_trade = on_trade
         self.on_orderbook = on_orderbook
         self.max_depth = max_depth
-        self.batch_size = batch_size  # 每批订阅的币种数量
-        self.batch_delay = batch_delay  # 批次间延迟(秒)
 
         self._fh = FeedHandler()
 
@@ -174,13 +170,6 @@ class CryptofeedStream:
         print(f"[CryptofeedStream] 订阅 {len(supported)} 个币种")
 
         return supported
-
-    def _split_into_batches(self, symbols: List[str]) -> List[List[str]]:
-        """将币种列表分割成多个批次（保留用于日志显示）"""
-        batches = []
-        for i in range(0, len(symbols), self.batch_size):
-            batches.append(symbols[i:i + self.batch_size])
-        return batches
 
     def run_forever(self):
         """
