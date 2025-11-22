@@ -209,26 +209,33 @@ echo "   特性: V8六层架构 | 实时因子计算 | Cryptofeed + CCXT"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# 停止旧进程（兼容v7.3.47和统一版本）
+# 停止旧进程（兼容V7和V8版本）
 pkill -f realtime_signal_scanner 2>/dev/null || true
+pkill -f start_realtime_stream 2>/dev/null || true
 sleep 1
 
 # 创建日志文件名
 LOG_FILE=~/cryptosignal_$(date +%Y%m%d_%H%M%S).log
 
-# 后台启动扫描器（v7.3.47版本）
-# 支持环境变量配置（P1-3修复）
-SCANNER_SCRIPT="${SCANNER_SCRIPT:-scripts/realtime_signal_scanner.py}"
+# 后台启动V8扫描器
+# 支持环境变量配置
+V8_MODE="${V8_MODE:-full}"
 SCAN_INTERVAL="${SCAN_INTERVAL:-300}"
-AUTO_COMMIT_REPORTS="${AUTO_COMMIT_REPORTS:-false}"
+ALL_SYMBOLS="${ALL_SYMBOLS:-true}"
 
-echo "📝 后台启动扫描器（v8.0.0 - V8架构 | 实时因子）..."
-echo "   📍 扫描器脚本: $SCANNER_SCRIPT"
+echo "📝 后台启动V8扫描器（真V8模式 - Cryptofeed+CCXT+Cryptostore）..."
+echo "   🔧 运行模式: $V8_MODE"
 echo "   ⏰ 扫描间隔: ${SCAN_INTERVAL}秒"
-echo "   📍 自动提交: $AUTO_COMMIT_REPORTS"
-echo "   📁 扫描报告保存在本地: reports/latest/"
-export AUTO_COMMIT_REPORTS
-nohup python3 "$SCANNER_SCRIPT" --interval "$SCAN_INTERVAL" > "$LOG_FILE" 2>&1 &
+echo "   🌐 全市场扫描: $ALL_SYMBOLS"
+echo "   📁 数据存储: data/v8_storage/"
+
+# 构建启动命令
+V8_CMD="python3 scripts/start_realtime_stream.py --mode $V8_MODE --interval $SCAN_INTERVAL"
+if [ "$ALL_SYMBOLS" = "true" ]; then
+    V8_CMD="$V8_CMD --all-symbols"
+fi
+
+nohup $V8_CMD > "$LOG_FILE" 2>&1 &
 PID=$!
 
 sleep 2
@@ -242,27 +249,25 @@ if ps -p $PID > /dev/null 2>&1; then
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "📋 管理命令:"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "  查看状态: ps aux | grep realtime_signal_scanner"
-    echo "  重新启动: ~/cryptosignal/auto_restart.sh"
-    echo "  停止程序: pkill -f realtime_signal_scanner.py"
+    echo "  查看状态: ps aux | grep start_realtime_stream"
+    echo "  重新启动: ~/cryptosignal/setup.sh"
+    echo "  停止程序: pkill -f start_realtime_stream.py"
     echo "  查看日志: tail -f $LOG_FILE"
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "⚙️  v8.0.0 配置:"
+    echo "⚙️  v8.0.1 真V8模式配置:"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "  ✅ 自动提交已禁用（AUTO_COMMIT_REPORTS=false）"
-    echo "  📁 扫描报告保存位置："
-    echo "     - reports/latest/scan_summary.json"
-    echo "     - reports/trends.json"
-    echo "  💡 如需启用自动提交，请修改 setup.sh 删除该设置"
+    echo "  🌐 全市场扫描: $ALL_SYMBOLS"
+    echo "  📁 数据存储位置: data/v8_storage/"
+    echo "  💡 切换模式: V8_MODE=simple ./setup.sh"
     echo ""
-    echo "  🆕 v8.0.0 V8六层架构："
-    echo "    ✅ Layer1: Cryptofeed (实时WebSocket数据)"
-    echo "    ✅ Layer2: CryptoSignal (因子计算+决策)"
-    echo "    ✅ Layer3: CCXT (统一交易所API)"
+    echo "  🆕 v8.0.1 真V8六层架构已启用："
+    echo "    ✅ Layer1: Cryptofeed (WebSocket实时数据流)"
+    echo "    ✅ Layer2: CryptoSignal (实时因子计算+决策)"
+    echo "    ✅ Layer3: CCXT (动态加载全市场币种)"
     echo "    ✅ Layer4: Cryptostore (数据持久化)"
-    echo "    ✅ 实时因子: CVD/OBI/LDI/VWAP"
-    echo "    📊 完整实时交易系统"
+    echo "    ✅ 实时因子: CVD/OBI/LDI/VWAP/TradeIntensity"
+    echo "    📊 全市场实时交易系统"
     echo ""
     echo "  V8组件目录："
     echo "    - cs_ext/data/cryptofeed_stream.py (数据层)"

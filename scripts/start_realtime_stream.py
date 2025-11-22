@@ -6,22 +6,112 @@ V8实时数据流启动脚本
 
 Usage:
     python scripts/start_realtime_stream.py [--symbols BTC,ETH] [--mode simple|full]
+    python scripts/start_realtime_stream.py --all-symbols --mode full  # 全市场扫描
 
     --symbols: 交易对列表，逗号分隔（默认：BTC,ETH）
+    --all-symbols: 动态加载全市场高流动性币种（从CCXT获取）
     --mode: 运行模式
         - simple: 仅启动数据流（原始模式）
         - full: 启动完整V8管道（因子计算+信号生成）
+    --interval: 扫描间隔秒数（默认300）
 
 Author: CryptoSignal
-Version: v8.0.0
+Version: v8.0.1
 """
 
 import argparse
 import sys
 import os
+import asyncio
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from ats_core.config.threshold_config import get_thresholds
+
+
+async def load_dynamic_symbols():
+    """
+    从CCXT动态加载高流动性USDT永续合约币种
+
+    Returns:
+        List[str]: 币种列表（如['BTC', 'ETH', 'SOL', ...]）
+    """
+    try:
+        import ccxt.async_support as ccxt
+
+        # 从配置加载参数
+        config = get_thresholds()
+        v8_config = config.get_all().get("v8_integration", {})
+        scanner_cfg = v8_config.get("scanner", {})
+
+        min_volume = scanner_cfg.get("min_volume_usdt", 3000000)
+        max_symbols = scanner_cfg.get("max_symbols", None)
+
+        print(f"[V8] 从CCXT动态加载币种...")
+        print(f"     最小成交额: {min_volume/1000000:.1f}M USDT")
+
+        # 创建CCXT客户端
+        exchange = ccxt.binanceusdm({
+            'enableRateLimit': True,
+        })
+
+        try:
+            # 获取市场信息
+            markets = await exchange.load_markets()
+
+            # 获取24h行情
+            tickers = await exchange.fetch_tickers()
+
+            # 筛选USDT永续合约
+            symbols = []
+            for symbol, ticker in tickers.items():
+                if not symbol.endswith(':USDT'):
+                    continue
+
+                market = markets.get(symbol)
+                if not market:
+                    continue
+
+                # 检查是否为永续合约
+                if market.get('type') != 'swap' or market.get('settle') != 'USDT':
+                    continue
+
+                # 检查流动性
+                quote_volume = ticker.get('quoteVolume', 0) or 0
+                if quote_volume < min_volume:
+                    continue
+
+                # 提取基础币种名称（如 BTC/USDT:USDT → BTC）
+                base = symbol.split('/')[0]
+                symbols.append((base, quote_volume))
+
+            # 按成交额排序
+            symbols.sort(key=lambda x: x[1], reverse=True)
+
+            # 提取币种名称
+            result = [s[0] for s in symbols]
+
+            # 限制最大数量
+            if max_symbols and len(result) > max_symbols:
+                result = result[:max_symbols]
+
+            print(f"[V8] 筛选出 {len(result)} 个高流动性币种")
+            if len(result) > 0:
+                print(f"     Top 5: {', '.join(result[:5])}")
+
+            return result
+
+        finally:
+            await exchange.close()
+
+    except ImportError:
+        print("[V8] 错误: CCXT未安装，请运行 pip install ccxt")
+        return ["BTC", "ETH"]
+    except Exception as e:
+        print(f"[V8] 动态加载币种失败: {e}")
+        print("[V8] 使用默认币种: BTC, ETH")
+        return ["BTC", "ETH"]
 
 
 def run_simple_mode(symbols):
@@ -115,23 +205,39 @@ def main():
         help="交易对列表，逗号分隔（默认：BTC,ETH）"
     )
     parser.add_argument(
+        "--all-symbols",
+        action="store_true",
+        help="动态加载全市场高流动性币种（覆盖--symbols）"
+    )
+    parser.add_argument(
         "--mode",
         type=str,
         choices=["simple", "full"],
         default="simple",
         help="运行模式：simple=仅数据流，full=完整V8管道"
     )
+    parser.add_argument(
+        "--interval",
+        type=int,
+        default=300,
+        help="扫描间隔秒数（默认300）"
+    )
 
     args = parser.parse_args()
 
     # 解析交易对
-    symbols = [s.strip().upper() for s in args.symbols.split(",")]
+    if args.all_symbols:
+        # 动态加载全市场币种
+        symbols = asyncio.run(load_dynamic_symbols())
+    else:
+        symbols = [s.strip().upper() for s in args.symbols.split(",")]
 
     print("=" * 60)
-    print("V8 Realtime Stream")
+    print("V8 Realtime Stream v8.0.1")
     print("=" * 60)
-    print(f"Symbols: {symbols}")
+    print(f"Symbols: {len(symbols)}个 ({', '.join(symbols[:5])}{'...' if len(symbols) > 5 else ''})")
     print(f"Mode: {args.mode}")
+    print(f"Interval: {args.interval}s")
     print("=" * 60)
     print()
 

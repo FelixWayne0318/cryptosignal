@@ -2682,3 +2682,83 @@ python3 scripts/diagnose_step1_full.py reports/btc_backtest_nov_v750.json
 - 甜蜜区间[8,12]获得最高分
 - 高|T|过热信号被有效压制
 
+
+---
+
+## 🚀 v8.0.1 真V8模式切换 (2025-11-22)
+
+### 问题背景
+setup.sh标签为v8.0.0，但实际运行的是v7.4.2批量扫描器：
+- 使用 `realtime_signal_scanner.py` (HTTP轮询)
+- 未使用真正的V8组件（Cryptofeed/CCXT/Cryptostore）
+
+用户请求切换到真正的V8模式。
+
+### 解决方案：切换到真V8实时流模式
+
+#### 1. 配置变更
+**config/signal_thresholds.json**
+```json
+{
+  "v8_integration": {
+    "scanner": {
+      "enabled": true,
+      "mode": "full",
+      "dynamic_symbols": true,
+      "min_volume_usdt": 3000000,
+      "max_symbols": null,
+      "scan_interval_seconds": 300
+    }
+  }
+}
+```
+
+#### 2. 启动脚本变更
+| 项目 | V7.4.2 | V8真模式 |
+|------|--------|----------|
+| 脚本 | `realtime_signal_scanner.py` | `start_realtime_stream.py` |
+| 数据源 | HTTP批量轮询 | Cryptofeed WebSocket |
+| 币种加载 | 直接Binance API | CCXT统一API |
+
+#### 3. 新增功能
+- `--all-symbols`: 从CCXT动态加载全市场高流动性币种
+- `--interval`: 扫描间隔参数
+- `load_dynamic_symbols()`: CCXT币种加载函数
+
+### 修改文件
+| 文件 | 说明 |
+|------|------|
+| config/signal_thresholds.json | 新增scanner配置节 |
+| scripts/start_realtime_stream.py | 新增动态加载币种功能 |
+| setup.sh | 切换到V8启动脚本 |
+| docs/V8_MODE_SWITCH.md | V8模式切换文档 |
+
+### 使用方法
+```bash
+# 标准启动（真V8模式）
+./setup.sh
+
+# 自定义参数
+V8_MODE=simple SCAN_INTERVAL=600 ./setup.sh
+
+# 手动运行
+python scripts/start_realtime_stream.py --mode full --all-symbols
+```
+
+### 验证
+```bash
+# 配置验证
+python3 -c "from ats_core.config.threshold_config import get_thresholds; print('✅')"
+
+# 模块导入
+python3 -c "from scripts.start_realtime_stream import load_dynamic_symbols; print('✅')"
+```
+
+### V8六层架构启用状态
+- ✅ Layer1: Cryptofeed (WebSocket实时数据流)
+- ✅ Layer2: CryptoSignal (实时因子计算)
+- ✅ Layer3: CCXT (动态加载全市场币种)
+- ✅ Layer4: Cryptostore (数据持久化)
+- ✅ Layer5: Decision (信号生成)
+- ✅ Layer6: Execution (dry_run模式)
+

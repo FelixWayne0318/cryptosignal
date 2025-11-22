@@ -827,6 +827,18 @@
       "layer5_api": "CCXT (交易所API统一层)",
       "layer6_storage": "Cryptostore (数据持久化)"
     },
+    "scanner": {
+      "_description": "V8扫描器配置 - 支持动态加载全市场币种",
+      "enabled": true,
+      "mode": "full",
+      "dynamic_symbols": true,
+      "min_volume_usdt": 3000000,
+      "max_symbols": null,
+      "scan_interval_seconds": 300,
+      "telegram_enabled": true,
+      "data_recording_enabled": true,
+      "_comment": "mode=full使用完整V8管道，dynamic_symbols=true从交易所动态加载"
+    },
     "cryptofeed_stream": {
       "_description": "Cryptofeed实时数据流配置",
       "enabled": true,
