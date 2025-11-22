@@ -60,6 +60,8 @@ try:
         normalize_symbol,
         four_step_to_decision_output,
         decision_to_telegram_dict,
+        to_ccxt_symbol,
+        to_cryptofeed_symbol,
     )
     FOUR_STEP_AVAILABLE = True
 except ImportError as e:
@@ -306,7 +308,7 @@ class V8RealtimePipeline:
 
         # 构建兼容telegram_fmt的信号字典
         return {
-            "symbol": signal.symbol.replace("-PERP", "").replace("-USDT", "USDT"),
+            "symbol": normalize_symbol(signal.symbol),
             "price": current_price,
             "side": signal.direction,
             "prime": signal.strength,
@@ -657,7 +659,7 @@ class V8RealtimePipeline:
             from cs_ext.execution.ccxt_executor import ExecutionSignal
             exec_signal = ExecutionSignal(
                 exchange=self.exchange_id,
-                symbol=signal.symbol.replace("-PERP", "").replace("-USDT", "/USDT"),
+                symbol=to_ccxt_symbol(signal.symbol),
                 side="buy" if signal.direction == "long" else "sell",
                 order_type="market",
                 quantity=self.default_order_quantity,  # 从配置读取订单数量
@@ -687,8 +689,8 @@ class V8RealtimePipeline:
             # 导入Cryptofeed组件
             from cs_ext.data.cryptofeed_stream import CryptofeedStream
 
-            # 转换符号格式
-            cf_symbols = [s.replace("USDT", "-USDT-PERP") for s in self.symbols]
+            # 转换符号格式为Cryptofeed格式
+            cf_symbols = [to_cryptofeed_symbol(s) for s in self.symbols]
 
             # 创建Cryptofeed流
             stream_cfg = self.config.get("cryptofeed_stream", {})
