@@ -207,18 +207,20 @@ class CryptofeedStream:
         print(f"[CryptofeedStream] Feed已添加，启动数据流...")
         print(f"[CryptofeedStream] 正在连接 Binance Futures WebSocket...")
 
-        # 检查是否已有运行中的事件循环
+        # Python 3.10+ 兼容：必须先设置事件循环
+        # asyncio.get_event_loop() 在 3.10+ 中不再自动创建循环
         try:
             loop = asyncio.get_running_loop()
-            # 已有事件循环，需要nest_asyncio支持
-            if not _NEST_ASYNCIO_AVAILABLE:
-                print("[CryptofeedStream] 警告: 检测到嵌套事件循环，请安装nest_asyncio: pip install nest_asyncio")
+            print(f"[CryptofeedStream] 使用现有事件循环")
         except RuntimeError:
-            # 没有运行中的事件循环，创建新的
+            # 创建并设置新的事件循环
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+            print(f"[CryptofeedStream] 创建新事件循环 (Python 3.10+ 兼容)")
 
         print(f"[CryptofeedStream] 事件循环已准备，开始运行...")
+
+        # 直接调用 fh.run()，它会使用我们刚设置的事件循环
         self._fh.run()
 
     def run_in_background(self):
