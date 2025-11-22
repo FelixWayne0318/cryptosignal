@@ -7,13 +7,13 @@ from cryptofeed import FeedHandler
 from cryptofeed.exchanges import BinanceFutures
 from cryptofeed.defines import TRADES, L2_BOOK
 
-# 支持嵌套事件循环
+# nest_asyncio 仅在需要时导入，不再全局应用
+_NEST_ASYNCIO_AVAILABLE = False
 try:
     import nest_asyncio
-    nest_asyncio.apply()
     _NEST_ASYNCIO_AVAILABLE = True
 except ImportError:
-    _NEST_ASYNCIO_AVAILABLE = False
+    pass
 
 
 class TradeEvent:
@@ -242,6 +242,7 @@ class CryptofeedStream:
             loop.create_task(self._run_async())
 
     async def _run_async(self):
+        """异步运行 Cryptofeed（用于在现有事件循环中运行）"""
         # 过滤不支持的币种
         valid_symbols = self._filter_supported_symbols(self.symbols)
 
@@ -254,17 +255,31 @@ class CryptofeedStream:
         print(f"[CryptofeedStream] 注意: 初始化快照可能触发429重试，这是正常的")
 
         # 单一Feed实例
-        self._fh.add_feed(
-            BinanceFutures(
-                channels=[TRADES, L2_BOOK],
-                symbols=valid_symbols,
-                callbacks={
-                    TRADES: self._trade_callback,
-                    L2_BOOK: self._l2_book_callback,
-                },
-                max_depth=self.max_depth,
-            )
+        feed = BinanceFutures(
+            channels=[TRADES, L2_BOOK],
+            symbols=valid_symbols,
+            callbacks={
+                TRADES: self._trade_callback,
+                L2_BOOK: self._l2_book_callback,
+            },
+            max_depth=self.max_depth,
         )
+        self._fh.add_feed(feed)
 
         print(f"[CryptofeedStream] Feed已添加，启动数据流...")
-        await self._fh.start()
+
+        # 启动所有 feeds
+        for f in self._fh.feeds:
+            await f.start()
+
+        print(f"[CryptofeedStream] ✅ 数据流已启动，等待数据...")
+
+        # 保持运行，等待数据
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            print(f"[CryptofeedStream] 数据流被取消")
+            # 清理
+            for f in self._fh.feeds:
+                await f.stop()

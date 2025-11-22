@@ -162,8 +162,8 @@ def run_simple_mode(symbols):
     stream.run_forever()
 
 
-def run_full_mode(symbols):
-    """运行完整V8管道模式"""
+async def run_full_mode_async(symbols):
+    """运行完整V8管道模式（异步版本）"""
     from ats_core.pipeline.v8_realtime_pipeline import V8RealtimePipeline, V8Signal
 
     # 转换符号格式
@@ -187,13 +187,17 @@ def run_full_mode(symbols):
     print(f"  - min_confidence: {pipeline.min_confidence}")
     print()
 
-    # 启动管道
-    import asyncio
+    # 启动管道（使用 await，不再嵌套 asyncio.run）
     try:
-        asyncio.run(pipeline.start())
+        await pipeline.start()
     except KeyboardInterrupt:
         pipeline.stop()
         print("\nV8管道已停止")
+
+
+def run_full_mode(symbols):
+    """运行完整V8管道模式（同步包装器）"""
+    asyncio.run(run_full_mode_async(symbols))
 
 
 def main():
