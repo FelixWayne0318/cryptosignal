@@ -168,10 +168,14 @@ class V8BacktestPipeline:
             )
         else:
             # 使用内部引擎
+            # 转换datetime为毫秒时间戳
+            start_ts = int(start_time.timestamp() * 1000)
+            end_ts = int(end_time.timestamp() * 1000)
+
             result = self._engine.run(
                 symbols=symbols,
-                start_time=start_time,
-                end_time=end_time,
+                start_time=start_ts,
+                end_time=end_ts,
                 interval=timeframe
             )
 
@@ -211,10 +215,14 @@ class V8BacktestPipeline:
 
         # 当前回退到内部引擎
         logger.warning("Freqtrade完整集成待实现，使用内部引擎")
+        # 转换datetime为毫秒时间戳
+        start_ts = int(start_time.timestamp() * 1000)
+        end_ts = int(end_time.timestamp() * 1000)
+
         return self._engine.run(
             symbols=symbols,
-            start_time=start_time,
-            end_time=end_time,
+            start_time=start_ts,
+            end_time=end_ts,
             interval=timeframe
         )
 
