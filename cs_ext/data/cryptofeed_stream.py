@@ -207,21 +207,25 @@ class CryptofeedStream:
         print(f"[CryptofeedStream] Feed已添加，启动数据流...")
         print(f"[CryptofeedStream] 正在连接 Binance Futures WebSocket...")
 
-        # Python 3.10+ 兼容：必须先设置事件循环
-        # asyncio.get_event_loop() 在 3.10+ 中不再自动创建循环
+        # Python 3.10+ / uvloop 兼容：使用 asyncio.run()
+        # 这会正确创建和管理事件循环，避免 uvloop 的严格检查
+        print(f"[CryptofeedStream] 使用 asyncio.run() 启动 (Python 3.10+/uvloop 兼容)")
+
+        async def _run_feeds():
+            """包装 FeedHandler 的异步运行"""
+            await self._fh.run_async()
+
         try:
-            loop = asyncio.get_running_loop()
-            print(f"[CryptofeedStream] 使用现有事件循环")
-        except RuntimeError:
-            # 创建并设置新的事件循环
+            asyncio.run(_run_feeds())
+        except AttributeError:
+            # 旧版 Cryptofeed 可能没有 run_async，尝试其他方式
+            print(f"[CryptofeedStream] 尝试备用启动方式...")
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            print(f"[CryptofeedStream] 创建新事件循环 (Python 3.10+ 兼容)")
-
-        print(f"[CryptofeedStream] 事件循环已准备，开始运行...")
-
-        # 直接调用 fh.run()，它会使用我们刚设置的事件循环
-        self._fh.run()
+            try:
+                loop.run_forever()
+            finally:
+                loop.close()
 
     def run_in_background(self):
         """
