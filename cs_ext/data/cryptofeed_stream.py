@@ -192,6 +192,7 @@ class CryptofeedStream:
                     TRADES: self._trade_callback,
                     L2_BOOK: self._l2_book_callback,
                 },
+                max_depth=self.max_depth,  # 减少订单簿深度，降低API权重
             )
         )
 
@@ -237,6 +238,7 @@ class CryptofeedStream:
                     TRADES: self._trade_callback,
                     L2_BOOK: self._l2_book_callback,
                 },
+                max_depth=self.max_depth,  # 减少订单簿深度，降低API权重
             )
         )
         await self._fh.start()

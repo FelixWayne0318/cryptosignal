@@ -833,11 +833,11 @@
       "mode": "full",
       "dynamic_symbols": true,
       "min_volume_usdt": 3000000,
-      "max_symbols": null,
+      "max_symbols": 100,
       "scan_interval_seconds": 300,
       "telegram_enabled": true,
       "data_recording_enabled": true,
-      "_comment": "mode=full使用完整V8管道，不支持币种自动跳过"
+      "_comment": "mode=full使用完整V8管道，max_symbols=100避免API限制"
     },
     "cryptofeed_stream": {
       "_description": "Cryptofeed实时数据流配置",

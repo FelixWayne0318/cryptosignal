@@ -5,6 +5,37 @@
 
 ---
 
+## 🆕 Session 23: Binance API限制修复 (2025-11-22)
+
+**Problem**: V8订阅200+币种导致Binance API 429限制错误
+**Solution**: 限制max_symbols=100，减少orderbook深度从1000到50
+**Impact**: Bug修复 - 避免API请求超限
+**Status**: ✅ Fixed
+
+### 错误原因
+
+```
+Too many requests; current limit of IP is 2400 requests per minute
+x-mbx-used-weight-1m: 2402, 2422, 2442...
+```
+
+Cryptofeed订阅L2_BOOK时需要REST快照，200+币种×20权重=4000+，超出限制。
+
+### 文件变更
+
+| 文件 | 类型 | 说明 |
+|------|------|------|
+| config/signal_thresholds.json | 更新 | max_symbols: null → 100 |
+| cs_ext/data/cryptofeed_stream.py | 更新 | 传递max_depth到BinanceFutures |
+
+### 修复方案
+
+1. **限制币种数量**: `max_symbols: 100` (top 100高流动性)
+2. **减少订单簿深度**: `max_depth: 50` (从1000降到50)
+3. API权重: 100币种 × 10权重 = 1000 < 2400限制
+
+---
+
 ## 🆕 Session 22: V8事件循环嵌套修复 (2025-11-22)
 
 **Problem**: V8管道运行时出现 `This event loop is already running` 错误
