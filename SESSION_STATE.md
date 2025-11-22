@@ -5,11 +5,11 @@
 
 ---
 
-## 🆕 Session 29: 六层架构集成关键问题修复 (2025-11-22)
+## 🆕 Session 29: 六层架构集成完善 (2025-11-22)
 
-**Problem**: 六层架构集成存在三个问题导致四步决策系统无法生效
-**Solution**: 修复K线缓存初始化、格式转换使用、配置默认值一致性
-**Impact**: Bug修复 - V8四步决策系统现在可以正常运行
+**Problem**: 六层架构集成存在问题导致四步决策系统无法生效
+**Solution**: 修复K线缓存、格式转换、配置默认值、Symbol转换规范化
+**Impact**: Bug修复+规范化 - 六层架构100%完整集成
 **Status**: ✅ Completed
 
 ### 问题分析与修复
@@ -19,24 +19,38 @@
 | K线缓存未初始化 | 🔴 严重 | `self.kline_cache = None` 永远是 None | 使用 `get_kline_cache()` 获取全局单例 |
 | Cryptofeed格式转换未使用 | 🟡 中等 | 导入但未调用 `normalize_symbol` | TradeEvent/OrderBookEvent 中调用 |
 | 配置默认值不一致 | 🟢 低 | 代码默认 `True`，配置 `false` | 默认值改为 `False` |
+| Symbol转换不规范 | 🟡 中等 | 手动字符串替换 | 使用统一转换函数 |
 
 ### 主要变更
 
 | 文件 | 类型 | 说明 |
 |------|------|------|
-| ats_core/pipeline/v8_realtime_pipeline.py | Bug修复 | K线缓存单例+默认值修正 |
+| ats_core/pipeline/v8_realtime_pipeline.py | 重大修复 | K线缓存+Symbol转换规范化 |
 | cs_ext/data/cryptofeed_stream.py | 增强 | 实际使用normalize_symbol |
+
+### Symbol格式转换统一
+
+```python
+# 修复前 (手动替换)
+symbol.replace("-PERP", "").replace("-USDT", "/USDT")
+
+# 修复后 (统一函数)
+to_ccxt_symbol(signal.symbol)      # → BTC/USDT
+to_cryptofeed_symbol(s)            # → BTC-USDT-PERP
+normalize_symbol(signal.symbol)    # → BTCUSDT
+```
 
 ### 测试验证
 
 - ✅ 语法检查通过
 - ✅ get_kline_cache()单例测试通过
-- ✅ Cryptofeed格式转换测试通过
+- ✅ 所有格式转换测试通过
 
-### Git Commit
+### Git Commits
 
 ```
 9e0ec00 fix(v8): 修复六层架构集成三个关键问题
+2b672fd refactor(v8): 统一Symbol格式转换函数
 ```
 
 ---
