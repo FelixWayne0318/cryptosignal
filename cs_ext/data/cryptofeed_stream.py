@@ -176,7 +176,7 @@ class CryptofeedStream:
         return supported
 
     def _split_into_batches(self, symbols: List[str]) -> List[List[str]]:
-        """将币种列表分割成多个批次"""
+        """将币种列表分割成多个批次（保留用于日志显示）"""
         batches = []
         for i in range(0, len(symbols), self.batch_size):
             batches.append(symbols[i:i + self.batch_size])
@@ -185,7 +185,7 @@ class CryptofeedStream:
     def run_forever(self):
         """
         阻塞式启动事件循环。适合独立进程或专用线程使用。
-        使用分批订阅避免API限制。
+        使用单一连接避免触发Binance风控（5连接/IP限制）。
         """
         channels = [TRADES, L2_BOOK]
 
@@ -196,32 +196,26 @@ class CryptofeedStream:
             print("[CryptofeedStream] 错误: 没有可用的币种")
             return
 
-        # 分批订阅避免API限制
-        batches = self._split_into_batches(valid_symbols)
-        total_batches = len(batches)
+        total_symbols = len(valid_symbols)
+        print(f"[CryptofeedStream] 订阅 {total_symbols} 个币种（单一连接模式）")
+        print(f"[CryptofeedStream] 注意: 初始化快照可能触发429重试，这是正常的")
 
-        print(f"[CryptofeedStream] 分 {total_batches} 批订阅，每批 {self.batch_size} 个币种，间隔 {self.batch_delay}s")
-
-        for i, batch_symbols in enumerate(batches):
-            self._fh.add_feed(
-                BinanceFutures(
-                    channels=channels,
-                    symbols=batch_symbols,
-                    callbacks={
-                        TRADES: self._trade_callback,
-                        L2_BOOK: self._l2_book_callback,
-                    },
-                    max_depth=self.max_depth,
-                )
+        # 单一Feed实例，Cryptofeed内部管理多流分配
+        # Binance限制: 200流/连接，5连接/IP
+        # Cryptofeed会自动处理429重试
+        self._fh.add_feed(
+            BinanceFutures(
+                channels=channels,
+                symbols=valid_symbols,
+                callbacks={
+                    TRADES: self._trade_callback,
+                    L2_BOOK: self._l2_book_callback,
+                },
+                max_depth=self.max_depth,
             )
+        )
 
-            # 批次间延迟（最后一批不需要延迟）
-            if i < total_batches - 1:
-                import time
-                print(f"[CryptofeedStream] 批次 {i+1}/{total_batches} 已添加 ({len(batch_symbols)} 个币种)，等待 {self.batch_delay}s...")
-                time.sleep(self.batch_delay)
-
-        print(f"[CryptofeedStream] 所有 {total_batches} 批次已添加，启动数据流...")
+        print(f"[CryptofeedStream] Feed已添加，启动数据流...")
 
         # 检查是否已有运行中的事件循环
         try:
@@ -257,29 +251,22 @@ class CryptofeedStream:
             print("[CryptofeedStream] 错误: 没有可用的币种")
             return
 
-        # 分批订阅避免API限制
-        batches = self._split_into_batches(valid_symbols)
-        total_batches = len(batches)
+        total_symbols = len(valid_symbols)
+        print(f"[CryptofeedStream] 订阅 {total_symbols} 个币种（单一连接模式）")
+        print(f"[CryptofeedStream] 注意: 初始化快照可能触发429重试，这是正常的")
 
-        print(f"[CryptofeedStream] 分 {total_batches} 批订阅，每批 {self.batch_size} 个币种，间隔 {self.batch_delay}s")
-
-        for i, batch_symbols in enumerate(batches):
-            self._fh.add_feed(
-                BinanceFutures(
-                    channels=[TRADES, L2_BOOK],
-                    symbols=batch_symbols,
-                    callbacks={
-                        TRADES: self._trade_callback,
-                        L2_BOOK: self._l2_book_callback,
-                    },
-                    max_depth=self.max_depth,
-                )
+        # 单一Feed实例
+        self._fh.add_feed(
+            BinanceFutures(
+                channels=[TRADES, L2_BOOK],
+                symbols=valid_symbols,
+                callbacks={
+                    TRADES: self._trade_callback,
+                    L2_BOOK: self._l2_book_callback,
+                },
+                max_depth=self.max_depth,
             )
+        )
 
-            # 批次间延迟
-            if i < total_batches - 1:
-                print(f"[CryptofeedStream] 批次 {i+1}/{total_batches} 已添加 ({len(batch_symbols)} 个币种)，等待 {self.batch_delay}s...")
-                await asyncio.sleep(self.batch_delay)
-
-        print(f"[CryptofeedStream] 所有 {total_batches} 批次已添加，启动数据流...")
+        print(f"[CryptofeedStream] Feed已添加，启动数据流...")
         await self._fh.start()

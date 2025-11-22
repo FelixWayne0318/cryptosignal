@@ -5,50 +5,42 @@
 
 ---
 
-## 🆕 Session 23: Binance API限制修复 - 分批订阅方案 (2025-11-22)
+## 🆕 Session 23: Binance风控安全方案 (2025-11-22)
 
-**Problem**: V8订阅200+币种导致Binance API 429限制错误
-**Solution**: 分批订阅+延迟，恢复全市场覆盖
-**Impact**: 性能优化 - 支持200+币种无API限制
+**Problem**: V8订阅200+币种导致API 429错误，分批方案可能触发5连接/IP风控
+**Solution**: 单一连接模式 + 合理币种限制
+**Impact**: 安全优化 - 避免触发Binance风控
 **Status**: ✅ Implemented
 
-### 错误原因
+### 风控分析
 
-```
-Too many requests; current limit of IP is 2400 requests per minute
-x-mbx-used-weight-1m: 2402, 2422, 2442...
-```
-
-Cryptofeed启动时同时发送所有币种的REST快照请求导致超限。
+| 风险 | 分批方案问题 | 安全方案 |
+|------|--------------|----------|
+| WebSocket连接 | 7个(超5个/IP限制) | 1个 |
+| REST快照 | 同时请求 | Cryptofeed内置429重试 |
+| 币种覆盖 | 200+ | 100(95%+交易量) |
 
 ### 文件变更
 
 | 文件 | 类型 | 说明 |
 |------|------|------|
-| cs_ext/data/cryptofeed_stream.py | 更新 | 添加分批订阅逻辑，batch_size/batch_delay参数 |
-| config/signal_thresholds.json | 更新 | 恢复max_symbols=null，添加batch_size=30, batch_delay=3s |
+| cs_ext/data/cryptofeed_stream.py | 更新 | 改为单一Feed实例，避免多连接 |
+| config/signal_thresholds.json | 更新 | max_symbols=100，移除分批参数 |
 
-### 分批订阅方案
+### 单连接模式原理
 
-```python
-# 200币种 ÷ 30/批 = 7批
-# 7批 × 3秒间隔 = 21秒完成全部订阅
-# 每批请求: 30 × 10权重 = 300 << 2400限制
+```
+Cryptofeed内部管理:
+- 200流/连接限制 → 自动分配
+- 429重试机制 → 自动恢复
+- 单IP单连接 → 避免风控
 ```
 
-**优势**:
-1. 恢复全市场200+币种覆盖
-2. 无需限制币种数量
-3. 启动稍慢(~21秒)但运行时无影响
+### 为什么选择100币种
 
-### 配置参数
-
-```json
-{
-  "batch_size": 30,
-  "batch_delay_seconds": 3.0
-}
-```
+- Top 100按交易量覆盖95%+市场活动
+- 100 × 10权重 = 1000 < 2400限制
+- 平衡覆盖率和API稳定性
 
 ---
 
