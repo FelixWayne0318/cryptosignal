@@ -61,6 +61,7 @@ class RealtimeFactors:
     ldi: float = 0.0
     trade_intensity: float = 0.0
     vwap: float = 0.0
+    mid_price: float = 0.0  # 中间价 (best_bid + best_ask) / 2
     bid_depth: float = 0.0
     ask_depth: float = 0.0
     spread_bps: float = 0.0
@@ -226,7 +227,7 @@ class RealtimeFactorCalculator:
         cvd, cvd_z = self._calc_cvd(symbol, trades)
 
         # 计算订单簿因子
-        obi, ldi, bid_depth, ask_depth, spread_bps = self._calc_orderbook_factors(ob)
+        obi, ldi, bid_depth, ask_depth, spread_bps, mid_price = self._calc_orderbook_factors(ob)
 
         # 计算交易强度
         trade_intensity = self._calc_trade_intensity(trades)
@@ -243,6 +244,7 @@ class RealtimeFactorCalculator:
             ldi=ldi,
             trade_intensity=trade_intensity,
             vwap=vwap,
+            mid_price=mid_price,
             bid_depth=bid_depth,
             ask_depth=ask_depth,
             spread_bps=spread_bps,
@@ -286,15 +288,15 @@ class RealtimeFactorCalculator:
 
     def _calc_orderbook_factors(
         self, ob: Optional[OrderbookData]
-    ) -> Tuple[float, float, float, float, float]:
+    ) -> Tuple[float, float, float, float, float, float]:
         """
         计算订单簿因子
 
         Returns:
-            (obi, ldi, bid_depth, ask_depth, spread_bps)
+            (obi, ldi, bid_depth, ask_depth, spread_bps, mid_price)
         """
         if not ob or not ob.bids or not ob.asks:
-            return 0.0, 0.0, 0.0, 0.0, 0.0
+            return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
 
         # 取前N档
         bids = ob.bids[:self.obi_depth]
@@ -327,7 +329,7 @@ class RealtimeFactorCalculator:
         mid_price = (best_bid + best_ask) / 2 if best_bid and best_ask else 0
         spread_bps = ((best_ask - best_bid) / mid_price * 10000) if mid_price > 0 else 0.0
 
-        return obi, ldi, bid_depth, ask_depth, spread_bps
+        return obi, ldi, bid_depth, ask_depth, spread_bps, mid_price
 
     def _calc_trade_intensity(self, trades: List[TradeData]) -> float:
         """
@@ -402,6 +404,7 @@ class RealtimeFactorCalculator:
             ldi=alpha * new_factors.ldi + (1 - alpha) * old.ldi,
             trade_intensity=alpha * new_factors.trade_intensity + (1 - alpha) * old.trade_intensity,
             vwap=alpha * new_factors.vwap + (1 - alpha) * old.vwap,
+            mid_price=new_factors.mid_price,  # 使用最新中间价
             bid_depth=new_factors.bid_depth,  # 深度不平滑
             ask_depth=new_factors.ask_depth,
             spread_bps=alpha * new_factors.spread_bps + (1 - alpha) * old.spread_bps,

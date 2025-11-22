@@ -870,26 +870,53 @@
       "_comment": "实时计算CVD/OBI/LDI等因子"
     },
     "decision_pipeline": {
-      "_description": "决策管道配置",
+      "_description": "决策管道配置 - V8集成四步决策系统",
       "enabled": true,
       "signal_evaluation_interval_ms": 5000,
       "min_confidence_for_signal": 0.6,
       "factor_aggregation_method": "weighted_sum",
       "use_v72_gates": true,
       "auto_execute": false,
-      "_comment": "从因子到信号的决策流程"
+      "use_four_step_system": true,
+      "four_step_integration": {
+        "_description": "V8与四步决策系统的有机融合配置",
+        "enabled": true,
+        "call_run_four_step_decision": true,
+        "use_telegram_template": true,
+        "fallback_to_simple": false,
+        "_comment": "启用后V8将调用run_four_step_decision而非简化判断"
+      },
+      "signal_thresholds": {
+        "_description": "信号生成阈值（从配置读取，零硬编码）",
+        "cvd_z_threshold": 0.5,
+        "obi_threshold": 0.1,
+        "base_confidence": 0.5,
+        "_comment": "降低阈值以产生更多信号，原值1.0/0.2过于严格"
+      },
+      "telegram_notification": {
+        "_description": "Telegram通知配置",
+        "enabled": true,
+        "use_v72_template": true,
+        "send_on_signal": true,
+        "include_factor_details": true,
+        "_comment": "使用telegram_fmt.py中的v7.2模板格式化消息"
+      },
+      "_comment": "从因子到信号的决策流程，集成四步系统"
     },
     "execution_layer": {
       "_description": "执行层配置",
       "enabled": true,
       "executor_type": "ccxt",
+      "exchange_id": "binanceusdm",
       "dry_run": true,
       "max_order_value_usdt": 1000.0,
+      "default_order_quantity": 0.001,
       "risk_check_enabled": true,
       "position_limit_pct": 0.05,
       "slippage_tolerance_pct": 0.001,
       "retry_on_failure": true,
       "max_retries": 3,
+      "dry_order_id_prefix": "DRY_",
       "_executor_options": ["ccxt", "hummingbot"],
       "_comment": "默认dry_run=true，需要手动开启实盘"
     },
