@@ -55,7 +55,7 @@ except ImportError:
 try:
     from ats_core.decision.four_step_system import run_four_step_decision
     from ats_core.pipeline.analyze_symbol import analyze_symbol_with_preloaded_klines
-    from ats_core.data.realtime_kline_cache import RealtimeKlineCache
+    from ats_core.data.realtime_kline_cache import RealtimeKlineCache, get_kline_cache
     from ats_core.utils.format_converter import (
         normalize_symbol,
         four_step_to_decision_output,
@@ -64,7 +64,8 @@ try:
     FOUR_STEP_AVAILABLE = True
 except ImportError as e:
     FOUR_STEP_AVAILABLE = False
-    logger.warning(f"四步决策系统导入失败: {e}")
+    # logger未定义，延迟warning到init时
+    _FOUR_STEP_IMPORT_ERROR = str(e)
 
 logger = logging.getLogger(__name__)
 
@@ -173,17 +174,26 @@ class V8RealtimePipeline:
         self._telegram_chat_id = None
         self._telegram_initialized = False
 
-        # 6. K线缓存（用于四步决策系统）
-        self.kline_cache = None
-        self._kline_cache_initialized = False
+        # 6. K线缓存（用于四步决策系统）- 使用全局单例
+        if FOUR_STEP_AVAILABLE:
+            self.kline_cache = get_kline_cache()
+            logger.info("K线缓存单例已获取")
+        else:
+            self.kline_cache = None
+            if '_FOUR_STEP_IMPORT_ERROR' in globals():
+                logger.warning(f"四步决策系统导入失败: {_FOUR_STEP_IMPORT_ERROR}")
 
         # 7. 四步决策系统配置
         four_step_cfg = self.config.get("decision_pipeline", {}).get("four_step_integration", {})
         self.use_four_step = four_step_cfg.get("enabled", False) and FOUR_STEP_AVAILABLE
-        self.four_step_fallback = four_step_cfg.get("fallback_to_simple", True)
+        # 默认值与配置文件一致: fallback_to_simple = false
+        self.four_step_fallback = four_step_cfg.get("fallback_to_simple", False)
 
         if self.use_four_step:
             logger.info("四步决策系统集成已启用")
+            if self.kline_cache:
+                stats = self.kline_cache.get_stats()
+                logger.info(f"K线缓存状态: {stats.get('total_symbols', 0)}个币种, {stats.get('total_klines', 0)}根K线")
         else:
             logger.info("使用简化CVD/OBI判断模式")
 

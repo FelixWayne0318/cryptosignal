@@ -102,8 +102,9 @@ class CryptofeedStream:
         if not self.on_trade:
             return
 
+        # 使用normalize_symbol标准化symbol格式 (BTC-USDT-PERP → BTCUSDT)
         evt = TradeEvent(
-            symbol=trade.symbol,
+            symbol=normalize_symbol(trade.symbol),
             ts=trade.timestamp,
             price=float(trade.price),
             size=float(trade.amount),
@@ -144,8 +145,9 @@ class CryptofeedStream:
             bids = bids[: self.max_depth]
             asks = asks[: self.max_depth]
 
+        # 使用normalize_symbol标准化symbol格式 (BTC-USDT-PERP → BTCUSDT)
         evt = OrderBookEvent(
-            symbol=book.symbol,
+            symbol=normalize_symbol(book.symbol),
             ts=book.timestamp,
             bids=bids,
             asks=asks,
