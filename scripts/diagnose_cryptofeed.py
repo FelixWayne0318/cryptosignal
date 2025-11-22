@@ -165,8 +165,8 @@ async def test_cryptofeed_connection():
         else:
             print(f"  ⚠️  5秒内未收到数据（可能是网络问题）")
 
-        # 停止
-        await feed.stop()
+        # 停止（stop() 也是同步方法）
+        feed.stop()
         print("  ✅ Feed.stop() 成功")
 
     except TypeError as e:

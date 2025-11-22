@@ -284,6 +284,6 @@ class CryptofeedStream:
                 await asyncio.sleep(1)
         except asyncio.CancelledError:
             print(f"[CryptofeedStream] 数据流被取消")
-            # 清理
+            # 清理（stop() 也是同步方法）
             for f in self._fh.feeds:
-                await f.stop()
+                f.stop()
