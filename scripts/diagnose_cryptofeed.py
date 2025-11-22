@@ -20,7 +20,8 @@ print(f"  平台: {sys.platform}")
 print("\n[2] 依赖包版本")
 try:
     import cryptofeed
-    print(f"  cryptofeed: {cryptofeed.__version__}")
+    version = getattr(cryptofeed, '__version__', 'unknown')
+    print(f"  cryptofeed: {version}")
 except Exception as e:
     print(f"  cryptofeed: 导入失败 - {e}")
     sys.exit(1)
