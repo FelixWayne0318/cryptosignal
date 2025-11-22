@@ -5,6 +5,56 @@
 
 ---
 
+## 🆕 Session 22: V8事件循环嵌套修复 (2025-11-22)
+
+**Problem**: V8管道运行时出现 `This event loop is already running` 错误
+**Solution**: 添加nest_asyncio支持处理嵌套事件循环
+**Impact**: Bug修复 - V8实时流模式稳定运行
+**Status**: ✅ Fixed
+
+### 错误原因
+
+V8RealtimePipeline在async上下文中调用CryptofeedStream.run_forever()，导致事件循环嵌套冲突。
+
+### 文件变更
+
+| 文件 | 类型 | 说明 |
+|------|------|------|
+| cs_ext/data/cryptofeed_stream.py | 更新 | 添加nest_asyncio支持和事件循环检测 |
+| requirements.txt | 更新 | 添加nest_asyncio>=1.5.0依赖 |
+
+### 修复代码
+
+```python
+# cs_ext/data/cryptofeed_stream.py
+try:
+    import nest_asyncio
+    nest_asyncio.apply()
+    _NEST_ASYNCIO_AVAILABLE = True
+except ImportError:
+    _NEST_ASYNCIO_AVAILABLE = False
+
+def run_forever(self):
+    # 检查是否已有运行中的事件循环
+    try:
+        loop = asyncio.get_running_loop()
+        if not _NEST_ASYNCIO_AVAILABLE:
+            print("[CryptofeedStream] 警告: 检测到嵌套事件循环，请安装nest_asyncio")
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    self._fh.run()
+```
+
+### 安装依赖
+
+```bash
+pip install nest_asyncio>=1.5.0
+```
+
+---
+
 ## 🆕 Session 21: Freqtrade安装与V8集成 (2025-11-22)
 
 **Problem**: V8回测系统缺少Freqtrade引擎支持

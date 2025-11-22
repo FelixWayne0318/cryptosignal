@@ -7,6 +7,14 @@ from cryptofeed import FeedHandler
 from cryptofeed.exchanges import BinanceFutures
 from cryptofeed.defines import TRADES, L2_BOOK
 
+# 支持嵌套事件循环
+try:
+    import nest_asyncio
+    nest_asyncio.apply()
+    _NEST_ASYNCIO_AVAILABLE = True
+except ImportError:
+    _NEST_ASYNCIO_AVAILABLE = False
+
 
 class TradeEvent:
     """
@@ -187,10 +195,14 @@ class CryptofeedStream:
             )
         )
 
-        # Python 3.10+ 兼容：确保有事件循环
+        # 检查是否已有运行中的事件循环
         try:
-            asyncio.get_running_loop()
+            loop = asyncio.get_running_loop()
+            # 已有事件循环，需要nest_asyncio支持
+            if not _NEST_ASYNCIO_AVAILABLE:
+                print("[CryptofeedStream] 警告: 检测到嵌套事件循环，请安装nest_asyncio: pip install nest_asyncio")
         except RuntimeError:
+            # 没有运行中的事件循环，创建新的
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
