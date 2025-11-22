@@ -47,9 +47,12 @@ async def load_dynamic_symbols():
 
         min_volume = scanner_cfg.get("min_volume_usdt", 3000000)
         max_symbols = scanner_cfg.get("max_symbols", None)
+        excluded_symbols = set(scanner_cfg.get("excluded_symbols", []))
 
         print(f"[V8] 从CCXT动态加载币种...")
         print(f"     最小成交额: {min_volume/1000000:.1f}M USDT")
+        if excluded_symbols:
+            print(f"     排除币种: {len(excluded_symbols)}个 (Cryptofeed不支持)")
 
         # 创建CCXT客户端
         exchange = ccxt.binanceusdm({
@@ -84,6 +87,11 @@ async def load_dynamic_symbols():
 
                 # 提取基础币种名称（如 BTC/USDT:USDT → BTC）
                 base = symbol.split('/')[0]
+
+                # 过滤Cryptofeed不支持的币种
+                if base in excluded_symbols:
+                    continue
+
                 symbols.append((base, quote_volume))
 
             # 按成交额排序
@@ -96,7 +104,7 @@ async def load_dynamic_symbols():
             if max_symbols and len(result) > max_symbols:
                 result = result[:max_symbols]
 
-            print(f"[V8] 筛选出 {len(result)} 个高流动性币种")
+            print(f"[V8] 筛选出 {len(result)} 个高流动性币种 (已排除{len(excluded_symbols)}个不支持币种)")
             if len(result) > 0:
                 print(f"     Top 5: {', '.join(result[:5])}")
 

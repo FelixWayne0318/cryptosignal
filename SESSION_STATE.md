@@ -2762,3 +2762,43 @@ python3 -c "from scripts.start_realtime_stream import load_dynamic_symbols; prin
 - ✅ Layer5: Decision (信号生成)
 - ✅ Layer6: Execution (dry_run模式)
 
+
+---
+
+## 🔧 v8.0.1 修复Cryptofeed不支持币种错误 (2025-11-22)
+
+### 问题描述
+运行V8系统时出错: `ALPACA-USDT-PERP is not supported on BINANCE_FUTURES`
+
+原因: Cryptofeed不支持所有Binance Futures币种，CCXT加载的部分币种（如ALPACA）在Cryptofeed中不可用。
+
+### 修复方案
+
+#### 1. 配置变更
+**config/signal_thresholds.json**
+```json
+{
+  "v8_integration": {
+    "scanner": {
+      "excluded_symbols": ["ALPACA", "1000FLOKI", "1000LUNC", "1000PEPE", "1000SHIB", "1000XEC", "LUNA2", "USTC"]
+    }
+  }
+}
+```
+
+#### 2. 代码变更
+**scripts/start_realtime_stream.py**
+- 从配置读取`excluded_symbols`
+- 在动态加载币种时过滤不支持的币种
+
+### 修改文件
+| 文件 | 说明 |
+|------|------|
+| config/signal_thresholds.json | 新增excluded_symbols配置 |
+| scripts/start_realtime_stream.py | 过滤不支持币种 |
+
+### 验证
+```bash
+python3 -c "from ats_core.config.threshold_config import get_thresholds; print('✅')"
+```
+
