@@ -1,7 +1,7 @@
 # CryptoSignal 规范文档索引
 
-**当前版本**: v7.4.2
-**最后更新**: 2025-11-18
+**当前版本**: v8.0.1
+**最后更新**: 2025-11-22
 **文档类型**: 总索引（系统工程入口）
 
 ---
@@ -134,16 +134,25 @@
 4. 如涉及新功能，更新追溯矩阵
 
 ### 废弃文档
-1. 不删除，移至 `archive/` 目录
+1. 不删除，移至 `docs/archived/` 目录
 2. 在原位置留下重定向说明
 3. 更新所有索引文件
+
+### 已归档文档 (`docs/archived/`)
+以下文档已移至归档目录：
+- `AUDIT_REPORT_v7.4.0.md` - 旧版本审计报告
+- `P0_FIXES_v7.4.2_SUMMARY.md` - 旧版本修复总结
+- `SYSTEM_HEALTH_CHECK_REPORT_2025-11-15.md` - 旧健康检查报告
+- `FOUR_STEP_INTEGRATION_ANALYSIS_2025-11-17.md` - 旧分析报告
+- `FACTOR_SYSTEM_WORLD_CLASS_REVIEW_2025-11-15.md` - 旧因子审查
+- `deploy_server_v740_TEMPLATE.sh` - v7.4.0部署模板
 
 ---
 
 ## 🔗 外部资源
 
 - **项目仓库**: https://github.com/FelixWayne0318/cryptosignal
-- **当前分支**: `claude/reorganize-repo-structure-011CUrZaXUMTBXApc3jvsqTh`
+- **当前分支**: `claude/reorganize-audit-system-014ptq1jFmYtXXvz4nZLrhML`
 - **问题追踪**: GitHub Issues
 
 ---
