@@ -5,6 +5,45 @@
 
 ---
 
+## 🆕 Session 27: 六层架构统一数据格式标准 (2025-11-22)
+
+**Problem**: V8六层架构各层数据格式不一致，无法有机融合
+**Solution**: 定义统一格式标准，创建格式转换工具
+**Impact**: 架构增强 - 为全系统四步决策集成奠定基础
+**Status**: ✅ Phase 1-2 完成, Phase 3-7 待实现
+
+### 主要变更
+
+| 文件 | 类型 | 说明 |
+|------|------|------|
+| config/signal_thresholds.json | 配置更新 | 添加unified_formats配置块 |
+| ats_core/utils/format_converter.py | 新建 | 格式转换工具模块 |
+
+### 发现的格式不一致问题
+
+| 问题 | 解决方案 |
+|------|----------|
+| Symbol: BTC-USDT-PERP / BTC/USDT 混用 | 统一BTCUSDT，转换时调整 |
+| 时间戳: 秒/毫秒混用 | 统一秒(float) |
+| RealtimeFactors无T/M/C/V/O/B分数 | 添加factor_scores字段 |
+| 决策action需转执行side | 提供转换函数 |
+
+### 格式转换工具
+
+- `normalize_symbol()`: 任意格式 → BTCUSDT
+- `to_ccxt_symbol()`: BTCUSDT → BTC/USDT
+- `DecisionOutput`: 标准化决策输出类
+- `decision_to_execution_signal()`: 决策 → 执行信号
+- `decision_to_telegram_dict()`: 决策 → Telegram格式
+
+### 剩余工作
+
+- Phase 3: V8实时管道调用四步决策（需K线获取+因子计算）
+- Phase 4-6: 各层实际集成
+- Phase 7: 测试验证
+
+---
+
 ## 🆕 Session 26: V8 Telegram集成与零硬编码 (2025-11-22)
 
 **Problem**: V8实时管道缺少Telegram通知，阈值硬编码，信号生成条件过严
