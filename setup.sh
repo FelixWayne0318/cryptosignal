@@ -1,9 +1,13 @@
 #!/bin/bash
 # ==========================================
-# CryptoSignal v7.4.2 一键部署脚本
+# CryptoSignal v8.0.0 一键部署脚本
 # 用途：拉取代码、检测环境、安装依赖、启动系统
 # 特点：自动更新代码、清理缓存、验证结构、可配置化
-# v7.4.2: 四步分层决策系统 - P0紧急修复（CVD验证+入场价+Gate2动态阈值）
+# v8.0.0: V8六层架构有机融合
+#   - Cryptofeed (实时数据层)
+#   - CryptoSignal (因子+决策层)
+#   - CCXT (执行层)
+#   - Cryptostore (存储层)
 # ==========================================
 #
 # 环境变量配置（可选）:
@@ -30,8 +34,8 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 echo "=============================================="
-echo "🚀 CryptoSignal v7.4.2 一键部署"
-echo "   四步分层决策系统 - P0修复版"
+echo "🚀 CryptoSignal v8.0.0 一键部署"
+echo "   V8六层架构有机融合"
 echo "=============================================="
 echo ""
 
@@ -85,28 +89,33 @@ find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 find . -name "*.pyc" -delete 2>/dev/null || true
 echo -e "${GREEN}✅ Python缓存已清理${NC}"
 
-# 0.4 验证重组后的目录结构（v7.4.2特性）
+# 0.4 验证目录结构（v8.0.0特性）
 echo ""
-echo "🔍 验证v7.4.2目录结构..."
+echo "🔍 验证v8.0.0目录结构..."
 
-# v7.4.2: 检查目录是否存在
-# 必需目录: tests/, diagnose/, docs/, standards/, config/, ats_core/decision/
-if [ -d "tests" ] && [ -d "diagnose" ] && [ -d "docs" ] && [ -d "standards" ] && [ -d "ats_core/decision" ]; then
-    echo -e "${GREEN}✅ v7.4.2目录结构正确（含四步决策系统）${NC}"
+# v8.0.0: 检查目录是否存在
+# 必需目录: tests/, docs/, standards/, config/, ats_core/, cs_ext/
+if [ -d "tests" ] && [ -d "docs" ] && [ -d "standards" ] && [ -d "ats_core/decision" ] && [ -d "cs_ext" ]; then
+    echo -e "${GREEN}✅ v8.0.0目录结构正确（含V8架构）${NC}"
 
-    # 统计文件数量（可选信息）
-    TEST_FILES=$(find tests -name "*.py" -o -name "*.md" 2>/dev/null | wc -l)
-    DIAGNOSE_FILES=$(find diagnose -name "*.py" -o -name "*.md" 2>/dev/null | wc -l)
+    # 统计文件数量
     DOC_FILES=$(find docs -name "*.md" 2>/dev/null | wc -l)
     STANDARD_FILES=$(find standards -name "*.md" 2>/dev/null | wc -l)
+    CS_EXT_FILES=$(find cs_ext -name "*.py" 2>/dev/null | wc -l)
 
-    echo "   - tests/: $TEST_FILES 个文件（预留目录）"
-    echo "   - diagnose/: $DIAGNOSE_FILES 个文件（预留目录）"
     echo "   - docs/: $DOC_FILES 个文档"
     echo "   - standards/: $STANDARD_FILES 个规范"
+    echo "   - cs_ext/: $CS_EXT_FILES 个V8适配器文件"
+
+    # V8组件检查
+    if [ -f "cs_ext/data/cryptofeed_stream.py" ] && [ -f "cs_ext/execution/ccxt_executor.py" ]; then
+        echo -e "${GREEN}   ✅ V8组件完整（Cryptofeed + CCXT）${NC}"
+    else
+        echo -e "${YELLOW}   ⚠️ V8组件不完整${NC}"
+    fi
 else
-    echo -e "${YELLOW}⚠️  目录结构可能不是v7.4.2版本${NC}"
-    echo "   请确保存在以下目录: tests/, diagnose/, docs/, standards/, ats_core/decision/"
+    echo -e "${YELLOW}⚠️  目录结构可能不是v8.0.0版本${NC}"
+    echo "   请确保存在以下目录: tests/, docs/, standards/, ats_core/, cs_ext/"
 fi
 
 echo ""
@@ -195,31 +204,38 @@ echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━
 echo -e "${GREEN}✅ 环境准备完成！${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo "🚀 正在启动 v7.4.2 扫描器（后台模式 + 实时日志）..."
-echo "   特性: 四步分层决策系统 | Dual Run模式 | Entry/SL/TP价格"
+echo "🚀 正在启动 v8.0.0 扫描器（后台模式 + 实时日志）..."
+echo "   特性: V8六层架构 | 实时因子计算 | Cryptofeed + CCXT"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# 停止旧进程（兼容v7.3.47和统一版本）
+# 停止旧进程（兼容V7和V8版本）
 pkill -f realtime_signal_scanner 2>/dev/null || true
+pkill -f start_realtime_stream 2>/dev/null || true
 sleep 1
 
 # 创建日志文件名
 LOG_FILE=~/cryptosignal_$(date +%Y%m%d_%H%M%S).log
 
-# 后台启动扫描器（v7.3.47版本）
-# 支持环境变量配置（P1-3修复）
-SCANNER_SCRIPT="${SCANNER_SCRIPT:-scripts/realtime_signal_scanner.py}"
+# 后台启动V8扫描器
+# 支持环境变量配置
+V8_MODE="${V8_MODE:-full}"
 SCAN_INTERVAL="${SCAN_INTERVAL:-300}"
-AUTO_COMMIT_REPORTS="${AUTO_COMMIT_REPORTS:-false}"
+ALL_SYMBOLS="${ALL_SYMBOLS:-true}"
 
-echo "📝 后台启动扫描器（v7.4.2 - 四步决策系统 | Dual Run）..."
-echo "   📍 扫描器脚本: $SCANNER_SCRIPT"
+echo "📝 后台启动V8扫描器（真V8模式 - Cryptofeed+CCXT+Cryptostore）..."
+echo "   🔧 运行模式: $V8_MODE"
 echo "   ⏰ 扫描间隔: ${SCAN_INTERVAL}秒"
-echo "   📍 自动提交: $AUTO_COMMIT_REPORTS"
-echo "   📁 扫描报告保存在本地: reports/latest/"
-export AUTO_COMMIT_REPORTS
-nohup python3 "$SCANNER_SCRIPT" --interval "$SCAN_INTERVAL" > "$LOG_FILE" 2>&1 &
+echo "   🌐 全市场扫描: $ALL_SYMBOLS"
+echo "   📁 数据存储: data/v8_storage/"
+
+# 构建启动命令
+V8_CMD="python3 scripts/start_realtime_stream.py --mode $V8_MODE --interval $SCAN_INTERVAL"
+if [ "$ALL_SYMBOLS" = "true" ]; then
+    V8_CMD="$V8_CMD --all-symbols"
+fi
+
+nohup $V8_CMD > "$LOG_FILE" 2>&1 &
 PID=$!
 
 sleep 2
@@ -233,38 +249,36 @@ if ps -p $PID > /dev/null 2>&1; then
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "📋 管理命令:"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "  查看状态: ps aux | grep realtime_signal_scanner"
-    echo "  重新启动: ~/cryptosignal/auto_restart.sh"
-    echo "  停止程序: pkill -f realtime_signal_scanner.py"
+    echo "  查看状态: ps aux | grep start_realtime_stream"
+    echo "  重新启动: ~/cryptosignal/setup.sh"
+    echo "  停止程序: pkill -f start_realtime_stream.py"
     echo "  查看日志: tail -f $LOG_FILE"
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "⚙️  v7.4.2 配置:"
+    echo "⚙️  v8.0.1 真V8模式配置:"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "  ✅ 自动提交已禁用（AUTO_COMMIT_REPORTS=false）"
-    echo "  📁 扫描报告保存位置："
-    echo "     - reports/latest/scan_summary.json"
-    echo "     - reports/trends.json"
-    echo "  💡 如需启用自动提交，请修改 setup.sh 删除该设置"
+    echo "  🌐 全市场扫描: $ALL_SYMBOLS"
+    echo "  📁 数据存储位置: data/v8_storage/"
+    echo "  💡 切换模式: V8_MODE=simple ./setup.sh"
     echo ""
-    echo "  🆕 v7.4.2 革命性升级："
-    echo "    ✅ Step1: 方向确认层（A层+I因子+BTC对齐+硬veto）"
-    echo "    ✅ Step2: 时机判断层（Enhanced F v2 + 六级评分）"
-    echo "    ✅ Step3: 风险管理层（Entry/SL/TP精确价格）"
-    echo "    ✅ Step4: 质量控制层（4门检查）"
-    echo "    ✅ Dual Run模式（v6.6 + v7.4并行运行）"
-    echo "    📊 从打分到价格 - 提供具体Entry/SL/TP"
+    echo "  🆕 v8.0.1 真V8六层架构已启用："
+    echo "    ✅ Layer1: Cryptofeed (WebSocket实时数据流)"
+    echo "    ✅ Layer2: CryptoSignal (实时因子计算+决策)"
+    echo "    ✅ Layer3: CCXT (动态加载全市场币种)"
+    echo "    ✅ Layer4: Cryptostore (数据持久化)"
+    echo "    ✅ 实时因子: CVD/OBI/LDI/VWAP/TradeIntensity"
+    echo "    📊 全市场实时交易系统"
     echo ""
-    echo "  四步系统目录："
-    echo "    - ats_core/decision/step1_direction.py"
-    echo "    - ats_core/decision/step2_timing.py"
-    echo "    - ats_core/decision/step3_risk.py"
-    echo "    - ats_core/decision/step4_quality.py"
-    echo "    - ats_core/decision/four_step_system.py"
+    echo "  V8组件目录："
+    echo "    - cs_ext/data/cryptofeed_stream.py (数据层)"
+    echo "    - cs_ext/execution/ccxt_executor.py (执行层)"
+    echo "    - cs_ext/storage/cryptostore_adapter.py (存储层)"
+    echo "    - ats_core/realtime/factor_calculator.py (因子计算)"
+    echo "    - ats_core/pipeline/v8_realtime_pipeline.py (集成管道)"
     echo ""
     echo "  配置开关："
-    echo "    - config/params.json → four_step_system.enabled"
-    echo "    - 默认: false（Dual Run待测试）"
+    echo "    - config/signal_thresholds.json → v8_integration"
+    echo "    - V8实时模式: python scripts/start_realtime_stream.py --mode full"
     echo ""
     echo "  详细文档："
     echo "    - docs/FOUR_STEP_IMPLEMENTATION_GUIDE.md"

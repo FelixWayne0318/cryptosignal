@@ -37,40 +37,10 @@ v7.4.4 Enhancements:
 from typing import Dict, Any, List, Optional
 import math
 from ats_core.logging import log, warn
+from ats_core.utils.volatility import calculate_simple_atr  # v7.6.1: 使用公共ATR函数
 
 
 # ============ TrendStage Module (v7.4.4) ============
-
-# TODO: calculate_simple_atr与Step3中的实现重复，未来可合并为公共工具函数
-# (如 ats_core/utils/volatility.py)，以避免长期漂移
-def calculate_simple_atr(klines: List[Dict], period: int = 14) -> float:
-    """
-    计算简单ATR (Average True Range)
-
-    Args:
-        klines: K线数据（至少period+1根）
-        period: ATR周期
-
-    Returns:
-        atr: 平均真实波动幅度
-    """
-    if len(klines) < period + 1:
-        return 0.0
-
-    trs = []
-    for i in range(-period, 0):
-        high = float(klines[i].get("high", 0))
-        low = float(klines[i].get("low", 0))
-        prev_close = float(klines[i-1].get("close", 0))
-
-        tr = max(
-            high - low,
-            abs(high - prev_close),
-            abs(low - prev_close)
-        )
-        trs.append(tr)
-
-    return sum(trs) / len(trs) if trs else 0.0
 
 
 def calculate_move_atr(
@@ -573,7 +543,8 @@ def step2_timing_judgment(
     factor_scores_series: List[Dict[str, float]],
     klines: List[Dict[str, Any]],
     s_factor_meta: Dict[str, Any],
-    params: Dict[str, Any]
+    params: Dict[str, Any],
+    direction_score: float = None  # v7.6.1新增: 接收Step1的direction_score
 ) -> Dict[str, Any]:
     """
     Step2主函数：时机判断层（v7.4.4增强版）
@@ -626,10 +597,17 @@ def step2_timing_judgment(
     enhanced_f_flow_price = enhanced_f_result["enhanced_f"]
 
     # 2. 计算TrendStage调整
-    # 从当前因子确定方向符号
-    current_factors = factor_scores_series[-1] if factor_scores_series else {}
-    T_now = current_factors.get("T", 0.0)
-    direction_sign = 1 if T_now >= 0 else -1
+    # v7.6.1修复(C1): 根据配置决定方向符号来源
+    direction_sign_source = step2_cfg.get("direction_sign_source", "step1_direction_score")
+
+    if direction_sign_source == "step1_direction_score" and direction_score is not None:
+        # 推荐: 使用Step1的direction_score，保证方向判断一致性
+        direction_sign = 1 if direction_score >= 0 else -1
+    else:
+        # 回退: 从T因子判断（向后兼容）
+        current_factors = factor_scores_series[-1] if factor_scores_series else {}
+        T_now = current_factors.get("T", 0.0)
+        direction_sign = 1 if T_now >= 0 else -1
 
     trend_stage_result = calculate_trend_stage_adjustment(
         klines, factor_scores_series, direction_sign, params

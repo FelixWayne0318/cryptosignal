@@ -340,7 +340,10 @@ def score_fund_leading_v2(
 
         if use_relative:
             # 使用相对变化率（推荐）：变化百分比
-            cvd_change_pct = (cvd_now - cvd_6h_ago) / max(abs(cvd_6h_ago), 1e-9)
+            # v7.6.1修复(M6): 使用配置的安全除数比例，避免极端值
+            safe_divisor_ratio = p.get("safe_divisor_ratio", 0.001)
+            safe_divisor = max(abs(cvd_6h_ago), safe_divisor_ratio * max(abs(cvd_now), abs(cvd_6h_ago)))
+            cvd_change_pct = (cvd_now - cvd_6h_ago) / safe_divisor
             cvd_change_norm = cvd_change_pct
         else:
             # 旧逻辑（已废弃）：绝对变化除以价格

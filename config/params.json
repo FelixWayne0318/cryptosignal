@@ -175,6 +175,10 @@
     "price_scale": 3.0,
     "slope_scale": 0.01,
     "leading_scale": 200.0,
+
+    "_comment_v7.6.1_fix": "M6修复: 添加安全除数配置防止除零",
+    "safe_divisor_ratio": 0.001,
+    "_safe_divisor_note": "当分母接近0时，使用max(|分母|, safe_divisor_ratio * max(|分子|, |分母|))防止极端值",
     "crowding_veto": {
       "_comment": "P0.4: 过热veto机制，防止追高",
       "enabled": true,
@@ -507,11 +511,15 @@
     "step2_timing": {
       "_comment": "Step2: 时机判断层 - Enhanced F v2（修正价格自相关问题）",
 
+      "_comment_v7.6.1_fix": "C1修复: 添加方向符号来源配置，统一使用Step1的direction_score",
+      "direction_sign_source": "step1_direction_score",
+      "_direction_sign_note": "可选: step1_direction_score(推荐) | t_factor。使用Step1统一方向判断",
+
       "enhanced_f": {
         "_comment": "Enhanced F v2: flow_momentum - price_momentum（只用非价格因子C/O/V/B）",
-        "scale": 20.0,
+        "scale": 50.0,
         "min_threshold": 0.0,
-        "_fix_note": "v7.4.6阈值调优: -30.0→0.0 (实际enhanced_f范围[-2.2,6.4]，原阈值-30完全无效，现要求>=0通过)",
+        "_fix_note": "v7.6.1修复(C3): scale 20.0→50.0 (实际输入范围约[-50,50]，原scale过小导致tanh饱和，现提供更好区分度)",
 
         "flow_weights": {
           "_comment": "Flow因子权重（仅非价格因子，避免自相关）",
@@ -742,9 +750,11 @@
         "_comment": "Gate4: 因子矛盾检测",
 
         "c_vs_o": {
-          "_comment": "C vs O矛盾检测（资金流vs持仓）",
+          "_comment": "C vs O矛盾检测（资金流vs持仓）- v7.6.1修复(M4): 改用联合条件",
           "enabled": true,
-          "abs_threshold": 60
+          "abs_threshold": 50,
+          "sum_threshold": 100,
+          "_fix_note": "v7.6.1修复(M4): 原abs_threshold=60过高，漏检部分矛盾。现改为联合条件: |C|+|O|>100 且方向相反，或 |C|>50且|O|>50方向相反"
         },
 
         "t_vs_enhanced_f": {

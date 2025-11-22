@@ -182,18 +182,22 @@ def check_gate4_contradiction(
     t_score = factor_scores.get("T", 0.0)
 
     # 矛盾1：C vs O
+    # v7.6.1修复(M4): 改用联合条件，避免漏检
     c_vs_o_cfg = gate4_cfg.get("c_vs_o", {})
     c_vs_o_enabled = c_vs_o_cfg.get("enabled", True)
-    c_vs_o_threshold = c_vs_o_cfg.get("abs_threshold", 60)
+    c_vs_o_threshold = c_vs_o_cfg.get("abs_threshold", 50)
+    c_vs_o_sum_threshold = c_vs_o_cfg.get("sum_threshold", 100)
 
     contradiction1 = False
     if c_vs_o_enabled:
-        # C和O都绝对值大，且方向相反
-        contradiction1 = (
-            abs(c_score) > c_vs_o_threshold
-            and abs(o_score) > c_vs_o_threshold
-            and (c_score * o_score) < 0
-        )
+        # v7.6.1修复(M4): 两种矛盾条件
+        # 条件A: |C| + |O| > sum_threshold 且方向相反
+        # 条件B: |C| > abs_threshold 且 |O| > abs_threshold 且方向相反
+        opposite_direction = (c_score * o_score) < 0
+        sum_condition = (abs(c_score) + abs(o_score) > c_vs_o_sum_threshold)
+        both_strong = (abs(c_score) > c_vs_o_threshold and abs(o_score) > c_vs_o_threshold)
+
+        contradiction1 = opposite_direction and (sum_condition or both_strong)
 
     # 矛盾2：T vs Enhanced_F
     t_vs_f_cfg = gate4_cfg.get("t_vs_enhanced_f", {})

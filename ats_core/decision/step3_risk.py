@@ -28,6 +28,7 @@ Created: 2025-11-16
 
 from typing import Dict, Any, List, Optional
 from ats_core.logging import log, warn
+from ats_core.utils.volatility import calculate_simple_atr  # v7.6.1: 使用公共ATR函数
 
 
 def extract_support_resistance(s_factor_meta: Dict[str, Any]) -> Dict[str, Any]:
@@ -249,35 +250,7 @@ def extract_orderbook_from_L_meta(
     }
 
 
-def calculate_simple_atr(klines: List[Dict[str, Any]], period: int = 14) -> float:
-    """
-    简易ATR计算（如果K线中没有atr字段）
-
-    Args:
-        klines: K线数据列表
-        period: ATR周期（默认14）
-
-    Returns:
-        float: ATR值（如果数据不足返回0.0）
-    """
-    if len(klines) < period + 1:
-        return 0.0
-
-    trs = []
-    for i in range(-period, 0):
-        high = float(klines[i]["high"])
-        low = float(klines[i]["low"])
-        prev_close = float(klines[i - 1]["close"])
-
-        # True Range = max(H-L, |H-Prev_C|, |L-Prev_C|)
-        tr = max(
-            high - low,
-            abs(high - prev_close),
-            abs(low - prev_close)
-        )
-        trs.append(tr)
-
-    return sum(trs) / len(trs) if trs else 0.0
+# v7.6.1: calculate_simple_atr已移至 ats_core/utils/volatility.py (M1修复)
 
 
 def calculate_entry_price(

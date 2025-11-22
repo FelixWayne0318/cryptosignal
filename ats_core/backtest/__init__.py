@@ -54,14 +54,22 @@ from ats_core.backtest.metrics import (
     PortfolioMetrics,
     DistributionMetrics
 )
+from ats_core.backtest.v8_data_loader import (
+    V8BacktestDataLoader,
+    create_v8_data_loader
+)
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 __all__ = [
     # Core Classes
     "HistoricalDataLoader",
     "BacktestEngine",
     "BacktestMetrics",
+
+    # V8 Classes
+    "V8BacktestDataLoader",
+    "create_v8_data_loader",
 
     # Data Classes
     "BacktestResult",
