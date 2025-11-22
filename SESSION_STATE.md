@@ -1,11 +1,75 @@
-# SESSION_STATE - CryptoSignal v8.0.1 Development Log
+# SESSION_STATE - CryptoSignal v8.0.2 Development Log
 
 **Branch**: `claude/reorganize-audit-system-014ptq1jFmYtXXvz4nZLrhML`
 **Standard**: SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0
 
 ---
 
-## 🆕 Session 27: 六层架构统一数据格式标准 (2025-11-22)
+## 🆕 Session 28: 六层架构四步决策系统完整集成 (2025-11-22)
+
+**Problem**: V8六层架构尚未与四步决策系统有机融合
+**Solution**: 实现Phase 3-7，完成所有层的四步决策集成
+**Impact**: 架构增强 - V8现在支持CVD/OBI快速触发+四步验证双模式
+**Status**: ✅ Completed
+
+### 主要变更
+
+| 文件 | 类型 | 说明 |
+|------|------|------|
+| ats_core/pipeline/v8_realtime_pipeline.py | 重大更新 | 四步决策系统集成 |
+| cs_ext/data/cryptofeed_stream.py | 增强 | 格式转换支持 |
+| cs_ext/storage/cryptostore_adapter.py | 增强 | 标准化决策存储方法 |
+
+### 实现特性
+
+1. **V8实时管道四步集成**
+   - 新增 `FOUR_STEP_AVAILABLE` 标志
+   - K线缓存支持 (`self.kline_cache`)
+   - 四步配置项 (`use_four_step`, `four_step_fallback`)
+   - `_run_four_step_validation()` 完整验证方法
+
+2. **双模式信号评估**
+   - 模式1: CVD/OBI快速预筛选
+   - 模式2: 四步决策系统验证
+   - 支持回退到简化模式
+
+3. **Cryptofeed数据层标准化**
+   - 导入 `normalize_symbol` 格式转换
+   - 提供fallback实现
+
+4. **Cryptostore存储层增强**
+   - 新增 `store_decision()` 方法
+   - 支持 DecisionOutput 和 dict 格式
+   - 标准化payload结构
+
+### 配置说明
+
+```json
+// config/signal_thresholds.json
+"decision_pipeline": {
+  "four_step_integration": {
+    "enabled": true,
+    "fallback_to_simple": true
+  }
+}
+```
+
+### 测试验证
+
+- ✅ 语法检查通过
+- ✅ format_converter导入测试通过
+- ✅ cryptostore_adapter导入测试通过
+- ✅ 格式转换单元测试通过
+
+### Git Commit
+
+```
+b0d4543 feat(v8): 集成四步决策系统到六层架构
+```
+
+---
+
+## Session 27: 六层架构统一数据格式标准 (2025-11-22)
 
 **Problem**: V8六层架构各层数据格式不一致，无法有机融合
 **Solution**: 定义统一格式标准，创建格式转换工具
