@@ -248,7 +248,8 @@ echo "   🌐 全市场扫描: $ALL_SYMBOLS"
 echo "   📁 数据存储: data/v8_storage/"
 
 # 构建启动命令
-V8_CMD="python3 scripts/start_realtime_stream.py --mode $V8_MODE --interval $SCAN_INTERVAL"
+# -u 参数禁用Python输出缓冲，确保日志实时写入
+V8_CMD="python3 -u scripts/start_realtime_stream.py --mode $V8_MODE --interval $SCAN_INTERVAL"
 if [ "$ALL_SYMBOLS" = "true" ]; then
     V8_CMD="$V8_CMD --all-symbols"
 fi
