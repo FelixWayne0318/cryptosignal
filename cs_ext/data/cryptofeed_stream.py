@@ -129,16 +129,57 @@ class CryptofeedStream:
         except Exception as e:
             print(f"[CryptofeedStream] on_orderbook error: {e} for event {evt}")
 
+    def _filter_supported_symbols(self, symbols: List[str]) -> List[str]:
+        """
+        过滤掉Cryptofeed不支持的币种
+
+        Args:
+            symbols: 原始币种列表
+
+        Returns:
+            支持的币种列表
+        """
+        supported = []
+        skipped = []
+
+        # 获取Cryptofeed支持的币种
+        try:
+            exchange = BinanceFutures(config={'log': {'disabled': True}})
+            supported_symbols = set(exchange.symbols())
+        except Exception as e:
+            print(f"[CryptofeedStream] 警告: 无法获取支持的币种列表: {e}")
+            return symbols
+
+        for symbol in symbols:
+            if symbol in supported_symbols:
+                supported.append(symbol)
+            else:
+                skipped.append(symbol)
+
+        if skipped:
+            print(f"[CryptofeedStream] 自动跳过 {len(skipped)} 个不支持的币种: {', '.join(skipped[:5])}{'...' if len(skipped) > 5 else ''}")
+
+        print(f"[CryptofeedStream] 订阅 {len(supported)} 个币种")
+
+        return supported
+
     def run_forever(self):
         """
         阻塞式启动事件循环。适合独立进程或专用线程使用。
         """
         channels = [TRADES, L2_BOOK]
 
+        # 过滤不支持的币种
+        valid_symbols = self._filter_supported_symbols(self.symbols)
+
+        if not valid_symbols:
+            print("[CryptofeedStream] 错误: 没有可用的币种")
+            return
+
         self._fh.add_feed(
             BinanceFutures(
                 channels=channels,
-                symbols=self.symbols,
+                symbols=valid_symbols,
                 callbacks={
                     TRADES: self._trade_callback,
                     L2_BOOK: self._l2_book_callback,
@@ -169,10 +210,17 @@ class CryptofeedStream:
             loop.create_task(self._run_async())
 
     async def _run_async(self):
+        # 过滤不支持的币种
+        valid_symbols = self._filter_supported_symbols(self.symbols)
+
+        if not valid_symbols:
+            print("[CryptofeedStream] 错误: 没有可用的币种")
+            return
+
         self._fh.add_feed(
             BinanceFutures(
                 channels=[TRADES, L2_BOOK],
-                symbols=self.symbols,
+                symbols=valid_symbols,
                 callbacks={
                     TRADES: self._trade_callback,
                     L2_BOOK: self._l2_book_callback,

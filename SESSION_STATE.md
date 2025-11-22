@@ -2802,3 +2802,38 @@ python3 -c "from scripts.start_realtime_stream import load_dynamic_symbols; prin
 python3 -c "from ats_core.config.threshold_config import get_thresholds; print('✅')"
 ```
 
+
+---
+
+## 🔧 v8.0.1 改进Cryptofeed币种过滤机制 (2025-11-22)
+
+### 问题描述
+之前的方案使用硬编码`excluded_symbols`列表过滤不支持币种，需要手动维护，不够智能。
+
+### 改进方案：自动过滤
+
+#### 1. 删除硬编码配置
+- 移除 `config/signal_thresholds.json` 中的 `excluded_symbols`
+
+#### 2. CryptofeedStream自动过滤
+**cs_ext/data/cryptofeed_stream.py**
+- 新增 `_filter_supported_symbols()` 方法
+- 启动时自动查询Cryptofeed支持的币种
+- 自动跳过不支持的币种并继续运行
+
+#### 3. 清理启动脚本
+**scripts/start_realtime_stream.py**
+- 移除 `excluded_symbols` 相关逻辑
+
+### 修改文件
+| 文件 | 说明 |
+|------|------|
+| config/signal_thresholds.json | 移除excluded_symbols配置 |
+| cs_ext/data/cryptofeed_stream.py | 新增自动过滤功能 |
+| scripts/start_realtime_stream.py | 清理排除逻辑 |
+
+### 优点
+- ✅ 无需手动维护排除列表
+- ✅ 自动适应Cryptofeed更新
+- ✅ 系统更加健壮
+

@@ -837,8 +837,7 @@
       "scan_interval_seconds": 300,
       "telegram_enabled": true,
       "data_recording_enabled": true,
-      "excluded_symbols": ["ALPACA", "1000FLOKI", "1000LUNC", "1000PEPE", "1000SHIB", "1000XEC", "LUNA2", "USTC"],
-      "_comment": "mode=full使用完整V8管道，excluded_symbols为Cryptofeed不支持的币种"
+      "_comment": "mode=full使用完整V8管道，不支持币种自动跳过"
     },
     "cryptofeed_stream": {
       "_description": "Cryptofeed实时数据流配置",
