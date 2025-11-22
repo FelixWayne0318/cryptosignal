@@ -12,15 +12,20 @@ V8实时交易管道
     4. CcxtExecutor执行订单
     5. CryptostoreAdapter持久化数据
 
-Version: v8.0.1
+Version: v8.0.2
 Standard: SYSTEM_ENHANCEMENT_STANDARD.md v3.3.0
+
+Changelog v8.0.2:
+    - 四步决策系统完整集成
+    - CVD/OBI快速触发 + 四步验证双重模式
+    - K线缓存支持
+    - format_converter统一数据格式
 
 Changelog v8.0.1:
     - 集成Telegram通知（使用render_signal_v72模板）
     - 添加mid_price到RealtimeFactors
     - 所有阈值从配置文件读取（零硬编码）
     - 修复executor.submit → submit_signal
-    - 添加四步决策系统集成计划文档
 """
 
 from __future__ import annotations
@@ -45,6 +50,21 @@ try:
     TELEGRAM_FMT_AVAILABLE = True
 except ImportError:
     TELEGRAM_FMT_AVAILABLE = False
+
+# 四步决策系统集成
+try:
+    from ats_core.decision.four_step_system import run_four_step_decision
+    from ats_core.pipeline.analyze_symbol import analyze_symbol_with_preloaded_klines
+    from ats_core.data.realtime_kline_cache import RealtimeKlineCache
+    from ats_core.utils.format_converter import (
+        normalize_symbol,
+        four_step_to_decision_output,
+        decision_to_telegram_dict,
+    )
+    FOUR_STEP_AVAILABLE = True
+except ImportError as e:
+    FOUR_STEP_AVAILABLE = False
+    logger.warning(f"四步决策系统导入失败: {e}")
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +172,20 @@ class V8RealtimePipeline:
         self._telegram_bot_token = None
         self._telegram_chat_id = None
         self._telegram_initialized = False
+
+        # 6. K线缓存（用于四步决策系统）
+        self.kline_cache = None
+        self._kline_cache_initialized = False
+
+        # 7. 四步决策系统配置
+        four_step_cfg = self.config.get("decision_pipeline", {}).get("four_step_integration", {})
+        self.use_four_step = four_step_cfg.get("enabled", False) and FOUR_STEP_AVAILABLE
+        self.four_step_fallback = four_step_cfg.get("fallback_to_simple", True)
+
+        if self.use_four_step:
+            logger.info("四步决策系统集成已启用")
+        else:
+            logger.info("使用简化CVD/OBI判断模式")
 
     def _init_telegram(self) -> None:
         """初始化Telegram配置"""
@@ -388,31 +422,11 @@ class V8RealtimePipeline:
         Returns:
             V8Signal或None
         """
-        # ===== V8实时信号生成逻辑 =====
-        # 使用配置阈值，零硬编码
-        #
-        # 当前实现（v8.0.1）：
-        #   - 基于CVD Z-score和OBI的快速实时判断
-        #   - 适合高频实时场景（毫秒级响应）
-        #
-        # 完整集成计划（v8.1.0）：
-        #   - 调用 ats_core.decision.four_step_system.run_four_step_decision()
-        #   - 需要获取K线数据（klines）
-        #   - 需要计算传统因子（T, M, C, V, O, B, I, S, L, F）
-        #   - 提供精确的Entry/SL/TP价格
-        #
-        # 集成步骤：
-        #   1. 在V8触发条件满足时，异步获取1小时K线数据
-        #   2. 使用ats_core.factors计算传统因子得分
-        #   3. 调用run_four_step_decision进行完整四步验证
-        #   4. 合并V8实时因子和四步决策结果
-        #
-        # 参考：
-        #   - ats_core/decision/four_step_system.py
-        #   - docs/FOUR_STEP_IMPLEMENTATION_GUIDE.md
+        # ===== V8 + 四步决策系统融合 =====
+        # v8.0.2: 实现CVD/OBI快速触发 + 四步决策验证
         # ================================
 
-        # 方向判断：基于CVD和OBI（从配置读取阈值）
+        # 1. 快速预筛选：基于CVD和OBI
         cvd_z = factors.cvd_z
         obi = factors.obi
 
@@ -425,8 +439,19 @@ class V8RealtimePipeline:
         else:
             return None
 
-        # 信心度计算
-        # 基于多个因子的综合评估
+        # 2. 尝试四步决策系统验证
+        if self.use_four_step and FOUR_STEP_AVAILABLE:
+            four_step_result = self._run_four_step_validation(factors, direction)
+            if four_step_result:
+                # 四步系统通过，使用其结果
+                return four_step_result
+            elif not self.four_step_fallback:
+                # 四步系统拒绝且不允许fallback
+                logger.debug(f"{factors.symbol} 四步决策拒绝，无fallback")
+                return None
+            # 四步系统失败但允许fallback，继续使用简化判断
+
+        # 3. 简化判断（CVD/OBI模式）
         confidence = self._calculate_confidence(factors, direction)
 
         if confidence < self.min_confidence:
@@ -440,11 +465,82 @@ class V8RealtimePipeline:
             confidence=confidence,
             factors=factors,
             meta={
-                "source": "v8_realtime",
+                "source": "v8_realtime_simple",
                 "cvd_z": cvd_z,
                 "obi": obi,
             }
         )
+
+    def _run_four_step_validation(
+        self, factors: RealtimeFactors, direction: str
+    ) -> Optional[V8Signal]:
+        """
+        运行四步决策系统验证
+
+        Args:
+            factors: 实时因子
+            direction: 预判方向
+
+        Returns:
+            V8Signal或None（如果验证失败）
+        """
+        try:
+            symbol = normalize_symbol(factors.symbol)
+
+            # 检查K线缓存
+            if not self.kline_cache or symbol not in self.kline_cache.cache:
+                logger.debug(f"{symbol} 无K线缓存，跳过四步验证")
+                return None
+
+            # 获取缓存的K线
+            k1h = list(self.kline_cache.cache[symbol].get('1h', []))
+            if len(k1h) < 50:
+                logger.debug(f"{symbol} K线数据不足 ({len(k1h)}<50)")
+                return None
+
+            # 调用完整分析（包含四步决策）
+            result = analyze_symbol_with_preloaded_klines(
+                symbol=symbol,
+                k1h=k1h,
+                k4h=[],  # 可选
+                oi_data=None,
+                orderbook={
+                    'bids': [[factors.mid_price * 0.999, factors.bid_depth]],
+                    'asks': [[factors.mid_price * 1.001, factors.ask_depth]],
+                } if factors.mid_price > 0 else None,
+            )
+
+            # 检查四步决策结果
+            four_step = result.get("four_step_decision", {})
+            if not four_step or four_step.get("decision") != "ACCEPT":
+                reject_reason = four_step.get("reject_reason", "unknown")
+                logger.debug(f"{symbol} 四步决策拒绝: {reject_reason}")
+                return None
+
+            # 四步系统通过，构建V8Signal
+            decision = four_step_to_decision_output(four_step, factors.timestamp)
+
+            return V8Signal(
+                symbol=factors.symbol,
+                timestamp=factors.timestamp,
+                direction=decision.action.lower() if decision.action else direction,
+                strength=decision.step1_result.get("final_strength", 50),
+                confidence=decision.confidence,
+                factors=factors,
+                meta={
+                    "source": "v8_four_step",
+                    "entry_price": decision.entry_price,
+                    "stop_loss": decision.stop_loss,
+                    "take_profit": decision.take_profit,
+                    "risk_reward_ratio": decision.risk_reward_ratio,
+                    "cvd_z": factors.cvd_z,
+                    "obi": factors.obi,
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"四步决策验证异常: {e}")
+            return None
 
     def _calculate_confidence(
         self, factors: RealtimeFactors, direction: str

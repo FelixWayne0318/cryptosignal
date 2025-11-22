@@ -7,6 +7,14 @@ from cryptofeed import FeedHandler
 from cryptofeed.exchanges import BinanceFutures
 from cryptofeed.defines import TRADES, L2_BOOK
 
+# 格式转换工具
+try:
+    from ats_core.utils.format_converter import normalize_symbol
+    FORMAT_CONVERTER_AVAILABLE = True
+except ImportError:
+    FORMAT_CONVERTER_AVAILABLE = False
+    def normalize_symbol(s): return s  # fallback
+
 # nest_asyncio 仅在需要时导入，不再全局应用
 _NEST_ASYNCIO_AVAILABLE = False
 try:

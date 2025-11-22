@@ -16,9 +16,17 @@ import os
 import json
 import threading
 from dataclasses import dataclass, asdict
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Dict, Any
 
 import datetime
+
+# 格式转换工具
+try:
+    from ats_core.utils.format_converter import normalize_symbol, DecisionOutput
+    FORMAT_CONVERTER_AVAILABLE = True
+except ImportError:
+    FORMAT_CONVERTER_AVAILABLE = False
+    def normalize_symbol(s): return s
 
 
 @dataclass
@@ -139,6 +147,54 @@ class CryptostoreAdapter:
         event = StorageEvent(
             ts=ts,
             category="signal",
+            symbol=symbol,
+            payload=payload,
+        )
+        self._backend.append_event(event)
+
+    def store_decision(self, decision: Any):
+        """
+        存储标准化的四步决策结果
+
+        Args:
+            decision: DecisionOutput 或包含标准字段的字典
+
+        使用统一格式标准存储决策，包含：
+        - 决策结果 (ACCEPT/REJECT)
+        - 交易方向和参数
+        - 风险指标
+        - 因子分数
+        """
+        # 从DecisionOutput或dict提取数据
+        if FORMAT_CONVERTER_AVAILABLE and hasattr(decision, 'to_dict'):
+            data = decision.to_dict()
+            ts = decision.timestamp
+            symbol = normalize_symbol(decision.symbol)
+        elif isinstance(decision, dict):
+            data = decision
+            ts = decision.get('timestamp', datetime.datetime.now().timestamp())
+            symbol = normalize_symbol(decision.get('symbol', 'UNKNOWN'))
+        else:
+            raise ValueError(f"不支持的决策类型: {type(decision)}")
+
+        # 构建标准payload
+        payload = {
+            "decision": data.get("decision", "UNKNOWN"),
+            "action": data.get("action"),
+            "probability": data.get("probability", 0),
+            "confidence": data.get("confidence", 0),
+            "entry_price": data.get("entry_price"),
+            "stop_loss": data.get("stop_loss"),
+            "take_profit": data.get("take_profit"),
+            "position_size": data.get("position_size", 0.05),
+            "risk_reward_ratio": data.get("risk_reward_ratio"),
+            "factor_scores": data.get("factor_scores", {}),
+            "reject_reason": data.get("reject_reason"),
+        }
+
+        event = StorageEvent(
+            ts=ts,
+            category="decision",
             symbol=symbol,
             payload=payload,
         )
