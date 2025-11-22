@@ -827,6 +827,60 @@
       "layer5_api": "CCXT (交易所API统一层)",
       "layer6_storage": "Cryptostore (数据持久化)"
     },
+    "unified_formats": {
+      "_description": "六层架构统一数据格式标准 - 确保各层有机融合",
+      "_version": "v1.0.0",
+      "symbol_format": {
+        "_description": "交易对格式统一标准",
+        "standard": "UPPERCASE_NO_SEPARATOR",
+        "example": "BTCUSDT",
+        "conversions": {
+          "from_cryptofeed": "BTC-USDT-PERP → BTCUSDT",
+          "to_ccxt": "BTCUSDT → BTC/USDT",
+          "storage": "BTCUSDT"
+        },
+        "_comment": "内部统一使用BTCUSDT格式，转换时按需调整"
+      },
+      "timestamp_format": {
+        "_description": "时间戳格式统一标准",
+        "unit": "seconds",
+        "type": "float",
+        "precision": 3,
+        "example": 1732252800.123,
+        "_comment": "全系统使用秒(float)，毫秒自动转换"
+      },
+      "factor_scores": {
+        "_description": "因子分数格式统一标准",
+        "range": [-100, 100],
+        "standard_factors": ["T", "M", "C", "V", "O", "B", "L", "S", "I", "F"],
+        "realtime_factors": ["cvd", "cvd_z", "obi", "ldi", "trade_intensity", "vwap", "mid_price"],
+        "_comment": "标准因子±100，实时因子各自范围"
+      },
+      "decision_output": {
+        "_description": "决策输出格式统一标准",
+        "required_fields": ["symbol", "timestamp", "decision", "action", "probability", "confidence"],
+        "trade_params": ["entry_price", "stop_loss", "take_profit", "position_size"],
+        "risk_metrics": ["risk_pct", "reward_pct", "risk_reward_ratio"],
+        "step_results": ["step1_direction", "step2_timing", "step3_risk", "step4_quality"],
+        "_comment": "四步决策系统输出标准格式"
+      },
+      "execution_signal": {
+        "_description": "执行信号格式统一标准",
+        "required_fields": ["exchange", "symbol", "side", "quantity", "signal_id"],
+        "optional_fields": ["price", "leverage", "stop_loss", "take_profit"],
+        "side_mapping": {
+          "LONG": "buy",
+          "SHORT": "sell"
+        },
+        "_comment": "决策输出自动转换为执行信号"
+      },
+      "storage_payload": {
+        "_description": "存储数据格式统一标准",
+        "categories": ["trade", "orderbook", "factor", "signal", "decision", "execution"],
+        "required_meta": ["timestamp", "symbol", "category"],
+        "_comment": "Cryptostore统一存储格式"
+      }
+    },
     "scanner": {
       "_description": "V8扫描器配置 - 支持动态加载全市场币种",
       "enabled": true,
