@@ -83,6 +83,10 @@ class CryptofeedStream:
 
         self._fh = FeedHandler()
 
+        # 调试计数器
+        self._trade_count = 0
+        self._orderbook_count = 0
+
     async def _trade_callback(self, trade, receipt_timestamp: float):
         """
         新版 cryptofeed 回调签名：(trade_obj, receipt_timestamp)
@@ -99,6 +103,12 @@ class CryptofeedStream:
         )
         try:
             self.on_trade(evt)
+            self._trade_count += 1
+            # 首次收到数据和每100条成交打印一次状态
+            if self._trade_count == 1:
+                print(f"[CryptofeedStream] 首次收到成交数据: {trade.symbol} @ {trade.price}")
+            elif self._trade_count % 100 == 0:
+                print(f"[CryptofeedStream] 已收到 {self._trade_count} 条成交数据")
         except Exception as e:
             # 防止单个回调异常导致整体中断
             print(f"[CryptofeedStream] on_trade error: {e} for event {evt}")
