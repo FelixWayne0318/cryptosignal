@@ -195,19 +195,31 @@ if [ -f /usr/lib/libta_lib.so ] || [ -f /usr/local/lib/libta_lib.so ]; then
 else
     print_info "安装 TA-Lib C库..."
     apt-get install -y libta-lib-dev -qq 2>/dev/null || {
-        print_info "apt 无 TA-Lib，手动编译..."
+        print_info "apt 无 TA-Lib，手动编译（约2-3分钟）..."
         cd /tmp
         wget -q http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
-        tar -xzf ta-lib-0.4.0-src.tar.gz
-        cd ta-lib/
-        ./configure --prefix=/usr >/dev/null 2>&1
-        make -j$(nproc) >/dev/null 2>&1
-        make install >/dev/null 2>&1
-        ldconfig
-        cd ~
-        rm -rf /tmp/ta-lib*
+        if [ ! -f ta-lib-0.4.0-src.tar.gz ]; then
+            add_error "TA-Lib 下载失败"
+            print_error "TA-Lib 下载失败"
+        else
+            tar -xzf ta-lib-0.4.0-src.tar.gz
+            cd ta-lib/
+            print_info "  配置中..."
+            ./configure --prefix=/usr >/dev/null 2>&1
+            print_info "  编译中（请耐心等待）..."
+            if make -j$(nproc) >/dev/null 2>&1; then
+                print_info "  安装中..."
+                make install >/dev/null 2>&1
+                ldconfig
+                print_success "TA-Lib C库安装完成"
+            else
+                add_error "TA-Lib 编译失败，可能内存不足"
+                print_error "TA-Lib 编译失败"
+            fi
+            cd ~
+            rm -rf /tmp/ta-lib*
+        fi
     }
-    print_success "TA-Lib C库安装完成"
 fi
 
 # ==================== 步骤 4: 停止旧进程 ====================
