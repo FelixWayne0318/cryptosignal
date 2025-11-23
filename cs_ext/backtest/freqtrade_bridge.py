@@ -322,9 +322,11 @@ class CryptoSignalStrategy(IStrategy):
             dataframe.at[dataframe.index[idx], 'cs_direction'] = direction
 
             # 生成入场信号
-            if direction == "long" and strength >= 40:
+            # 注意：四步系统的final_strength范围约0-20，阈值应与四步系统配置一致
+            entry_threshold = self._backtest_config.get("engine", {}).get("entry_strength_threshold", 7.0)
+            if direction == "long" and strength >= entry_threshold:
                 dataframe.at[dataframe.index[idx], "enter_long"] = 1
-            elif direction == "short" and strength >= 40:
+            elif direction == "short" and strength >= entry_threshold:
                 dataframe.at[dataframe.index[idx], "enter_short"] = 1
 
         return dataframe
@@ -350,13 +352,17 @@ class CryptoSignalStrategy(IStrategy):
             prev_strength = dataframe.iloc[idx - 1]['cs_signal_strength']
             prev_direction = dataframe.iloc[idx - 1]['cs_direction']
 
+            # 获取阈值配置
+            entry_threshold = self._backtest_config.get("engine", {}).get("entry_strength_threshold", 7.0)
+            exit_threshold = entry_threshold * 0.5  # 退出阈值为入场阈值的一半
+
             # 退出做多条件
             if prev_direction == "long":
                 # 信号反转
                 if current_direction == "short":
                     dataframe.at[dataframe.index[idx], "exit_long"] = 1
                 # 强度大幅衰减（低于入场阈值的一半）
-                elif current_strength < 20 and prev_strength >= 40:
+                elif current_strength < exit_threshold and prev_strength >= entry_threshold:
                     dataframe.at[dataframe.index[idx], "exit_long"] = 1
 
             # 退出做空条件
@@ -365,7 +371,7 @@ class CryptoSignalStrategy(IStrategy):
                 if current_direction == "long":
                     dataframe.at[dataframe.index[idx], "exit_short"] = 1
                 # 强度大幅衰减
-                elif current_strength < 20 and prev_strength >= 40:
+                elif current_strength < exit_threshold and prev_strength >= entry_threshold:
                     dataframe.at[dataframe.index[idx], "exit_short"] = 1
 
         return dataframe
