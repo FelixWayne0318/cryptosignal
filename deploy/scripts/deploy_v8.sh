@@ -26,6 +26,10 @@ DEPLOY_MODE="${1:-auto}"  # auto/fresh/update
 export DEBIAN_FRONTEND=noninteractive
 export NEEDRESTART_MODE=a
 
+# ==================== 错误收集 ====================
+ERRORS=""
+add_error() { ERRORS="$ERRORS\n  - $1"; }
+
 # ==================== 颜色定义 ====================
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -190,15 +194,15 @@ if [ -f /usr/lib/libta_lib.so ] || [ -f /usr/local/lib/libta_lib.so ]; then
     print_skip "TA-Lib C库已安装"
 else
     print_info "安装 TA-Lib C库..."
-    apt-get install -y libta-lib-dev --quiet 2>/dev/null || {
+    apt-get install -y libta-lib-dev -qq 2>/dev/null || {
         print_info "apt 无 TA-Lib，手动编译..."
         cd /tmp
         wget -q http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
         tar -xzf ta-lib-0.4.0-src.tar.gz
         cd ta-lib/
-        ./configure --prefix=/usr
-        make -j$(nproc)
-        make install
+        ./configure --prefix=/usr >/dev/null 2>&1
+        make -j$(nproc) >/dev/null 2>&1
+        make install >/dev/null 2>&1
         ldconfig
         cd ~
         rm -rf /tmp/ta-lib*
@@ -539,6 +543,15 @@ print_success "自动化任务配置完成"
 
 # ==================== 部署完成 ====================
 print_header "🎉 部署完成"
+
+# 显示错误汇总（如果有）
+if [ -n "$ERRORS" ]; then
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}⚠️  部署过程中遇到以下问题：${NC}"
+    echo -e "$ERRORS"
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+fi
 
 echo -e "${GREEN}╔═══════════════════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║            ✅ V8.0.2 部署成功！                           ║${NC}"
