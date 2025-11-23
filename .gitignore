@@ -72,3 +72,4 @@ server_deploy_private.sh*
 
 # External dependencies (clone separately)
 externals/
+user_data/
