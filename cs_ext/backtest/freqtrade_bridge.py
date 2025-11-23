@@ -102,17 +102,18 @@ class CryptoSignalStrategy(IStrategy):
 
         print(f"[CryptoSignalStrategy] 初始化完成, lookback_bars={self._lookback_bars}")
 
-    def _convert_df_to_klines(self, dataframe: DataFrame) -> List[List]:
+    def _convert_df_to_klines(self, dataframe: DataFrame) -> List[Dict]:
         """
         将 Freqtrade DataFrame 转换为 CryptoSignal klines 格式
 
-        CryptoSignal klines 格式: [[open_time, open, high, low, close, volume, close_time, ...], ...]
+        v7.4.8修复：四步系统期望字典格式，而非列表格式
+        CryptoSignal klines 格式: [{"timestamp": ..., "open": ..., "high": ..., ...}, ...]
 
         Args:
             dataframe: Freqtrade 的 OHLCV DataFrame
 
         Returns:
-            klines 列表
+            klines 字典列表
         """
         klines = []
 
@@ -125,21 +126,20 @@ class CryptoSignalStrategy(IStrategy):
             else:
                 open_time = int(row.get('date', 0))
 
-            # 构造 kline 格式 [open_time, open, high, low, close, volume, close_time, ...]
-            kline = [
-                open_time,
-                float(row['open']),
-                float(row['high']),
-                float(row['low']),
-                float(row['close']),
-                float(row['volume']),
-                open_time + 3600000,  # close_time (假设1小时)
-                0,  # quote_asset_volume
-                0,  # number_of_trades
-                0,  # taker_buy_base_volume
-                0,  # taker_buy_quote_volume
-                0   # ignore
-            ]
+            # 构造 kline 字典格式（与内置BacktestEngine保持一致）
+            kline = {
+                "timestamp": open_time,
+                "open": float(row['open']),
+                "high": float(row['high']),
+                "low": float(row['low']),
+                "close": float(row['close']),
+                "volume": float(row['volume']),
+                "close_time": open_time + 3600000,  # close_time (假设1小时)
+                "quote_volume": 0.0,
+                "trades": 0,
+                "taker_buy_base": 0.0,
+                "taker_buy_quote": 0.0
+            }
             klines.append(kline)
 
         return klines
@@ -194,7 +194,7 @@ class CryptoSignalStrategy(IStrategy):
         spot_price = None
         if k1h:
             latest_kline = k1h[-1]
-            mark_price = float(latest_kline[4])  # close price
+            mark_price = float(latest_kline["close"])  # close price（字典格式）
             spot_price = mark_price
 
         try:
@@ -270,15 +270,17 @@ class CryptoSignalStrategy(IStrategy):
             "_full_result": result
         }
 
-    def _resample_to_4h(self, k1h: List[List]) -> List[List]:
+    def _resample_to_4h(self, k1h: List[Dict]) -> List[Dict]:
         """
         将1小时K线重采样为4小时K线
 
+        v7.4.8修复：使用字典格式（与_convert_df_to_klines保持一致）
+
         Args:
-            k1h: 1小时K线列表
+            k1h: 1小时K线字典列表
 
         Returns:
-            4小时K线列表
+            4小时K线字典列表
         """
         k4h = []
 
@@ -287,16 +289,19 @@ class CryptoSignalStrategy(IStrategy):
             if len(batch) < 4:
                 continue
 
-            k4h_candle = [
-                batch[0][0],  # open_time
-                batch[0][1],  # open
-                max(k[2] for k in batch),  # high
-                min(k[3] for k in batch),  # low
-                batch[-1][4],  # close
-                sum(k[5] for k in batch),  # volume
-                batch[-1][6],  # close_time
-                0, 0, 0, 0, 0  # 其他字段
-            ]
+            k4h_candle = {
+                "timestamp": batch[0]["timestamp"],  # open_time
+                "open": batch[0]["open"],
+                "high": max(k["high"] for k in batch),
+                "low": min(k["low"] for k in batch),
+                "close": batch[-1]["close"],
+                "volume": sum(k["volume"] for k in batch),
+                "close_time": batch[-1].get("close_time", batch[-1]["timestamp"] + 14400000),
+                "quote_volume": sum(k.get("quote_volume", 0) for k in batch),
+                "trades": sum(k.get("trades", 0) for k in batch),
+                "taker_buy_base": 0.0,
+                "taker_buy_quote": 0.0
+            }
             k4h.append(k4h_candle)
 
         return k4h
