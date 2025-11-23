@@ -22,6 +22,10 @@ SERVER_TIMEZONE="Asia/Singapore"
 # ==================== 模式选择 ====================
 DEPLOY_MODE="${1:-auto}"  # auto/fresh/update
 
+# ==================== 非交互模式设置 ====================
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+
 # ==================== 颜色定义 ====================
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -147,10 +151,10 @@ fi
 
 print_info "更新系统软件包..."
 apt-get update -qq
-apt-get upgrade -y -qq
+apt-get upgrade -y -qq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
 
 print_info "安装基础工具..."
-apt-get install -y git curl wget screen build-essential software-properties-common --quiet
+apt-get install -y git curl wget screen build-essential software-properties-common -qq
 
 print_success "系统环境准备完成"
 
@@ -167,7 +171,7 @@ fi
 
 # 确保开发包已安装（编译 cryptofeed 需要 Python.h）
 print_info "确保 Python 3.11 开发包已安装..."
-apt-get install -y python3.11 python3.11-venv python3.11-dev python3.11-distutils --quiet
+apt-get install -y python3.11 python3.11-venv python3.11-dev python3.11-distutils -qq
 print_success "Python 3.11 开发包已安装"
 
 # 确保 pip 安装
