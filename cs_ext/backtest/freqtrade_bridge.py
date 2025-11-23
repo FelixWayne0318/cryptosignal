@@ -189,21 +189,29 @@ class CryptoSignalStrategy(IStrategy):
         # 生成 4 小时 K 线（简化处理：每4根1小时K线合并）
         k4h = self._resample_to_4h(k1h)
 
+        # v7.4.8修复：提供必要的价格数据（与内置回测引擎保持一致）
+        mark_price = None
+        spot_price = None
+        if k1h:
+            latest_kline = k1h[-1]
+            mark_price = float(latest_kline[4])  # close price
+            spot_price = mark_price
+
         try:
             result = analyze_symbol_with_preloaded_klines(
                 symbol=symbol,
                 k1h=k1h,
                 k4h=k4h,
-                # 以下为可选参数，回测时可能没有实时数据
-                oi_data=None,
+                # v7.4.8修复：传递空列表而非None，避免因子计算错误
+                oi_data=[],  # 空OI数据
                 spot_k1h=None,
                 elite_meta=None,
                 k15m=None,
                 k1d=None,
                 orderbook=None,
-                mark_price=None,
-                funding_rate=None,
-                spot_price=None,
+                mark_price=mark_price,  # 标记价格
+                funding_rate=0.0,  # 默认资金费率
+                spot_price=spot_price,  # 现货价格
                 btc_klines=None,
                 eth_klines=None,
                 kline_cache=None,
