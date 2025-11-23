@@ -213,31 +213,42 @@ class CryptoSignalStrategy(IStrategy):
             print(f"[CryptoSignalStrategy] analyze_symbol_with_preloaded_klines error: {e}")
             return default_result
 
-        # 解析分析结果
-        is_prime = result.get("is_prime", False)
-        side_long = result.get("side_long", None)
-
-        # 提取四步系统决策结果
+        # 解析分析结果 - 优先使用四步系统决策
         four_step = result.get("four_step_decision", {})
 
-        if not is_prime or side_long is None:
-            return default_result
+        # 方案1：四步系统决策（优先）
+        if four_step.get("decision") == "ACCEPT":
+            action = four_step.get("action", "")
+            direction = "long" if action == "LONG" else "short" if action == "SHORT" else "none"
 
-        # 确定方向
-        direction = "long" if side_long else "short"
+            step1 = four_step.get("step1_direction", {})
+            final_strength = step1.get("final_strength", 0)
 
-        # 提取强度和概率
-        step1 = four_step.get("step1_direction", {})
-        final_strength = step1.get("final_strength", result.get("prime_strength", 0))
+            # 使用四步系统的价格信息
+            entry_price = four_step.get("entry_price")
+            stop_loss = four_step.get("stop_loss")
+            take_profit = four_step.get("take_profit")
+            risk_reward_ratio = four_step.get("risk_reward_ratio", 0)
 
-        # 计算概率（基于强度映射）
-        probability = min(0.5 + final_strength / 200, 0.95)
+            probability = min(0.5 + final_strength / 20, 0.95)  # 强度范围约0-20
 
-        # 提取风险管理参数
-        entry_price = result.get("entry_price") or four_step.get("entry_price")
-        stop_loss = result.get("stop_loss") or four_step.get("stop_loss")
-        take_profit = result.get("take_profit") or four_step.get("take_profit")
-        risk_reward_ratio = result.get("risk_reward_ratio") or four_step.get("risk_reward_ratio", 0)
+        # 方案2：后备 - 旧系统判定
+        else:
+            is_prime = result.get("is_prime", False)
+            side_long = result.get("side_long", None)
+
+            if not is_prime or side_long is None:
+                return default_result
+
+            direction = "long" if side_long else "short"
+            final_strength = result.get("prime_strength", 0)
+
+            entry_price = result.get("entry_price")
+            stop_loss = result.get("stop_loss")
+            take_profit = result.get("take_profit")
+            risk_reward_ratio = result.get("risk_reward_ratio", 0)
+
+            probability = min(0.5 + final_strength / 200, 0.95)
 
         return {
             "direction": direction,
@@ -401,16 +412,15 @@ class CryptoSignalStrategy(IStrategy):
 
         可以在这里添加额外的过滤逻辑
         """
-        # 检查风险回报比
-        # 获取最新缓存的信号
+        # 风险回报比检查已在四步系统Step3完成
+        # 这里仅记录日志，不重复拒绝已通过四步系统的信号
         for key in reversed(list(self._signal_cache.keys())):
             if key.startswith(pair):
                 signal = self._signal_cache[key]
                 rr_ratio = signal.get("risk_reward_ratio", 0)
 
-                # 要求风险回报比至少1:1.5
-                if rr_ratio < 1.5:
-                    return False
+                if rr_ratio > 0 and rr_ratio < 1.5:
+                    print(f"[CryptoSignalStrategy] WARNING: {pair} RR={rr_ratio:.2f} < 1.5, 但已通过四步系统")
                 break
 
         return True
